@@ -1,0 +1,8 @@
+# Managed by privatestack-ansible (roles/looking_glass). Do not
+# hand-edit: the next run overwrites this file - change the role instead.
+#
+# Two processes, one node. OWNER is QEMU, which opens the device as a memory
+# backend when the guest starts. TAG+="uaccess" puts an ACL on top for the
+# logged-in seat, which is how the client gets in - without the node being
+# made world-writable and without the admin user joining a group for it.
+SUBSYSTEM=="kvmfr", OWNER="{{ looking_glass_qemu_user }}", GROUP="{{ looking_glass_device_group }}", MODE="0660", TAG+="uaccess"

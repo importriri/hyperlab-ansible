@@ -460,3 +460,90 @@
         render_cava_max: >-
           {{ (render_cockpit.results[12].content | b64decode)
              | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}
+
+    # --- looking_glass ----------------------------------------------------------
+    # The defaults are loaded as real variables, not read as text: the shared
+    # memory size is a formula, and a formula is only proved by evaluating it.
+    - name: Load the Looking Glass defaults as real variables
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/looking_glass/defaults/main.yml"
+
+    - name: Make a rendering workspace for the transport files
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .render
+      register: render_lg_ws
+
+    - name: Render the udev rule and the module options
+      ansible.builtin.template:
+        src: "{{ repo_root }}/roles/looking_glass/templates/{{ item }}"
+        dest: "{{ render_lg_ws.path }}/{{ item | regex_replace('\\.j2$', '') }}"
+        mode: "0644"
+      loop:
+        - 70-kvmfr.rules.j2
+        - kvmfr.conf.j2
+
+    - name: Read the rendered transport files, the brick, and the playbooks
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: render_lg
+      loop:
+        - "{{ render_lg_ws.path }}/70-kvmfr.rules"
+        - "{{ render_lg_ws.path }}/kvmfr.conf"
+        - "{{ repo_root }}/roles/looking_glass/tasks/main.yml"
+        - "{{ repo_root }}/roles/looking_glass/handlers/main.yml"
+        - "{{ repo_root }}/playbooks/looking-glass.yml"
+        - "{{ repo_root }}/playbooks/lab.yml"
+
+    - name: Looking Glass invariants (sized shm, two openers, wayland-pure, opt-in)
+      ansible.builtin.assert:
+        that:
+          # the size is derived from the frame geometry, never a magic number.
+          # 1080p rounds up to 32 MiB. Moving the geometry moves it, and that
+          # is deliberately a coupled change: this line has to be edited too,
+          # which is the reminder that the guest XML ivshmem size moves with it
+          - looking_glass_shm_mb | int == 32
+          - render_lg_modprobe is search('static_size_mb=32')
+          # both openers of the same node, or the picture never arrives:
+          # OWNER is QEMU, uaccess is the desktop session
+          - render_lg_rule is search('OWNER="' ~ looking_glass_qemu_user ~ '"')
+          - render_lg_rule is search('TAG\+="uaccess"')
+          # udev does not revisit devices that already exist, so a reload on
+          # its own is a no-op: the synthetic change event is the whole fix
+          - render_lg_handlers is search('--action=change')
+          # wayland-pure, same contract as the cockpit: X11 off at configure
+          # time, so no libx* can creep back into the dependency list
+          - "'-DENABLE_X11=no' in render_lg_tasks"
+          # named one by one on purpose: libxkbcommon also starts with libx
+          # and belongs to Wayland (keymaps), so a "^libx" sweep would forbid
+          # a dependency the client actually needs
+          - looking_glass_packages | intersect(looking_glass_x11_deps) | length == 0
+          # opt-in: the blind host stays the default
+          - render_lg_hosts == 'hypervisor'
+          - "'looking_glass' not in render_lg_lab_roles"
+        fail_msg: >-
+          A Looking Glass invariant broke: the shared memory must be sized
+          from the frame geometry, the device node must be openable by both
+          QEMU and the session, the udev retrigger must stay (a reload alone
+          is a no-op on a node that already exists), the client must stay
+          Wayland-only, and the brick must never land in lab.yml.
+      vars:
+        looking_glass_x11_deps:
+          - libx11
+          - libxfixes
+          - libxi
+          - libxinerama
+          - libxss
+          - libxcursor
+          - libxpresent
+        render_lg_rule: "{{ render_lg.results[0].content | b64decode }}"
+        render_lg_modprobe: "{{ render_lg.results[1].content | b64decode }}"
+        render_lg_tasks: "{{ render_lg.results[2].content | b64decode }}"
+        render_lg_handlers: "{{ render_lg.results[3].content | b64decode }}"
+        render_lg_hosts: "{{ (render_lg.results[4].content | b64decode | from_yaml)[0].hosts }}"
+        render_lg_lab_roles: "{{ (render_lg.results[5].content | b64decode | from_yaml)[0].roles }}"
+
+    - name: Remove the Looking Glass rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_lg_ws.path }}"
+        state: absent

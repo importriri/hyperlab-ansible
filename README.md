@@ -33,6 +33,7 @@ package on the host. The host stays a fortress; the services stay cattle.
 | `gpu_handoff` | Trust-ranked GPU handoff hook, fail-closed | lab bundle (6/6) | available |
 | `desktop` | Sway + ly cockpit: Mocha rice (floating waybar, rofi launcher + power menu, cava strip), shell nav kit | optional | available |
 | `dev_ide` | Emacs IDE: eglot LSP (java/js/html/css/bash/ansible) + Claude Code | optional (guests) | available |
+| `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
 | `guest` | The VM foundation: verified cloud image, qcow2 overlay, cloud-init seed | foundation | planned — A8 |
 | `jellyfin` | Private media server — the reference optional brick | optional | planned — A9 |
 | `nextcloud` | Private drive | optional | documented slot |
@@ -46,8 +47,14 @@ The cockpit is opt-in: `playbooks/desktop.yml` mounts the desktop on the
 host or on any VM in `workstations` (the host rides its free iGPU — the
 dGPU belongs to `gpu_handoff`); `playbooks/dev.yml` turns a guest into a
 dev workstation — same cockpit plus the Emacs IDE wired to eglot and
-Claude Code (`claude` authenticates on first run: manual, by design).
-The lab bundle never mounts either — the blind host stays the default.
+Claude Code (`claude` authenticates on first run: manual, by design);
+`playbooks/looking-glass.yml` adds the window onto the GPU VM — the kvmfr
+transport, the node permissions QEMU and the desktop session both need, and
+the client built from a pinned commit. Its guest half stays manual by design
+and is documented in
+[arch-hypervisor-lab](https://github.com/importriri/arch-hypervisor-lab/blob/main/configs/looking-glass.md):
+a signed .exe is not a brick.
+The lab bundle never mounts any of them — the blind host stays the default.
 
 ## Assembly
 

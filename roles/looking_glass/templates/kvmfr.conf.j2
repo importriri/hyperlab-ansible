@@ -1,0 +1,10 @@
+# Managed by privatestack-ansible (roles/looking_glass). Do not
+# hand-edit: the next run overwrites this file - change the role instead.
+#
+# One static device, sized for {{ looking_glass_width }}x{{ looking_glass_height }}:
+# width * height * 4 bytes * 2 frames + 10 MiB, rounded up to a power of two.
+#
+# The same number must be the ivshmem size in the guest XML. They are one
+# buffer seen from two sides; if they disagree the smaller one wins, and the
+# picture loses its bottom edge.
+options kvmfr static_size_mb={{ looking_glass_shm_mb | int }}

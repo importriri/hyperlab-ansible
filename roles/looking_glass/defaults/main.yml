@@ -1,0 +1,79 @@
+---
+# The host half of Looking Glass: the kvmfr shared-memory transport, its
+# permissions, and the client built from a pinned commit.
+#
+# The guest half - the Windows host application and the virtual display it
+# captures - is manual by design and documented in arch-hypervisor-lab
+# (configs/looking-glass.md). A signed .exe is not a brick.
+#
+# Opt-in like the rest of the cockpit: playbooks/looking-glass.yml, never
+# lab.yml. It needs a Wayland session, so it rides on top of `desktop`.
+
+# --- The pin -----------------------------------------------------------------
+# Client and Windows host application MUST be the same build. Mismatched
+# builds do not negotiate: the client sits on "waiting for the host" forever
+# and falls back to the SPICE surface, which looks like a working Looking
+# Glass to anyone not reading the log. Bump both or neither.
+looking_glass_commit: 0140a3f6
+looking_glass_build: B7-263-0140a3f6
+looking_glass_repo: https://github.com/gnif/LookingGlass.git
+looking_glass_src: /usr/local/src/looking-glass
+looking_glass_stamp: /usr/local/share/looking-glass/built-from
+
+# --- Frame geometry and the shared memory that has to hold it -----------------
+# Upstream sizing: width * height * 4 * 2 + 10 MiB, rounded up to the next
+# power of two. Two frames plus headroom. Undersize it and the client
+# truncates the bottom of the picture and tells you by how much.
+# 1920x1080 -> 25.8 MiB -> 32. Change the geometry, the number follows.
+looking_glass_width: 1920
+looking_glass_height: 1080
+looking_glass_shm_mb: >-
+  {{ [32, 64, 128, 256, 512]
+     | select('ge', ((looking_glass_width * looking_glass_height * 8 / 1048576) + 10)
+                    | round(0, 'ceil') | int)
+     | first }}
+
+# --- Who is allowed to open the device ----------------------------------------
+# Two processes need the same node: QEMU opens it as a memory backend, the
+# client mmaps it from the desktop session. One owner is not enough - see
+# problems/kvmfr-device-permissions.md in arch-hypervisor-lab.
+# On Arch, libvirt runs QEMU as this system user.
+looking_glass_device: /dev/kvmfr0
+looking_glass_qemu_user: libvirt-qemu
+looking_glass_device_group: kvm
+
+# --- Client configuration ------------------------------------------------------
+# The upstream default escape key is ScrollLock, which does not exist on this
+# laptop's keyboard: a release key you cannot press is a trap, not a default.
+looking_glass_escape_key: KEY_RIGHTCTRL
+looking_glass_fullscreen: true
+looking_glass_spice_host: 127.0.0.1
+looking_glass_spice_port: 5900
+
+# --- Build dependencies --------------------------------------------------------
+# X11 is switched off at configure time (-DENABLE_X11=no), so none of the
+# libx* development packages are needed. That is not a size optimisation: the
+# cockpit is Wayland-pure by contract, and a client that can still fall back
+# to X11 would let that contract rot silently.
+looking_glass_packages:
+  - dkms
+  - "{{ kernel_name }}-headers"
+  - git
+  - cmake
+  - gcc
+  - make
+  - pkgconf
+  - binutils
+  - fontconfig
+  - gmp
+  - nettle
+  - spice-protocol
+  - mesa
+  - libglvnd
+  - libxkbcommon
+  - wayland
+  - wayland-protocols
+  - libdecor
+  - pipewire
+  - libsamplerate
+  - ttf-dejavu

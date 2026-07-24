@@ -1,0 +1,31 @@
+# Managed by privatestack-ansible (roles/looking_glass). Do not
+# hand-edit: the next run overwrites this file - change the role instead.
+#
+# Build pin: {{ looking_glass_build }} - the Windows host application must
+# report the same string in its own log inside the guest.
+
+[app]
+shmFile={{ looking_glass_device }}
+
+[win]
+fullScreen={{ 'yes' if looking_glass_fullscreen else 'no' }}
+# Off on purpose. It only does anything with the upstream IDD, and with a
+# third-party virtual display it can renegotiate the mode on every window
+# resize - which restarts the guest-side capture in a loop.
+setGuestRes=no
+
+[input]
+# Held down, this is also the help overlay (see input:helpMenuDelay).
+escapeKey={{ looking_glass_escape_key }}
+captureOnFocus=yes
+autoCapture=yes
+rawMouse=yes
+
+[spice]
+# SPICE carries keyboard and mouse only. The picture comes through kvmfr; if
+# you can see a desktop while the log says the host application is not
+# running, you are looking at the SPICE fallback surface, not at Looking Glass.
+enable=yes
+host={{ looking_glass_spice_host }}
+port={{ looking_glass_spice_port }}
+captureOnStart=yes

@@ -1,0 +1,145 @@
+---
+- name: Install the build stack and the client runtime
+  community.general.pacman:
+    name: "{{ looking_glass_packages }}"
+    state: present
+
+# A udev rule naming a user that does not exist is not an error: it is a
+# silent no-op, and the failure surfaces two layers away as QEMU refusing to
+# open the node. Fail here instead, where the message is readable.
+- name: Refuse without the QEMU system user (a udev OWNER that resolves)
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ looking_glass_qemu_user }}"
+
+# No depth: the build reads git describe for its version string, and that
+# string is how you prove client and Windows host are the same build.
+- name: Clone Looking Glass at the pinned commit
+  ansible.builtin.git:
+    repo: "{{ looking_glass_repo }}"
+    dest: "{{ looking_glass_src }}"
+    version: "{{ looking_glass_commit }}"
+    recursive: true
+
+# --- the shared memory transport ---------------------------------------------
+- name: Check whether kvmfr is already registered with dkms
+  ansible.builtin.command: dkms status -m kvmfr
+  register: looking_glass_dkms
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Build and install the kvmfr module through dkms
+  ansible.builtin.command:
+    cmd: dkms install .
+    chdir: "{{ looking_glass_src }}/module"
+  register: looking_glass_dkms_install
+  changed_when: looking_glass_dkms_install.rc == 0
+  when: "'kvmfr' not in looking_glass_dkms.stdout"
+
+- name: Size the shared memory from the frame geometry
+  ansible.builtin.template:
+    src: kvmfr.conf.j2
+    dest: /etc/modprobe.d/kvmfr.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Unload kvmfr if nothing holds it
+    - Load kvmfr with the current size
+
+- name: Load kvmfr at boot
+  ansible.builtin.copy:
+    content: "kvmfr\n"
+    dest: /etc/modules-load.d/kvmfr.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# QEMU opens the node, the desktop session mmaps it. OWNER covers the first,
+# TAG+="uaccess" covers the second by ACL on the seat's active session, so
+# neither one has to be weakened to 0666 to let the other in.
+- name: Own the device node - QEMU writes it, the session reads it
+  ansible.builtin.template:
+    src: 70-kvmfr.rules.j2
+    dest: /etc/udev/rules.d/70-kvmfr.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload the udev rules
+    - Retrigger the kvmfr device
+
+- name: Load kvmfr now (modules-load.d only fires at boot)
+  community.general.modprobe:
+    name: kvmfr
+    state: present
+
+# --- the client ----------------------------------------------------------------
+- name: Read the build stamp
+  ansible.builtin.slurp:
+    src: "{{ looking_glass_stamp }}"
+  register: looking_glass_stamp_read
+  failed_when: false
+  changed_when: false
+
+- name: Decide whether the installed client matches the pin
+  ansible.builtin.set_fact:
+    looking_glass_build_needed: >-
+      {{ looking_glass_stamp_read.content is not defined
+         or (looking_glass_stamp_read.content | b64decode | trim) != looking_glass_commit }}
+
+- name: Build and install the client from the pinned checkout
+  when: looking_glass_build_needed | bool
+  block:
+    - name: Make the build directory
+      ansible.builtin.file:
+        path: "{{ looking_glass_src }}/client/build"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    # ENABLE_X11=no keeps the cockpit Wayland-pure; libdecor draws the window
+    # decorations sway does not draw for it.
+    - name: Configure the client build
+      ansible.builtin.command:
+        cmd: cmake -DENABLE_X11=no -DENABLE_WAYLAND=yes -DENABLE_LIBDECOR=yes ../
+        chdir: "{{ looking_glass_src }}/client/build"
+      changed_when: true
+
+    - name: Compile the client
+      ansible.builtin.command:
+        cmd: make -j{{ ansible_processor_vcpus | default(2) }}
+        chdir: "{{ looking_glass_src }}/client/build"
+      changed_when: true
+
+    - name: Install the client
+      ansible.builtin.command:
+        cmd: make install
+        chdir: "{{ looking_glass_src }}/client/build"
+      changed_when: true
+
+    - name: Stamp what was installed (this is the idempotency)
+      ansible.builtin.copy:
+        content: "{{ looking_glass_commit }}\n"
+        dest: "{{ looking_glass_stamp }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+- name: Create the client configuration directory
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/.config/looking-glass"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+
+- name: Deploy the client configuration
+  ansible.builtin.template:
+    src: client.ini.j2
+    dest: "/home/{{ admin_user }}/.config/looking-glass/client.ini"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"

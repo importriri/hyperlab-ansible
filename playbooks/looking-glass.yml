@@ -1,0 +1,16 @@
+---
+# The window onto the GPU VM. Host only: the client runs where the physical
+# screen is, and it needs the Wayland session playbooks/desktop.yml mounts -
+# run that one first.
+#
+# This brick is the host half only. The guest half - the Windows host
+# application and the virtual display it captures - is manual by design and
+# documented in arch-hypervisor-lab (configs/looking-glass.md): a signed
+# .exe is not a brick.
+#
+# lab.yml never mounts this. The blind host stays the default.
+- name: Mount the Looking Glass client
+  hosts: hypervisor
+  become: true
+  roles:
+    - looking_glass

@@ -17,7 +17,7 @@ executable bit). Before the first commit, keep a plain copy instead
 (`cp <file> /tmp/bak`) - and after restoring the hook that way, re-run
 `chmod +x` (the first bats test will remind you if you forget).
 
-All twenty were executed and caught during the build. Replay at least
+All twenty-three were executed and caught during the build. Replay at least
 one before every push.
 
 ## roles/base + the shared contract
@@ -159,3 +159,28 @@ one before every push.
   resolves that but `pacman -Q` does not, so the module would report
   changed on every run forever.
 - Restore: `git checkout -- roles/desktop/defaults/main.yml`
+
+## roles/looking_glass
+
+### 21. Frame geometry moved, shared memory left behind
+- Break: `sed -i "s/^looking_glass_width: 1920$/looking_glass_width: 3840/" roles/looking_glass/defaults/main.yml`
+- Red: render suite - Looking Glass invariants (the sizing formula now
+  yields 64 MiB). The coupling is the point: the guest XML ivshmem size
+  has to move with it, so the test refuses to let the geometry change
+  quietly on one side only.
+- Restore: `git checkout -- roles/looking_glass/defaults/main.yml`
+
+### 22. udev retrigger dropped
+- Break: `sed -i '/--action=change/d' roles/looking_glass/handlers/main.yml`
+- Red: render suite - Looking Glass invariants. `udevadm control --reload`
+  on its own applies to devices that appear *later*; the kvmfr node
+  already exists, so without the synthetic change event the rule is a
+  no-op and QEMU or the client is left with EACCES.
+- Restore: `git checkout -- roles/looking_glass/handlers/main.yml`
+
+### 23. X11 back in the client
+- Break: `sed -i 's/-DENABLE_X11=no/-DENABLE_X11=yes/' roles/looking_glass/tasks/main.yml`
+- Red: render suite - Looking Glass invariants. Same contract as the
+  cockpit: the whole path is Wayland, and a client that can still fall
+  back to X11 lets that rot silently.
+- Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
