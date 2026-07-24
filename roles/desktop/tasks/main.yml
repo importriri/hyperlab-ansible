@@ -15,6 +15,38 @@
     name: ly@tty2.service
     enabled: true
 
+# The two helpers land in /usr/local/bin, not in the user's config: sway
+# and waybar call them by absolute path (no ~ expansion to trust), and a
+# root-owned 0755 script is not rewritable by whatever runs in the session.
+- name: Deploy the cockpit helpers
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/bin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: privatestack-cava.sh, dest: privatestack-cava }
+    - { src: privatestack-powermenu.sh, dest: privatestack-powermenu }
+
+- name: Create the wallpaper directory
+  ansible.builtin.file:
+    path: /usr/share/backgrounds/privatestack
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Same absolute path is baked into sway.config and swaylock.conf; the
+# render suite asserts the three agree, so a rename cannot drift.
+- name: Deploy the backdrop
+  ansible.builtin.copy:
+    src: wallpaper.png
+    dest: /usr/share/backgrounds/privatestack/mocha.png
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Create the config directories
   ansible.builtin.file:
     path: "/home/{{ admin_user }}/.config/{{ item }}"
@@ -26,8 +58,11 @@
     - sway
     - waybar
     - foot
-    - fuzzel
     - mako
+    - rofi
+    - cava
+    - swaylock
+    - gtk-3.0
 
 - name: Deploy the Mocha rice
   ansible.builtin.copy:
@@ -41,8 +76,18 @@
     - { src: waybar.jsonc, dest: waybar/config.jsonc }
     - { src: waybar.css, dest: waybar/style.css }
     - { src: foot.ini, dest: foot/foot.ini }
-    - { src: fuzzel.ini, dest: fuzzel/fuzzel.ini }
     - { src: mako.conf, dest: mako/config }
+    # rofi keeps its source names, config.rasi excepted: that one filename
+    # is what `rofi -show drun` loads with no arguments, and the @import
+    # lines inside these files point at the other three by those names.
+    - { src: rofi-config.rasi, dest: rofi/config.rasi }
+    - { src: rofi-mocha.rasi, dest: rofi/rofi-mocha.rasi }
+    - { src: rofi-launcher.rasi, dest: rofi/rofi-launcher.rasi }
+    - { src: rofi-powermenu.rasi, dest: rofi/rofi-powermenu.rasi }
+    - { src: cava.conf, dest: cava/config }
+    - { src: cava-waybar.conf, dest: cava/cava-waybar.conf }
+    - { src: swaylock.conf, dest: swaylock/config }
+    - { src: gtk3-settings.ini, dest: gtk-3.0/settings.ini }
     - { src: starship.toml, dest: starship.toml }
 
 - name: Wire the shell kit into bash (managed block, reversible)

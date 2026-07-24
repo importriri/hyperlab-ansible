@@ -1,13 +1,51 @@
 {
     "layer": "top",
-    "height": 32,
-    "spacing": 6,
-    "modules-left": ["sway/workspaces", "sway/mode"],
+    "position": "top",
+    "height": 34,
+    "spacing": 0,
+    "modules-left": ["custom/logo", "sway/workspaces", "sway/mode", "custom/cava"],
     "modules-center": ["clock"],
-    "modules-right": ["pulseaudio", "network", "cpu", "memory", "battery", "tray"],
-    "clock": { "format": "  {:%a %d %b   %H:%M}" },
-    "cpu": { "format": "  {usage}%" },
-    "memory": { "format": "  {}%" },
+    "modules-right": ["idle_inhibitor", "pulseaudio", "backlight", "network", "cpu", "memory", "temperature", "battery", "tray"],
+
+    "custom/logo": {
+        "format": "  ",
+        "tooltip": false,
+        "on-click": "/usr/local/bin/privatestack-powermenu"
+    },
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "format": "{name}"
+    },
+    // Continuous custom module: no "interval" on purpose - waybar reads the
+    // script's stdout as a stream, one line per cava frame.
+    "custom/cava": {
+        "exec": "/usr/local/bin/privatestack-cava",
+        "tooltip": false,
+        "restart-interval": 5
+    },
+    "clock": {
+        "format": "  {:%a %d %b   %H:%M}",
+        "tooltip-format": "<tt>{calendar}</tt>"
+    },
+    "idle_inhibitor": {
+        "format": "{icon}",
+        "format-icons": { "activated": "", "deactivated": "" },
+        "tooltip": false
+    },
+    "cpu": { "format": "  {usage}%", "interval": 5 },
+    "memory": { "format": "  {}%", "interval": 10 },
+    // No hwmon-path: waybar falls back to thermal_zone0. Pin a zone here if
+    // that one reads the wrong die on your board.
+    "temperature": {
+        "critical-threshold": 82,
+        "format": "  {temperatureC}°C"
+    },
+    "backlight": {
+        "format": "{icon}  {percent}%",
+        "format-icons": ["", "", "", ""],
+        "on-scroll-up": "brightnessctl set +5%",
+        "on-scroll-down": "brightnessctl set 5%-"
+    },
     "battery": {
         "states": { "warning": 25, "critical": 10 },
         "format": "{icon}  {capacity}%",
@@ -17,12 +55,15 @@
     "network": {
         "format-wifi": "  {essid}",
         "format-ethernet": "󰈀  {ifname}",
-        "format-disconnected": "󰖪  offline"
+        "format-disconnected": "󰖪  offline",
+        "tooltip-format": "{ipaddr}/{cidr}"
     },
     "pulseaudio": {
         "format": "{icon}  {volume}%",
         "format-muted": "󰝟  mute",
         "format-icons": { "default": ["", "", ""] },
-        "on-click": "pamixer -t"
-    }
+        "on-click": "pamixer -t",
+        "scroll-step": 5
+    },
+    "tray": { "icon-size": 16, "spacing": 8 }
 }

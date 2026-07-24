@@ -17,7 +17,7 @@ executable bit). Before the first commit, keep a plain copy instead
 (`cp <file> /tmp/bak`) - and after restoring the hook that way, re-run
 `chmod +x` (the first bats test will remind you if you forget).
 
-All fifteen were executed and caught during the build. Replay at least
+All twenty were executed and caught during the build. Replay at least
 one before every push.
 
 ## roles/base + the shared contract
@@ -119,3 +119,43 @@ one before every push.
 - Red: render suite - rotation invariants ("services never joins it",
   and the line count no longer matches the contract map).
 - Restore: `git checkout -- roles/gpu_handoff/templates/rotation.j2`
+
+## roles/desktop - the cockpit rice
+
+### 16. Helper deployed 0644
+- Break: `sed -i '0,/mode: "0755"/s//mode: "0644"/' roles/desktop/tasks/main.yml`
+- Red: render suite, "A rice invariant broke" - a config file copied 0644
+  is inert, a SCRIPT copied 0644 is a silent no-op: waybar shows an empty
+  module and nothing anywhere says why.
+- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+
+### 17. rofi @import pointing at a name nobody deploys
+- Break: `sed -i 's/@import "rofi-launcher.rasi"/@import "launcher.rasi"/' roles/desktop/files/rofi-config.rasi`
+- Red: render suite, "A rice invariant broke" - rofi resolves @import
+  against the file's own directory, so a rename in the copy loop and a
+  rename in the theme have to happen together or the launcher falls back
+  to the stock theme.
+- Restore: `git checkout -- roles/desktop/files/rofi-config.rasi`
+
+### 18. Backdrop path drift
+- Break: `sed -i 's#backgrounds/privatestack/mocha#backgrounds/mocha#' roles/desktop/files/sway.config`
+- Red: render suite, "A rice invariant broke" - one wallpaper, three
+  files that name it (copy task, sway.config, swaylock.conf). Two out of
+  three agreeing is a black desktop or a black lock screen.
+- Restore: `git checkout -- roles/desktop/files/sway.config`
+
+### 19. cava emits levels the bridge cannot map
+- Break: `sed -i 's/ascii_max_range = 7/ascii_max_range = 15/' roles/desktop/files/cava-waybar.conf`
+- Red: render suite, "A rice invariant broke" - the bridge script maps
+  0-7 onto the eighth-block glyphs; raise the range and the extra levels
+  reach waybar as bare digits.
+- Restore: `git checkout -- roles/desktop/files/cava-waybar.conf`
+
+### 20. The old launcher comes back
+- Break: `sed -i 's/^  - rofi$/  - rofi\n  - fuzzel/' roles/desktop/defaults/main.yml`
+- Red: render suite, "A cockpit invariant broke" - one launcher, and it
+  is the one the sway binding and the power menu actually call. The same
+  assertion refuses `rofi-wayland`: rofi 2.0 Provides/Replaces it, pacman
+  resolves that but `pacman -Q` does not, so the module would report
+  changed on every run forever.
+- Restore: `git checkout -- roles/desktop/defaults/main.yml`

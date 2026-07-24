@@ -1,0 +1,19 @@
+/* Default rofi config: `rofi -show drun` picks this up with no arguments,
+   which is what the sway binding calls. The power menu passes its own
+   -theme and overrides the layout only. */
+configuration {
+    modes:               "drun,run,window";
+    font:                "JetBrainsMono Nerd Font 11";
+    show-icons:          true;
+    icon-theme:          "Papirus-Dark";
+    drun-display-format: "{name}";
+    display-drun:        "apps";
+    display-run:         "run";
+    display-window:      "win";
+    disable-history:     false;
+    hover-select:        true;
+    me-select-entry:     "";
+    me-accept-entry:     "MousePrimary";
+}
+@import "rofi-mocha.rasi"
+@import "rofi-launcher.rasi"

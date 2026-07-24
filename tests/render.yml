@@ -332,12 +332,29 @@
         - playbooks/desktop.yml
         - playbooks/dev.yml
         - playbooks/lab.yml
+        - roles/desktop/files/sway.config
+        - roles/desktop/files/waybar.jsonc
+        - roles/desktop/files/swaylock.conf
+        - roles/desktop/files/rofi-config.rasi
+        - roles/desktop/files/rofi-powermenu.rasi
+        - roles/desktop/files/privatestack-cava.sh
+        - roles/desktop/files/cava-waybar.conf
 
     - name: Cockpit invariants (opt-in, wayland-pure, guests-only IDE)
       ansible.builtin.assert:
         that:
           - "'sway' in render_desk_pkgs"
           - "'ly' in render_desk_pkgs"
+          # the rice pass swapped the launcher. rofi 2.0 absorbed the
+          # wayland fork: the repos ship `rofi` (Provides/Replaces
+          # rofi-wayland), so the old name must never come back - pacman
+          # resolves Provides, `pacman -Q` does not, and the module would
+          # report changed on every single run.
+          - "'rofi' in render_desk_pkgs"
+          - "'rofi-wayland' not in render_desk_pkgs"
+          - "'fuzzel' not in render_desk_pkgs"
+          - "'cava' in render_desk_pkgs"
+          - "'papirus-icon-theme' in render_desk_pkgs"
           - "'sddm' not in render_desk_pkgs"
           - "'gdm' not in render_desk_pkgs"
           - "'xorg-server' not in render_desk_pkgs"
@@ -370,3 +387,76 @@
         render_desktop_hosts: "{{ (render_cockpit.results[3].content | b64decode | from_yaml)[0].hosts }}"
         render_dev_hosts: "{{ (render_cockpit.results[4].content | b64decode | from_yaml)[0].hosts }}"
         render_lab_roles: "{{ (render_cockpit.results[5].content | b64decode | from_yaml)[0].roles }}"
+
+    - name: Rice invariants (helpers executable, every path agrees with every file)
+      ansible.builtin.assert:
+        that:
+          # A config file copied 0644 is inert; a SCRIPT copied 0644 is a
+          # silent no-op that only shows up as an empty bar. Pin the mode.
+          - "render_desk_bin_modes == ['0755']"
+          - "'privatestack-cava' in render_desk_dests"
+          - "'privatestack-powermenu' in render_desk_dests"
+          # waybar and sway call the helpers by absolute path: the module
+          # config and the deploy must name the same file.
+          - "render_waybar['custom/cava']['exec'] == '/usr/local/bin/privatestack-cava'"
+          - "render_waybar['custom/logo']['on-click'] == '/usr/local/bin/privatestack-powermenu'"
+          - "'custom/cava' in render_waybar['modules-left']"
+          - "'/usr/local/bin/privatestack-powermenu' in render_sway"
+          # rofi resolves @import against the file's own directory, so every
+          # import has to match a destination this role actually writes.
+          - "render_rofi_imports | length > 0"
+          - "render_rofi_missing == []"
+          # one backdrop, three files: the copy task, sway and swaylock.
+          - "render_wall_dest | length == 1"
+          - "render_wall_dest[0] in render_sway"
+          - "render_wall_dest[0] in render_swaylock"
+          # the bridge maps one glyph per cava level: max_range 7 -> 8 glyphs.
+          - "render_cava_glyphs == render_cava_max | int + 1"
+          # the launcher swap has to be real in the config too, not only in
+          # the package list.
+          - "'fuzzel' not in render_sway"
+        fail_msg: >-
+          A rice invariant broke: the helpers must land 0755 in
+          /usr/local/bin under the exact names sway and waybar call, every
+          rofi @import must match a deployed file, the backdrop path must be
+          identical in the copy task, sway.config and swaylock.conf, and the
+          cava bridge must cover every level the cava config emits.
+      vars:
+        render_desk_copy_mods: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.copy')
+             | map(attribute='value') | list }}
+        render_desk_bin_modes: >-
+          {{ render_desk_copy_mods
+             | selectattr('dest', 'search', '/usr/local/bin/')
+             | map(attribute='mode') | list }}
+        render_desk_dests: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'loop')
+             | map(attribute='value') | flatten
+             | selectattr('dest', 'defined') | map(attribute='dest') | list }}
+        render_wall_dest: >-
+          {{ render_desk_copy_mods
+             | selectattr('src', 'defined')
+             | selectattr('src', 'equalto', 'wallpaper.png')
+             | map(attribute='dest') | list }}
+        render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
+        render_waybar: >-
+          {{ render_cockpit.results[7].content | b64decode
+             | regex_replace('(?m)^\s*//.*$', '') | from_json }}
+        render_swaylock: "{{ render_cockpit.results[8].content | b64decode }}"
+        render_rofi_imports: >-
+          {{ ((render_cockpit.results[9].content | b64decode)
+              ~ (render_cockpit.results[10].content | b64decode))
+             | regex_findall('@import\s+"([^"]+)"') }}
+        render_rofi_missing: >-
+          {{ render_rofi_imports | map('regex_replace', '^', 'rofi/') | list
+             | difference(render_desk_dests) }}
+        render_cava_glyphs: >-
+          {{ (render_cockpit.results[11].content | b64decode)
+             | regex_findall('s/([0-7])/') | unique | length }}
+        render_cava_max: >-
+          {{ (render_cockpit.results[12].content | b64decode)
+             | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}

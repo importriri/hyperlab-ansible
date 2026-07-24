@@ -7,13 +7,21 @@
 # one compositor, no dependency chain. The eye candy is theming
 # (Catppuccin Mocha end to end), not a fork.
 # ly is the display manager: console-grade, ~1 MB, no seat circus.
+#
+# The rice pass added rofi (launcher + power menu), papirus-icon-theme
+# (rofi's icons) and cava (the waybar strip). rofi 2.0 absorbed the
+# wayland fork: `rofi-wayland` is gone from the repos - the package
+# `rofi` now Provides and Replaces it, so THAT is the name to install.
+# The wallpaper ships with the role and lands in
+# /usr/share/backgrounds/privatestack/: drop another PNG on that path to
+# swap the backdrop without touching ansible.
 desktop_packages:
   - sway
   - swaybg
   - swayidle
   - swaylock
   - waybar
-  - fuzzel
+  - rofi
   - foot
   - mako
   - grim
@@ -27,6 +35,8 @@ desktop_packages:
   - pipewire-pulse
   - wireplumber
   - pamixer
+  - cava
+  - papirus-icon-theme
   - ttf-jetbrains-mono-nerd
   - noto-fonts
   - ly

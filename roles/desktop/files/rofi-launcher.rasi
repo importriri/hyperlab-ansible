@@ -1,0 +1,77 @@
+/* launcher: centred card, icon list, mauve selection */
+window {
+    transparency:     "real";
+    background-color: @base;
+    text-color:       @text;
+    border:           2px;
+    border-color:     @mauve;
+    border-radius:    14px;
+    width:            36%;
+    location:         center;
+    padding:          0px;
+}
+mainbox {
+    background-color: @transparent;
+    children:         [ inputbar, message, listview ];
+    spacing:          0px;
+    padding:          10px;
+}
+inputbar {
+    background-color: @mantle;
+    text-color:       @text;
+    border-radius:    10px;
+    padding:          10px 14px;
+    margin:           0px 0px 8px 0px;
+    children:         [ prompt, entry ];
+    spacing:          10px;
+}
+prompt {
+    background-color: @transparent;
+    text-color:       @mauve;
+}
+entry {
+    background-color: @transparent;
+    text-color:       @text;
+    placeholder:      "search";
+    placeholder-color: @overlay0;
+    cursor:           text;
+}
+message {
+    background-color: @transparent;
+    padding:          0px;
+}
+listview {
+    background-color: @transparent;
+    columns:          1;
+    lines:            9;
+    spacing:          2px;
+    cycle:            false;
+    dynamic:          true;
+    scrollbar:        false;
+}
+element {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border-radius:    10px;
+    padding:          7px 10px;
+    spacing:          12px;
+    cursor:           pointer;
+}
+element-icon {
+    background-color: @transparent;
+    size:             24px;
+    cursor:           inherit;
+}
+element-text {
+    background-color: @transparent;
+    text-color:       inherit;
+    vertical-align:   0.5;
+    cursor:           inherit;
+}
+element selected.normal {
+    background-color: @mauve;
+    text-color:       @crust;
+}
+element alternate.normal {
+    background-color: @transparent;
+}
