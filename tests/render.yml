@@ -113,6 +113,7 @@
         label: "{{ item.file }}"
       vars:
         vfio_boot_luks_uuid: 12345678-1234-1234-1234-123456789abc
+        hardware_probe_vfio_ids_csv: "{{ hardware_profiles['nitro-3060'].vfio_ids | join(',') }}"
 
     - name: Read the rendered entries
       ansible.builtin.slurp:
@@ -134,6 +135,7 @@
           - "'root=/dev/mapper/cryptroot' in render_entry_text"
           - "'rootflags=subvol=@' in render_entry_text"
           - "'zswap.enabled=0' in render_entry_text"
+          - "'vfio-pci.ids=10de:2520,10de:228e' in render_entry_text if item.item.title is search('Vfio') else true"
           - render_entry_keys | unique | length == render_entry_keys | length
         fail_msg: >-
           A boot-entry invariant broke in {{ item.item.file }}: no backslash
