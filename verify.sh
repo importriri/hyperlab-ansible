@@ -16,6 +16,12 @@ cd "$(dirname "$0")" || exit 1
 
 fail=0
 
+if ! ansible-galaxy collection list community.general >/dev/null 2>&1 \
+   || ! ansible-galaxy collection list community.libvirt >/dev/null 2>&1; then
+    echo "Missing collections. Run: ansible-galaxy collection install -r collections/requirements.yml" >&2
+    exit 1
+fi
+
 step() {
     printf '\n== %s\n' "$1"
 }
@@ -33,6 +39,9 @@ run() {
     fi
     rm -f "${log}"
 }
+
+step "level 0a - static cross-repository contract"
+run python tests/static_contract.py
 
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint

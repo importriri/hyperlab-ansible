@@ -4,7 +4,9 @@
 
 A warehouse of pre-configured Ansible bricks for the host that
 [arch-bootstrap](https://github.com/importriri/arch-bootstrap) builds.
-One brick does one job. Playbooks are the assembly instructions.
+One brick does one job. Playbooks are the assembly instructions. The same
+pipeline selects validated profiles for the Nitro RTX 3060 and Predator RTX
+3070 instead of asking users to hand-edit PCI IDs.
 
 Part of a trilogy:
 [arch-bootstrap](https://github.com/importriri/arch-bootstrap) installs the
@@ -25,12 +27,13 @@ package on the host. The host stays a fortress; the services stay cattle.
 
 | Brick | Job | Kind | Status |
 |---|---|---|---|
-| `base` | Admin user, validated sudoers drop-in, hardening sysctls, pacman QoL | lab bundle (1/6) | available |
-| `kvm_host` | Headless KVM stack, socket activation, `/dev/kvm` guard | lab bundle (2/6) | available |
-| `vfio_boot` | The four systemd-boot entries, templated; LUKS UUID read at runtime | lab bundle (3/6) | available |
-| `network_domains` | The five libvirt networks (four NAT + isolated lab) | lab bundle (4/6) | available |
-| `lab_isolation` | The nftables cross-domain drop matrix | lab bundle (5/6) | available |
-| `gpu_handoff` | Trust-ranked GPU handoff hook, fail-closed | lab bundle (6/6) | available |
+| `base` | Admin user, validated sudoers drop-in, hardening sysctls, pacman QoL | lab bundle (1/7) | available |
+| `hardware_probe` | Auto-select and validate Nitro 3060 / Predator 3070 PCI profiles | lab bundle (2/7) | available |
+| `kvm_host` | Headless KVM stack, socket activation, `/dev/kvm` guard | lab bundle (3/7) | available |
+| `vfio_boot` | The four systemd-boot entries, templated; LUKS UUID read at runtime | lab bundle (4/7) | available |
+| `network_domains` | The five libvirt networks (four NAT + isolated lab) | lab bundle (5/7) | available |
+| `lab_isolation` | The nftables cross-domain drop matrix | lab bundle (6/7) | available |
+| `gpu_handoff` | Trust-ranked GPU handoff hook, fail-closed | lab bundle (7/7) | available |
 | `desktop` | Sway + ly cockpit: Mocha rice (floating waybar, rofi launcher + power menu, cava strip), shell nav kit | optional | available |
 | `dev_ide` | Emacs IDE: eglot LSP (java/js/html/css/bash/ansible) + Claude Code | optional (guests) | available |
 | `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
@@ -66,6 +69,9 @@ pacman -S --needed git ansible
 git clone https://github.com/importriri/privatestack-ansible.git
 cd privatestack-ansible
 
+# identify the laptop profile before writing boot/network configuration
+ansible-playbook playbooks/preflight.yml
+
 # dress rehearsal first, always
 ansible-playbook playbooks/lab.yml --check --diff
 
@@ -80,7 +86,7 @@ Subsequent runs as the admin user: `ansible-playbook playbooks/lab.yml
 --ask-become-pass`. A second run right after the first must report
 `changed=0` — that is the definition of done.
 
-The shared contract lives in [`group_vars/all.yml`](group_vars/all.yml):
+The shared contract is split by concern under [`group_vars/all/`](group_vars/all/):
 identity, boot values matching what arch-bootstrap produced, the five
 network domains, the GPU trust map, and the LAN exposure allowlist. Bricks
 consume the contract; they never redefine it.
@@ -97,6 +103,9 @@ Nothing central gets edited. CI discovers the new playbook by itself,
 syntax-checks it, lints the role, and runs the brick's tests if it ships
 any. If adding a brick ever requires more than this, that is an
 architecture bug and gets treated as one.
+
+Hardware profile details: [`docs/hardware-profiles.md`](docs/hardware-profiles.md).
+Network drift handling: [`docs/network-reconciliation.md`](docs/network-reconciliation.md).
 
 ## Testing
 
