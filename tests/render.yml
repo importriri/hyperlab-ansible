@@ -415,12 +415,19 @@
           # the launcher swap has to be real in the config too, not only in
           # the package list.
           - "'fuzzel' not in render_sway"
+          # window_role takes a regex, window_type does NOT: sway matches it
+          # with strcasecmp against a fixed list, and a value outside that
+          # list leaves the criteria empty - sway then refuses the whole line
+          # at startup and says so in a nag bar. Same-looking syntax, one
+          # line apart, opposite rules.
+          - render_sway_window_types | difference(render_sway_types_valid) == []
         fail_msg: >-
           A rice invariant broke: the helpers must land 0755 in
           /usr/local/bin under the exact names sway and waybar call, every
           rofi @import must match a deployed file, the backdrop path must be
-          identical in the copy task, sway.config and swaylock.conf, and the
-          cava bridge must cover every level the cava config emits.
+          identical in the copy task, sway.config and swaylock.conf, the
+          cava bridge must cover every level the cava config emits, and every
+          window_type criterion must name one type sway can actually parse.
       vars:
         render_desk_copy_mods: >-
           {{ (render_cockpit.results[1].content | b64decode | from_yaml)
@@ -460,6 +467,19 @@
         render_cava_max: >-
           {{ (render_cockpit.results[12].content | b64decode)
              | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}
+        render_sway_window_types: >-
+          {{ render_sway | regex_findall('window_type="([^"]*)"') }}
+        render_sway_types_valid:
+          - normal
+          - dialog
+          - utility
+          - toolbar
+          - splash
+          - menu
+          - dropdown_menu
+          - popup_menu
+          - tooltip
+          - notification
 
     # --- looking_glass ----------------------------------------------------------
     # The defaults are loaded as real variables, not read as text: the shared
@@ -521,12 +541,27 @@
           # opt-in: the blind host stays the default
           - render_lg_hosts == 'hypervisor'
           - "'looking_glass' not in render_lg_lab_roles"
+          # `copy` never creates parent directories and upstream `make
+          # install` does not create this one: unless the role declares it,
+          # the stamp - the whole idempotency mechanism - is what fails, and
+          # it fails at the END of a full compile
+          # (the paths come out of the file as raw text, so an expression is
+          # matched as an expression - the resolved path is accepted too)
+          - >-
+            (looking_glass_stamp | dirname) in render_lg_dirs
+            or render_lg_dirs
+               | select('search', 'looking_glass_stamp\s*\|\s*dirname')
+               | list | length > 0
+          # top-level fact injection is deprecated and disappears in
+          # ansible-core 2.24: facts are read through ansible_facts
+          - "'ansible_processor_vcpus' not in render_lg_tasks"
         fail_msg: >-
           A Looking Glass invariant broke: the shared memory must be sized
           from the frame geometry, the device node must be openable by both
           QEMU and the session, the udev retrigger must stay (a reload alone
           is a no-op on a node that already exists), the client must stay
-          Wayland-only, and the brick must never land in lab.yml.
+          Wayland-only, the stamp directory must be declared by the role, and
+          the brick must never land in lab.yml.
       vars:
         looking_glass_x11_deps:
           - libx11
@@ -542,6 +577,13 @@
         render_lg_handlers: "{{ render_lg.results[3].content | b64decode }}"
         render_lg_hosts: "{{ (render_lg.results[4].content | b64decode | from_yaml)[0].hosts }}"
         render_lg_lab_roles: "{{ (render_lg.results[5].content | b64decode | from_yaml)[0].roles }}"
+        render_lg_dirs: >-
+          {{ (render_lg.results[2].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.file')
+             | map(attribute='value')
+             | selectattr('state', 'equalto', 'directory')
+             | map(attribute='path') | list }}
 
     - name: Remove the Looking Glass rendering workspace
       ansible.builtin.file:

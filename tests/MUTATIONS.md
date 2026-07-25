@@ -17,7 +17,7 @@ executable bit). Before the first commit, keep a plain copy instead
 (`cp <file> /tmp/bak`) - and after restoring the hook that way, re-run
 `chmod +x` (the first bats test will remind you if you forget).
 
-All twenty-three were executed and caught during the build. Replay at least
+All twenty-six were executed and caught during the build. Replay at least
 one before every push.
 
 ## roles/base + the shared contract
@@ -183,4 +183,32 @@ one before every push.
 - Red: render suite - Looking Glass invariants. Same contract as the
   cockpit: the whole path is Wayland, and a client that can still fall
   back to X11 lets that rot silently.
+- Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
+
+### 24. window_type goes back to being a regex
+- Break: `sed -i 's/^for_window \[window_type="dialog"\].*$/for_window [window_type="dialog|menu"]/; /^for_window \[window_type="menu"\]/d' roles/desktop/files/sway.config`
+- Red: render suite, "A rice invariant broke" - the line above it takes a
+  regex (`window_role`), this one does not: sway matches `window_type`
+  with `strcasecmp` against a fixed list, an unknown value leaves the
+  criteria empty, and sway refuses the whole line at startup with
+  "Criteria is empty". Caught on hardware first; this is the check that
+  keeps it caught.
+- Restore: `git checkout -- roles/desktop/files/sway.config`
+
+### 25. The stamp directory is never declared
+- Break: delete the `Own the stamp directory` task from
+  `roles/looking_glass/tasks/main.yml`
+- Red: render suite - Looking Glass invariants. `copy` does not create
+  parent directories and upstream `make install` does not create
+  `/usr/local/share/looking-glass`, so the run compiles the whole client
+  and then dies on the last task - the stamp, which is the idempotency.
+  The next run recompiles from scratch, forever.
+- Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
+
+### 26. A top-level fact creeps back in
+- Break: `sed -i "s/ansible_facts\['processor_vcpus'\]/ansible_processor_vcpus/" roles/looking_glass/tasks/main.yml`
+- Red: render suite - Looking Glass invariants. `INJECT_FACTS_AS_VARS`
+  defaults to true today and is deprecated: at ansible-core 2.24 the
+  top-level name stops existing and `make -j` silently falls back to the
+  default. A deprecation warning is a dated bug report.
 - Restore: `git checkout -- roles/looking_glass/tasks/main.yml`

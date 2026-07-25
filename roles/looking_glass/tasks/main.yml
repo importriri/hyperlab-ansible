@@ -76,6 +76,17 @@
     state: present
 
 # --- the client ----------------------------------------------------------------
+# `make install` does not create this directory, and `copy` does not create
+# parents. Without this task the stamp - the entire idempotency mechanism -
+# is the one thing that fails, and it fails at the END of a full compile.
+- name: Own the stamp directory
+  ansible.builtin.file:
+    path: "{{ looking_glass_stamp | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Read the build stamp
   ansible.builtin.slurp:
     src: "{{ looking_glass_stamp }}"
@@ -110,7 +121,7 @@
 
     - name: Compile the client
       ansible.builtin.command:
-        cmd: make -j{{ ansible_processor_vcpus | default(2) }}
+        cmd: make -j{{ ansible_facts['processor_vcpus'] | default(2) }}
         chdir: "{{ looking_glass_src }}/client/build"
       changed_when: true
 
