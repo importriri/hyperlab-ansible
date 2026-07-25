@@ -33,11 +33,11 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: List all persistent libvirt networks
-  community.libvirt.virt_net:
-    command: list_nets
+- name: List all defined libvirt networks
+  ansible.builtin.command: virsh net-list --all --name
   register: network_domains_known
   changed_when: false
+  check_mode: false
 
 - name: Read current persistent XML when the network exists
   ansible.builtin.command: "virsh net-dumpxml --inactive {{ item.name }}"
@@ -80,7 +80,7 @@
     network_domains_reconcile: >-
       {{ network_domains
          | map(attribute='name') | list
-         | difference(network_domains_known.list_nets)
+         | difference(network_domains_known.stdout_lines)
          | union(network_domains_comparison.results | default([])
                  | selectattr('skipped', 'undefined')
                  | selectattr('rc', 'equalto', 1)
