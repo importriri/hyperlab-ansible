@@ -1,0 +1,6 @@
+---
+# Restarting a changed active libvirt network disconnects attached guests.
+# Keep fail-closed by default; explicitly opt in during a maintenance window.
+network_domains_restart_changed: false
+network_domains_config_dir: /etc/privatestack/networks
+network_domains_compare_tool: /usr/local/libexec/privatestack-network-xml-equivalent

@@ -1,17 +1,120 @@
 ---
-- name: Install the libvirt python bindings (community.libvirt needs them)
+- name: Install libvirt network dependencies
   community.general.pacman:
     name:
       - libvirt-python
       - python-lxml
     state: present
 
-- name: List the networks libvirt already knows
+- name: Install the semantic network XML comparator
+  ansible.builtin.copy:
+    src: network_xml_equivalent.py
+    dest: "{{ network_domains_compare_tool }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the managed network XML directory
+  ansible.builtin.file:
+    path: "{{ network_domains_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render the desired persistent network definitions
+  ansible.builtin.template:
+    src: net.xml.j2
+    dest: "{{ network_domains_config_dir }}/{{ item.name }}.xml"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ network_domains }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: List all persistent libvirt networks
   community.libvirt.virt_net:
     command: list_nets
   register: network_domains_known
+  changed_when: false
 
-- name: Define the missing domains
+- name: Read current persistent XML when the network exists
+  ansible.builtin.command: "virsh net-dumpxml --inactive {{ item.name }}"
+  loop: "{{ network_domains }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: network_domains_current_xml
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Compare current and desired network semantics
+  ansible.builtin.command:
+    cmd: >-
+      {{ network_domains_compare_tool }}
+      {{ network_domains_config_dir }}/{{ item.item.name }}.xml -
+    stdin: "{{ item.stdout }}"
+  loop: "{{ network_domains_current_xml.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  register: network_domains_comparison
+  changed_when: false
+  failed_when: false
+  when: item.rc == 0
+  check_mode: false
+
+- name: Refuse comparator execution or XML parse failures
+  ansible.builtin.assert:
+    that:
+      - item.rc in [0, 1]
+    fail_msg: >-
+      Could not compare network {{ item.item.item.name }}: {{ item.stderr }}
+  loop: "{{ network_domains_comparison.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.item.name | default('skipped') }}"
+  when: item.skipped is not defined
+
+- name: Build the network reconciliation set
+  ansible.builtin.set_fact:
+    network_domains_reconcile: >-
+      {{ network_domains
+         | map(attribute='name') | list
+         | difference(network_domains_known.list_nets)
+         | union(network_domains_comparison.results | default([])
+                 | selectattr('skipped', 'undefined')
+                 | selectattr('rc', 'equalto', 1)
+                 | map(attribute='item.item.name') | list) }}
+
+- name: List active libvirt networks
+  ansible.builtin.command: virsh net-list --name
+  register: network_domains_active_raw
+  changed_when: false
+  check_mode: false
+
+- name: Refuse disruptive live reconciliation without an explicit opt-in
+  ansible.builtin.assert:
+    that:
+      - network_domains_restart_changed | bool
+    fail_msg: >-
+      Persistent network drift exists on active network {{ item }}. Re-run in a
+      maintenance window with -e network_domains_restart_changed=true; attached
+      guests will briefly lose connectivity.
+  loop: "{{ network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) | length > 0
+
+- name: Stop changed active networks for immediate reconciliation
+  community.libvirt.virt_net:
+    name: "{{ item }}"
+    state: inactive
+  loop: "{{ network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: network_domains_restart_changed | bool
+
+- name: Define missing or changed persistent networks
   community.libvirt.virt_net:
     command: define
     name: "{{ item.name }}"
@@ -19,9 +122,9 @@
   loop: "{{ network_domains }}"
   loop_control:
     label: "{{ item.name }}"
-  when: item.name not in network_domains_known.list_nets
+  when: item.name in network_domains_reconcile
 
-- name: Activate every domain
+- name: Activate every network domain
   community.libvirt.virt_net:
     name: "{{ item.name }}"
     state: active
@@ -29,7 +132,7 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Autostart every domain
+- name: Autostart every network domain
   community.libvirt.virt_net:
     name: "{{ item.name }}"
     autostart: true
