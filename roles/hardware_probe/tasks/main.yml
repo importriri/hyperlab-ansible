@@ -1,0 +1,85 @@
+---
+- name: Install PCI discovery tooling
+  community.general.pacman:
+    name: pciutils
+    state: present
+
+- name: Read numeric PCI identities
+  ansible.builtin.command: lspci -Dn
+  register: hardware_probe_lspci
+  changed_when: false
+  check_mode: false
+
+- name: Normalize detected PCI IDs
+  ansible.builtin.set_fact:
+    hardware_probe_detected_ids: >-
+      {{ hardware_probe_lspci.stdout
+         | regex_findall('(?i)\b[0-9a-f]{4}:[0-9a-f]{4}\b')
+         | map('lower') | unique | sort | list }}
+    hardware_probe_matches: []
+
+- name: Match known laptop profiles
+  ansible.builtin.set_fact:
+    hardware_probe_matches: "{{ hardware_probe_matches + [item.key] }}"
+  loop: "{{ hardware_profiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.value.vfio_ids | difference(hardware_probe_detected_ids) | length == 0
+
+- name: Resolve automatic hardware selection
+  ansible.builtin.assert:
+    that:
+      - hardware_probe_matches | length == 1
+    fail_msg: >-
+      Automatic hardware selection needs exactly one complete match, but found
+      {{ hardware_probe_matches | join(', ') | default('none', true) }}.
+      Detected PCI IDs: {{ hardware_probe_detected_ids | join(', ') }}.
+      Add a reviewed profile or set hardware_profile explicitly.
+  when: hardware_profile == 'auto'
+
+- name: Validate an explicit hardware profile name
+  ansible.builtin.assert:
+    that:
+      - hardware_profile in hardware_profiles
+    fail_msg: "Unknown hardware_profile={{ hardware_profile }}"
+  when: hardware_profile != 'auto'
+
+- name: Select the hardware profile
+  ansible.builtin.set_fact:
+    hardware_probe_selected_profile: >-
+      {{ hardware_probe_matches[0] if hardware_profile == 'auto' else hardware_profile }}
+
+- name: Refuse a profile whose devices are absent
+  ansible.builtin.assert:
+    that:
+      - hardware_profiles[hardware_probe_selected_profile].vfio_ids
+        | difference(hardware_probe_detected_ids) | length == 0
+    fail_msg: >-
+      Profile {{ hardware_probe_selected_profile }} does not match this machine.
+      Required: {{ hardware_profiles[hardware_probe_selected_profile].vfio_ids | join(', ') }};
+      detected: {{ hardware_probe_detected_ids | join(', ') }}.
+
+- name: Publish the validated VFIO ID string
+  ansible.builtin.set_fact:
+    hardware_probe_vfio_ids_csv: >-
+      {{ hardware_profiles[hardware_probe_selected_profile].vfio_ids | join(',') }}
+
+- name: Create the local pipeline report directory
+  ansible.builtin.file:
+    path: "{{ hardware_probe_report_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record the selected profile without serial numbers
+  ansible.builtin.copy:
+    content: |-
+      profile: {{ hardware_probe_selected_profile }}
+      label: {{ hardware_profiles[hardware_probe_selected_profile].label | to_json }}
+      vfio_ids: {{ hardware_profiles[hardware_probe_selected_profile].vfio_ids | to_json }}
+      detected_pci_ids: {{ hardware_probe_detected_ids | to_json }}
+    dest: "{{ hardware_probe_report_path }}"
+    owner: root
+    group: root
+    mode: "0644"

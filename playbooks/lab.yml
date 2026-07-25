@@ -1,11 +1,12 @@
 ---
-# The lab bundle: mounts the six bricks, in mandatory order.
-# Bricks are uncommented as their stage lands - the shape is the plan.
+# The core lab bundle, in dependency order. Desktop and Looking Glass remain
+# opt-in so the secure headless host is still the default.
 - name: Assemble the hypervisor lab host
   hosts: hypervisor
   become: true
   roles:
     - base
+    - hardware_probe
     - kvm_host
     - vfio_boot
     - network_domains

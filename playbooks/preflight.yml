@@ -1,0 +1,6 @@
+---
+- name: Validate the laptop profile before assembling the lab
+  hosts: hypervisor
+  become: true
+  roles:
+    - hardware_probe

@@ -14,7 +14,7 @@ vfio_boot_profiles:
     title: Arch Linux (Vfio)
     option_groups:
       - "intel_iommu=on iommu=pt"
-      - "vfio-pci.ids={{ vfio_ids }}"
+      - "vfio-pci.ids={{ hardware_probe_vfio_ids_csv }}"
       - "modprobe.blacklist=nouveau module_blacklist=nouveau nvidia-drm.modeset=0"
       - "video=efifb:off pcie_port_pm=off pcie_aspm=off kvm.ignore_msrs=1"
 

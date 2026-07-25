@@ -1,0 +1,3 @@
+---
+hardware_probe_report_dir: /etc/privatestack
+hardware_probe_report_path: "{{ hardware_probe_report_dir }}/hardware-profile.yml"
