@@ -1,27 +1,15 @@
 ---
-# Handlers run in the order they are defined here, not in notify order.
-# Both pairs below depend on that.
-
-# The module reads static_size_mb at load time, so a new size means a reload.
-# If a VM is holding the device the unload fails, and it is left to fail:
-# yanking the transport out from under a running guest to apply a config
-# change is worse than applying it at the next boot.
-- name: Unload kvmfr if nothing holds it
+- name: Unload kvmfr before applying a new size
   ansible.builtin.command: modprobe -r kvmfr
   register: looking_glass_unload
   changed_when: looking_glass_unload.rc == 0
-  failed_when: false
+  failed_when: looking_glass_unload.rc != 0
 
 - name: Load kvmfr with the current size
   community.general.modprobe:
     name: kvmfr
     state: present
 
-# udev applies rules to devices as they appear. It does not revisit a device
-# that already exists, so `control --reload` on its own changes nothing on a
-# node that is already there - which is the case on every run after the
-# first. The synthetic change event is what applies the rule without
-# unloading the module or stopping the VM.
 - name: Reload the udev rules
   ansible.builtin.command: udevadm control --reload
   changed_when: true

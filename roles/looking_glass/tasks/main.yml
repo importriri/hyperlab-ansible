@@ -45,7 +45,7 @@
     group: root
     mode: "0644"
   notify:
-    - Unload kvmfr if nothing holds it
+    - Unload kvmfr before applying a new size
     - Load kvmfr with the current size
 
 - name: Load kvmfr at boot
@@ -74,6 +74,21 @@
   community.general.modprobe:
     name: kvmfr
     state: present
+
+- name: Inspect the kvmfr node after loading the module
+  ansible.builtin.stat:
+    path: "{{ looking_glass_device }}"
+    follow: false
+  register: looking_glass_device_stat
+
+- name: Refuse a missing or stale regular kvmfr path
+  ansible.builtin.assert:
+    that:
+      - looking_glass_device_stat.stat.exists | default(false)
+      - looking_glass_device_stat.stat.ischr | default(false)
+    fail_msg: >-
+      {{ looking_glass_device }} is not a character device. Stop every VM using
+      it, remove a stale regular file if present, reload kvmfr, then rerun.
 
 # --- the client ----------------------------------------------------------------
 # `make install` does not create this directory, and `copy` does not create
