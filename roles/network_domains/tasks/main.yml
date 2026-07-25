@@ -6,6 +6,14 @@
       - python-lxml
     state: present
 
+- name: Create the comparator directory
+  ansible.builtin.file:
+    path: "{{ network_domains_compare_tool | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the semantic network XML comparator
   ansible.builtin.copy:
     src: network_xml_equivalent.py

@@ -36,6 +36,7 @@ network_tasks = (root / "roles/network_domains/tasks/main.yml").read_text()
 check("net-dumpxml --inactive" in network_tasks, "network drift must compare persistent XML")
 check("network_domains_reconcile" in network_tasks, "network role must reconcile changed definitions")
 check("network_domains_restart_changed" in network_tasks, "active network restart must be explicit")
+check("network_domains_compare_tool | dirname" in network_tasks, "network comparator parent directory must be declared")
 
 looking_tasks = (root / "roles/looking_glass/tasks/main.yml").read_text()
 looking_handlers = (root / "roles/looking_glass/handlers/main.yml").read_text()
