@@ -1,0 +1,17 @@
+---
+# `auto` selects the unique profile whose complete PCI ID set is present.
+# An explicit profile is still validated against the detected hardware.
+hardware_profile: auto
+hardware_profiles:
+  nitro-3060:
+    label: Acer Nitro 5 / RTX 3060 Mobile
+    status: component-verified
+    vfio_ids:
+      - "10de:2520"
+      - "10de:228e"
+  predator-3070:
+    label: Acer Predator Helios 300 / RTX 3070 Mobile
+    status: component-verified
+    vfio_ids:
+      - "10de:249d"
+      - "10de:228b"

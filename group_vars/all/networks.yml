@@ -1,0 +1,18 @@
+---
+# Five security domains. `isolated` deliberately omits libvirt's <forward>.
+network_domains:
+  - { name: clean,    bridge: virbr-clean,    subnet: 10.10.1.0/24, gateway: 10.10.1.1, forward: nat }
+  - { name: dirty,    bridge: virbr-dirty,    subnet: 10.10.2.0/24, gateway: 10.10.2.1, forward: nat }
+  - { name: dev,      bridge: virbr-dev,      subnet: 10.10.3.0/24, gateway: 10.10.3.1, forward: nat }
+  - { name: lab,      bridge: virbr-lab,      subnet: 10.10.4.0/24, gateway: 10.10.4.1, forward: isolated }
+  - { name: services, bridge: virbr-services, subnet: 10.10.5.0/24, gateway: 10.10.5.1, forward: nat }
+
+# Only GPU-owning workload domains participate. Services never receive the GPU.
+gpu_trust_levels:
+  clean: 3
+  dev: 2
+  dirty: 1
+  lab: 0
+
+# Deliberate DNAT holes for service VMs. Empty by default.
+services_exposed: []

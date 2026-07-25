@@ -1,0 +1,4 @@
+---
+# Identity created by the base role.
+admin_user: sid
+host_hostname: hypervisor-01
