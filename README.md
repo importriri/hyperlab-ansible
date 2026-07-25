@@ -128,7 +128,7 @@ The whole battery runs locally in one shot: **`./verify.sh`** - the
 same levels CI runs, by discovery, correct at every stage of the repo,
 and usable as a pre-commit hook. And because a test that has never
 been seen red proves nothing, [`tests/MUTATIONS.md`](tests/MUTATIONS.md)
-catalogs fifteen deliberate breakages - one per invariant - with the
+catalogs deliberate breakages for the invariants, with the
 exact command, the check expected to turn red, and the restore.
 Replay one before you push.
 

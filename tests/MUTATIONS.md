@@ -17,8 +17,10 @@ executable bit). Before the first commit, keep a plain copy instead
 (`cp <file> /tmp/bak`) - and after restoring the hook that way, re-run
 `chmod +x` (the first bats test will remind you if you forget).
 
-All twenty-six were executed and caught during the build. Replay at least
-one before every push.
+The original twenty-six were executed and caught during the build. New
+cross-repository contract mutations are listed below and should be replayed as
+the hardware-profile pipeline is validated. Replay at least one before every
+push.
 
 ## roles/base + the shared contract
 
@@ -34,9 +36,9 @@ one before every push.
 - Restore: `git checkout -- roles/base/files/10-wheel`
 
 ### 3. services joins the GPU rotation
-- Break: `sed -i 's/^  lab: 0$/  lab: 0\n  services: 2/' group_vars/all.yml`
+- Break: `sed -i 's/^  lab: 0$/  lab: 0\n  services: 2/' group_vars/all/networks.yml`
 - Red: render suite - contract invariants ("services never joins it").
-- Restore: `git checkout -- group_vars/all.yml`
+- Restore: `git checkout -- group_vars/all/networks.yml`
 
 ## roles/kvm_host
 
@@ -212,3 +214,26 @@ one before every push.
   top-level name stops existing and `make -j` silently falls back to the
   default. A deprecation warning is a dated bug report.
 - Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
+
+
+## Hardware and reconciliation contracts
+
+### 27. Predator profile loses the HDMI-audio function
+- Break: `sed -i '/10de:228b/d' group_vars/all/hardware.yml`
+- Red: static contract, "predator-3070 must bind GPU and HDMI audio".
+- Restore: `git checkout -- group_vars/all/hardware.yml`
+
+### 28. Persistent network drift is no longer read
+- Break: `sed -i 's/net-dumpxml --inactive/net-dumpxml/' roles/network_domains/tasks/main.yml`
+- Red: static contract, "network drift must compare persistent XML".
+- Restore: `git checkout -- roles/network_domains/tasks/main.yml`
+
+### 29. Looking Glass comments regress to hash markers
+- Break: `sed -i '1s/^;/#/' roles/looking_glass/templates/client.ini.j2`
+- Red: static contract, "Looking Glass B7 comments must use semicolons".
+- Restore: `git checkout -- roles/looking_glass/templates/client.ini.j2`
+
+### 30. kvmfr unload failures are ignored again
+- Break: `sed -i 's/failed_when: looking_glass_unload.rc != 0/failed_when: false/' roles/looking_glass/handlers/main.yml`
+- Red: static contract, "kvmfr resize must fail when unload fails".
+- Restore: `git checkout -- roles/looking_glass/handlers/main.yml`
