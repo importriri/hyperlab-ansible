@@ -1,85 +1,123 @@
 ---
-# Host-independent render and invariant suite. All generated files live in a
-# temporary directory; only nft syntax validation needs privilege escalation.
-- name: Validate rendered configuration contracts
+# ============================================================================
+# RENDER / INVARIANT TESTS
+# ----------------------------------------------------------------------------
+# Runs locally and in CI. No writes outside a tmpdir; one task needs root
+# (nft -c opens a netlink socket), so by hand it wants -K. Every brick
+# that ships or generates a file gets its invariants pinned here: the
+# findings paid for with real bugs become executable assertions.
+#
+#   ansible-playbook -i inventory.ini tests/render.yml
+# ============================================================================
+
+- name: Validate brick files against their invariants
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
     repo_root: "{{ playbook_dir }}/.."
   tasks:
-    - name: Create the render workspace
+
+    # --- roles/base -----------------------------------------------------------
+    - name: Sudoers drop-in must pass visudo (the file itself, in CI, forever)
+      ansible.builtin.command: visudo -cf {{ repo_root }}/roles/base/files/10-wheel
+      changed_when: false
+
+    - name: Read the hardening sysctls
+      ansible.builtin.slurp:
+        src: "{{ repo_root }}/roles/base/files/99-hardening.conf"
+      register: render_sysctl
+
+    - name: Sysctl invariants (loose rp_filter, kptr/dmesg restricted, no redirects)
+      ansible.builtin.assert:
+        that:
+          - "'net.ipv4.conf.all.rp_filter = 2' in render_sysctl_text"
+          - "'net.ipv4.conf.default.rp_filter = 2' in render_sysctl_text"
+          - "'rp_filter = 1' not in render_sysctl_text"
+          - "'kernel.kptr_restrict = 2' in render_sysctl_text"
+          - "'kernel.dmesg_restrict = 1' in render_sysctl_text"
+          - "'accept_redirects = 1' not in render_sysctl_text"
+          - "'send_redirects = 1' not in render_sysctl_text"
+          - "'accept_source_route = 1' not in render_sysctl_text"
+        fail_msg: >-
+          A hardening invariant broke. rp_filter MUST be 2 (loose): this
+          host carries five bridges and strict mode drops legitimate
+          asymmetric traffic between them.
+      vars:
+        render_sysctl_text: "{{ render_sysctl.content | b64decode }}"
+
+    # --- the shared contract ---------------------------------------------------
+    - name: Contract invariants (five domains, lab isolated, rotation subset)
+      ansible.builtin.assert:
+        that:
+          - network_domains | length == 5
+          - network_domains | selectattr('forward', 'equalto', 'isolated')
+            | map(attribute='name') | list == ['lab']
+          - network_domains | map(attribute='subnet') | list | unique | length == 5
+          - network_domains | map(attribute='bridge') | list | unique | length == 5
+          - gpu_trust_levels.keys() | difference(network_domains | map(attribute='name')) | length == 0
+          - "'services' not in gpu_trust_levels"
+        fail_msg: >-
+          The shared contract broke an invariant: exactly five domains, only
+          lab is isolated, no duplicate subnets/bridges, GPU rotation is a
+          strict subset of the domains, and services never joins it.
+
+    # --- roles/kvm_host ---------------------------------------------------------
+    - name: Read the kvm_host package list and tasks
+      ansible.builtin.slurp:
+        src: "{{ repo_root }}/roles/kvm_host/{{ item }}/main.yml"
+      register: render_kvm
+      loop:
+        - defaults
+        - tasks
+
+    - name: Kvm_host invariants (headless, mandatory optdeps, socket activation)
+      ansible.builtin.assert:
+        that:
+          - "'qemu-base' in render_kvm_pkgs"
+          - "'qemu-desktop' not in render_kvm_pkgs"
+          - "'iptables-nft' in render_kvm_pkgs"
+          - "'dnsmasq' in render_kvm_pkgs"
+          - "'libvirtd.socket' in render_kvm_tasks"
+          - "'virtlogd.socket' in render_kvm_tasks"
+          - "'libvirtd.service' not in render_kvm_tasks"
+        fail_msg: >-
+          A kvm_host invariant broke: the stack must stay headless
+          (qemu-base), iptables-nft and dnsmasq are de-facto hard deps for
+          libvirt NAT on Arch, and activation goes through sockets - never
+          the monolithic libvirtd.service.
+      vars:
+        render_kvm_pkgs: "{{ (render_kvm.results[0].content | b64decode | from_yaml).kvm_host_packages }}"
+        render_kvm_tasks: "{{ render_kvm.results[1].content | b64decode }}"
+
+    # --- roles/vfio_boot --------------------------------------------------------
+    - name: Load the vfio_boot profiles
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/vfio_boot/defaults/main.yml"
+
+    - name: VFIO profile data must not contain unresolved cross-role facts
+      ansible.builtin.assert:
+        that:
+          - >-
+            'hardware_probe_vfio_ids_csv'
+            not in (vfio_boot_profiles | to_json)
+          - >-
+            vfio_boot_profiles
+            | selectattr('bind_vfio_devices', 'defined')
+            | selectattr('bind_vfio_devices', 'equalto', true)
+            | list
+            | length == 1
+        fail_msg: >-
+          vfio_boot profile defaults must remain static data. The validated
+          hardware fact is injected only while rendering the VFIO entry.
+
+    - name: Make a rendering workspace
       ansible.builtin.tempfile:
         state: directory
         suffix: .render
       register: render_ws
 
-    - name: Validate the shipped sudoers drop-in
-      ansible.builtin.command:
-        argv:
-          - visudo
-          - -cf
-          - "{{ repo_root }}/roles/base/files/10-wheel"
-      changed_when: false
-
-    - name: Read structural source files
-      ansible.builtin.slurp:
-        src: "{{ repo_root }}/{{ item }}"
-      loop:
-        - roles/base/files/99-hardening.conf
-        - roles/kvm_host/defaults/main.yml
-        - roles/kvm_host/tasks/main.yml
-        - roles/vfio_boot/files/10-vfio.conf
-        - roles/lab_isolation/files/nftables.conf
-        - roles/lab_isolation/handlers/main.yml
-        - roles/lab_isolation/tasks/main.yml
-        - roles/gpu_handoff/tasks/main.yml
-        - roles/desktop/defaults/main.yml
-        - roles/desktop/tasks/main.yml
-        - roles/dev_ide/defaults/main.yml
-        - roles/desktop/files/sway.config
-        - roles/desktop/files/foot.ini
-        - roles/looking_glass/tasks/main.yml
-        - roles/looking_glass/handlers/main.yml
-        - playbooks/desktop.yml
-        - playbooks/dev.yml
-        - playbooks/lab.yml
-        - playbooks/looking-glass.yml
-      register: render_sources
-
-    - name: Pin the shared host invariants
-      ansible.builtin.assert:
-        that:
-          - "'net.ipv4.conf.all.rp_filter = 2' in render_sysctl"
-          - "'kernel.kptr_restrict = 2' in render_sysctl"
-          - "'accept_redirects = 1' not in render_sysctl"
-          - network_domains | length == 5
-          - network_domains | selectattr('forward', 'equalto', 'isolated')
-            | map(attribute='name') | list == ['lab']
-          - network_domains | map(attribute='subnet') | unique | length == 5
-          - "'services' not in gpu_trust_levels"
-          - "'qemu-base' in render_kvm_defaults"
-          - "'qemu-desktop' not in render_kvm_defaults"
-          - "'libvirtd.socket' in render_kvm_tasks"
-          - "'libvirtd.service' not in render_kvm_tasks"
-          - "'MODULES+=(' in render_vfio_dropin"
-          - "'vfio_pci' in render_vfio_dropin"
-        quiet: true
-      vars:
-        render_sysctl: "{{ render_sources.results[0].content | b64decode }}"
-        render_kvm_defaults: "{{ render_sources.results[1].content | b64decode }}"
-        render_kvm_tasks: "{{ render_sources.results[2].content | b64decode }}"
-        render_vfio_dropin: "{{ render_sources.results[3].content | b64decode }}"
-
-    - name: Load role defaults used by render tests
-      ansible.builtin.include_vars:
-        file: "{{ item }}"
-      loop:
-        - "{{ repo_root }}/roles/vfio_boot/defaults/main.yml"
-        - "{{ repo_root }}/roles/lab_isolation/defaults/main.yml"
-        - "{{ repo_root }}/roles/looking_glass/defaults/main.yml"
-
-    - name: Render the boot entries
+    - name: Render the four boot entries with a pinned fake UUID
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/vfio_boot/templates/entry.conf.j2"
         dest: "{{ render_ws.path }}/{{ item.file }}"
@@ -89,223 +127,447 @@
         label: "{{ item.file }}"
       vars:
         vfio_boot_luks_uuid: 12345678-1234-1234-1234-123456789abc
-        hardware_probe_vfio_ids_csv: >-
-          {{ host_profiles['nitro-3060'].vfio_ids | join(',') }}
+        hardware_probe_vfio_ids_csv: "{{ host_profiles['nitro-3060'].vfio_ids | join(',') }}"
 
-    - name: Read the rendered boot entries
+    - name: Read the rendered entries
       ansible.builtin.slurp:
         src: "{{ render_ws.path }}/{{ item.file }}"
+      register: render_entries
       loop: "{{ vfio_boot_profiles }}"
-      register: render_boot_entries
+      loop_control:
+        label: "{{ item.file }}"
 
-    - name: Validate every rendered boot entry
+    - name: Boot entry invariants (the M0 bug classes, pinned forever)
       ansible.builtin.assert:
         that:
-          - "'YOUR-LUKS-UUID' not in render_boot_text"
-          - "'cryptdevice' not in render_boot_text"
-          - "'root=/dev/mapper/cryptroot' in render_boot_text"
-          - "'rootflags=subvol=@' in render_boot_text"
-          - "'zswap.enabled=0' in render_boot_text"
-          - render_boot_text | regex_findall('(?m)\\\\$') | length == 0
-          - >-
-            'vfio-pci.ids=10de:2520,10de:228e' in render_boot_text
-            if item.item.title is search('Vfio') else true
+          - render_entry_text | regex_findall('(?m)\\$') | length == 0
+          - render_entry_text | regex_findall('(?m)^options ') | length >= 2
+          - "'cryptdevice' not in render_entry_text"
+          - "'YOUR-LUKS-UUID' not in render_entry_text"
+          - render_entry_text | regex_findall('\{\{') | length == 0
+          - "'rd.luks.name=12345678-1234-1234-1234-123456789abc=cryptroot' in render_entry_text"
+          - "'root=/dev/mapper/cryptroot' in render_entry_text"
+          - "'rootflags=subvol=@' in render_entry_text"
+          - "'zswap.enabled=0' in render_entry_text"
+          - "'vfio-pci.ids=10de:2520,10de:228e' in render_entry_text if item.item.title is search('Vfio') else true"
+          - render_entry_keys | unique | length == render_entry_keys | length
         quiet: true
-      loop: "{{ render_boot_entries.results }}"
+      loop: "{{ render_entries.results }}"
       loop_control:
         label: "{{ item.item.file }}"
       vars:
-        render_boot_text: "{{ item.content | b64decode }}"
+        render_entry_text: "{{ item.content | b64decode }}"
+        render_entry_keys: "{{ render_entry_text | regex_findall('(?m)^options\\s+(.*)$') | join(' ') | split | map('regex_replace', '=.*', '') | list }}"
 
-    - name: Render the five libvirt networks
+    - name: The runtime UUID guard must reject the placeholder shape
+      ansible.builtin.assert:
+        that:
+          - "'YOUR-LUKS-UUID-HERE' is not match('^[0-9a-f]{8}-[0-9a-f]{4}-')"
+          - "'12345678-1234-1234-1234-123456789abc' is match('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')"
+
+    - name: Read the vfio early-bind drop-in
+      ansible.builtin.slurp:
+        src: "{{ repo_root }}/roles/vfio_boot/files/10-vfio.conf"
+      register: render_vfio_dropin
+
+    - name: Early-bind invariants (three modules, append-only syntax)
+      ansible.builtin.assert:
+        that:
+          - "'MODULES+=(' in render_vfio_dropin_text"
+          - "'vfio_pci' in render_vfio_dropin_text"
+          - "' vfio ' in render_vfio_dropin_text"
+          - "'vfio_iommu_type1' in render_vfio_dropin_text"
+        quiet: true
+      vars:
+        render_vfio_dropin_text: "{{ render_vfio_dropin.content | b64decode }}"
+
+    - name: Render the five network XMLs
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/network_domains/templates/net.xml.j2"
         dest: "{{ render_ws.path }}/net-{{ item.name }}.xml"
         mode: "0644"
       loop: "{{ network_domains }}"
 
-    - name: Parse every rendered network as XML
-      ansible.builtin.command:
-        argv:
-          - python3
-          - -c
-          - >-
-            import xml.etree.ElementTree as ET;
-            ET.parse('{{ render_ws.path }}/net-{{ item.name }}.xml')
+    - name: Every rendered network must parse as XML
+      ansible.builtin.command: >-
+        python3 -c "import xml.etree.ElementTree as ET;
+        ET.parse('{{ render_ws.path }}/net-{{ item.name }}.xml')"
       changed_when: false
       loop: "{{ network_domains }}"
 
-    - name: Render the nftables isolation matrix
+    - name: Read the rendered networks
+      ansible.builtin.slurp:
+        src: "{{ render_ws.path }}/net-{{ item.name }}.xml"
+      register: render_nets
+      loop: "{{ network_domains }}"
+
+    - name: Network invariants (NAT vs isolated as a strict equivalence)
+      ansible.builtin.assert:
+        that:
+          - (item.item.forward == 'nat') == ('<forward mode="nat"/>' in render_net_text)
+          - (item.item.forward == 'isolated') == ('<forward' not in render_net_text)
+          - render_net_text is search('bridge name="' ~ item.item.bridge ~ '"')
+          - render_net_text is search('address="' ~ item.item.gateway ~ '"')
+          - "'<dhcp>' in render_net_text"
+        quiet: true
+      loop: "{{ render_nets.results }}"
+      vars:
+        render_net_text: "{{ item.content | b64decode }}"
+
+    - name: Load the lab_isolation defaults
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/lab_isolation/defaults/main.yml"
+
+    - name: Render the isolation matrix
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/lab_isolation/templates/lab-isolation.nft.j2"
         dest: "{{ render_ws.path }}/lab-isolation.nft"
         mode: "0644"
 
-    - name: Validate the rendered nftables ruleset
+    - name: The real judge - nft -c on the rendered ruleset
       become: true
-      ansible.builtin.command:
-        argv:
-          - nft
-          - -c
-          - -f
-          - "{{ render_ws.path }}/lab-isolation.nft"
+      ansible.builtin.command: nft -c -f {{ render_ws.path }}/lab-isolation.nft
       changed_when: false
 
-    - name: Read the rendered isolation matrix
+    - name: Read the rendered matrix and the shipped nftables.conf
       ansible.builtin.slurp:
-        src: "{{ render_ws.path }}/lab-isolation.nft"
-      register: render_nft_matrix_file
+        src: "{{ item }}"
+      register: render_nft
+      loop:
+        - "{{ render_ws.path }}/lab-isolation.nft"
+        - "{{ repo_root }}/roles/lab_isolation/files/nftables.conf"
+        - "{{ repo_root }}/roles/lab_isolation/handlers/main.yml"
+        - "{{ repo_root }}/roles/lab_isolation/tasks/main.yml"
 
-    - name: Pin isolation lifecycle invariants
+    - name: Matrix invariants (flush scope, completeness, priority, reload-only)
       ansible.builtin.assert:
         that:
-          - render_nft_matrix | regex_findall('flush table inet lab_isolation')
-            | length == 1
-          - render_nft_matrix | regex_findall('(?m)^\\s*flush ruleset')
-            | length == 0
+          - render_nft_matrix | regex_findall('(?m)^\\s*flush ruleset') | length == 0
+          - render_nft_matrix | regex_findall('flush table inet lab_isolation') | length == 1
+          - render_nft_matrix | regex_findall('iifname "virbr-[a-z]+" oifname "virbr-[a-z]+" counter drop') | length == render_nft_pairs | int
           - "'priority -10' in render_nft_matrix"
+          - "'policy accept' in render_nft_matrix"
           - "'iifname \"virbr-lab\" counter drop' in render_nft_matrix"
           - "'oifname \"virbr-lab\" counter drop' in render_nft_matrix"
+          - render_nft_conf | regex_findall('(?m)^\\s*flush ruleset') | length == 0
+          - "'include \"/etc/nftables.d/*.nft\"' in render_nft_conf"
           - "'state: reloaded' in render_nft_handlers"
           - "'state: restarted' not in render_nft_handlers"
+          - "'state: restarted' not in render_nft_tasks"
           - "'state: started' not in render_nft_tasks"
+          - "'nft list table' in render_nft_tasks"
+          - "'when: lab_isolation_live.rc != 0' in render_nft_tasks"
         quiet: true
       vars:
-        render_nft_matrix: "{{ render_nft_matrix_file.content | b64decode }}"
-        render_nft_handlers: "{{ render_sources.results[5].content | b64decode }}"
-        render_nft_tasks: "{{ render_sources.results[6].content | b64decode }}"
+        render_nft_matrix: "{{ render_nft.results[0].content | b64decode }}"
+        render_nft_conf: "{{ render_nft.results[1].content | b64decode }}"
+        render_nft_handlers: "{{ render_nft.results[2].content | b64decode }}"
+        render_nft_tasks: "{{ render_nft.results[3].content | b64decode }}"
+        render_nft_pairs: "{{ network_domains | length * (network_domains | length - 1) }}"
 
-    - name: Render the GPU trust rotation
+    - name: Render the trust rotation from the contract
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/gpu_handoff/templates/rotation.j2"
         dest: "{{ render_ws.path }}/rotation"
         mode: "0644"
 
-    - name: Read the rendered GPU rotation
+    - name: Read the rendered rotation and the gpu_handoff tasks
       ansible.builtin.slurp:
-        src: "{{ render_ws.path }}/rotation"
-      register: render_gpu_rotation_file
+        src: "{{ item }}"
+      register: render_gpu
+      loop:
+        - "{{ render_ws.path }}/rotation"
+        - "{{ repo_root }}/roles/gpu_handoff/tasks/main.yml"
 
-    - name: Pin GPU handoff invariants
+    - name: Rotation invariants (contract map, services never, hook lands 0755)
       ansible.builtin.assert:
         that:
+          - render_gpu_rotation | regex_findall('(?m)^[a-z]+ [0-9]+$') | length == gpu_trust_levels | length
           - "'services' not in render_gpu_rotation"
           - "'clean 3' in render_gpu_rotation"
           - "'lab 0' in render_gpu_rotation"
-          - render_gpu_rotation | regex_findall('(?m)^[a-z]+ [0-9]+$')
-            | length == gpu_trust_levels | length
-          - 'render_gpu_tasks is search(''hooks/qemu[\s\S]{0,180}mode: "0755"'')'
+          - 'render_gpu_tasks is search(''hooks/qemu[\s\S]{0,160}mode: "0755"'')'
         quiet: true
       vars:
-        render_gpu_rotation: "{{ render_gpu_rotation_file.content | b64decode }}"
-        render_gpu_tasks: "{{ render_sources.results[7].content | b64decode }}"
+        render_gpu_rotation: "{{ render_gpu.results[0].content | b64decode }}"
+        render_gpu_tasks: "{{ render_gpu.results[1].content | b64decode }}"
 
-    - name: Pin cockpit and public-tooling invariants
+    - name: Remove the rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_ws.path }}"
+        state: absent
+
+    - name: Read the cockpit bricks and their playbooks
+      ansible.builtin.slurp:
+        src: "{{ repo_root }}/{{ item }}"
+      register: render_cockpit
+      loop:
+        - roles/desktop/defaults/main.yml
+        - roles/desktop/tasks/main.yml
+        - roles/dev_ide/defaults/main.yml
+        - playbooks/desktop.yml
+        - playbooks/dev.yml
+        - playbooks/lab.yml
+        - roles/desktop/files/sway.config
+        - roles/desktop/files/waybar.jsonc
+        - roles/desktop/files/swaylock.conf
+        - roles/desktop/files/rofi-config.rasi
+        - roles/desktop/files/rofi-powermenu.rasi
+        - roles/desktop/files/privatestack-cava.sh
+        - roles/desktop/files/cava-waybar.conf
+
+    - name: Cockpit invariants (opt-in, wayland-pure, guests-only IDE)
       ansible.builtin.assert:
         that:
-          - "'sway' in render_desktop_packages"
-          - "'ly' in render_desktop_packages"
-          - "'rofi' in render_desktop_packages"
-          - "'rofi-wayland' not in render_desktop_packages"
-          - "'xorg-server' not in render_desktop_packages"
-          - "'emacs-wayland' in render_ide_packages"
-          - "'emacs' not in render_ide_packages"
-          - render_desktop_hosts == 'hypervisor:workstations'
-          - render_dev_hosts == 'workstations'
+          - "'sway' in render_desk_pkgs"
+          - "'ly' in render_desk_pkgs"
+          - "'rofi' in render_desk_pkgs"
+          - "'rofi-wayland' not in render_desk_pkgs"
+          - "'fuzzel' not in render_desk_pkgs"
+          - "'cava' in render_desk_pkgs"
+          - "'papirus-icon-theme' in render_desk_pkgs"
+          - "'sddm' not in render_desk_pkgs"
+          - "'gdm' not in render_desk_pkgs"
+          - "'xorg-server' not in render_desk_pkgs"
+          - "render_desk_units == ['ly@tty2.service']"
+          - "'emacs-wayland' in render_ide_pkgs"
+          - "'emacs' not in render_ide_pkgs"
+          - "render_desktop_hosts == 'hypervisor:workstations'"
+          - "render_dev_hosts == 'workstations'"
           - "'desktop' not in render_lab_roles"
           - "'dev_ide' not in render_lab_roles"
-          - "'include input.conf' in render_sway"
-          - "'[colors-dark]' in render_foot_sections"
-          - "'[colors]' not in render_foot_sections"
-          - "'[cursor]' not in render_foot_sections"
-          - "'cursor=' in render_foot"
         quiet: true
       vars:
-        render_desktop_packages: >-
-          {{ (render_sources.results[8].content | b64decode
-              | from_yaml).desktop_packages }}
-        render_ide_packages: >-
-          {{ (render_sources.results[10].content | b64decode
-              | from_yaml).dev_ide_packages }}
-        render_sway: "{{ render_sources.results[11].content | b64decode }}"
-        render_foot: "{{ render_sources.results[12].content | b64decode }}"
-        render_foot_sections: >-
-          {{ render_foot | regex_findall('(?m)^\\[[a-z0-9-]+\\]') }}
-        render_desktop_hosts: >-
-          {{ (render_sources.results[15].content | b64decode | from_yaml)[0].hosts }}
-        render_dev_hosts: >-
-          {{ (render_sources.results[16].content | b64decode | from_yaml)[0].hosts }}
-        render_lab_roles: >-
-          {{ (render_sources.results[17].content | b64decode | from_yaml)[0].roles }}
+        render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_packages }}"
+        render_desk_units: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.systemd_service')
+             | map(attribute='value.name') | list }}
+        render_ide_pkgs: "{{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_packages }}"
+        render_desktop_hosts: "{{ (render_cockpit.results[3].content | b64decode | from_yaml)[0].hosts }}"
+        render_dev_hosts: "{{ (render_cockpit.results[4].content | b64decode | from_yaml)[0].hosts }}"
+        render_lab_roles: "{{ (render_cockpit.results[5].content | b64decode | from_yaml)[0].roles }}"
 
-    - name: Render Looking Glass transport files
+    - name: Rice invariants (helpers executable, every path agrees with every file)
+      ansible.builtin.assert:
+        that:
+          - "render_desk_bin_modes == ['0755']"
+          - "'privatestack-cava' in render_desk_dests"
+          - "'privatestack-powermenu' in render_desk_dests"
+          - "render_waybar['custom/cava']['exec'] == '/usr/local/bin/privatestack-cava'"
+          - "render_waybar['custom/logo']['on-click'] == '/usr/local/bin/privatestack-powermenu'"
+          - "'custom/cava' in render_waybar['modules-left']"
+          - "'/usr/local/bin/privatestack-powermenu' in render_sway"
+          - "render_rofi_imports | length > 0"
+          - "render_rofi_missing == []"
+          - "render_wall_dest | length == 1"
+          - "render_wall_dest[0] in render_sway"
+          - "render_wall_dest[0] in render_swaylock"
+          - "render_cava_glyphs == render_cava_max | int + 1"
+          - "'fuzzel' not in render_sway"
+          - render_sway_window_types | difference(render_sway_types_valid) == []
+        quiet: true
+      vars:
+        render_desk_copy_mods: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.copy')
+             | map(attribute='value') | list }}
+        render_desk_bin_modes: >-
+          {{ render_desk_copy_mods
+             | selectattr('dest', 'search', '/usr/local/bin/')
+             | map(attribute='mode') | list }}
+        render_desk_dests: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'loop')
+             | map(attribute='value') | flatten
+             | selectattr('dest', 'defined') | map(attribute='dest') | list }}
+        render_wall_dest: >-
+          {{ render_desk_copy_mods
+             | selectattr('src', 'defined')
+             | selectattr('src', 'equalto', 'wallpaper.png')
+             | map(attribute='dest') | list }}
+        render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
+        render_waybar: >-
+          {{ render_cockpit.results[7].content | b64decode
+             | regex_replace('(?m)^\s*//.*$', '') | from_json }}
+        render_swaylock: "{{ render_cockpit.results[8].content | b64decode }}"
+        render_rofi_imports: >-
+          {{ ((render_cockpit.results[9].content | b64decode)
+              ~ (render_cockpit.results[10].content | b64decode))
+             | regex_findall('@import\s+"([^"]+)"') }}
+        render_rofi_missing: >-
+          {{ render_rofi_imports | map('regex_replace', '^', 'rofi/') | list
+             | difference(render_desk_dests) }}
+        render_cava_glyphs: >-
+          {{ (render_cockpit.results[11].content | b64decode)
+             | regex_findall('s/([0-7])/') | unique | length }}
+        render_cava_max: >-
+          {{ (render_cockpit.results[12].content | b64decode)
+             | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}
+        render_sway_window_types: >-
+          {{ render_sway | regex_findall('window_type="([^"]*)"') }}
+        render_sway_types_valid:
+          - normal
+          - dialog
+          - utility
+          - toolbar
+          - splash
+          - menu
+          - dropdown_menu
+          - popup_menu
+          - tooltip
+          - notification
+
+    - name: Load the Looking Glass defaults as real variables
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/looking_glass/defaults/main.yml"
+
+    - name: Make a rendering workspace for the transport files
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .render
+      register: render_lg_ws
+
+    - name: Render the udev rule and the module options
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/looking_glass/templates/{{ item }}"
-        dest: "{{ render_ws.path }}/{{ item | regex_replace('\\.j2$', '') }}"
+        dest: "{{ render_lg_ws.path }}/{{ item | regex_replace('\\.j2$', '') }}"
         mode: "0644"
       loop:
         - 70-kvmfr.rules.j2
         - kvmfr.conf.j2
 
-    - name: Read Looking Glass transport files
+    - name: Read the rendered transport files, the brick, and the playbooks
       ansible.builtin.slurp:
-        src: "{{ render_ws.path }}/{{ item }}"
+        src: "{{ item }}"
+      register: render_lg
       loop:
-        - 70-kvmfr.rules
-        - kvmfr.conf
-      register: render_lg_files
+        - "{{ render_lg_ws.path }}/70-kvmfr.rules"
+        - "{{ render_lg_ws.path }}/kvmfr.conf"
+        - "{{ repo_root }}/roles/looking_glass/tasks/main.yml"
+        - "{{ repo_root }}/roles/looking_glass/handlers/main.yml"
+        - "{{ repo_root }}/playbooks/looking-glass.yml"
+        - "{{ repo_root }}/playbooks/lab.yml"
 
-    - name: Pin Looking Glass transport and identity invariants
+    - name: Looking Glass invariants (sized shm, two openers, wayland-pure, opt-in)
       ansible.builtin.assert:
         that:
           - looking_glass_shm_mb | int == 32
-          - "'static_size_mb=32' in render_lg_modprobe"
+          - render_lg_modprobe is search('static_size_mb=32')
           - render_lg_rule is search('OWNER="' ~ looking_glass_qemu_user ~ '"')
-          - render_lg_rule is search('TAG\\+="uaccess"')
+          - render_lg_rule is search('TAG\+="uaccess"')
+          - render_lg_handlers is search('--action=change')
           - "'-DENABLE_X11=no' in render_lg_tasks"
+          - looking_glass_packages | intersect(looking_glass_x11_deps) | length == 0
+          - render_lg_hosts == 'hypervisor'
+          - "'looking_glass' not in render_lg_lab_roles"
+          - >-
+            (looking_glass_stamp | dirname) in render_lg_dirs
+            or render_lg_dirs
+               | select('search', 'looking_glass_stamp\s*\|\s*dirname')
+               | list | length > 0
+          - "'ansible_processor_vcpus' not in render_lg_tasks"
           - "'--abbrev=10' in render_lg_tasks"
           - looking_glass_commit | length == 40
           - looking_glass_build is search(looking_glass_commit[0:10] ~ '$')
-          - "'looking_glass' not in render_lab_roles"
-          - render_lg_hosts == 'hypervisor'
         quiet: true
       vars:
-        render_lg_rule: "{{ render_lg_files.results[0].content | b64decode }}"
-        render_lg_modprobe: "{{ render_lg_files.results[1].content | b64decode }}"
-        render_lg_tasks: "{{ render_sources.results[13].content | b64decode }}"
-        render_lab_roles: >-
-          {{ (render_sources.results[17].content | b64decode | from_yaml)[0].roles }}
-        render_lg_hosts: >-
-          {{ (render_sources.results[18].content | b64decode | from_yaml)[0].hosts }}
+        looking_glass_x11_deps:
+          - libx11
+          - libxfixes
+          - libxi
+          - libxinerama
+          - libxss
+          - libxcursor
+          - libxpresent
+        render_lg_rule: "{{ render_lg.results[0].content | b64decode }}"
+        render_lg_modprobe: "{{ render_lg.results[1].content | b64decode }}"
+        render_lg_tasks: "{{ render_lg.results[2].content | b64decode }}"
+        render_lg_handlers: "{{ render_lg.results[3].content | b64decode }}"
+        render_lg_hosts: "{{ (render_lg.results[4].content | b64decode | from_yaml)[0].hosts }}"
+        render_lg_lab_roles: "{{ (render_lg.results[5].content | b64decode | from_yaml)[0].roles }}"
+        render_lg_dirs: >-
+          {{ (render_lg.results[2].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.file')
+             | map(attribute='value')
+             | selectattr('state', 'equalto', 'directory')
+             | map(attribute='path') | list }}
 
-    - name: Render the per-machine input contract
+    - name: Remove the Looking Glass rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_lg_ws.path }}"
+        state: absent
+
+    - name: Make the input rendering workspace
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .render
+      register: render_input_ws
+
+    - name: Render the per-machine input template three ways
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/desktop/templates/sway-input.conf.j2"
-        dest: "{{ render_ws.path }}/input.conf"
+        dest: "{{ render_input_ws.path }}/{{ item.name }}.conf"
         mode: "0644"
       vars:
-        desktop_input: >-
-          {{ desktop_input_defaults | combine(
-             host_profiles['nitro-3060'].desktop, recursive=true) }}
+        desktop_input: "{{ item.input }}"
+        render_input_fallback_map: >-
+          {{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_input_defaults }}
+        render_hw_profiles: >-
+          {{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}
+      loop:
+        - name: fallback
+          input: "{{ render_input_fallback_map }}"
+        - name: optional
+          input: >-
+            {{ render_input_fallback_map | combine({
+                 'keyboard_variant': 'us',
+                 'keyboard_options': 'ctrl:nocaps'}, recursive=true) }}
+        - name: nitro
+          input: >-
+            {{ render_input_fallback_map | combine(
+                 render_hw_profiles['nitro-3060'].desktop, recursive=true) }}
 
-    - name: Read the rendered input contract
+    - name: Read back what the template produced
       ansible.builtin.slurp:
-        src: "{{ render_ws.path }}/input.conf"
-      register: render_input_file
+        src: "{{ render_input_ws.path }}/{{ item }}.conf"
+      register: render_input_out
+      loop:
+        - fallback
+        - optional
+        - nitro
 
-    - name: Pin per-machine input values
+    - name: Per-machine input invariants (values, not mentions)
       ansible.builtin.assert:
         that:
-          - "'xkb_layout it' in render_input"
-          - "'input type:touchpad' in render_input"
-          - "'natural_scroll enabled' in render_input"
-          - "'tap enabled' in render_input"
-          - render_input | regex_findall('\\{\\{') | length == 0
+          - "'xkb_layout it' in render_input_fallback"
+          - render_input_fallback | select('match', 'xkb_variant') | list | length == 0
+          - render_input_fallback | select('match', 'xkb_options') | list | length == 0
+          - "'xkb_variant us' in render_input_optional"
+          - "'xkb_options ctrl:nocaps' in render_input_optional"
+          - render_input_touchpad == render_input_touchpad_expected
+          - "'xkb_layout ' ~ render_hw_profiles['nitro-3060'].desktop.keyboard_layout in render_input_nitro"
+          - render_hw_profiles | dict2items | rejectattr('value.desktop', 'defined') | list | length == 0
         quiet: true
       vars:
-        render_input: "{{ render_input_file.content | b64decode }}"
+        render_input_fallback: "{{ (render_input_out.results[0].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_optional: "{{ (render_input_out.results[1].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_nitro: "{{ (render_input_out.results[2].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_touchpad: >-
+          {{ render_input_fallback | select('search', '^(dwt|middle_emulation|natural_scroll|tap) ') | list }}
+        render_input_touchpad_expected:
+          - dwt enabled
+          - middle_emulation enabled
+          - natural_scroll enabled
+          - tap enabled
+        render_hw_profiles: >-
+          {{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}
 
-    - name: Remove the render workspace
+    - name: Remove the input rendering workspace
       ansible.builtin.file:
-        path: "{{ render_ws.path }}"
+        path: "{{ render_input_ws.path }}"
         state: absent
