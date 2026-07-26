@@ -64,7 +64,12 @@ done
 if [ "${ok}" -eq 1 ]; then echo "   OK"; else fail=1; fi
 
 step "level 2 - render / invariant tests"
-run ansible-playbook -i inventory.ini tests/render.yml
+# M0's renderer still names the old variable in one isolated fake-data
+# expression. Supply that fixture explicitly while production data and every
+# M1 contract use host_profiles. Remove this bridge with the test-only render
+# migration; never restore the legacy key to production group_vars.
+run ansible-playbook -i inventory.ini tests/render.yml \
+    --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
 
 if ls tests/*.bats >/dev/null 2>&1; then
     step "level 3 - protocol tests (bats, discovered)"
