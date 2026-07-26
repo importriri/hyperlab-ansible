@@ -97,6 +97,22 @@
       ansible.builtin.include_vars:
         file: "{{ repo_root }}/roles/vfio_boot/defaults/main.yml"
 
+    - name: VFIO profile data must not contain unresolved cross-role facts
+      ansible.builtin.assert:
+        that:
+          - >-
+            'hardware_probe_vfio_ids_csv'
+            not in (vfio_boot_profiles | to_json)
+          - >-
+            vfio_boot_profiles
+            | selectattr('bind_vfio_devices', 'defined')
+            | selectattr('bind_vfio_devices', 'equalto', true)
+            | list
+            | length == 1
+        fail_msg: >-
+          vfio_boot profile defaults must remain static data. The validated
+          hardware fact is injected only while rendering the VFIO entry.
+
     - name: Make a rendering workspace
       ansible.builtin.tempfile:
         state: directory

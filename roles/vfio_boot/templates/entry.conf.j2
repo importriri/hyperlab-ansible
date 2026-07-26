@@ -13,6 +13,9 @@ linux   /vmlinuz-{{ kernel_name }}
 initrd  /initramfs-{{ kernel_name }}.img
 options rd.luks.name={{ vfio_boot_luks_uuid }}={{ luks_mapper_name }} root=/dev/mapper/{{ luks_mapper_name }} rootfstype=btrfs rootflags=subvol={{ root_subvol }} rw
 options zswap.enabled=0
+{% if item.bind_vfio_devices | default(false) %}
+options vfio-pci.ids={{ hardware_probe_vfio_ids_csv }}
+{% endif %}
 {% for group in item.option_groups %}
 options {{ group }}
 {% endfor %}

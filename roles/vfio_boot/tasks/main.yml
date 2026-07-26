@@ -12,6 +12,18 @@
       /boot/loader/entries is missing: this host does not look like it was
       built by arch-bootstrap (systemd-boot with a mounted ESP expected).
 
+- name: Refuse boot rendering without validated VFIO IDs
+  ansible.builtin.assert:
+    that:
+      - hardware_probe_vfio_ids_csv is defined
+      - hardware_probe_vfio_ids_csv is string
+      - >-
+        hardware_probe_vfio_ids_csv is
+        match('^[0-9a-f]{4}:[0-9a-f]{4}(,[0-9a-f]{4}:[0-9a-f]{4})+$')
+    fail_msg: >-
+      vfio_boot requires the validated hardware_probe_vfio_ids_csv fact.
+      Run hardware_probe first; do not hand-write PCI IDs into boot profiles.
+
 - name: Read the LUKS UUID at runtime (a placeholder cannot reach /boot)
   ansible.builtin.command: cryptsetup luksUUID {{ luks_root_device }}
   register: vfio_boot_luks_raw

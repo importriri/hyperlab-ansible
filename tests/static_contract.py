@@ -28,6 +28,16 @@ check("services" not in networks["gpu_trust_levels"], "services must never recei
 lab_roles = [str(x) for x in yaml.safe_load((root / "playbooks/lab.yml").read_text())[0]["roles"]]
 check(lab_roles == ["base", "hardware_probe", "kvm_host", "vfio_boot", "network_domains", "lab_isolation", "gpu_handoff"], "lab role order drift")
 
+vfio_defaults = (root / "roles/vfio_boot/defaults/main.yml").read_text()
+check(
+    "hardware_probe_vfio_ids_csv" not in vfio_defaults,
+    "vfio defaults must stay static and must not embed cross-role facts",
+)
+check(
+    vfio_defaults.count("bind_vfio_devices: true") == 1,
+    "exactly one boot profile must request VFIO device binding",
+)
+
 hardware_tasks = (root / "roles/hardware_probe/tasks/main.yml").read_text()
 check("lspci -Dn" in hardware_tasks, "hardware probe must use numeric PCI discovery")
 check("difference(hardware_probe_detected_ids)" in hardware_tasks, "hardware profile must validate all required IDs")
