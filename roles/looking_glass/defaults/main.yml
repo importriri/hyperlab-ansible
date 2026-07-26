@@ -1,7 +1,11 @@
 ---
 # The host half of Looking Glass: the kvmfr shared-memory transport, its
 # permissions, and the client built from a pinned commit.
-looking_glass_commit: 0140a3f6fb
+#
+# Keep the immutable source identity and the human-facing build identity
+# separate. The full SHA is what Git checks out. The build string is what the
+# client prints, generated with git describe --abbrev=10.
+looking_glass_commit: 0140a3f6fb616c5636d6c430eb71b8a7d5338e39
 looking_glass_build: B7-263-g0140a3f6fb
 looking_glass_repo: https://github.com/gnif/LookingGlass.git
 looking_glass_src: /usr/local/src/looking-glass
