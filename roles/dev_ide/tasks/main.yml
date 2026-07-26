@@ -4,7 +4,7 @@
     name: "{{ dev_ide_packages }}"
     state: present
 
-- name: Install the language servers and Claude Code (npm, global)
+- name: Install the language servers (npm, global)
   community.general.npm:
     name: "{{ item }}"
     global: true
