@@ -43,7 +43,7 @@ from jinja2 import Environment, StrictUndefined
 
 root = Path(sys.argv[1])
 defaults = yaml.safe_load((root / "roles/desktop/defaults/main.yml").read_text())["desktop_input_defaults"]
-hardware = yaml.safe_load((root / "group_vars/all/hardware.yml").read_text())["hardware_profiles"]
+hardware = yaml.safe_load((root / "group_vars/all/hardware.yml").read_text())["host_profiles"]
 template = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True).from_string(
     (root / "roles/desktop/templates/sway-input.conf.j2").read_text()
 )
