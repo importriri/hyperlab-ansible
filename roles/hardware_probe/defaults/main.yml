@@ -1,3 +1,5 @@
 ---
-hardware_probe_report_dir: /etc/privatestack
-hardware_probe_report_path: "{{ hardware_probe_report_dir }}/hardware-profile.yml"
+# The path is contract, not role opinion: the cockpit reads the same file to
+# find out which laptop it is on. See group_vars/all/hardware.yml.
+hardware_probe_report_path: "{{ hardware_report_path }}"
+hardware_probe_report_dir: "{{ hardware_report_path | dirname }}"

@@ -1,0 +1,25 @@
+# Per-machine input for the sway cockpit.
+# Rendered by privatestack-ansible (roles/desktop). Do not hand-edit: the
+# next run overwrites this file - change the variables instead.
+#
+# sway has no keyboard default worth inheriting. With no xkb_layout the
+# session runs `us`, whatever the physical keyboard and the console say -
+# and the first thing that breaks is every password with a symbol in it.
+# The console keymap is a different setting entirely (vconsole, owned by
+# the base install): a correct sway layout does not fix a TTY, nor the
+# other way round.
+input type:keyboard {
+    xkb_layout {{ desktop_input.keyboard_layout }}
+{% if desktop_input.keyboard_variant %}
+    xkb_variant {{ desktop_input.keyboard_variant }}
+{% endif %}
+{% if desktop_input.keyboard_options %}
+    xkb_options {{ desktop_input.keyboard_options }}
+{% endif %}
+}
+
+input type:touchpad {
+{% for setting, value in desktop_input.touchpad | dictsort %}
+    {{ setting }} {{ value }}
+{% endfor %}
+}

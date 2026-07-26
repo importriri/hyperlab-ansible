@@ -77,9 +77,6 @@
     - { src: waybar.css, dest: waybar/style.css }
     - { src: foot.ini, dest: foot/foot.ini }
     - { src: mako.conf, dest: mako/config }
-    # rofi keeps its source names, config.rasi excepted: that one filename
-    # is what `rofi -show drun` loads with no arguments, and the @import
-    # lines inside these files point at the other three by those names.
     - { src: rofi-config.rasi, dest: rofi/config.rasi }
     - { src: rofi-mocha.rasi, dest: rofi/rofi-mocha.rasi }
     - { src: rofi-launcher.rasi, dest: rofi/rofi-launcher.rasi }
@@ -89,6 +86,41 @@
     - { src: swaylock.conf, dest: swaylock/config }
     - { src: gtk3-settings.ini, dest: gtk-3.0/settings.ini }
     - { src: starship.toml, dest: starship.toml }
+
+# hardware_probe writes its selection to disk precisely so a playbook that
+# does not run it can still read it - facts do not survive between playbook
+# runs. Reading the file instead of depending on the role is also what keeps
+# desktop.yml working on a guest VM, which has no laptop profile and never
+# will: no file, no match, fallback.
+- name: Read the recorded hardware profile, when this host has one
+  ansible.builtin.slurp:
+    src: "{{ hardware_report_path }}"
+  register: desktop_hardware_report
+  failed_when: false
+  changed_when: false
+
+- name: Resolve the per-machine input settings
+  ansible.builtin.set_fact:
+    desktop_input: >-
+      {{ desktop_input_defaults | combine(
+           hardware_profiles[desktop_profile_name].desktop | default({}, true),
+           recursive=true)
+         if desktop_profile_name in hardware_profiles
+         else desktop_input_defaults }}
+  vars:
+    desktop_profile_name: >-
+      {{ (desktop_hardware_report.content | b64decode | from_yaml).profile
+         if desktop_hardware_report.content is defined else '' }}
+
+# Rendered, not copied: this is the per-machine half of the cockpit, and it
+# is the reason sway.config itself carries no hardware assumption.
+- name: Render the per-machine input configuration
+  ansible.builtin.template:
+    src: sway-input.conf.j2
+    dest: "/home/{{ admin_user }}/.config/sway/input.conf"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
 
 - name: Wire the shell kit into bash (managed block, reversible)
   ansible.builtin.blockinfile:

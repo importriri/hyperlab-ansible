@@ -2,6 +2,12 @@
 # `auto` selects the unique profile whose complete PCI ID set is present.
 # An explicit profile is still validated against the detected hardware.
 hardware_profile: auto
+
+# Where hardware_probe records its selection. Bricks that must know which
+# laptop this is, but have no business probing PCI (the cockpit), read the
+# file: facts do not survive between playbook runs, a file does.
+hardware_report_path: /etc/privatestack/hardware-profile.yml
+
 hardware_profiles:
   nitro-3060:
     label: Acer Nitro 5 / RTX 3060 Mobile
@@ -9,9 +15,27 @@ hardware_profiles:
     vfio_ids:
       - "10de:2520"
       - "10de:228e"
+    desktop:
+      keyboard_layout: it
+      keyboard_variant: ""
+      keyboard_options: ""
+      touchpad:
+        dwt: enabled
+        middle_emulation: enabled
+        natural_scroll: enabled
+        tap: enabled
   predator-3070:
     label: Acer Predator Helios 300 / RTX 3070 Mobile
     status: component-verified
     vfio_ids:
       - "10de:249d"
       - "10de:228b"
+    desktop:
+      keyboard_layout: it
+      keyboard_variant: ""
+      keyboard_options: ""
+      touchpad:
+        dwt: enabled
+        middle_emulation: enabled
+        natural_scroll: enabled
+        tap: enabled

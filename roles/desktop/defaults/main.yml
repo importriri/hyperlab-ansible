@@ -6,7 +6,6 @@
 # sway, NOT swayfx and NOT a DE: official repos only (no AUR in bricks),
 # one compositor, no dependency chain. The eye candy is theming
 # (Catppuccin Mocha end to end), not a fork.
-# ly is the display manager: console-grade, ~1 MB, no seat circus.
 #
 # The rice pass added rofi (launcher + power menu), papirus-icon-theme
 # (rofi's icons) and cava (the waybar strip). rofi 2.0 absorbed the
@@ -15,6 +14,26 @@
 # The wallpaper ships with the role and lands in
 # /usr/share/backgrounds/privatestack/: drop another PNG on that path to
 # swap the backdrop without touching ansible.
+# --- per-machine input --------------------------------------------------------
+# The only genuinely per-laptop part of the cockpit, and the reason
+# sway.config carries no hardware assumption of its own: this is rendered
+# into ~/.config/sway/input.conf, which sway.config includes by relative
+# path.
+#
+# These are the FALLBACK. A host with a recorded hardware profile takes that
+# profile's `desktop:` block instead (group_vars/all/hardware.yml), merged
+# over these. A guest VM has no profile and keeps them, which is right: it
+# has no touchpad and no opinion about the keyboard.
+desktop_input_defaults:
+  keyboard_layout: it
+  keyboard_variant: ""
+  keyboard_options: ""
+  touchpad:
+    dwt: enabled
+    middle_emulation: enabled
+    natural_scroll: enabled
+    tap: enabled
+
 desktop_packages:
   - sway
   - swaybg
@@ -40,7 +59,6 @@ desktop_packages:
   - ttf-jetbrains-mono-nerd
   - noto-fonts
   - ly
-  # navigation & shell productivity kit
   - starship
   - zoxide
   - fzf
