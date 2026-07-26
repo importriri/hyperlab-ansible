@@ -4,20 +4,11 @@
     name: "{{ desktop_packages }}"
     state: present
 
-# ly ships one template unit, not a plain one: upstream res/ly@.service carries
-# Conflicts=getty@%i.service and Alias=autovt@.service, so the TTY is chosen by
-# the instance we enable - and the alias is what makes logind spawn ly instead
-# of getty when that VT is activated. No getty needs disabling by hand.
-# A plain ly.service does not exist: only a live systemd can say so, which is
-# why lint and the render suite waved this through for a whole stage.
 - name: Enable ly on tty2 (starts at next boot - never yank a live TTY)
   ansible.builtin.systemd_service:
     name: ly@tty2.service
     enabled: true
 
-# The two helpers land in /usr/local/bin, not in the user's config: sway
-# and waybar call them by absolute path (no ~ expansion to trust), and a
-# root-owned 0755 script is not rewritable by whatever runs in the session.
 - name: Deploy the cockpit helpers
   ansible.builtin.copy:
     src: "{{ item.src }}"
@@ -37,8 +28,6 @@
     group: root
     mode: "0755"
 
-# Same absolute path is baked into sway.config and swaylock.conf; the
-# render suite asserts the three agree, so a rename cannot drift.
 - name: Deploy the backdrop
   ansible.builtin.copy:
     src: wallpaper.png
@@ -87,14 +76,9 @@
     - { src: gtk3-settings.ini, dest: gtk-3.0/settings.ini }
     - { src: starship.toml, dest: starship.toml }
 
-# hardware_probe writes its selection to disk precisely so a playbook that
-# does not run it can still read it - facts do not survive between playbook
-# runs. Reading the file instead of depending on the role is also what keeps
-# desktop.yml working on a guest VM, which has no laptop profile and never
-# will: no file, no match, fallback.
 - name: Read the recorded hardware profile, when this host has one
   ansible.builtin.slurp:
-    src: "{{ hardware_report_path }}"
+    src: "{{ host_profile_report_path }}"
   register: desktop_hardware_report
   failed_when: false
   changed_when: false
@@ -103,17 +87,15 @@
   ansible.builtin.set_fact:
     desktop_input: >-
       {{ desktop_input_defaults | combine(
-           hardware_profiles[desktop_profile_name].desktop | default({}, true),
+           host_profiles[desktop_profile_name].desktop | default({}, true),
            recursive=true)
-         if desktop_profile_name in hardware_profiles
+         if desktop_profile_name in host_profiles
          else desktop_input_defaults }}
   vars:
     desktop_profile_name: >-
-      {{ (desktop_hardware_report.content | b64decode | from_yaml).profile
+      {{ (desktop_hardware_report.content | b64decode | from_yaml).host_profile
          if desktop_hardware_report.content is defined else '' }}
 
-# Rendered, not copied: this is the per-machine half of the cockpit, and it
-# is the reason sway.config itself carries no hardware assumption.
 - name: Render the per-machine input configuration
   ansible.builtin.template:
     src: sway-input.conf.j2
@@ -139,3 +121,10 @@
       alias tree='eza --tree'
       source /usr/share/fzf/key-bindings.bash
       source /usr/share/fzf/completion.bash
+
+- name: Record that the desktop brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: desktop

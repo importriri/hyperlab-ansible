@@ -1,0 +1,38 @@
+---
+# VM spec schema, version 1. A spec describes an instance and references one
+# image manifest; it never restates image facts.
+schema_version: 1
+kind: vm-spec
+
+fields:
+  schema_version: {type: int, enum: [1]}
+  name: {type: str, min_length: 2, pattern: "^[a-z0-9][a-z0-9-]{1,30}$"}
+  image: {type: str, min_length: 1, pattern: "^[a-z0-9][a-z0-9-]*$"}
+  lifecycle: {type: str, enum: [disposable, permanent]}
+  device_profile: {type: str, enum: [standard, vfio]}
+  network_profile: {type: str, domain: true}
+
+  resources:
+    type: map
+    fields:
+      memory_mb: {type: int_or_auto, min: 512, max: 1048576}
+      vcpus: {type: int, min: 1, max: 256}
+      disk_gib: {type: int, nullable: true, min: 1, max: 4096}
+
+  memory_overcommit: {type: bool}
+  autostart: {type: bool}
+  qemu_guest_agent: {type: bool}
+  looking_glass: {type: bool}
+  clipboard: {type: bool}
+  shared_folders: {type: bool}
+  usb_allowlist: {type: list, of: str, unique_items: true}
+  owner: {type: str, min_length: 1}
+  purpose: {type: str, min_length: 1}
+  tags: {type: list, of: str, min_items: 1, unique_items: true}
+
+optional:
+  snapshot_policy: {type: str, enum: [none, manual, daily]}
+  backup_policy: {type: str, enum: [none, manual, weekly]}
+  benchmark: {type: str, nullable: true, min_length: 1}
+  ip: {type: str, nullable: true, min_length: 1}
+  mac: {type: str, nullable: true, min_length: 1}

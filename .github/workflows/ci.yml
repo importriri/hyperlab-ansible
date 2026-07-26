@@ -42,8 +42,16 @@ jobs:
             ansible-playbook --syntax-check -i inventory.ini "${pb}"
           done
 
-      - name: Static cross-repository contract
+      - name: Static pipeline contract
         run: python tests/static_contract.py
+
+      - name: Image manifest and VM spec schemas
+        run: python tests/schema_validate.py
+
+      - name: Contract mutation tests
+        run: |
+          python tests/schema_mutations.py
+          python tests/contract_mutations.py
 
       - name: Render and invariant tests
         run: ansible-playbook -i inventory.ini tests/render.yml

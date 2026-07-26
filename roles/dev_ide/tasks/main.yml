@@ -40,3 +40,10 @@
     marker: "# {mark} privatestack dev_ide brick"
     block: |
       export EDITOR=emacs
+
+- name: Record that the dev_ide brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: dev_ide

@@ -13,4 +13,7 @@
   hosts: hypervisor
   become: true
   roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: looking_glass
     - looking_glass

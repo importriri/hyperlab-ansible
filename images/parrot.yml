@@ -1,0 +1,42 @@
+---
+schema_version: 1
+id: parrot
+display_name: Parrot Security
+os_family: linux
+os_variant: debian12
+version: "pinned-at-build"
+format: qcow2
+
+status: not-built
+sha256: null
+
+private: false
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+# Parrot publishes ISOs, not a cloud image fit for this pipeline. The
+# honest path is a sealed manual or Packer build from the official ISO and
+# its official checksum - not a cloud URL that does not exist.
+source_type: official-iso
+source_url: null
+source_checksum_url: null
+filename: parrot.qcow2
+
+virtual_size_gib: 40
+minimum_size_gib: 20
+min_memory_mb: 3072
+
+supports: {standard: true, vfio: false, cloud_init: false, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: disposable, device_profile: standard, network_profile: lab}
+# The allowlist is the enforcement, not the default: lab is the only domain
+# without an uplink, and this image must never reach the home LAN.
+network_allowlist: [lab]
+licensing: {redistributable: true}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  Defensive work against authorized systems only. Disposable by default so
+  a session leaves nothing behind.

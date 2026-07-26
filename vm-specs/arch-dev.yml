@@ -1,0 +1,23 @@
+---
+schema_version: 1
+name: arch-dev
+image: arch
+lifecycle: permanent
+device_profile: standard
+network_profile: dev
+resources:
+  memory_mb: auto
+  vcpus: 4
+  disk_gib: null
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: false
+clipboard: true
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Development workstation
+tags: [linux, dev]
+snapshot_policy: manual
+backup_policy: manual

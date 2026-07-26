@@ -1,0 +1,45 @@
+---
+# The personal Windows master. Never leaves this machine.
+schema_version: 1
+id: win11clean
+display_name: Windows 11 Clean
+os_family: windows
+os_variant: win11
+version: "2026.07.1"
+format: qcow2
+
+status: not-built
+sha256: null
+
+private: true
+contains_personal_data: true
+# A personal master is NOT a template. It carries one Windows identity, so
+# two of them on one network is a name and SID collision, not a clone. The
+# Sysprep path that would make it generalizable also destroys the account
+# that is the point of this image - see win11dirty for the template.
+generalized: false
+instance_policy: singleton
+
+source_type: local
+source_url: null
+source_checksum_url: null
+filename: win11clean.qcow2
+
+virtual_size_gib: 128
+minimum_size_gib: 80
+min_memory_mb: 6144
+
+supports: {standard: true, vfio: true, cloud_init: false, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: true, tpm2: true}
+defaults: {lifecycle: permanent, device_profile: vfio, network_profile: clean}
+network_allowlist: [clean]
+licensing: {redistributable: false}
+
+# Must equal the client build in roles/looking_glass/defaults/main.yml.
+# Mismatched builds do not negotiate: the client waits for a host forever
+# and falls back to the SPICE surface, which looks like success.
+looking_glass_host_build_required: B7-263-g0140a3f6fb
+looking_glass_host_build_observed: null
+notes: >-
+  Built by hand, sealed by hand. The build procedure lives in
+  arch-hypervisor-lab; the artefact never enters Git or a release.

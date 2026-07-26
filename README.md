@@ -37,6 +37,7 @@ package on the host. The host stays a fortress; the services stay cattle.
 | `desktop` | Sway + ly cockpit: Mocha rice (floating waybar, rofi launcher + power menu, cava strip), shell nav kit | optional | available |
 | `dev_ide` | Emacs IDE: eglot LSP (java/js/html/css/bash/ansible) + Claude Code | optional (guests) | available |
 | `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
+| `brick_guard` | Refuses a brick whose prerequisites are not on this host | infrastructure | available |
 | `guest` | The VM foundation: verified cloud image, qcow2 overlay, cloud-init seed | foundation | planned — A8 |
 | `jellyfin` | Private media server — the reference optional brick | optional | planned — A9 |
 | `nextcloud` | Private drive | optional | documented slot |
@@ -93,16 +94,28 @@ consume the contract; they never redefine it.
 
 ## The extension contract
 
-Adding a brick is a mechanical gesture:
+Adding a brick is a mechanical, reviewable change:
 
-1. `roles/<name>/` — the brick, one job;
-2. `playbooks/<name>.yml` — its assembly instructions;
-3. one row in the catalog table above.
+1. add `roles/<name>/` — one job, with a final `brick_guard` stamp;
+2. add `playbooks/<name>.yml` — its assembly instructions;
+3. declare prerequisites in `brick_requires` and its mounting playbook in
+   `brick_playbooks`;
+4. add one row in the catalog and the tests that protect its invariants.
 
-Nothing central gets edited. CI discovers the new playbook by itself,
-syntax-checks it, lints the role, and runs the brick's tests if it ships
-any. If adding a brick ever requires more than this, that is an
-architecture bug and gets treated as one.
+CI still discovers playbooks, roles and tests automatically. The two central
+maps are intentional contract data: without them an unknown prerequisite
+would silently behave like an empty list, and a refusal could not name the
+command that fixes it.
+
+The image and VM contracts live in [`schemas/`](schemas/), with the six
+manifests in [`images/`](images/) and example instances in
+[`vm-specs/`](vm-specs/). Manifests describe artefacts and carry a
+checksum; the artefacts themselves never enter Git. Brick prerequisites
+are data in [`group_vars/all/bricks.yml`](group_vars/all/bricks.yml) and
+enforced by `brick_guard`, not by a comment.
+
+Design decisions are recorded in [`docs/adr/`](docs/adr/); the audit that
+produced them is [`docs/AUDIT.md`](docs/AUDIT.md).
 
 Hardware profile details: [`docs/hardware-profiles.md`](docs/hardware-profiles.md).
 Network drift handling: [`docs/network-reconciliation.md`](docs/network-reconciliation.md).

@@ -30,3 +30,10 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Record that the gpu_handoff brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: gpu_handoff

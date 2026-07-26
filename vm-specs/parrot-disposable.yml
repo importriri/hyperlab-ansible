@@ -1,0 +1,26 @@
+---
+schema_version: 1
+name: parrot-disposable
+image: parrot
+lifecycle: disposable
+device_profile: standard
+# lab is the only domain libvirt gives no uplink. The image's allowlist
+# names it as the only one it may ever use, so a copy of this file with
+# `dev` in it fails validation instead of reaching the home LAN.
+network_profile: lab
+resources:
+  memory_mb: auto
+  vcpus: 4
+  disk_gib: null
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: false
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Defensive tooling against authorized systems, isolated
+tags: [linux, disposable, isolated]
+snapshot_policy: none
+backup_policy: none

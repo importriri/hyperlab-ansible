@@ -40,8 +40,15 @@ run() {
     rm -f "${log}"
 }
 
-step "level 0a - static cross-repository contract"
+step "level 0a - static pipeline contract"
 run python tests/static_contract.py
+
+step "level 0c - image manifest and VM spec schemas"
+run python tests/schema_validate.py
+
+step "level 0d - contract mutation tests"
+run python tests/schema_mutations.py
+run python tests/contract_mutations.py
 
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint
