@@ -23,18 +23,24 @@
   changed_when: false
   check_mode: false
 
-- name: Resolve the build identity produced by git describe
+- name: Resolve the client-visible build identity
   ansible.builtin.command:
-    argv: [git, -C, "{{ looking_glass_src }}", describe, --always, --long]
+    argv: [git, -C, "{{ looking_glass_src }}", describe, --always, --long, --abbrev=10]
   register: looking_glass_resolved_build
   changed_when: false
   check_mode: false
 
-- name: Refuse a checkout whose build identity differs from the contract
+- name: Refuse a checkout whose identity differs from the contract
   ansible.builtin.assert:
     that:
-      - looking_glass_resolved_commit.stdout | trim is match('^[0-9a-f]{40}$')
+      - looking_glass_resolved_commit.stdout | trim == looking_glass_commit
       - looking_glass_resolved_build.stdout | trim == looking_glass_build
+    fail_msg: >-
+      Looking Glass pin mismatch. Requested full commit
+      {{ looking_glass_commit }}, resolved
+      {{ looking_glass_resolved_commit.stdout | trim }}, client-visible build
+      {{ looking_glass_resolved_build.stdout | trim }}, expected
+      {{ looking_glass_build }}.
 
 - name: Check whether kvmfr is already registered with dkms
   ansible.builtin.command: dkms status -m kvmfr
