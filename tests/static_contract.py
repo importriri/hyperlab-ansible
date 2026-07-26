@@ -120,10 +120,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("failed_when: looking_glass_unload.rc != 0" in looking_handlers, "kvmfr resize must fail when unload fails")
     check("rev-parse" in looking_tasks and "resolved_commit:" in looking_tasks, "Looking Glass stamp must record the resolved full SHA")
     check("git" in looking_tasks and "describe" in looking_tasks and "build:" in looking_tasks, "Looking Glass stamp must record git describe")
+    check("--abbrev=10" in looking_tasks, "Looking Glass build identity must use the client's ten-digit SHA abbreviation")
     lg_commit = str(looking_defaults.get("looking_glass_commit", ""))
     lg_build = str(looking_defaults.get("looking_glass_build", ""))
-    check(re.fullmatch(r"[0-9a-f]{10,40}", lg_commit) is not None, "Looking Glass checkout pin must be a reviewed hexadecimal commit")
-    check(lg_build.endswith(lg_commit), "Looking Glass build string must end with the reviewed commit selector")
+    check(re.fullmatch(r"[0-9a-f]{40}", lg_commit) is not None, "Looking Glass checkout pin must be the reviewed full commit")
+    check(lg_build.endswith(lg_commit[:10]), "Looking Glass build string must end with the reviewed ten-digit commit selector")
 
     client = (ROOT / "roles/looking_glass/templates/client.ini.j2").read_text().splitlines()
     check(not any(line.startswith("#") for line in client), "Looking Glass B7 comments must use semicolons")
