@@ -54,7 +54,13 @@ jobs:
           python tests/contract_mutations.py
 
       - name: Render and invariant tests
-        run: ansible-playbook -i inventory.ini tests/render.yml
+        # M0's renderer still names the old variable in one isolated fake-data
+        # expression. Supply that fixture explicitly while production data and
+        # every M1 contract use host_profiles. The fixture disappears when the
+        # render suite is migrated in the next test-only cleanup.
+        run: >-
+          ansible-playbook -i inventory.ini tests/render.yml
+          --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
 
       - name: Protocol tests (bats, when a brick ships them)
         run: |
