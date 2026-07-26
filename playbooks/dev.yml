@@ -1,6 +1,6 @@
 ---
-# A dev workstation: the same cockpit as the host, plus the Emacs IDE
-# and Claude Code. Guests only - the hypervisor never becomes a dev box.
+# A dev workstation: the same cockpit as the host, plus the Emacs IDE and
+# language tooling. Guests only - the hypervisor never becomes a dev box.
 - name: Assemble a dev workstation (guests only)
   hosts: workstations
   become: true
