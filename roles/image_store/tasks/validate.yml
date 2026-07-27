@@ -1,0 +1,171 @@
+---
+- name: Refuse a root value that is not a string
+  ansible.builtin.assert:
+    that:
+      - hyperlab_root is string
+    fail_msg: "hyperlab_root must be a string containing an absolute path."
+
+- name: Refuse a root that is not a usable absolute path
+  ansible.builtin.assert:
+    that:
+      - hyperlab_root | length > 1
+      - hyperlab_root.startswith('/')
+      - "'..' not in hyperlab_root.split('/')"
+      - not hyperlab_root.endswith('/')
+      - "'//' not in hyperlab_root"
+    fail_msg: >-
+      hyperlab_root={{ hyperlab_root | to_json }} must be absolute, longer than
+      /, contain no empty or `..` component, and have no trailing slash.
+
+- name: Refuse a root that is a system directory
+  ansible.builtin.assert:
+    that:
+      - hyperlab_root not in hyperlab_forbidden_roots
+    fail_msg: >-
+      hyperlab_root={{ hyperlab_root }} is a protected system directory. This
+      role manages ownership and mode on its own paths and must never target it.
+
+- name: Resolve the root as the kernel would
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/readlink
+      - -m
+      - --
+      - "{{ hyperlab_root }}"
+  register: image_store_resolved
+  changed_when: false
+  check_mode: false
+
+- name: Refuse a root whose canonical path is not the declared one
+  ansible.builtin.assert:
+    that:
+      - image_store_resolved.stdout == hyperlab_root
+    fail_msg: >-
+      {{ hyperlab_root }} resolves to {{ image_store_resolved.stdout }}. An
+      existing ancestor is a symlink, so the store would land somewhere other
+      than the reviewed path.
+
+- name: Look at the root as it is on disk
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}"
+    follow: false
+  register: image_store_root_stat
+  changed_when: false
+
+- name: Refuse a root that is a symlink
+  ansible.builtin.assert:
+    that:
+      - not (image_store_root_stat.stat.islnk | default(false))
+    fail_msg: "{{ hyperlab_root }} is a symlink; the store root must be a real directory."
+  when: image_store_root_stat.stat.exists
+
+- name: Refuse a root that exists and is not a directory
+  ansible.builtin.assert:
+    that:
+      - image_store_root_stat.stat.isdir | default(false)
+    fail_msg: "{{ hyperlab_root }} exists and is not a directory."
+  when: image_store_root_stat.stat.exists
+
+- name: Refuse a layout that is not a list
+  ansible.builtin.assert:
+    that:
+      - image_store_layout is sequence
+      - image_store_layout is not string
+    fail_msg: "image_store_layout must be a YAML list of directory mappings."
+
+- name: Refuse a layout containing a non-mapping element
+  ansible.builtin.assert:
+    that:
+      - image_store_layout | reject('mapping') | list | length == 0
+    fail_msg: "Every image_store_layout element must be a mapping."
+
+- name: Refuse a layout element missing a required field
+  ansible.builtin.assert:
+    that:
+      - image_store_layout | rejectattr('path', 'defined') | list | length == 0
+      - image_store_layout | rejectattr('mode', 'defined') | list | length == 0
+      - image_store_layout | rejectattr('access', 'defined') | list | length == 0
+      - image_store_layout | rejectattr('purpose', 'defined') | list | length == 0
+    fail_msg: "Every layout element requires path, mode, access and purpose."
+
+- name: Refuse a layout that is not internally coherent
+  ansible.builtin.assert:
+    that:
+      - image_store_layout | length > 0
+      - image_store_layout | map(attribute='path') | list | length
+        == image_store_layout | map(attribute='path') | unique | list | length
+      - image_store_layout | selectattr('path', 'equalto', '') | list | length == 1
+      - image_store_layout | map(attribute='path') | reject('string') | list | length == 0
+      - image_store_layout | map(attribute='mode') | select('string') | list | length
+        == image_store_layout | length
+      - image_store_layout | map(attribute='mode') | reject('match', '^0[0-7]{3}$') | list | length == 0
+      - image_store_layout | map(attribute='purpose') | reject('string') | list | length == 0
+      - image_store_layout | map(attribute='purpose') | select('equalto', '') | list | length == 0
+      - image_store_layout | map(attribute='access') | reject('in', ['admin', 'qemu', 'swtpm']) | list | length == 0
+      - image_store_layout | map(attribute='path') | select('match', '^/') | list | length == 0
+      - image_store_layout | map(attribute='path') | select('search', '(^|/)\.\.(/|$)') | list | length == 0
+    fail_msg: >-
+      Layout paths must be unique relative strings with exactly one root entry;
+      modes must be quoted four-digit octal strings; access must be admin, qemu
+      or swtpm; and every directory must have a non-empty purpose.
+
+- name: Refuse a layout that is missing a required directory
+  ansible.builtin.assert:
+    that:
+      - hyperlab_required_directories | difference(image_store_layout | map(attribute='path') | list) | length == 0
+    fail_msg: >-
+      The layout does not cover
+      {{ hyperlab_required_directories | difference(image_store_layout | map(attribute='path') | list) | join(', ') }}.
+
+- name: Refuse an unusable administrator owner or group
+  ansible.builtin.assert:
+    that:
+      - image_store_owner is string
+      - image_store_owner | trim | length > 0
+      - image_store_group is string
+      - image_store_group | trim | length > 0
+    fail_msg: "image_store_owner and image_store_group must be non-empty strings."
+
+- name: Look at each layout component as it is on disk
+  ansible.builtin.stat:
+    path: "{{ (hyperlab_root, item.path) | path_join }}"
+    follow: false
+  register: image_store_component_stat
+  changed_when: false
+  loop: "{{ image_store_layout }}"
+  loop_control:
+    label: "{{ item.path | default('<root>', true) }}"
+
+- name: Refuse a layout component that is a symlink or not a directory
+  ansible.builtin.assert:
+    that:
+      - image_store_bad_components | length == 0
+    fail_msg: >-
+      These existing components are not plain directories:
+      {{ image_store_bad_components | join(', ') }}.
+  vars:
+    image_store_bad_components: >-
+      {{ image_store_component_stat.results
+         | selectattr('stat.exists')
+         | rejectattr('stat.isdir')
+         | map(attribute='item.path') | list }}
+
+- name: Refuse a pre-existing layout component on another filesystem
+  ansible.builtin.assert:
+    that:
+      - image_store_crossed_mounts | length == 0
+    fail_msg: >-
+      These components are on a different filesystem from the store root:
+      {{ image_store_crossed_mounts | join(', ') }}.
+  vars:
+    image_store_root_device: >-
+      {{ image_store_component_stat.results
+         | selectattr('item.path', 'equalto', '')
+         | selectattr('stat.exists')
+         | map(attribute='stat.dev') | first | default('') }}
+    image_store_crossed_mounts: >-
+      {{ image_store_component_stat.results
+         | selectattr('stat.exists')
+         | rejectattr('stat.dev', 'equalto', image_store_root_device)
+         | map(attribute='item.path') | list
+         if image_store_root_device != '' else [] }}

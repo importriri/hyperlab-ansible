@@ -1,0 +1,103 @@
+---
+# Runtime identities are discovered only when qemu.conf states them explicitly.
+# Commented examples are not defaults: vendor builds choose their own compiled
+# QEMU identity, and swtpm has a separate identity. When the file is silent the
+# host_vars declarations must be filled from hardware observation.
+
+- name: Look for runtime identities explicitly configured by libvirt
+  ansible.builtin.slurp:
+    src: "{{ hyperlab_qemu_conf }}"
+  register: image_store_qemu_conf_raw
+  failed_when: false
+  changed_when: false
+
+- name: Resolve the QEMU and swtpm identities without guessing build defaults
+  ansible.builtin.set_fact:
+    image_store_qemu_user: >-
+      {{ (image_store_qemu_conf_text | regex_findall('(?m)^\s*user\s*=\s*"([^"]+)"') | last)
+         if image_store_qemu_conf_text | regex_findall('(?m)^\s*user\s*=\s*"([^"]+)"')
+         else hyperlab_qemu_user_declared }}
+    image_store_qemu_group: >-
+      {{ (image_store_qemu_conf_text | regex_findall('(?m)^\s*group\s*=\s*"([^"]+)"') | last)
+         if image_store_qemu_conf_text | regex_findall('(?m)^\s*group\s*=\s*"([^"]+)"')
+         else hyperlab_qemu_group_declared }}
+    image_store_swtpm_user: >-
+      {{ (image_store_qemu_conf_text | regex_findall('(?m)^\s*swtpm_user\s*=\s*"([^"]+)"') | last)
+         if image_store_qemu_conf_text | regex_findall('(?m)^\s*swtpm_user\s*=\s*"([^"]+)"')
+         else hyperlab_swtpm_user_declared }}
+    image_store_swtpm_group: >-
+      {{ (image_store_qemu_conf_text | regex_findall('(?m)^\s*swtpm_group\s*=\s*"([^"]+)"') | last)
+         if image_store_qemu_conf_text | regex_findall('(?m)^\s*swtpm_group\s*=\s*"([^"]+)"')
+         else hyperlab_swtpm_group_declared }}
+  vars:
+    image_store_qemu_conf_text: >-
+      {{ (image_store_qemu_conf_raw.content | b64decode)
+         if image_store_qemu_conf_raw.content is defined else '' }}
+
+- name: Refuse unresolved runtime identities
+  ansible.builtin.assert:
+    that:
+      - image_store_qemu_user is string
+      - image_store_qemu_group is string
+      - image_store_swtpm_user is string
+      - image_store_swtpm_group is string
+      - image_store_qemu_user | trim | length > 0
+      - image_store_qemu_group | trim | length > 0
+      - image_store_swtpm_user | trim | length > 0
+      - image_store_swtpm_group | trim | length > 0
+      - image_store_qemu_user != hyperlab_runtime_identity_unset
+      - image_store_qemu_group != hyperlab_runtime_identity_unset
+      - image_store_swtpm_user != hyperlab_runtime_identity_unset
+      - image_store_swtpm_group != hyperlab_runtime_identity_unset
+    fail_msg: >-
+      Runtime identity is unresolved. qemu.conf did not explicitly provide all
+      of user, group, swtpm_user and swtpm_group, and the corresponding
+      hyperlab_*_declared host values still carry the hardware-required
+      sentinel. Observe the effective Nitro identities before creating the
+      store; do not substitute root merely because qemu.conf shows a commented
+      example.
+
+- name: Check that every identity the store uses exists on this host
+  ansible.builtin.getent:
+    database: "{{ item.database }}"
+    key: "{{ item.key }}"
+  register: image_store_identity_lookup
+  failed_when: false
+  changed_when: false
+  loop:
+    - {database: passwd, key: "{{ image_store_owner }}"}
+    - {database: group, key: "{{ image_store_group }}"}
+    - {database: passwd, key: "{{ image_store_qemu_user }}"}
+    - {database: group, key: "{{ image_store_qemu_group }}"}
+    - {database: passwd, key: "{{ image_store_swtpm_user }}"}
+    - {database: group, key: "{{ image_store_swtpm_group }}"}
+  loop_control:
+    label: "{{ item.database }}:{{ item.key }}"
+
+- name: Refuse an identity this host does not have
+  ansible.builtin.assert:
+    that:
+      - image_store_unknown_identities | length == 0
+    fail_msg: >-
+      These identities do not exist on this host:
+      {{ image_store_unknown_identities | join(', ') }}. No directory has been
+      created; fix the declared runtime identities first.
+    success_msg: >-
+      Store administered by {{ image_store_owner }}:{{ image_store_group }},
+      QEMU {{ image_store_qemu_user }}:{{ image_store_qemu_group }}, swtpm
+      {{ image_store_swtpm_user }}:{{ image_store_swtpm_group }}.
+  vars:
+    image_store_unknown_identities: >-
+      {{ image_store_identity_lookup.results
+         | rejectattr('ansible_facts', 'defined')
+         | map(attribute='item.key') | unique | list }}
+
+- name: Map layout access classes to their verified groups
+  ansible.builtin.set_fact:
+    image_store_access_groups:
+      admin: "{{ image_store_group }}"
+      qemu: "{{ image_store_qemu_group }}"
+      swtpm: "{{ image_store_swtpm_group }}"
+    image_store_access_users:
+      qemu: "{{ image_store_qemu_user }}"
+      swtpm: "{{ image_store_swtpm_user }}"

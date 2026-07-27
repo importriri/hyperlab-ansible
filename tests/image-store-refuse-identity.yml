@@ -1,0 +1,18 @@
+---
+- name: Expect this identity configuration to be refused
+  block:
+    - name: Run the real identity gate
+      ansible.builtin.include_tasks: "{{ repo_root }}/roles/image_store/tasks/identity.yml"
+
+    - name: Identity configuration was wrongly accepted
+      ansible.builtin.set_fact:
+        identity_refusals_accepted: >-
+          {{ identity_refusals_accepted | default([]) + [identity_refusal_why] }}
+  rescue:
+    - name: Record which identity guard refused it
+      ansible.builtin.set_fact:
+        identity_refusals_seen: >-
+          {{ identity_refusals_seen | default([]) + [identity_refusal_why] }}
+        identity_refusal_reasons: >-
+          {{ (identity_refusal_reasons | default({}))
+             | combine({identity_refusal_why: ansible_failed_task.name | default('unknown')}) }}

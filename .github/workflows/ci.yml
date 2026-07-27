@@ -42,6 +42,18 @@ jobs:
             ansible-playbook --syntax-check -i inventory.ini "${pb}"
           done
 
+      - name: Per-brick structural contracts (discovered)
+        run: |
+          for contract in tests/*_contract.py; do
+            python "${contract}"
+          done
+
+      - name: Refusal suites (discovered)
+        run: |
+          for suite in tests/*-refusals.yml; do
+            ansible-playbook -i inventory.ini "${suite}"
+          done
+
       - name: Static pipeline contract
         run: python tests/static_contract.py
 

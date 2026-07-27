@@ -1,0 +1,276 @@
+---
+# M2: the layout, and only the layout. No image is created, imported,
+# converted or checksummed here, and no domain is defined.
+
+- name: Refuse to lay out a store without gathered facts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.mounts is defined
+    fail_msg: >-
+      image_store needs ansible_facts.mounts. Run it from a play that gathers
+      facts, or gather them before including the role.
+
+- name: Resolve and verify the administrator and runtime identities
+  ansible.builtin.include_tasks: identity.yml
+
+- name: Validate the store before touching anything
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Start the ancestor list from the filesystem root
+  ansible.builtin.set_fact:
+    image_store_ancestors: ["/"]
+
+- name: Build the ancestor paths of the store root
+  ansible.builtin.set_fact:
+    image_store_ancestors: >-
+      {{ image_store_ancestors + [(image_store_ancestors | last, item) | path_join] }}
+  loop: "{{ hyperlab_root.strip('/').split('/') }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Identify the filesystem that will hold the store
+  ansible.builtin.set_fact:
+    image_store_mount: >-
+      {{ ansible_facts.mounts
+         | selectattr('mount', 'in', image_store_ancestors)
+         | sort(attribute='mount') | last }}
+
+- name: Inspect every store ancestor before creation
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  register: image_store_ancestor_stat
+  changed_when: false
+  loop: "{{ image_store_ancestors }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Select the nearest existing directory as the NOCOW inheritance source
+  ansible.builtin.set_fact:
+    image_store_nocow_probe_path: >-
+      {{ image_store_ancestor_stat.results
+         | selectattr('stat.exists', 'equalto', true)
+         | selectattr('stat.isdir', 'equalto', true)
+         | map(attribute='item') | last }}
+
+- name: Default the pre-write NOCOW observation off Btrfs
+  ansible.builtin.set_fact:
+    image_store_nocow_present: false
+
+- name: Read NOCOW attribute from the nearest existing store ancestor
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/lsattr
+      - -d
+      - --
+      - "{{ image_store_nocow_probe_path }}"
+  register: image_store_lsattr
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: image_store_mount.fstype == 'btrfs'
+
+- name: Evaluate the pre-write Btrfs NOCOW attribute
+  ansible.builtin.include_tasks: nocow-evaluate.yml
+  when: image_store_mount.fstype == 'btrfs'
+
+- name: Refuse a Btrfs target that cannot inherit NOCOW
+  ansible.builtin.assert:
+    that:
+      - image_store_lsattr.rc | default(1) == 0
+      - image_store_nocow_present
+    fail_msg: >-
+      {{ hyperlab_root }} is on Btrfs, but NOCOW is absent from the nearest
+      existing inheritance source {{ image_store_nocow_probe_path }}. No store
+      directory has been created. The bootstrap must apply +C to the empty image
+      subvolume before this layout is created; applying it later does not convert
+      existing files.
+    success_msg: >-
+      {{ hyperlab_root }} will inherit NOCOW from
+      {{ image_store_nocow_probe_path }}.
+  when:
+    - image_store_mount.fstype == 'btrfs'
+    - image_store_require_nocow | bool
+
+- name: Warn about unconfirmed pre-write Btrfs NOCOW when strict mode is disabled
+  ansible.builtin.debug:
+    msg: >-
+      NOCOW WARNING: {{ hyperlab_root }} is on Btrfs and +C was not confirmed on
+      {{ image_store_nocow_probe_path }}. qcow2 images must not be imported until
+      this is corrected.
+  when:
+    - image_store_mount.fstype == 'btrfs'
+    - not (image_store_require_nocow | bool)
+    - not image_store_nocow_present
+
+- name: Warn when the filesystem is below the declared image capacity plan
+  ansible.builtin.debug:
+    msg: >-
+      CAPACITY WARNING: {{ image_store_mount.mount }} has
+      {{ (image_store_mount.size_available | int / 1024 / 1024 / 1024) | round(1) }}
+      GiB available, below the {{ image_store_capacity_plan_gib }} GiB derived
+      from the largest declared image plus overlay headroom. M2 will create only
+      empty directories; image import must refuse before consuming space.
+  when:
+    - (image_store_mount.size_available | int)
+      < (image_store_capacity_plan_gib | int) * 1024 * 1024 * 1024
+
+- name: Create each store directory individually
+  ansible.builtin.file:
+    path: "{{ (hyperlab_root, item.path) | path_join }}"
+    state: directory
+    owner: "{{ image_store_owner }}"
+    group: "{{ image_store_access_groups[item.access] }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ image_store_layout }}"
+  loop_control:
+    label: "{{ item.path | default('<root>', true) }}"
+
+- name: Verify the applied layout after a real creation pass
+  when: not ansible_check_mode
+  block:
+    - name: Re-read every component after creating it
+      ansible.builtin.stat:
+        path: "{{ (hyperlab_root, item.path) | path_join }}"
+        follow: false
+      register: image_store_final_stat
+      changed_when: false
+      loop: "{{ image_store_layout }}"
+      loop_control:
+        label: "{{ item.path | default('<root>', true) }}"
+
+    - name: Verify type, filesystem, ownership and mode after creation
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isdir
+          - not (item.stat.islnk | default(false))
+          - item.stat.dev == image_store_final_root_device
+          - item.stat.pw_name == image_store_owner
+          - item.stat.gr_name == image_store_access_groups[item.item.access]
+          - item.stat.mode == item.item.mode
+        fail_msg: >-
+          {{ (hyperlab_root, item.item.path) | path_join }} failed its post-condition.
+          Expected a real directory on device {{ image_store_final_root_device }},
+          owner {{ image_store_owner }}, group
+          {{ image_store_access_groups[item.item.access] }}, mode {{ item.item.mode }};
+          observed {{ item.stat | to_nice_json }}.
+      loop: "{{ image_store_final_stat.results }}"
+      loop_control:
+        label: "{{ item.item.path | default('<root>', true) }}"
+      vars:
+        image_store_final_root_device: >-
+          {{ image_store_final_stat.results
+             | selectattr('item.path', 'equalto', '')
+             | map(attribute='stat.dev') | first }}
+
+    - name: Verify each non-root runtime identity can traverse its directories
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/runuser
+          - -u
+          - "{{ image_store_access_users[item.access] }}"
+          - --
+          - /usr/bin/test
+          - -x
+          - "{{ (hyperlab_root, item.path) | path_join }}"
+      register: image_store_runtime_traversal
+      changed_when: false
+      failed_when: false
+      loop: "{{ image_store_layout | rejectattr('access', 'equalto', 'admin') | list }}"
+      loop_control:
+        label: "{{ item.access }}:{{ item.path }}"
+      when: image_store_access_users[item.access] != 'root'
+
+    - name: Refuse runtime directories their process cannot traverse
+      ansible.builtin.assert:
+        that:
+          - image_store_failed_traversals | length == 0
+        fail_msg: >-
+          Runtime traversal failed for {{ image_store_failed_traversals | join(', ') }}.
+          The configured identity exists but cannot search the path the layout
+          gave it; no VM should be started until ownership, group membership or
+          parent permissions are corrected.
+      vars:
+        image_store_failed_traversals: >-
+          {{ image_store_runtime_traversal.results
+             | rejectattr('skipped', 'defined')
+             | rejectattr('rc', 'equalto', 0)
+             | map(attribute='item.path') | list }}
+
+    - name: Reset the post-write NOCOW observation
+      ansible.builtin.set_fact:
+        image_store_nocow_present: false
+
+    - name: Read NOCOW attribute from the created store root
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/lsattr
+          - -d
+          - --
+          - "{{ hyperlab_root }}"
+      register: image_store_lsattr
+      changed_when: false
+      failed_when: false
+      when: image_store_mount.fstype == 'btrfs'
+
+    - name: Evaluate the created root Btrfs NOCOW attribute
+      ansible.builtin.include_tasks: nocow-evaluate.yml
+      when: image_store_mount.fstype == 'btrfs'
+
+    - name: Refuse a created Btrfs store that did not inherit NOCOW
+      ansible.builtin.assert:
+        that:
+          - image_store_lsattr.rc | default(1) == 0
+          - image_store_nocow_present
+        fail_msg: >-
+          {{ hyperlab_root }} was created on Btrfs but did not inherit NOCOW from
+          {{ image_store_nocow_probe_path }}. Do not import any image; investigate
+          the mount and attribute inheritance before continuing.
+        success_msg: "Btrfs store inherited NOCOW."
+      when:
+        - image_store_mount.fstype == 'btrfs'
+        - image_store_require_nocow | bool
+
+    - name: Warn about unconfirmed created-root NOCOW when strict mode is disabled
+      ansible.builtin.debug:
+        msg: >-
+          NOCOW WARNING: {{ hyperlab_root }} is on Btrfs and inherited +C was not
+          confirmed. qcow2 images must not be imported until this is corrected.
+      when:
+        - image_store_mount.fstype == 'btrfs'
+        - not (image_store_require_nocow | bool)
+        - not image_store_nocow_present
+
+- name: Explain the verification boundary in check mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: directory changes above are predictions. Final type, device,
+      owner, group, mode, runtime traversal, created-root NOCOW and the layout
+      manifest are verified only during the real pass, then again on the
+      changed=0 pass.
+  when: ansible_check_mode
+
+- name: Record the verified layout for later audit
+  ansible.builtin.copy:
+    content: |
+      # Written by image_store. This is a layout manifest, not an image manifest.
+      root: {{ hyperlab_root | to_json }}
+      filesystem: {{ image_store_mount.mount | to_json }}
+      fstype: {{ image_store_mount.fstype | to_json }}
+      administered_by: {{ (image_store_owner ~ ':' ~ image_store_group) | to_json }}
+      qemu_identity: {{ (image_store_qemu_user ~ ':' ~ image_store_qemu_group) | to_json }}
+      swtpm_identity: {{ (image_store_swtpm_user ~ ':' ~ image_store_swtpm_group) | to_json }}
+      directories: {{ image_store_layout | map(attribute='path') | list | to_json }}
+    dest: "{{ (hyperlab_root, 'state/layout.yml') | path_join }}"
+    owner: "{{ image_store_owner }}"
+    group: "{{ image_store_group }}"
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Record that the image_store brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: image_store

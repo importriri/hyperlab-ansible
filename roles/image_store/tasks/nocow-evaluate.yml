@@ -1,0 +1,10 @@
+---
+# Pure interpretation of lsattr output, split out so the refusal suite can run
+# this exact logic against a path containing an uppercase C. Only the first
+# whitespace-delimited field contains attributes; the path must never influence
+# the result.
+- name: Interpret the copy-on-write attribute field
+  ansible.builtin.set_fact:
+    image_store_nocow_present: >-
+      {{ 'C' in ((image_store_lsattr.stdout | default('')).split()
+                 | first | default('')) }}

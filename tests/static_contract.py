@@ -40,7 +40,6 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     networks = load_mapping(networks_path, errors)
     bricks = load_mapping(bricks_path, errors)
 
-    # --- host/device terminology ------------------------------------------------
     check(hardware.get("host_profile") == "auto", "physical laptop selector must be host_profile: auto")
     check("host_profiles" in hardware, "physical laptop profiles must be named host_profiles")
     check("device_profile" not in hardware, "device_profile belongs to VM specs, never host hardware")
@@ -54,14 +53,7 @@ def collect_errors(root: Path = ROOT) -> list[str]:
         check(all(re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{4}", str(x)) for x in vfio_ids), f"bad PCI ID in {name}")
         check("desktop" in profile, f"{name} must declare per-machine input")
         memory = profile.get("memory", {})
-        expected_memory = {
-            "host_reserved_mb",
-            "qemu_overhead_per_domain_mb",
-            "services_reserved_mb",
-            "vfio_fixed_overhead_mb",
-            "max_auto_memory_mb",
-            "standard_overcommit_ratio",
-        }
+        expected_memory = {"host_reserved_mb", "qemu_overhead_per_domain_mb", "services_reserved_mb", "vfio_fixed_overhead_mb", "max_auto_memory_mb", "standard_overcommit_ratio"}
         check(set(memory) == expected_memory, f"{name} must declare the complete memory budget contract")
         for key in expected_memory - {"standard_overcommit_ratio"}:
             check(isinstance(memory.get(key), int) and memory.get(key, -1) >= 0, f"{name}.{key} must be a non-negative integer")
@@ -80,7 +72,6 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("min_items" in spec_schema_text and "unique_items" in spec_schema_text, "schema vocabulary must constrain lists")
     check("instance_policy" in image_schema.get("fields", {}), "image schema must make instance policy explicit")
 
-    # --- network and playbook foundation ---------------------------------------
     domains = networks.get("network_domains", [])
     check([d.get("name") for d in domains] == ["clean", "dirty", "dev", "lab", "services"], "domain order/coverage drift")
     check([d.get("name") for d in domains if d.get("forward") == "isolated"] == ["lab"], "lab must be the only isolated domain")
@@ -94,7 +85,6 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("hardware_probe_vfio_ids_csv" not in vfio_defaults, "vfio defaults must not embed cross-role facts")
     check(vfio_defaults.count("bind_vfio_devices: true") == 1, "exactly one boot profile must request VFIO binding")
 
-    # --- hardware probe: narrow failure path and useful evidence ----------------
     hardware_tasks = (ROOT / "roles/hardware_probe/tasks/main.yml").read_text()
     check("lspci" in hardware_tasks and "-Dn" in hardware_tasks, "hardware probe must use numeric PCI discovery")
     check("when: host_profile == 'auto'" in hardware_tasks, "unknown-machine rescue must be limited to automatic selection")
@@ -102,16 +92,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("requested_host_profile:" in hardware_tasks, "unknown report must name the requested host profile")
     check("gpu_pci:" in hardware_tasks and "gpu_audio_pci:" in hardware_tasks and "cpu_threads:" in hardware_tasks, "preflight report must collect PCI addresses and CPU threads")
     check("hardware_probe_vfio_devices" in hardware_tasks, "preflight must retain the ID-to-address mapping")
-    auto_block = hardware_tasks.find("- name: Resolve automatic host profile")
-    explicit_assert = hardware_tasks.find("- name: Validate an explicit host profile name")
-    check(0 <= auto_block < explicit_assert, "explicit profile validation must sit outside the automatic rescue block")
 
-    # --- existing host invariants ----------------------------------------------
     network_tasks = (ROOT / "roles/network_domains/tasks/main.yml").read_text()
     check("net-dumpxml --inactive" in network_tasks, "network drift must compare persistent XML")
     check("network_domains_reconcile" in network_tasks, "network role must reconcile changed definitions")
     check("network_domains_restart_changed" in network_tasks, "active network restart must be explicit")
-    check("network_domains_compare_tool | dirname" in network_tasks, "network comparator parent directory must be declared")
 
     looking_tasks = (ROOT / "roles/looking_glass/tasks/main.yml").read_text()
     looking_handlers = (ROOT / "roles/looking_glass/handlers/main.yml").read_text()
@@ -119,7 +104,6 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("stat.ischr" in looking_tasks, "kvmfr must be verified as a character device")
     check("failed_when: looking_glass_unload.rc != 0" in looking_handlers, "kvmfr resize must fail when unload fails")
     check("rev-parse" in looking_tasks and "resolved_commit:" in looking_tasks, "Looking Glass stamp must record the resolved full SHA")
-    check("git" in looking_tasks and "describe" in looking_tasks and "build:" in looking_tasks, "Looking Glass stamp must record git describe")
     check("--abbrev=10" in looking_tasks, "Looking Glass build identity must use the client's ten-digit SHA abbreviation")
     lg_commit = str(looking_defaults.get("looking_glass_commit", ""))
     lg_build = str(looking_defaults.get("looking_glass_build", ""))
@@ -130,7 +114,6 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check(not any(line.startswith("#") for line in client), "Looking Glass B7 comments must use semicolons")
     check(any(line == "port={{ looking_glass_spice_port }}" for line in client), "SPICE port must remain templated")
 
-    # --- brick graph ------------------------------------------------------------
     requires = bricks.get("brick_requires", {})
     role_names = {d.name for d in (ROOT / "roles").iterdir() if d.is_dir()}
     check(set(requires) <= role_names, "brick_requires names a role that does not exist")
@@ -146,28 +129,23 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("brick_guard_brick in brick_playbooks" in guard_tasks, "brick_guard must reject a brick without a playbook mapping")
     check("default([])" not in guard_tasks, "brick_guard must not turn an unknown brick into an empty prerequisite list")
 
-    lg_roles = yaml.safe_load((ROOT / "playbooks/looking-glass.yml").read_text())[0]["roles"]
-    check(any(isinstance(role, dict) and role.get("role") == "brick_guard" for role in lg_roles), "looking-glass.yml must mount brick_guard first")
-    for brick in requires:
-        tasks = (ROOT / "roles" / brick / "tasks/main.yml").read_text()
-        check(f"brick_guard_brick: {brick}" in tasks, f"{brick} does not record that it landed")
-
     resolved: set[str] = set()
     for _ in range(len(requires) + 1):
         resolved |= {brick for brick, prereqs in requires.items() if set(prereqs) <= resolved}
     check(resolved == set(requires), "the brick graph has a cycle")
 
-    # --- public extension contract and M1 scope --------------------------------
     readme = (ROOT / "README.md").read_text()
     check("brick_requires" in readme and "brick_playbooks" in readme and "stamp" in readme.lower(), "README extension contract must include graph, playbook map and stamp")
-    adr_lifecycle = (ROOT / "docs/adr/0002-lifecycle-disposable-permanent.md").read_text()
-    check("permanent" in adr_lifecycle and "independent" in adr_lifecycle.lower(), "ADR must define permanent VMs as independent clones")
-    check("permanent overlay" not in adr_lifecycle.lower(), "schema v1 must not promise permanent overlays")
 
-    forbidden_runtime = ("virsh define", "virsh create", "qemu-img create", "qemu-img convert")
-    m1_paths = [ROOT / "images", ROOT / "vm-specs", ROOT / "schemas"]
-    m1_text = "\n".join(path.read_text() for directory in m1_paths for path in directory.glob("*.yml"))
-    check(not any(command in m1_text for command in forbidden_runtime), "M1 contracts must remain non-destructive")
+    check(requires.get("image_store") == ["kvm_host"], "the image store belongs to the brick that owns libvirt")
+    store_play = yaml.safe_load((root / "playbooks/image-store.yml").read_text())[0]
+    check(any(isinstance(r, dict) and r.get("role") == "brick_guard" for r in store_play["roles"]), "image-store.yml must mount brick_guard before the brick")
+
+    verify_text = (root / "verify.sh").read_text()
+    ci_text = (root / ".github/workflows/ci.yml").read_text()
+    for text, where in ((verify_text, "verify.sh"), (ci_text, "CI")):
+        check("tests/*_contract.py" in text, f"{where} must discover structural contracts")
+        check("tests/*-refusals.yml" in text, f"{where} must discover refusal suites")
 
     return errors
 

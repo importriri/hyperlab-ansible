@@ -1,0 +1,77 @@
+---
+# The administrator owns the layout. Runtime processes receive only the group
+# traversal needed for the directories they actually open.
+image_store_owner: root
+image_store_group: root
+
+# `access` selects the directory group:
+#   admin  -> image_store_group
+#   qemu   -> the observed QEMU runtime group
+#   swtpm  -> the observed swtpm runtime group
+#
+# Each directory is managed individually. `recurse` is deliberately forbidden:
+# changing an existing store recursively would rewrite image ownership/modes.
+image_store_layout:
+  - path: ""
+    mode: "0751"
+    access: admin
+    purpose: The store root. o+x lets runtime identities reach their own tree.
+  - path: bases
+    mode: "0555"
+    access: admin
+    purpose: Read-only master image namespace. Never booted directly.
+  - path: bases/windows
+    mode: "0555"
+    access: admin
+    purpose: Windows masters.
+  - path: bases/linux
+    mode: "0555"
+    access: admin
+    purpose: Linux masters.
+  - path: disposable
+    mode: "0750"
+    access: qemu
+    purpose: Overlays whose backing file is a base. Safe to delete.
+  - path: permanent
+    mode: "0750"
+    access: qemu
+    purpose: Independent clones. Never collected automatically.
+  - path: cloud-init
+    mode: "0750"
+    access: qemu
+    purpose: NoCloud seed images, one directory per VM.
+  - path: nvram
+    mode: "0750"
+    access: qemu
+    purpose: Per-VM UEFI variables.
+  - path: tpm
+    mode: "0750"
+    access: swtpm
+    purpose: Per-VM swtpm state. Never cloned between VMs.
+  - path: snapshots
+    mode: "0750"
+    access: qemu
+    purpose: Snapshot artefacts.
+  - path: exports
+    mode: "0750"
+    access: admin
+    purpose: Deliberate exports leaving the machine.
+  - path: cache
+    mode: "0750"
+    access: admin
+    purpose: Re-derivable downloads. Safe to empty.
+  - path: state
+    mode: "0750"
+    access: admin
+    purpose: The only writable metadata location.
+
+# Capacity planning signal, not a mkdir precondition. It is derived from the
+# largest virtual_size_gib in images/ times 1.5. M2 only creates empty
+# directories, so falling below this value warns now and must become a refusal
+# in the later image-import brick immediately before space is consumed.
+image_store_capacity_plan_gib: 192
+
+# The bootstrap is expected to apply +C to the empty Btrfs image subvolume.
+# On Btrfs, absence of inherited NOCOW is a hard refusal by default: discovering
+# it before the first qcow2 exists is the only useful time to stop.
+image_store_require_nocow: true

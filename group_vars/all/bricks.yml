@@ -19,6 +19,7 @@ brick_requires:
   network_domains: [kvm_host]
   lab_isolation: [network_domains]
   gpu_handoff: [network_domains]
+  image_store: [kvm_host]
   desktop: []
   dev_ide: [desktop]
   looking_glass: [desktop, kvm_host]
@@ -33,6 +34,7 @@ brick_playbooks:
   network_domains: playbooks/lab.yml
   lab_isolation: playbooks/lab.yml
   gpu_handoff: playbooks/lab.yml
+  image_store: playbooks/image-store.yml
   desktop: playbooks/desktop.yml
   dev_ide: playbooks/dev.yml
   looking_glass: playbooks/looking-glass.yml

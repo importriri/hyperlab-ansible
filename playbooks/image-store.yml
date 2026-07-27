@@ -1,0 +1,16 @@
+---
+# The Hyperlab image store: create and validate the layout.
+#
+# Scoped deliberately. It mounts the guard, then the brick, and nothing else:
+# pulling in the whole lab bundle to lay out directories would make a
+# five-second job reconfigure networks and boot entries. kvm_host is a
+# prerequisite because libvirt owns this tree and because the QEMU identity
+# this role reads is written by libvirt's own configuration.
+- name: Lay out the Hyperlab image store
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: image_store
+    - image_store
