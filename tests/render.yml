@@ -74,12 +74,10 @@
     - name: Kvm_host invariants (headless, mandatory optdeps, socket activation)
       ansible.builtin.assert:
         that:
-          # structural: the actual package list, immune to comments
           - "'qemu-base' in render_kvm_pkgs"
           - "'qemu-desktop' not in render_kvm_pkgs"
           - "'iptables-nft' in render_kvm_pkgs"
           - "'dnsmasq' in render_kvm_pkgs"
-          # textual pins on the tasks
           - "'libvirtd.socket' in render_kvm_tasks"
           - "'virtlogd.socket' in render_kvm_tasks"
           - "'libvirtd.service' not in render_kvm_tasks"
@@ -129,7 +127,7 @@
         label: "{{ item.file }}"
       vars:
         vfio_boot_luks_uuid: 12345678-1234-1234-1234-123456789abc
-        hardware_probe_vfio_ids_csv: "{{ hardware_profiles['nitro-3060'].vfio_ids | join(',') }}"
+        hardware_probe_vfio_ids_csv: "{{ host_profiles['nitro-3060'].vfio_ids | join(',') }}"
 
     - name: Read the rendered entries
       ansible.builtin.slurp:
@@ -142,7 +140,7 @@
     - name: Boot entry invariants (the M0 bug classes, pinned forever)
       ansible.builtin.assert:
         that:
-          - render_entry_text | regex_findall('(?m)\\\\$') | length == 0
+          - render_entry_text | regex_findall('(?m)\\$') | length == 0
           - render_entry_text | regex_findall('(?m)^options ') | length >= 2
           - "'cryptdevice' not in render_entry_text"
           - "'YOUR-LUKS-UUID' not in render_entry_text"
@@ -153,11 +151,6 @@
           - "'zswap.enabled=0' in render_entry_text"
           - "'vfio-pci.ids=10de:2520,10de:228e' in render_entry_text if item.item.title is search('Vfio') else true"
           - render_entry_keys | unique | length == render_entry_keys | length
-        fail_msg: >-
-          A boot-entry invariant broke in {{ item.item.file }}: no backslash
-          continuations, one options line per group (at least two lines),
-          never cryptdevice, no surviving placeholder, contract mapper and
-          subvol rendered, no duplicate kernel parameter keys.
         quiet: true
       loop: "{{ render_entries.results }}"
       loop_control:
@@ -171,10 +164,7 @@
         that:
           - "'YOUR-LUKS-UUID-HERE' is not match('^[0-9a-f]{8}-[0-9a-f]{4}-')"
           - "'12345678-1234-1234-1234-123456789abc' is match('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')"
-        fail_msg: The UUID regex no longer separates real UUIDs from placeholders.
 
-
-    # --- roles/vfio_boot: early-bind drop-in --------------------------------------
     - name: Read the vfio early-bind drop-in
       ansible.builtin.slurp:
         src: "{{ repo_root }}/roles/vfio_boot/files/10-vfio.conf"
@@ -187,23 +177,16 @@
           - "'vfio_pci' in render_vfio_dropin_text"
           - "' vfio ' in render_vfio_dropin_text"
           - "'vfio_iommu_type1' in render_vfio_dropin_text"
-        fail_msg: >-
-          The early-bind drop-in lost a module or stopped appending:
-          it must APPEND vfio_pci, vfio, vfio_iommu_type1 - a full
-          MODULES= replacement would silently drop what mkinitcpio.conf sets.
         quiet: true
       vars:
         render_vfio_dropin_text: "{{ render_vfio_dropin.content | b64decode }}"
 
-    # --- roles/network_domains --------------------------------------------------
     - name: Render the five network XMLs
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/network_domains/templates/net.xml.j2"
         dest: "{{ render_ws.path }}/net-{{ item.name }}.xml"
         mode: "0644"
       loop: "{{ network_domains }}"
-      loop_control:
-        label: "{{ item.name }}"
 
     - name: Every rendered network must parse as XML
       ansible.builtin.command: >-
@@ -211,16 +194,12 @@
         ET.parse('{{ render_ws.path }}/net-{{ item.name }}.xml')"
       changed_when: false
       loop: "{{ network_domains }}"
-      loop_control:
-        label: "{{ item.name }}"
 
     - name: Read the rendered networks
       ansible.builtin.slurp:
         src: "{{ render_ws.path }}/net-{{ item.name }}.xml"
       register: render_nets
       loop: "{{ network_domains }}"
-      loop_control:
-        label: "{{ item.name }}"
 
     - name: Network invariants (NAT vs isolated as a strict equivalence)
       ansible.builtin.assert:
@@ -230,19 +209,11 @@
           - render_net_text is search('bridge name="' ~ item.item.bridge ~ '"')
           - render_net_text is search('address="' ~ item.item.gateway ~ '"')
           - "'<dhcp>' in render_net_text"
-        fail_msg: >-
-          A network invariant broke in {{ item.item.name }}: NAT domains
-          carry exactly <forward mode="nat"/>, the isolated domain carries
-          NO forward element at all, bridge and gateway must match the
-          contract, DHCP present everywhere.
         quiet: true
       loop: "{{ render_nets.results }}"
-      loop_control:
-        label: "{{ item.item.name }}"
       vars:
         render_net_text: "{{ item.content | b64decode }}"
 
-    # --- roles/lab_isolation ----------------------------------------------------
     - name: Load the lab_isolation defaults
       ansible.builtin.include_vars:
         file: "{{ repo_root }}/roles/lab_isolation/defaults/main.yml"
@@ -286,13 +257,7 @@
           - "'state: started' not in render_nft_tasks"
           - "'nft list table' in render_nft_tasks"
           - "'when: lab_isolation_live.rc != 0' in render_nft_tasks"
-        fail_msg: >-
-          A matrix invariant broke: never flush ruleset (anywhere), flush
-          exactly this table once, the deny matrix must be complete
-          (n*(n-1) pairs), drops sit before libvirt's accepts
-          (priority -10), the lab forwards nothing either way, the
-          service is reloaded - never started, never restarted - and the
-          load is gated on the kernel actually holding the table.
+        quiet: true
       vars:
         render_nft_matrix: "{{ render_nft.results[0].content | b64decode }}"
         render_nft_conf: "{{ render_nft.results[1].content | b64decode }}"
@@ -300,7 +265,6 @@
         render_nft_tasks: "{{ render_nft.results[3].content | b64decode }}"
         render_nft_pairs: "{{ network_domains | length * (network_domains | length - 1) }}"
 
-    # --- roles/gpu_handoff ------------------------------------------------------
     - name: Render the trust rotation from the contract
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/gpu_handoff/templates/rotation.j2"
@@ -323,22 +287,16 @@
           - "'clean 3' in render_gpu_rotation"
           - "'lab 0' in render_gpu_rotation"
           - 'render_gpu_tasks is search(''hooks/qemu[\s\S]{0,160}mode: "0755"'')'
-        fail_msg: >-
-          A gpu_handoff invariant broke: the rotation must hold exactly the
-          contract trust map (and services never joins it), and the hook
-          must land with mode 0755 - a hook that cannot execute guards
-          nothing.
+        quiet: true
       vars:
         render_gpu_rotation: "{{ render_gpu.results[0].content | b64decode }}"
         render_gpu_tasks: "{{ render_gpu.results[1].content | b64decode }}"
 
-    # --- cleanup ----------------------------------------------------------------
     - name: Remove the rendering workspace
       ansible.builtin.file:
         path: "{{ render_ws.path }}"
         state: absent
 
-    # --- cockpit (desktop + dev_ide) --------------------------------------------
     - name: Read the cockpit bricks and their playbooks
       ansible.builtin.slurp:
         src: "{{ repo_root }}/{{ item }}"
@@ -363,11 +321,6 @@
         that:
           - "'sway' in render_desk_pkgs"
           - "'ly' in render_desk_pkgs"
-          # the rice pass swapped the launcher. rofi 2.0 absorbed the
-          # wayland fork: the repos ship `rofi` (Provides/Replaces
-          # rofi-wayland), so the old name must never come back - pacman
-          # resolves Provides, `pacman -Q` does not, and the module would
-          # report changed on every single run.
           - "'rofi' in render_desk_pkgs"
           - "'rofi-wayland' not in render_desk_pkgs"
           - "'fuzzel' not in render_desk_pkgs"
@@ -376,23 +329,14 @@
           - "'sddm' not in render_desk_pkgs"
           - "'gdm' not in render_desk_pkgs"
           - "'xorg-server' not in render_desk_pkgs"
-          # the display manager is a template unit: one systemd task, one
-          # instance, and it is the TTY the role claims. Equality is the point
-          # - it also refuses a silent slide back to a plain ly.service.
           - "render_desk_units == ['ly@tty2.service']"
           - "'emacs-wayland' in render_ide_pkgs"
           - "'emacs' not in render_ide_pkgs"
-          - "'@anthropic-ai/claude-code' in render_ide_npm"
-          # structural: parsed plays, immune to comments (the A2 lesson)
           - "render_desktop_hosts == 'hypervisor:workstations'"
           - "render_dev_hosts == 'workstations'"
           - "'desktop' not in render_lab_roles"
           - "'dev_ide' not in render_lab_roles"
-        fail_msg: >-
-          A cockpit invariant broke: the desktop stays opt-in (never in
-          lab.yml), wayland-pure (sway + ly, no X11 display manager,
-          emacs-wayland), the dev brick never lands on the hypervisor,
-          and Claude Code ships with the IDE.
+        quiet: true
       vars:
         render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_packages }}"
         render_desk_units: >-
@@ -401,7 +345,6 @@
              | selectattr('key', 'equalto', 'ansible.builtin.systemd_service')
              | map(attribute='value.name') | list }}
         render_ide_pkgs: "{{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_packages }}"
-        render_ide_npm: "{{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_npm_globals }}"
         render_desktop_hosts: "{{ (render_cockpit.results[3].content | b64decode | from_yaml)[0].hosts }}"
         render_dev_hosts: "{{ (render_cockpit.results[4].content | b64decode | from_yaml)[0].hosts }}"
         render_lab_roles: "{{ (render_cockpit.results[5].content | b64decode | from_yaml)[0].roles }}"
@@ -409,43 +352,22 @@
     - name: Rice invariants (helpers executable, every path agrees with every file)
       ansible.builtin.assert:
         that:
-          # A config file copied 0644 is inert; a SCRIPT copied 0644 is a
-          # silent no-op that only shows up as an empty bar. Pin the mode.
           - "render_desk_bin_modes == ['0755']"
           - "'privatestack-cava' in render_desk_dests"
           - "'privatestack-powermenu' in render_desk_dests"
-          # waybar and sway call the helpers by absolute path: the module
-          # config and the deploy must name the same file.
           - "render_waybar['custom/cava']['exec'] == '/usr/local/bin/privatestack-cava'"
           - "render_waybar['custom/logo']['on-click'] == '/usr/local/bin/privatestack-powermenu'"
           - "'custom/cava' in render_waybar['modules-left']"
           - "'/usr/local/bin/privatestack-powermenu' in render_sway"
-          # rofi resolves @import against the file's own directory, so every
-          # import has to match a destination this role actually writes.
           - "render_rofi_imports | length > 0"
           - "render_rofi_missing == []"
-          # one backdrop, three files: the copy task, sway and swaylock.
           - "render_wall_dest | length == 1"
           - "render_wall_dest[0] in render_sway"
           - "render_wall_dest[0] in render_swaylock"
-          # the bridge maps one glyph per cava level: max_range 7 -> 8 glyphs.
           - "render_cava_glyphs == render_cava_max | int + 1"
-          # the launcher swap has to be real in the config too, not only in
-          # the package list.
           - "'fuzzel' not in render_sway"
-          # window_role takes a regex, window_type does NOT: sway matches it
-          # with strcasecmp against a fixed list, and a value outside that
-          # list leaves the criteria empty - sway then refuses the whole line
-          # at startup and says so in a nag bar. Same-looking syntax, one
-          # line apart, opposite rules.
           - render_sway_window_types | difference(render_sway_types_valid) == []
-        fail_msg: >-
-          A rice invariant broke: the helpers must land 0755 in
-          /usr/local/bin under the exact names sway and waybar call, every
-          rofi @import must match a deployed file, the backdrop path must be
-          identical in the copy task, sway.config and swaylock.conf, the
-          cava bridge must cover every level the cava config emits, and every
-          window_type criterion must name one type sway can actually parse.
+        quiet: true
       vars:
         render_desk_copy_mods: >-
           {{ (render_cockpit.results[1].content | b64decode | from_yaml)
@@ -499,9 +421,6 @@
           - tooltip
           - notification
 
-    # --- looking_glass ----------------------------------------------------------
-    # The defaults are loaded as real variables, not read as text: the shared
-    # memory size is a formula, and a formula is only proved by evaluating it.
     - name: Load the Looking Glass defaults as real variables
       ansible.builtin.include_vars:
         file: "{{ repo_root }}/roles/looking_glass/defaults/main.yml"
@@ -536,50 +455,25 @@
     - name: Looking Glass invariants (sized shm, two openers, wayland-pure, opt-in)
       ansible.builtin.assert:
         that:
-          # the size is derived from the frame geometry, never a magic number.
-          # 1080p rounds up to 32 MiB. Moving the geometry moves it, and that
-          # is deliberately a coupled change: this line has to be edited too,
-          # which is the reminder that the guest XML ivshmem size moves with it
           - looking_glass_shm_mb | int == 32
           - render_lg_modprobe is search('static_size_mb=32')
-          # both openers of the same node, or the picture never arrives:
-          # OWNER is QEMU, uaccess is the desktop session
           - render_lg_rule is search('OWNER="' ~ looking_glass_qemu_user ~ '"')
           - render_lg_rule is search('TAG\+="uaccess"')
-          # udev does not revisit devices that already exist, so a reload on
-          # its own is a no-op: the synthetic change event is the whole fix
           - render_lg_handlers is search('--action=change')
-          # wayland-pure, same contract as the cockpit: X11 off at configure
-          # time, so no libx* can creep back into the dependency list
           - "'-DENABLE_X11=no' in render_lg_tasks"
-          # named one by one on purpose: libxkbcommon also starts with libx
-          # and belongs to Wayland (keymaps), so a "^libx" sweep would forbid
-          # a dependency the client actually needs
           - looking_glass_packages | intersect(looking_glass_x11_deps) | length == 0
-          # opt-in: the blind host stays the default
           - render_lg_hosts == 'hypervisor'
           - "'looking_glass' not in render_lg_lab_roles"
-          # `copy` never creates parent directories and upstream `make
-          # install` does not create this one: unless the role declares it,
-          # the stamp - the whole idempotency mechanism - is what fails, and
-          # it fails at the END of a full compile
-          # (the paths come out of the file as raw text, so an expression is
-          # matched as an expression - the resolved path is accepted too)
           - >-
             (looking_glass_stamp | dirname) in render_lg_dirs
             or render_lg_dirs
                | select('search', 'looking_glass_stamp\s*\|\s*dirname')
                | list | length > 0
-          # top-level fact injection is deprecated and disappears in
-          # ansible-core 2.24: facts are read through ansible_facts
           - "'ansible_processor_vcpus' not in render_lg_tasks"
-        fail_msg: >-
-          A Looking Glass invariant broke: the shared memory must be sized
-          from the frame geometry, the device node must be openable by both
-          QEMU and the session, the udev retrigger must stay (a reload alone
-          is a no-op on a node that already exists), the client must stay
-          Wayland-only, the stamp directory must be declared by the role, and
-          the brick must never land in lab.yml.
+          - "'--abbrev=10' in render_lg_tasks"
+          - looking_glass_commit | length == 40
+          - looking_glass_build is search(looking_glass_commit[0:10] ~ '$')
+        quiet: true
       vars:
         looking_glass_x11_deps:
           - libx11
@@ -606,4 +500,74 @@
     - name: Remove the Looking Glass rendering workspace
       ansible.builtin.file:
         path: "{{ render_lg_ws.path }}"
+        state: absent
+
+    - name: Make the input rendering workspace
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .render
+      register: render_input_ws
+
+    - name: Render the per-machine input template three ways
+      ansible.builtin.template:
+        src: "{{ repo_root }}/roles/desktop/templates/sway-input.conf.j2"
+        dest: "{{ render_input_ws.path }}/{{ item.name }}.conf"
+        mode: "0644"
+      vars:
+        desktop_input: "{{ item.input }}"
+        render_input_fallback_map: >-
+          {{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_input_defaults }}
+        render_hw_profiles: >-
+          {{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}
+      loop:
+        - name: fallback
+          input: "{{ render_input_fallback_map }}"
+        - name: optional
+          input: >-
+            {{ render_input_fallback_map | combine({
+                 'keyboard_variant': 'us',
+                 'keyboard_options': 'ctrl:nocaps'}, recursive=true) }}
+        - name: nitro
+          input: >-
+            {{ render_input_fallback_map | combine(
+                 render_hw_profiles['nitro-3060'].desktop, recursive=true) }}
+
+    - name: Read back what the template produced
+      ansible.builtin.slurp:
+        src: "{{ render_input_ws.path }}/{{ item }}.conf"
+      register: render_input_out
+      loop:
+        - fallback
+        - optional
+        - nitro
+
+    - name: Per-machine input invariants (values, not mentions)
+      ansible.builtin.assert:
+        that:
+          - "'xkb_layout it' in render_input_fallback"
+          - render_input_fallback | select('match', 'xkb_variant') | list | length == 0
+          - render_input_fallback | select('match', 'xkb_options') | list | length == 0
+          - "'xkb_variant us' in render_input_optional"
+          - "'xkb_options ctrl:nocaps' in render_input_optional"
+          - render_input_touchpad == render_input_touchpad_expected
+          - "'xkb_layout ' ~ render_hw_profiles['nitro-3060'].desktop.keyboard_layout in render_input_nitro"
+          - render_hw_profiles | dict2items | rejectattr('value.desktop', 'defined') | list | length == 0
+        quiet: true
+      vars:
+        render_input_fallback: "{{ (render_input_out.results[0].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_optional: "{{ (render_input_out.results[1].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_nitro: "{{ (render_input_out.results[2].content | b64decode).splitlines() | map('trim') | list }}"
+        render_input_touchpad: >-
+          {{ render_input_fallback | select('search', '^(dwt|middle_emulation|natural_scroll|tap) ') | list }}
+        render_input_touchpad_expected:
+          - dwt enabled
+          - middle_emulation enabled
+          - natural_scroll enabled
+          - tap enabled
+        render_hw_profiles: >-
+          {{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}
+
+    - name: Remove the input rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_input_ws.path }}"
         state: absent

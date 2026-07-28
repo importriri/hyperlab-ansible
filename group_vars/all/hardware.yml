@@ -1,14 +1,14 @@
 ---
 # `auto` selects the unique profile whose complete PCI ID set is present.
 # An explicit profile is still validated against the detected hardware.
-hardware_profile: auto
+host_profile: auto
 
-# Where hardware_probe records its selection. Bricks that must know which
+# Where hardware_probe records the selected physical host profile. Bricks that must know which
 # laptop this is, but have no business probing PCI (the cockpit), read the
 # file: facts do not survive between playbook runs, a file does.
-hardware_report_path: /etc/privatestack/hardware-profile.yml
+host_profile_report_path: /etc/privatestack/hardware-profile.yml
 
-hardware_profiles:
+host_profiles:
   nitro-3060:
     label: Acer Nitro 5 / RTX 3060 Mobile
     status: component-verified
@@ -24,6 +24,21 @@ hardware_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
+    # Memory budget, not a total: the machine's RAM is detected at run time,
+    # so the 8/16 -> 32 GB upgrade needs no edit here. See ADR 0007.
+    memory:
+      host_reserved_mb: 2048
+      qemu_overhead_per_domain_mb: 512
+      services_reserved_mb: 0
+      vfio_fixed_overhead_mb: 256
+      max_auto_memory_mb: 6144
+      standard_overcommit_ratio: 1.0
+    # Evidence fields stay null in the public profile until reviewed from a real
+    # preflight report. hardware_probe now records them locally without
+    # guessing addresses; M2 may promote reviewed values into this contract.
+    gpu_pci: null
+    gpu_audio_pci: null
+    cpu_threads: null
   predator-3070:
     label: Acer Predator Helios 300 / RTX 3070 Mobile
     status: component-verified
@@ -39,3 +54,18 @@ hardware_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
+    # Memory budget, not a total: the machine's RAM is detected at run time,
+    # so the 8/16 -> 32 GB upgrade needs no edit here. See ADR 0007.
+    memory:
+      host_reserved_mb: 2560
+      qemu_overhead_per_domain_mb: 512
+      services_reserved_mb: 0
+      vfio_fixed_overhead_mb: 256
+      max_auto_memory_mb: 12288
+      standard_overcommit_ratio: 1.0
+    # Evidence fields stay null in the public profile until reviewed from a real
+    # preflight report. hardware_probe now records them locally without
+    # guessing addresses; M2 may promote reviewed values into this contract.
+    gpu_pci: null
+    gpu_audio_pci: null
+    cpu_threads: null

@@ -10,16 +10,14 @@
       - kvm_host_dev.stat.exists
       - kvm_host_dev.stat.ischr
     fail_msg: >-
-      /dev/kvm is missing: virtualization (VT-x / AMD-V) is almost certainly
-      disabled in the BIOS/UEFI firmware. Enable it and reboot - there is no
-      software fix for this one.
+      /dev/kvm is missing: virtualization is probably disabled in firmware.
 
 - name: Install the headless KVM stack
   community.general.pacman:
     name: "{{ kvm_host_packages }}"
     state: present
 
-- name: Enable socket activation (never the monolithic service)
+- name: Enable socket activation
   ansible.builtin.systemd_service:
     name: "{{ item }}"
     enabled: true
@@ -28,8 +26,15 @@
     - libvirtd.socket
     - virtlogd.socket
 
-- name: Let the admin drive virsh (libvirt group, polkit rule ships with libvirt)
+- name: Let the admin drive virsh
   ansible.builtin.user:
     name: "{{ admin_user }}"
     groups: libvirt
     append: true
+
+- name: Record that the kvm_host brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: kvm_host

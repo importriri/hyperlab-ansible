@@ -147,3 +147,10 @@
   loop: "{{ network_domains }}"
   loop_control:
     label: "{{ item.name }}"
+
+- name: Record that the network_domains brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: network_domains

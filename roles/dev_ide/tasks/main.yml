@@ -4,7 +4,7 @@
     name: "{{ dev_ide_packages }}"
     state: present
 
-- name: Install the language servers and Claude Code (npm, global)
+- name: Install the language servers (npm, global)
   community.general.npm:
     name: "{{ item }}"
     global: true
@@ -40,3 +40,10 @@
     marker: "# {mark} privatestack dev_ide brick"
     block: |
       export EDITOR=emacs
+
+- name: Record that the dev_ide brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: dev_ide

@@ -1,0 +1,41 @@
+---
+# The Windows the lab is allowed to break.
+schema_version: 1
+id: win11dirty
+display_name: Windows 11 Dirty
+os_family: windows
+os_variant: win11
+version: "2026.07.1"
+format: qcow2
+
+status: not-built
+sha256: null
+
+private: false
+# A local lab account, because Windows still needs an identity to log in
+# with. No Microsoft account, and no credential reused anywhere else.
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+source_type: local
+source_url: null
+source_checksum_url: null
+filename: win11dirty.qcow2
+
+virtual_size_gib: 96
+minimum_size_gib: 60
+min_memory_mb: 4096
+
+supports: {standard: true, vfio: true, cloud_init: false, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: true, tpm2: true}
+defaults: {lifecycle: disposable, device_profile: standard, network_profile: dirty}
+network_allowlist: [dirty, lab]
+licensing: {redistributable: false}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  Sysprep generalized, so clones get their own identity. Clipboard and
+  shared folders stay off: the whole point of dirty is that nothing it
+  touches reaches the host.

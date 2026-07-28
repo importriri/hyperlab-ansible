@@ -1,0 +1,16 @@
+---
+- name: Make the brick record directory
+  ansible.builtin.file:
+    path: "{{ brick_stamp_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record that this brick landed
+  ansible.builtin.copy:
+    content: "{{ brick_guard_brick }}\n"
+    dest: "{{ brick_stamp_dir }}/{{ brick_guard_brick }}"
+    owner: root
+    group: root
+    mode: "0644"

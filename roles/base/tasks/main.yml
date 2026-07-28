@@ -46,3 +46,10 @@
     regexp: '^#?\s*ParallelDownloads'
     line: "ParallelDownloads = {{ base_parallel_downloads }}"
     insertafter: '^\[options\]'
+
+- name: Record that the base brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: base

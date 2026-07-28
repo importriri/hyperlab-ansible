@@ -4,16 +4,11 @@
     name: "{{ looking_glass_packages }}"
     state: present
 
-# A udev rule naming a user that does not exist is not an error: it is a
-# silent no-op, and the failure surfaces two layers away as QEMU refusing to
-# open the node. Fail here instead, where the message is readable.
 - name: Refuse without the QEMU system user (a udev OWNER that resolves)
   ansible.builtin.getent:
     database: passwd
     key: "{{ looking_glass_qemu_user }}"
 
-# No depth: the build reads git describe for its version string, and that
-# string is how you prove client and Windows host are the same build.
 - name: Clone Looking Glass at the pinned commit
   ansible.builtin.git:
     repo: "{{ looking_glass_repo }}"
@@ -21,7 +16,32 @@
     version: "{{ looking_glass_commit }}"
     recursive: true
 
-# --- the shared memory transport ---------------------------------------------
+- name: Resolve the pinned checkout to its full commit
+  ansible.builtin.command:
+    argv: [git, -C, "{{ looking_glass_src }}", rev-parse, HEAD]
+  register: looking_glass_resolved_commit
+  changed_when: false
+  check_mode: false
+
+- name: Resolve the client-visible build identity
+  ansible.builtin.command:
+    argv: [git, -C, "{{ looking_glass_src }}", describe, --always, --long, --abbrev=10]
+  register: looking_glass_resolved_build
+  changed_when: false
+  check_mode: false
+
+- name: Refuse a checkout whose identity differs from the contract
+  ansible.builtin.assert:
+    that:
+      - looking_glass_resolved_commit.stdout | trim == looking_glass_commit
+      - looking_glass_resolved_build.stdout | trim == looking_glass_build
+    fail_msg: >-
+      Looking Glass pin mismatch. Requested full commit
+      {{ looking_glass_commit }}, resolved
+      {{ looking_glass_resolved_commit.stdout | trim }}, client-visible build
+      {{ looking_glass_resolved_build.stdout | trim }}, expected
+      {{ looking_glass_build }}.
+
 - name: Check whether kvmfr is already registered with dkms
   ansible.builtin.command: dkms status -m kvmfr
   register: looking_glass_dkms
@@ -56,9 +76,6 @@
     group: root
     mode: "0644"
 
-# QEMU opens the node, the desktop session mmaps it. OWNER covers the first,
-# TAG+="uaccess" covers the second by ACL on the seat's active session, so
-# neither one has to be weakened to 0666 to let the other in.
 - name: Own the device node - QEMU writes it, the session reads it
   ansible.builtin.template:
     src: 70-kvmfr.rules.j2
@@ -86,14 +103,7 @@
     that:
       - looking_glass_device_stat.stat.exists | default(false)
       - looking_glass_device_stat.stat.ischr | default(false)
-    fail_msg: >-
-      {{ looking_glass_device }} is not a character device. Stop every VM using
-      it, remove a stale regular file if present, reload kvmfr, then rerun.
 
-# --- the client ----------------------------------------------------------------
-# `make install` does not create this directory, and `copy` does not create
-# parents. Without this task the stamp - the entire idempotency mechanism -
-# is the one thing that fails, and it fails at the END of a full compile.
 - name: Own the stamp directory
   ansible.builtin.file:
     path: "{{ looking_glass_stamp | dirname }}"
@@ -109,11 +119,19 @@
   failed_when: false
   changed_when: false
 
-- name: Decide whether the installed client matches the pin
+- name: Parse the installed build stamp
+  ansible.builtin.set_fact:
+    looking_glass_stamp_data: >-
+      {{ (looking_glass_stamp_read.content | b64decode | from_yaml)
+         if looking_glass_stamp_read.content is defined else {} }}
+
+- name: Decide whether the installed client matches the resolved pin
   ansible.builtin.set_fact:
     looking_glass_build_needed: >-
-      {{ looking_glass_stamp_read.content is not defined
-         or (looking_glass_stamp_read.content | b64decode | trim) != looking_glass_commit }}
+      {{ looking_glass_stamp_data.requested_commit | default('') != looking_glass_commit
+         or looking_glass_stamp_data.resolved_commit | default('') !=
+            (looking_glass_resolved_commit.stdout | trim)
+         or looking_glass_stamp_data.build | default('') != looking_glass_build }}
 
 - name: Build and install the client from the pinned checkout
   when: looking_glass_build_needed | bool
@@ -126,8 +144,6 @@
         group: root
         mode: "0755"
 
-    # ENABLE_X11=no keeps the cockpit Wayland-pure; libdecor draws the window
-    # decorations sway does not draw for it.
     - name: Configure the client build
       ansible.builtin.command:
         cmd: cmake -DENABLE_X11=no -DENABLE_WAYLAND=yes -DENABLE_LIBDECOR=yes ../
@@ -146,9 +162,12 @@
         chdir: "{{ looking_glass_src }}/client/build"
       changed_when: true
 
-    - name: Stamp what was installed (this is the idempotency)
+    - name: Stamp the requested pin and the observed build identity
       ansible.builtin.copy:
-        content: "{{ looking_glass_commit }}\n"
+        content: |-
+          requested_commit: {{ looking_glass_commit }}
+          resolved_commit: {{ looking_glass_resolved_commit.stdout | trim }}
+          build: {{ looking_glass_build }}
         dest: "{{ looking_glass_stamp }}"
         owner: root
         group: root
@@ -169,3 +188,10 @@
     owner: "{{ admin_user }}"
     group: "{{ admin_user }}"
     mode: "0644"
+
+- name: Record that the looking_glass brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: looking_glass

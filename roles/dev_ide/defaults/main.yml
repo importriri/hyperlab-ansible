@@ -18,9 +18,6 @@ dev_ide_packages:
   - typescript-language-server
   - shellcheck
 
-# claude-code downloads a native binary; `claude` authenticates on first
-# run - a manual step the brick must not fake (same rule as sbctl keys).
 dev_ide_npm_globals:
   - vscode-langservers-extracted
   - "@ansible/ansible-language-server"
-  - "@anthropic-ai/claude-code"

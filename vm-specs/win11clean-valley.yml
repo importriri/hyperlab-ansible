@@ -1,0 +1,28 @@
+---
+# The benchmark instance: the personal Windows master with the GPU.
+# On the 8 GB laptop this spec fails the runtime fit check with the
+# shortfall in the message, and starts passing by itself when the RAM
+# arrives. That is the intended behaviour, not a limitation - see ADR 0007.
+schema_version: 1
+name: win11clean-valley
+image: win11clean
+lifecycle: permanent
+device_profile: vfio
+network_profile: clean
+resources:
+  memory_mb: auto
+  vcpus: 6
+  disk_gib: null
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: true
+clipboard: true
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: GPU passthrough benchmark and personal Windows workload
+tags: [windows, vfio, benchmark]
+snapshot_policy: manual
+backup_policy: weekly
+benchmark: unigine-valley

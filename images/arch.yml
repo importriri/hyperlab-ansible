@@ -1,0 +1,41 @@
+---
+schema_version: 1
+id: arch
+display_name: Arch Linux
+os_family: linux
+os_variant: archlinux
+version: "pinned-at-build"
+format: qcow2
+
+status: not-built
+sha256: null
+
+private: false
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+# The exact release and its official checksum URL are filled in when the
+# image is actually pulled, at M7, from the distribution's own download
+# page. They are null here because an invented URL is worse than a blank:
+# a blank fails the sealing check, a wrong one downloads something.
+source_type: official-cloud
+source_url: null
+source_checksum_url: null
+filename: arch.qcow2
+
+virtual_size_gib: 20
+minimum_size_gib: 8
+min_memory_mb: 2048
+
+supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
+network_allowlist: [dev, lab]
+licensing: {redistributable: true}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  Cloud image plus NoCloud seed: hostname and user are created at first
+  boot, and no private key ever enters the artefact.

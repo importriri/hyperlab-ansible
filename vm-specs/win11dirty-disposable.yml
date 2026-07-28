@@ -1,0 +1,25 @@
+---
+schema_version: 1
+name: win11dirty-disposable
+image: win11dirty
+lifecycle: disposable
+device_profile: standard
+network_profile: dirty
+resources:
+  memory_mb: auto
+  vcpus: 4
+  disk_gib: null
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: false
+# Off, and enforced by the validator rather than by discipline: dirty is
+# the domain whose whole purpose is that nothing crosses back.
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Controlled Windows experiments, reset between sessions
+tags: [windows, disposable]
+snapshot_policy: none
+backup_policy: none

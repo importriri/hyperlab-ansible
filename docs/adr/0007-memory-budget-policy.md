@@ -1,105 +1,121 @@
-# ADR 0007 - Memory is a budget computed at run time, never a literal
+# ADR 0007 - Memory is a run-time budget, never a laptop literal
 
 ## Context
 
-The two target laptops have 8 GB and 16 GB today and both go to 32 GB
-within a couple of months. The lab repository already documents the
-failure mode: on an 8 GB machine a 7 GB guest is killed by the OOM
-killer, because a PCI hostdev pins the whole guest and makes ballooning
-ineffective.
+The two target laptops have different RAM today and both may be upgraded.
+A literal guest allocation is therefore either unsafe on the smaller host or
+wasteful on the larger one. VFIO makes the failure sharper: hostdev memory is
+pinned, kvmfr is a fixed allocation, and ballooning is not a recovery plan.
 
-A spec that says `memory_mb: 12288` is therefore correct on one laptop,
-fatal on another, and wastefully small on both after the upgrade.
-
-The naive budget - total minus a host reserve - is wrong in four ways
-that only show up on a machine that is already doing something:
-
-- QEMU costs memory *outside* the guest's own allocation: the emulator
-  process, vhost rings, the video and shared-memory backends. On a VFIO
-  guest the kvmfr window alone is a fixed, non-negotiable slice.
-- Another VM may already be running. A budget that ignores it hands out
-  the same megabytes twice.
-- Some memory is spoken for even when idle: the service VMs that are
-  expected to always fit are not free capacity.
-- Ballooning works on a `standard` guest and does not work on a `vfio`
-  one. One overcommit policy cannot be correct for both.
+A correct decision must account for running domains, per-domain QEMU cost,
+capacity reserved for service VMs, and the candidate VM itself. It must also
+avoid charging the same service memory twice.
 
 ## Decision
 
-### Two checks, not one
+### Static consistency and run-time fit are separate
 
-**Static capacity check** runs offline, in CI, with no host: it never
-computes fit, because total memory is unknown. It verifies internal
-consistency only - an explicit `memory_mb` is at or above the image's
-`min_memory_mb`; an `auto` request has a `max_auto_memory_mb` ceiling
-that is itself at or above that floor; a `vfio` spec does not request
-overcommit. A green static check does not mean the VM will start.
+The static validator runs in CI without a hypervisor. It checks only facts
+that do not require a host: positive sizes, image floors, device support,
+Looking Glass pins and the rule that VFIO cannot opt into overcommit. A green
+static result never means that a VM will fit.
 
-**Runtime fit check** runs on the host, against facts and libvirt, at
-the moment of creation or start. It is the only thing allowed to say
-yes.
+The run-time fit check, implemented in M2, reads host memory and live libvirt
+state immediately before create/start. It is the only component allowed to
+approve capacity.
 
-### The budget
+### Host-profile inputs
 
+Each physical `host_profile` declares:
+
+- `host_reserved_mb`: operating system, page cache and optional cockpit;
+- `qemu_overhead_per_domain_mb`: memory outside each guest allocation;
+- `services_reserved_mb`: capacity promised to service VMs even while idle;
+- `vfio_fixed_overhead_mb`: kvmfr and the pinned-guest margin;
+- `max_auto_memory_mb`: ceiling for one `memory_mb: auto` candidate;
+- `standard_overcommit_ratio`: commitment ceiling for standard VMs, normally
+  `1.0` and never applied to VFIO.
+
+No profile declares total RAM. `memtotal_mb` is a run-time fact, so a RAM
+upgrade needs no repository edit.
+
+### Values read from libvirt
+
+At run time the checker records:
+
+- `active_guest_mb`: sum of configured memory for every running domain;
+- `active_domain_count`: number of running domains;
+- `active_service_mb`: part of `active_guest_mb` belonging to the services
+  domain;
+- whether any active domain uses VFIO.
+
+The unconsumed service reserve is:
+
+```text
+unconsumed_services_mb = max(services_reserved_mb - active_service_mb, 0)
 ```
-available_mb = memtotal_mb
-             - host_reserved_mb          (per hardware profile)
-             - hypervisor_overhead_mb    (per hardware profile)
-             - services_reserved_mb      (per hardware profile)
-             - sum(allocated memory of every running domain)
-             - vfio_fixed_overhead_mb    (vfio profile only: kvmfr window
-                                          plus the pinned-guest margin)
+
+Active service VMs are therefore counted once in `active_guest_mb`; only the
+unused part of their promise is deducted separately.
+
+### Physical candidate budget
+
+For a candidate VM:
+
+```text
+overhead_mb = (active_domain_count + 1) * qemu_overhead_per_domain_mb
+
+base_guest_pool_mb = memtotal_mb
+                   - host_reserved_mb
+                   - unconsumed_services_mb
+                   - overhead_mb
+                   - candidate_vfio_overhead_mb
+
+candidate_vfio_overhead_mb = vfio_fixed_overhead_mb for vfio, otherwise 0
+physical_remaining_mb = base_guest_pool_mb - active_guest_mb
 ```
 
-`host_reserved_mb` covers the OS, page cache and the cockpit when it is
-mounted. `hypervisor_overhead_mb` covers per-VM QEMU cost. Both are
-declared by the hardware profile; neither declares a total, so the RAM
-upgrade needs no file edit.
+The `+ 1` charges QEMU overhead for the candidate as well as every running
+domain. Negative results fail closed.
 
-Running domains are read from libvirt, not remembered. State that is
-derived and cached is state that is wrong.
+For VFIO, `physical_remaining_mb` is the final budget. Overcommit is always
+refused, and starting any overcommitted standard VM while a VFIO domain is
+running is also refused.
 
-### auto, and its ceiling
+### Standard overcommit
 
+A standard VM may set `memory_overcommit: true`. The ratio lives in the
+selected physical host profile, not in prose and not independently in every
+spec:
+
+```text
+commit_limit_mb = floor(base_guest_pool_mb * standard_overcommit_ratio)
+commit_remaining_mb = commit_limit_mb - active_guest_mb
 ```
-memory_mb: auto  ->  min(available_mb, max_auto_memory_mb)
-                     rounded down to a multiple of 1024
+
+The checker uses `commit_remaining_mb` only when the candidate is standard,
+it explicitly opts in, no VFIO domain is active, and the ratio is greater
+than `1.0`. Otherwise it uses `physical_remaining_mb`.
+
+### `auto`
+
+```text
+memory_mb: auto -> min(selected_remaining_mb, max_auto_memory_mb)
+                  rounded down to a multiple of 1024
 ```
 
-`max_auto_memory_mb` is declared per hardware profile and exists so a
-32 GB laptop does not hand 28 GB to a Windows guest that has no use for
-it. Without a ceiling, `auto` is a request for everything, which is a
-different and much worse default.
-
-The result must still clear `image.min_memory_mb`. Below it, the check
-fails closed with every number in the message: total, each deduction,
-what was left, and what the image needed.
-
-### Overcommit is explicit and profile-dependent
-
-`hyperlab_memory_overcommit_ratio`, default `1.0`, meaning none: the sum
-of guest allocations may not exceed `available_mb`.
-
-- On `standard`, a value above 1.0 is honoured. Ballooning and swap make
-  it survivable, and the operator asked for it.
-- On `vfio`, it is **ignored and refused**. A hostdev pins the whole
-  allocation; there is nothing to reclaim and no swap path that ends
-  well. A `vfio` spec that requests overcommit fails the static check,
-  not the runtime one, so it never reaches a host.
-- Any ratio above 1.0 is also refused while a VFIO domain is running,
-  whatever the profile of the VM being started.
+The result must still meet `image.min_memory_mb`. Failure reports every input:
+total RAM, host reserve, service reserve consumed/unconsumed, active domain
+allocations, domain count, per-domain overhead, VFIO overhead, selected ratio,
+remaining capacity and the image floor.
 
 ## Consequences
 
-- The 8 to 32 GB upgrade needs zero file edits. An `auto` spec grows by
-  itself up to its ceiling; an explicit one keeps working.
-- `win11clean-valley` on the 8 GB laptop fails at validation, in a
-  message that names the shortfall, instead of at the OOM killer five
-  minutes into a boot. The same file becomes a pass by itself when the
-  RAM arrives.
-- CI can validate every spec without a hypervisor, and cannot pretend it
-  validated fit.
-- "One VFIO VM at a time" gains a second, independent reason to be true,
-  and the runtime check enforces it with arithmetic rather than a rule.
-- Hugepages stay out of the default path: a static reservation is the
-  opposite of a budget.
+- RAM upgrades require no edits.
+- Service VMs are never counted twice.
+- QEMU overhead scales with the number of active domains and includes the
+  candidate.
+- Standard overcommit is explicit and data-driven; VFIO remains physical-only.
+- CI validates consistency without pretending to validate fit.
+- M2 can implement the arithmetic directly without interpreting ambiguous
+  prose.

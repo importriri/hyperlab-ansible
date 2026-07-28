@@ -31,10 +31,6 @@
     validate: nft -c -f %s
   notify: Reload nftables
 
-# systemd only knows whether it ran nft, not whether the rules are in the
-# kernel. Asserting the unit is started makes every run report changed the
-# moment it stops holding its active-exited state, and buries real drift in
-# that noise. Ask the kernel instead: the table is the fact that matters.
 - name: Enable nftables at boot
   ansible.builtin.systemd_service:
     name: nftables
@@ -46,11 +42,15 @@
   changed_when: false
   failed_when: false
 
-# 'reloaded' starts the unit when it is down and reloads it when it is up:
-# either way the ruleset lands without ever stopping it (the unit's stop
-# action flushes the whole ruleset, libvirt's NAT included).
 - name: Load the ruleset only when the kernel is missing it (never restart)
   ansible.builtin.systemd_service:
     name: nftables
     state: reloaded
   when: lab_isolation_live.rc != 0
+
+- name: Record that the lab_isolation brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: lab_isolation

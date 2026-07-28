@@ -1,0 +1,56 @@
+---
+schema_version: 1
+kind: image-manifest
+fields:
+  schema_version: {type: int, enum: [1]}
+  id: {type: str, min_length: 1, pattern: "^[a-z0-9][a-z0-9-]*$"}
+  display_name: {type: str, min_length: 1}
+  os_family: {type: str, enum: [windows, linux]}
+  os_variant: {type: str, min_length: 1}
+  version: {type: str, min_length: 1}
+  format: {type: str, enum: [qcow2, raw]}
+  status: {type: str, enum: [not-built, sealed]}
+  sha256: {type: str, nullable: true, pattern: "^[a-f0-9]{64}$"}
+  private: {type: bool}
+  contains_personal_data: {type: bool}
+  generalized: {type: bool}
+  instance_policy: {type: str, enum: [multiple, singleton]}
+  source_type: {type: str, enum: [official-cloud, official-iso, local]}
+  source_url: {type: str, nullable: true, min_length: 1}
+  source_checksum_url: {type: str, nullable: true, min_length: 1}
+  filename: {type: str, min_length: 1, pattern: "^[A-Za-z0-9._-]+$"}
+  virtual_size_gib: {type: int, min: 1, max: 4096}
+  minimum_size_gib: {type: int, min: 1, max: 4096}
+  min_memory_mb: {type: int, min: 512, max: 1048576}
+  supports:
+    type: map
+    fields:
+      standard: {type: bool}
+      vfio: {type: bool}
+      cloud_init: {type: bool}
+      qemu_guest_agent: {type: bool}
+  requires:
+    type: map
+    fields:
+      uefi: {type: bool}
+      secure_boot: {type: bool}
+      tpm2: {type: bool}
+  defaults:
+    type: map
+    fields:
+      lifecycle: {type: str, enum: [disposable, permanent]}
+      device_profile: {type: str, enum: [standard, vfio]}
+      network_profile: {type: str, domain: true}
+  network_allowlist:
+    type: list
+    of: str
+    domain: true
+    unique_items: true
+  licensing:
+    type: map
+    fields:
+      redistributable: {type: bool}
+optional:
+  looking_glass_host_build_required: {type: str, nullable: true, min_length: 1}
+  looking_glass_host_build_observed: {type: str, nullable: true, min_length: 1}
+  notes: {type: str, min_length: 1}

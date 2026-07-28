@@ -15,9 +15,9 @@ base. Reset is: delete the overlay, recreate it. Nothing else.
 `qemu-img convert`. No backing file, no chain, no dependency on the base
 after creation.
 
-A permanent VM on an overlay is available as an explicit opt-in and
-prints what it costs: the base can never be removed or rebased, and the
-chain has to be read before every operation.
+Schema v1 intentionally has no permanent-overlay mode. A permanent VM is
+always an independent clone; adding another lifecycle later requires a new
+schema field and migration note rather than an undocumented special case.
 
 ## Consequences
 

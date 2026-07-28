@@ -40,8 +40,33 @@ run() {
     rm -f "${log}"
 }
 
-step "level 0a - static cross-repository contract"
+run_render() {
+    # tests/render.yml validates nftables with become. CI has passwordless
+    # sudo and no TTY; an operator's terminal normally needs the become
+    # password. Do not hide that prompt inside run()'s captured stderr.
+    if [ -t 0 ]; then
+        if ansible-playbook -K -i inventory.ini tests/render.yml \
+            --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'; then
+            echo "   OK"
+        else
+            echo "   FAIL"
+            fail=1
+        fi
+    else
+        run ansible-playbook -i inventory.ini tests/render.yml \
+            --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
+    fi
+}
+
+step "level 0a - static pipeline contract"
 run python tests/static_contract.py
+
+step "level 0c - image manifest and VM spec schemas"
+run python tests/schema_validate.py
+
+step "level 0d - contract mutation tests"
+run python tests/schema_mutations.py
+run python tests/contract_mutations.py
 
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint
@@ -57,7 +82,11 @@ done
 if [ "${ok}" -eq 1 ]; then echo "   OK"; else fail=1; fi
 
 step "level 2 - render / invariant tests"
-run ansible-playbook -i inventory.ini tests/render.yml
+# M0's renderer still names the old variable in one isolated fake-data
+# expression. Supply that fixture explicitly while production data and every
+# M1 contract use host_profiles. Remove this bridge with the test-only render
+# migration; never restore the legacy key to production group_vars.
+run_render
 
 if ls tests/*.bats >/dev/null 2>&1; then
     step "level 3 - protocol tests (bats, discovered)"

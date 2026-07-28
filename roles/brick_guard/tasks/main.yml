@@ -1,0 +1,34 @@
+---
+- name: Refuse an unknown brick name
+  ansible.builtin.assert:
+    that:
+      - brick_guard_brick in brick_requires
+      - brick_guard_brick in brick_playbooks
+    fail_msg: >-
+      Unknown brick_guard_brick={{ brick_guard_brick }}. Add the brick to both
+      brick_requires and brick_playbooks before mounting the guard.
+
+- name: Look for the prerequisites of this brick
+  ansible.builtin.stat:
+    path: "{{ brick_stamp_dir }}/{{ item }}"
+  register: brick_guard_found
+  changed_when: false
+  loop: "{{ brick_requires[brick_guard_brick] }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Refuse to assemble on top of a brick that is not there
+  ansible.builtin.assert:
+    that:
+      - brick_guard_missing | length == 0
+    fail_msg: >-
+      {{ brick_guard_brick }} needs {{ brick_guard_missing | join(', ') }} on
+      this host first. Run:
+      {% for brick in brick_guard_missing %}
+      ansible-playbook {{ brick_playbooks[brick] }}
+      {% endfor %}
+    success_msg: "{{ brick_guard_brick }}: prerequisites present."
+  vars:
+    brick_guard_missing: >-
+      {{ brick_guard_found.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}

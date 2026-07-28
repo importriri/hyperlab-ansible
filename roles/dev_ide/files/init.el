@@ -79,14 +79,13 @@
 (use-package magit
   :bind ("C-x g" . magit-status))
 
-;;; Claude Code in a terminal buffer (eat: pure elisp, no native deps).
-;; `claude` authenticates on first run - manual, by design.
+;;; project terminal (eat: pure elisp, no native deps)
 (use-package eat)
-(defun privatestack/claude-code ()
-  "Open Claude Code in the project root."
+(defun privatestack/project-terminal ()
+  "Open a terminal in the current project root."
   (interactive)
   (let ((default-directory
          (or (when-let ((p (project-current))) (project-root p))
              default-directory)))
-    (eat "claude")))
-(global-set-key (kbd "C-c a") #'privatestack/claude-code)
+    (eat)))
+(global-set-key (kbd "C-c t") #'privatestack/project-terminal)

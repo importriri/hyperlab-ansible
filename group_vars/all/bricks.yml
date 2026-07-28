@@ -1,0 +1,38 @@
+---
+# Brick prerequisites, as data.
+#
+# playbooks/looking-glass.yml used to carry a comment saying to run
+# desktop.yml first. In the wrong order it still *succeeded*: packages
+# installed, the module built, the client landed - and it failed an hour
+# later, when the client could not open the node, because TAG+="uaccess"
+# grants access to an active seat session and without the cockpit there is
+# none. A prerequisite enforced by a comment is not enforced.
+#
+# Each brick records that it landed; brick_guard reads the records.
+brick_stamp_dir: /etc/privatestack/bricks
+
+brick_requires:
+  base: []
+  hardware_probe: []
+  kvm_host: [base]
+  vfio_boot: [hardware_probe]
+  network_domains: [kvm_host]
+  lab_isolation: [network_domains]
+  gpu_handoff: [network_domains]
+  desktop: []
+  dev_ide: [desktop]
+  looking_glass: [desktop, kvm_host]
+
+# Which playbook mounts a brick, so a refusal can name the fix instead of
+# leaving the reader to grep for it.
+brick_playbooks:
+  base: playbooks/lab.yml
+  hardware_probe: playbooks/preflight.yml
+  kvm_host: playbooks/lab.yml
+  vfio_boot: playbooks/lab.yml
+  network_domains: playbooks/lab.yml
+  lab_isolation: playbooks/lab.yml
+  gpu_handoff: playbooks/lab.yml
+  desktop: playbooks/desktop.yml
+  dev_ide: playbooks/dev.yml
+  looking_glass: playbooks/looking-glass.yml

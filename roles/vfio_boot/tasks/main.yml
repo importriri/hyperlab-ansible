@@ -73,3 +73,10 @@
   ansible.builtin.file:
     path: /boot/loader/entries/arch-hardened.conf
     state: absent
+
+- name: Record that the vfio_boot brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: vfio_boot
