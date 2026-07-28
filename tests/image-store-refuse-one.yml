@@ -1,0 +1,16 @@
+---
+- name: Expect this configuration to be refused
+  block:
+    - name: Run the real validation
+      ansible.builtin.include_tasks: "{{ repo_root }}/roles/image_store/tasks/validate.yml"
+
+    - name: It was accepted, which is the failure
+      ansible.builtin.set_fact:
+        refusals_accepted: "{{ refusals_accepted | default([]) + [refusal_why] }}"
+  rescue:
+    - name: It was refused, and this records WHICH assertion did it
+      ansible.builtin.set_fact:
+        refusals_seen: "{{ refusals_seen | default([]) + [refusal_why] }}"
+        refusal_reasons: >-
+          {{ (refusal_reasons | default({}))
+             | combine({refusal_why: ansible_failed_task.name | default('unknown')}) }}

@@ -2,11 +2,13 @@
 - name: Refuse an unknown brick name
   ansible.builtin.assert:
     that:
+      - brick_guard_brick is defined
       - brick_guard_brick in brick_requires
       - brick_guard_brick in brick_playbooks
     fail_msg: >-
-      Unknown brick_guard_brick={{ brick_guard_brick }}. Add the brick to both
-      brick_requires and brick_playbooks before mounting the guard.
+      Unknown brick_guard_brick={{ brick_guard_brick | default('<undefined>') }}.
+      Add the brick to both brick_requires and brick_playbooks before mounting
+      the guard.
 
 - name: Look for the prerequisites of this brick
   ansible.builtin.stat:

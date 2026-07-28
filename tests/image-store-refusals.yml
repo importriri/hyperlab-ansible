@@ -1,0 +1,313 @@
+---
+# Real refusal paths, all filesystem writes constrained to a tempdir. The role's
+# validation/identity/NOCOW evaluator are included directly rather than copied.
+- name: Image store refusals
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir | dirname }}"
+
+  tasks:
+    - name: Exercise refusal contracts inside a workspace that is always removed
+      block:
+        - name: Make the isolated workspace
+          ansible.builtin.tempfile:
+            state: directory
+          register: refusal_ws
+
+        - name: Load the shared store contract and role defaults
+          ansible.builtin.include_vars:
+            file: "{{ item }}"
+          loop:
+            - "{{ repo_root }}/group_vars/all/storage.yml"
+            - "{{ repo_root }}/roles/image_store/defaults/main.yml"
+
+        - name: Derive the real store path from the contract
+          ansible.builtin.set_fact:
+            refusal_real_store_path: "{{ hyperlab_root }}"
+
+        - name: Read the real store before the suite
+          ansible.builtin.stat:
+            path: "{{ refusal_real_store_path }}"
+            follow: false
+          register: refusal_store_before
+          changed_when: false
+
+        - name: Every malformed root must be refused
+          ansible.builtin.include_tasks: image-store-refuse-one.yml
+          vars:
+            hyperlab_root: "{{ refusal_case.root }}"
+            refusal_why: "{{ refusal_case.why }}"
+          loop:
+            - {root: /, why: root-slash}
+            - {root: /tmp, why: root-tmp}
+            - {root: /var/lib/libvirt, why: root-libvirt}
+            - {root: images/hyperlab, why: relative}
+            - {root: /var/lib/libvirt/images/../../../etc, why: dotdot}
+            - {root: /var/lib/libvirt/images/hyperlab/, why: trailing-slash}
+            - {root: /var/lib//libvirt/hyperlab, why: empty-component}
+          loop_control:
+            loop_var: refusal_case
+            label: "{{ refusal_case.why }}"
+
+        - name: Create real directories used by filesystem-shape refusals
+          ansible.builtin.file:
+            path: "{{ refusal_ws.path }}/{{ item }}"
+            state: directory
+            mode: "0755"
+          loop: [real, store, ancestor]
+
+        - name: Put a symlink where a store root would be
+          ansible.builtin.file:
+            src: "{{ refusal_ws.path }}/real"
+            dest: "{{ refusal_ws.path }}/linked-root"
+            state: link
+
+        - name: Put a symlink where a layout component would be
+          ansible.builtin.file:
+            src: "{{ refusal_ws.path }}/real"
+            dest: "{{ refusal_ws.path }}/store/bases"
+            state: link
+
+        - name: Put a symlink in an ancestor of the declared root
+          ansible.builtin.file:
+            src: "{{ refusal_ws.path }}/ancestor"
+            dest: "{{ refusal_ws.path }}/linked-parent"
+            state: link
+
+        - name: Create the target below the real ancestor
+          ansible.builtin.file:
+            path: "{{ refusal_ws.path }}/ancestor/below"
+            state: directory
+            mode: "0755"
+
+        - name: Put a regular file where a store root would be
+          ansible.builtin.copy:
+            content: not-a-directory
+            dest: "{{ refusal_ws.path }}/file-root"
+            mode: "0644"
+
+        - name: Every unsafe on-disk shape must be refused
+          ansible.builtin.include_tasks: image-store-refuse-one.yml
+          vars:
+            hyperlab_root: "{{ refusal_ws.path }}/{{ refusal_case.path }}"
+            refusal_why: "{{ refusal_case.why }}"
+          loop:
+            - {path: linked-root, why: root-symlink}
+            - {path: store, why: component-symlink}
+            - {path: file-root, why: root-is-file}
+            - {path: linked-parent/below, why: ancestor-symlink}
+          loop_control:
+            loop_var: refusal_case
+            label: "{{ refusal_case.why }}"
+
+        - name: Empty administrator identities must be refused by validation
+          ansible.builtin.include_tasks: image-store-refuse-one.yml
+          vars:
+            hyperlab_root: "{{ refusal_ws.path }}/store-owner"
+            image_store_owner: "{{ refusal_case.owner }}"
+            image_store_group: "{{ refusal_case.group }}"
+            refusal_why: "{{ refusal_case.why }}"
+          loop:
+            - {owner: "", group: root, why: empty-owner}
+            - {owner: root, group: "", why: empty-group}
+            - {owner: "  ", group: root, why: blank-owner}
+          loop_control:
+            loop_var: refusal_case
+            label: "{{ refusal_case.why }}"
+
+        - name: Broken layout structures must be refused
+          ansible.builtin.include_tasks: image-store-refuse-one.yml
+          vars:
+            hyperlab_root: "{{ refusal_ws.path }}/store-layout"
+            image_store_layout: "{{ refusal_case.layout }}"
+            refusal_why: "{{ refusal_case.why }}"
+          loop:
+            - {why: layout-not-list, layout: wrong}
+            - {why: layout-non-mapping, layout: [wrong]}
+            - why: missing-field
+              layout:
+                - {path: "", mode: "0751", access: admin}
+            - why: duplicate-directory
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: bases, mode: "0555", access: admin, purpose: masters}
+                - {path: bases, mode: "0750", access: admin, purpose: duplicate}
+            - why: invalid-mode
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: bases, mode: "755", access: admin, purpose: short mode}
+            - why: mode-not-octal
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: bases, mode: "0958", access: admin, purpose: bad digits}
+            - why: mode-unquoted-integer
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: bases, mode: 493, access: admin, purpose: integer mode}
+            - why: absolute-component
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: /etc, mode: "0755", access: admin, purpose: escape}
+            - why: dotdot-component
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: root}
+                - {path: ../elsewhere, mode: "0755", access: admin, purpose: escape}
+            - why: no-root-entry
+              layout:
+                - {path: bases, mode: "0555", access: admin, purpose: no root}
+            - why: empty-purpose
+              layout:
+                - {path: "", mode: "0751", access: admin, purpose: ""}
+            - why: unknown-access-class
+              layout:
+                - {path: "", mode: "0751", access: runtime, purpose: bad class}
+          loop_control:
+            loop_var: refusal_case
+            label: "{{ refusal_case.why }}"
+
+        - name: Derive a layout missing one independently required directory
+          ansible.builtin.set_fact:
+            refusal_layout_without_state: >-
+              {{ image_store_layout | rejectattr('path', 'equalto', 'state') | list }}
+
+        - name: A layout missing a required directory must be refused
+          ansible.builtin.include_tasks: image-store-refuse-one.yml
+          vars:
+            hyperlab_root: "{{ refusal_ws.path }}/store-incomplete"
+            refusal_why: missing-required-directory
+            image_store_layout: "{{ refusal_layout_without_state }}"
+
+        - name: A well-formed root under the workspace must validate
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/image_store/tasks/validate.yml"
+          vars:
+            hyperlab_root: "{{ refusal_ws.path }}/good-store"
+
+        - name: An unresolved compiled runtime default must be refused
+          ansible.builtin.include_tasks: image-store-refuse-identity.yml
+          vars:
+            identity_refusal_why: unresolved-runtime-identity
+            hyperlab_qemu_conf: "{{ refusal_ws.path }}/no-qemu.conf"
+            hyperlab_qemu_user_declared: "{{ hyperlab_runtime_identity_unset }}"
+            hyperlab_qemu_group_declared: "{{ hyperlab_runtime_identity_unset }}"
+            hyperlab_swtpm_user_declared: "{{ hyperlab_runtime_identity_unset }}"
+            hyperlab_swtpm_group_declared: "{{ hyperlab_runtime_identity_unset }}"
+
+        - name: An administrator identity absent from getent must be refused
+          ansible.builtin.include_tasks: image-store-refuse-identity.yml
+          vars:
+            identity_refusal_why: nonexistent-administrator
+            hyperlab_qemu_conf: "{{ refusal_ws.path }}/no-qemu.conf"
+            hyperlab_qemu_user_declared: root
+            hyperlab_qemu_group_declared: root
+            hyperlab_swtpm_user_declared: root
+            hyperlab_swtpm_group_declared: root
+            image_store_owner: __image_store_missing_user__
+            image_store_group: root
+
+        - name: Evaluate NOCOW with an uppercase C only in the path
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/image_store/tasks/nocow-evaluate.yml"
+          vars:
+            image_store_lsattr:
+              stdout: "---------------------- {{ refusal_ws.path }}/ContainsC/hyperlab"
+
+        - name: A C in the path must not masquerade as the NOCOW flag
+          ansible.builtin.assert:
+            that: [not image_store_nocow_present]
+
+        - name: Evaluate NOCOW with C in the attribute field
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/image_store/tasks/nocow-evaluate.yml"
+          vars:
+            image_store_lsattr:
+              stdout: "------C--------------- {{ refusal_ws.path }}/plain/hyperlab"
+
+        - name: A C in the attribute field must be detected
+          ansible.builtin.assert:
+            that: [image_store_nocow_present]
+
+        - name: Every validation refusal must fire for a distinguishable guard
+          ansible.builtin.assert:
+            that:
+              - refusals_seen | default([]) | sort == refusal_expected | sort
+              - refusals_accepted | default([]) | length == 0
+              - refusal_reasons['root-symlink'] != refusal_reasons['component-symlink']
+              - refusal_reasons['relative'] != refusal_reasons['root-tmp']
+              - refusal_required_guards | difference(refusal_reasons | dict2items | map(attribute='value') | unique | list) | length == 0
+          vars:
+            refusal_required_guards:
+              - Refuse a root that is not a usable absolute path
+              - Refuse a root that is a system directory
+              - Refuse a root whose canonical path is not the declared one
+              - Refuse a root that exists and is not a directory
+              - Refuse a layout component that is a symlink or not a directory
+              - Refuse an unusable administrator owner or group
+              - Refuse a layout that is not a list
+              - Refuse a layout containing a non-mapping element
+              - Refuse a layout element missing a required field
+              - Refuse a layout that is not internally coherent
+              - Refuse a layout that is missing a required directory
+            refusal_expected:
+              - root-slash
+              - root-tmp
+              - root-libvirt
+              - relative
+              - dotdot
+              - trailing-slash
+              - empty-component
+              - root-symlink
+              - component-symlink
+              - root-is-file
+              - ancestor-symlink
+              - empty-owner
+              - empty-group
+              - blank-owner
+              - layout-not-list
+              - layout-non-mapping
+              - missing-field
+              - duplicate-directory
+              - invalid-mode
+              - mode-not-octal
+              - mode-unquoted-integer
+              - absolute-component
+              - dotdot-component
+              - no-root-entry
+              - empty-purpose
+              - unknown-access-class
+              - missing-required-directory
+
+        - name: Both identity refusals must fire from different guards
+          ansible.builtin.assert:
+            that:
+              - identity_refusals_seen | default([]) | sort == identity_refusal_expected | sort
+              - identity_refusals_accepted | default([]) | length == 0
+              - identity_refusal_reasons['unresolved-runtime-identity'] != identity_refusal_reasons['nonexistent-administrator']
+          vars:
+            identity_refusal_expected: [unresolved-runtime-identity, nonexistent-administrator]
+
+        - name: Read the real store after the suite
+          ansible.builtin.stat:
+            path: "{{ refusal_real_store_path }}"
+            follow: false
+          register: refusal_store_after
+          changed_when: false
+
+        - name: Prove the real store remained unchanged
+          ansible.builtin.assert:
+            that:
+              - refusal_store_before.stat.exists == refusal_store_after.stat.exists
+              - refusal_store_before.stat.islnk | default(false) == refusal_store_after.stat.islnk | default(false)
+              - refusal_store_before.stat.isdir | default(false) == refusal_store_after.stat.isdir | default(false)
+              - refusal_store_before.stat.mode | default('') == refusal_store_after.stat.mode | default('')
+              - refusal_store_before.stat.uid | default(-1) == refusal_store_after.stat.uid | default(-1)
+              - refusal_store_before.stat.gid | default(-1) == refusal_store_after.stat.gid | default(-1)
+              - refusal_store_before.stat.size | default(-1) == refusal_store_after.stat.size | default(-1)
+              - refusal_store_before.stat.mtime | default(0) == refusal_store_after.stat.mtime | default(0)
+              - refusal_store_before.stat.ctime | default(0) == refusal_store_after.stat.ctime | default(0)
+              - refusal_store_before.stat.inode | default(-1) == refusal_store_after.stat.inode | default(-1)
+      always:
+        - name: Remove the isolated workspace whatever happened
+          ansible.builtin.file:
+            path: "{{ refusal_ws.path }}"
+            state: absent
+          when: refusal_ws.path is defined

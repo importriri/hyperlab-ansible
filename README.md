@@ -30,12 +30,13 @@ package on the host. The host stays a fortress; the services stay cattle.
 | `base` | Admin user, validated sudoers drop-in, hardening sysctls, pacman QoL | lab bundle (1/7) | available |
 | `hardware_probe` | Auto-select and validate Nitro 3060 / Predator 3070 PCI profiles | lab bundle (2/7) | available |
 | `kvm_host` | Headless KVM stack, socket activation, `/dev/kvm` guard | lab bundle (3/7) | available |
+| `image_store` | Validated Hyperlab storage layout; no image and no domain lifecycle | foundation | available |
 | `vfio_boot` | The four systemd-boot entries, templated; LUKS UUID read at runtime | lab bundle (4/7) | available |
 | `network_domains` | The five libvirt networks (four NAT + isolated lab) | lab bundle (5/7) | available |
 | `lab_isolation` | The nftables cross-domain drop matrix | lab bundle (6/7) | available |
 | `gpu_handoff` | Trust-ranked GPU handoff hook, fail-closed | lab bundle (7/7) | available |
 | `desktop` | Sway + ly cockpit: Mocha rice (floating waybar, rofi launcher + power menu, cava strip), shell nav kit | optional | available |
-| `dev_ide` | Emacs IDE: eglot LSP (java/js/html/css/bash/ansible) + Claude Code | optional (guests) | available |
+| `dev_ide` | Emacs IDE: eglot LSP for Java, JS/TS, HTML/CSS, Bash and Ansible | optional (guests) | available |
 | `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
 | `brick_guard` | Refuses a brick whose prerequisites are not on this host | infrastructure | available |
 | `guest` | The VM foundation: verified cloud image, qcow2 overlay, cloud-init seed | foundation | planned — A8 |
@@ -50,8 +51,8 @@ Bricks land stage by stage; this table is the truth about what exists.
 The cockpit is opt-in: `playbooks/desktop.yml` mounts the desktop on the
 host or on any VM in `workstations` (the host rides its free iGPU — the
 dGPU belongs to `gpu_handoff`); `playbooks/dev.yml` turns a guest into a
-dev workstation — same cockpit plus the Emacs IDE wired to eglot and
-Claude Code (`claude` authenticates on first run: manual, by design);
+dev workstation — same cockpit plus the Emacs IDE wired to eglot and its
+language servers; interactive account credentials remain outside automation;
 `playbooks/looking-glass.yml` adds the window onto the GPU VM — the kvmfr
 transport, the node permissions QEMU and the desktop session both need, and
 the client built from a pinned commit. Its guest half stays manual by design

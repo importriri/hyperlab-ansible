@@ -1,0 +1,52 @@
+---
+# The Hyperlab image store: where it is, who may reach it, and which roots are
+# never it.
+#
+# The image_store brick creates and validates directories. It does not create,
+# import, convert or checksum any image, and it defines no domain.
+hyperlab_root: /var/lib/libvirt/images/hyperlab
+
+hyperlab_forbidden_roots:
+  - /
+  - /boot
+  - /etc
+  - /home
+  - /proc
+  - /root
+  - /run
+  - /sys
+  - /tmp
+  - /usr
+  - /var
+  - /var/lib
+  - /var/lib/libvirt
+  - /var/tmp
+
+# Kept separate from image_store_layout so a runtime override cannot silently
+# remove a required directory and redefine the contract it is checked against.
+hyperlab_required_directories:
+  - ""
+  - bases
+  - bases/windows
+  - bases/linux
+  - disposable
+  - permanent
+  - cloud-init
+  - nvram
+  - tpm
+  - snapshots
+  - exports
+  - cache
+  - state
+
+# Runtime identities are host facts, not portable defaults. qemu.conf may set
+# them explicitly; otherwise libvirt uses distribution build-time defaults.
+# Those compiled defaults cannot be inferred safely from a commented example.
+# Replace these sentinels in host_vars after observing the Nitro, unless the
+# corresponding setting is explicitly present in qemu.conf.
+hyperlab_runtime_identity_unset: __REQUIRED_FROM_HARDWARE__
+hyperlab_qemu_user_declared: __REQUIRED_FROM_HARDWARE__
+hyperlab_qemu_group_declared: __REQUIRED_FROM_HARDWARE__
+hyperlab_swtpm_user_declared: __REQUIRED_FROM_HARDWARE__
+hyperlab_swtpm_group_declared: __REQUIRED_FROM_HARDWARE__
+hyperlab_qemu_conf: /etc/libvirt/qemu.conf

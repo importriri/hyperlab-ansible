@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
 # verify.sh - the whole verification battery, one command, from the repo
 # root. Managed by privatestack-ansible (part of the A1 scaffold).
-#
-# Mirrors what CI runs, BY DISCOVERY: the same script is correct at every
-# stage of the repo, because it checks what exists instead of what is
-# enumerated. Adding a brick never requires touching this file - same
-# contract as the CI workflow.
-#
-# Run it before every commit. It also works as a git pre-commit hook:
-#     ln -s ../../verify.sh .git/hooks/pre-commit
-#
-# Exit code: 0 only if EVERY level of the pyramid is green.
 set -u
 cd "$(dirname "$0")" || exit 1
 
@@ -22,12 +12,9 @@ if ! ansible-galaxy collection list community.general >/dev/null 2>&1 \
     exit 1
 fi
 
-step() {
-    printf '\n== %s\n' "$1"
-}
+step() { printf '\n== %s\n' "$1"; }
 
 run() {
-    # capture quietly, show the tail only on failure
     local log
     log="$(mktemp)"
     if "$@" >"${log}" 2>&1; then
@@ -41,9 +28,6 @@ run() {
 }
 
 run_render() {
-    # tests/render.yml validates nftables with become. CI has passwordless
-    # sudo and no TTY; an operator's terminal normally needs the become
-    # password. Do not hide that prompt inside run()'s captured stderr.
     if [ -t 0 ]; then
         if ansible-playbook -K -i inventory.ini tests/render.yml \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'; then
@@ -68,6 +52,14 @@ step "level 0d - contract mutation tests"
 run python tests/schema_mutations.py
 run python tests/contract_mutations.py
 
+contracts=(tests/*_contract.py)
+if [ -e "${contracts[0]}" ]; then
+    step "level 0e - per-brick structural contracts (discovered)"
+    for contract in "${contracts[@]}"; do
+        run python "${contract}"
+    done
+fi
+
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint
 
@@ -81,11 +73,15 @@ for pb in playbooks/*.yml; do
 done
 if [ "${ok}" -eq 1 ]; then echo "   OK"; else fail=1; fi
 
+refusal_suites=(tests/*-refusals.yml)
+if [ -e "${refusal_suites[0]}" ]; then
+    step "level 2b - refusal suites (discovered)"
+    for suite in "${refusal_suites[@]}"; do
+        run ansible-playbook -i inventory.ini "${suite}"
+    done
+fi
+
 step "level 2 - render / invariant tests"
-# M0's renderer still names the old variable in one isolated fake-data
-# expression. Supply that fixture explicitly while production data and every
-# M1 contract use host_profiles. Remove this bridge with the test-only render
-# migration; never restore the legacy key to production group_vars.
 run_render
 
 if ls tests/*.bats >/dev/null 2>&1; then

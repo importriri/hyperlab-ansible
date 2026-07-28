@@ -215,7 +215,6 @@ push.
   default. A deprecation warning is a dated bug report.
 - Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
 
-
 ## Hardware and reconciliation contracts
 
 ### 27. Predator profile loses the HDMI-audio function
@@ -237,3 +236,125 @@ push.
 - Break: `sed -i 's/failed_when: looking_glass_unload.rc != 0/failed_when: false/' roles/looking_glass/handlers/main.yml`
 - Red: static contract, "kvmfr resize must fail when unload fails".
 - Restore: `git checkout -- roles/looking_glass/handlers/main.yml`
+
+## Image store (M2)
+
+Run each mutation from a clean tree, execute the named test, then restore the
+file before trying the next mutation. The important property is not the number
+of mutations; it is that each safety claim has a test capable of becoming red.
+
+### 51. A write enters pre-write validation
+- Break: append an `ansible.builtin.file` task to
+  `roles/image_store/tasks/validate.yml`.
+- Red: `python tests/image_store_contract.py` — `validate.yml` is read-only and
+  has no exemption for the module most likely to create a directory by mistake.
+
+### 52. A new shell-out bypasses the exact allowlist
+- Break: add any `ansible.builtin.command` task, or change an allowlisted
+  executable to `/bin/true`.
+- Red: structural contract — no shell is permitted and command is limited to
+  `/usr/bin/readlink`, `/usr/bin/test` and `/usr/bin/lsattr`, all using `argv`
+  with `changed_when: false`.
+
+### 53. Canonicalisation is removed
+- Break: remove the `readlink -m` task from `validate.yml`.
+- Red: structural contract and refusal `ancestor-symlink`.
+
+### 54. A mount-boundary post-check disappears
+- Break: remove `stat.dev` from the post-creation assertion in `main.yml`.
+- Red: structural contract — device IDs must be checked before and after the
+  create window.
+
+### 55. An unresolved libvirt build default is accepted
+- Break: remove `Refuse unresolved runtime identities` from `identity.yml`.
+- Red: refusal `unresolved-runtime-identity` and the structural sentinel check.
+
+### 56. A missing administrator identity passes getent
+- Break: select on result `failed` after leaving `failed_when: false` on the
+  getent loop.
+- Red: refusal `nonexistent-administrator` and the structural check requiring
+  the getent fact map to be inspected.
+
+### 57. swtpm is collapsed into the QEMU identity
+- Break: change the `tpm` layout entry from `access: swtpm` to `access: qemu`.
+- Red: structural contract — the emulator has a separate runtime identity and
+  TPM state must not become readable by the QEMU group by accident.
+
+### 58. A QEMU path loses group traversal
+- Break: change `disposable` to `0700` or `access: admin`.
+- Red: structural mode/access checks. The hardware run also executes
+  `/usr/bin/test -x` as the effective QEMU user.
+
+### 59. The runtime traversal proof is removed
+- Break: delete `Verify each non-root runtime identity can traverse its
+  directories`.
+- Red: structural contract — existence of an account/group does not prove
+  supplementary membership or parent traversal.
+
+### 60. A layout override removes a required directory
+- Break: delete the runtime assertion against
+  `hyperlab_required_directories`.
+- Red: refusal `missing-required-directory`.
+
+### 61. A layout stops being a list of mappings
+- Break: remove either staged type assertion in `validate.yml`.
+- Red: refusals `layout-not-list` or `layout-non-mapping`.
+
+### 62. An unquoted mode reaches later filters
+- Break: set a mode to YAML integer `493` or remove the quoted-mode check.
+- Red: structural contract and refusal `mode-unquoted-integer`, without a
+  traceback.
+
+### 63. Capacity planning becomes a mkdir refusal
+- Break: replace the capacity `debug` task with an `assert` on
+  `size_available`.
+- Red: structural contract. M2 creates empty directories; import is where a
+  hard space check belongs.
+
+### 64. The derived capacity plan is lowered
+- Break: set `image_store_capacity_plan_gib: 40`.
+- Red: structural contract recomputes the minimum from `images/*.yml`.
+
+### 65. A C in the path is mistaken for the NOCOW flag
+- Break: parse the full `lsattr` line rather than its first field.
+- Red: refusal suite evaluates the real shared NOCOW task with an uppercase C
+  only in the pathname.
+
+### 66. NOCOW is applied rather than observed
+- Break: replace `/usr/bin/lsattr` with `chattr +C`.
+- Red: exact command allowlist and forbidden-operation scan.
+
+### 67. The post-condition stops verifying the resulting layout
+- Break: remove any of `stat.pw_name`, `stat.gr_name`, `stat.mode` or `stat.dev`
+  from `main.yml`.
+- Red: structural contract.
+
+### 68. The store leaves the brick graph
+- Break: change `image_store: [kvm_host]` to `image_store: []`.
+- Red: both static and image-store structural contracts.
+
+### 69. The scoped playbook pulls in another brick
+- Break: add `network_domains` to `playbooks/image-store.yml`.
+- Red: structural contract — a directory-layout play must not reconfigure the
+  lab bundle.
+
+### 70. Local verification stops discovering brick tests
+- Break: remove the `tests/*_contract.py` or `tests/*-refusals.yml` block from
+  `verify.sh`.
+- Red: `tests/static_contract.py`. This closes the old omission failure where
+  the battery could print ALL GREEN without running the new test family.
+
+### 71. Check mode pretends predicted directories already exist
+- Break: remove the `when: not ansible_check_mode` guard from the real
+  post-condition block or the layout-manifest task.
+- Red: `python tests/image_store_contract.py`; on hardware, a first
+  `playbooks/image-store.yml --check --diff` against an absent store must finish
+  without trying to stat, traverse or copy into directories that check mode did
+  not create.
+
+### 72. NOCOW is checked only after the first write
+- Break: move `Read NOCOW attribute from the nearest existing store ancestor`
+  below `Create each store directory individually`.
+- Red: `python tests/image_store_contract.py` — the inheritance source must be a
+  pre-write refusal, while the created root is independently verified on the
+  real pass.
