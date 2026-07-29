@@ -39,14 +39,19 @@ package on the host. The host stays a fortress; the services stay cattle.
 | `dev_ide` | Emacs IDE: eglot LSP for Java, JS/TS, HTML/CSS, Bash and Ansible | optional (guests) | available |
 | `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
 | `brick_guard` | Refuses a brick whose prerequisites are not on this host | infrastructure | available |
-| `guest` | The VM foundation: verified cloud image, qcow2 overlay, cloud-init seed | foundation | planned — A8 |
-| `jellyfin` | Private media server — the reference optional brick | optional | planned — A9 |
+| `guest` | Standard VM lifecycle; a reviewed VFIO extension is stacked above it | foundation | in review — [PR #4](https://github.com/importriri/privatestack-ansible/pull/4) / [PR #5](https://github.com/importriri/privatestack-ansible/pull/5); not on `main` |
+| `image_factory` | Image acquisition, qcow2 validation, sealing and provenance receipts | foundation | in review — [PR #6](https://github.com/importriri/privatestack-ansible/pull/6); not on `main` |
+| `windows_workshop` | Privacy-safe Windows evidence and clean/dirty image hand-off | foundation | in review — [PR #7](https://github.com/importriri/privatestack-ansible/pull/7); not on `main` |
+| `service_registry` | Service identity, static leases, reservations and offline recovery | foundation | in review — [PR #8](https://github.com/importriri/privatestack-ansible/pull/8); not on `main` |
+| `jellyfin` | Private media server — the reference application brick | optional | in review — [PR #9](https://github.com/importriri/privatestack-ansible/pull/9); not on `main` |
 | `nextcloud` | Private drive | optional | documented slot |
 | `vaultwarden` | Password manager | optional | documented slot |
 | `immich` | Private photo library | optional | documented slot |
 | `pihole` | Filtering DNS | optional | documented slot |
 
-Bricks land stage by stage; this table is the truth about what exists.
+Entries marked `available` are part of `main`. Entries marked `in review`
+exist only in the linked draft pull requests and are not supported from
+`main` yet.
 
 The cockpit is opt-in: `playbooks/desktop.yml` mounts the desktop on the
 host or on any VM in `workstations` (the host rides its free iGPU — the
