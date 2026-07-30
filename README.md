@@ -2,154 +2,122 @@
 
 [![ci](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml)
 
-A warehouse of pre-configured Ansible bricks for the host that
-[arch-bootstrap](https://github.com/importriri/arch-bootstrap) builds.
-One brick does one job. Playbooks are the assembly instructions. The same
-pipeline selects validated profiles for the Nitro RTX 3060 and Predator RTX
-3070 instead of asking users to hand-edit PCI IDs.
+Ansible configuration for the Arch/KVM/VFIO laptop built by
+[arch-bootstrap](https://github.com/importriri/arch-bootstrap).
 
-Part of a trilogy:
-[arch-bootstrap](https://github.com/importriri/arch-bootstrap) installs the
-encrypted base system, **privatestack-ansible** (this repo) turns it into a
-segmented hypervisor and a private services stack, and
-[arch-hypervisor-lab](https://github.com/importriri/arch-hypervisor-lab)
-documents the lab that drove the design.
+The default target is a headless hypervisor. The local Sway desktop, Emacs
+workstation setup and Looking Glass host transport are separate playbooks and
+are never pulled in by the base lab playbook.
 
-## The iron principle: empty, blind, secure host
+This is stage 2 of a three-repository project:
 
-The host runs nothing of its own except the hypervisor plumbing: libvirt,
-the network domains, the nftables isolation, the GPU guard. TTY-only, no
-GUI, no listening services, minimal attack surface. **Every service runs in
-a dedicated VM on its own domain** — never a container on the host, never a
-package on the host. The host stays a fortress; the services stay cattle.
-
-## Brick catalog
-
-| Brick | Job | Kind | Status |
-|---|---|---|---|
-| `base` | Admin user, validated sudoers drop-in, hardening sysctls, pacman QoL | lab bundle (1/7) | available |
-| `hardware_probe` | Auto-select and validate Nitro 3060 / Predator 3070 PCI profiles | lab bundle (2/7) | available |
-| `kvm_host` | Headless KVM stack, socket activation, `/dev/kvm` guard | lab bundle (3/7) | available |
-| `image_store` | Validated Hyperlab storage layout; no image and no domain lifecycle | foundation | available |
-| `vfio_boot` | The four systemd-boot entries, templated; LUKS UUID read at runtime | lab bundle (4/7) | available |
-| `network_domains` | The five libvirt networks (four NAT + isolated lab) | lab bundle (5/7) | available |
-| `lab_isolation` | The nftables cross-domain drop matrix | lab bundle (6/7) | available |
-| `gpu_handoff` | Trust-ranked GPU handoff hook, fail-closed | lab bundle (7/7) | available |
-| `desktop` | Sway + ly cockpit: Mocha rice (floating waybar, rofi launcher + power menu, cava strip), shell nav kit | optional | available |
-| `dev_ide` | Emacs IDE: eglot LSP for Java, JS/TS, HTML/CSS, Bash and Ansible | optional (guests) | available |
-| `looking_glass` | kvmfr transport, node permissions, client pinned to a build | optional (host) | available |
-| `brick_guard` | Refuses a brick whose prerequisites are not on this host | infrastructure | available |
-| `guest` | Standard VM lifecycle; a reviewed VFIO extension is stacked above it | foundation | in review — [PR #4](https://github.com/importriri/privatestack-ansible/pull/4) / [PR #5](https://github.com/importriri/privatestack-ansible/pull/5); not on `main` |
-| `image_factory` | Image acquisition, qcow2 validation, sealing and provenance receipts | foundation | in review — [PR #6](https://github.com/importriri/privatestack-ansible/pull/6); not on `main` |
-| `windows_workshop` | Privacy-safe Windows evidence and clean/dirty image hand-off | foundation | in review — [PR #7](https://github.com/importriri/privatestack-ansible/pull/7); not on `main` |
-| `service_registry` | Service identity, static leases, reservations and offline recovery | foundation | in review — [PR #8](https://github.com/importriri/privatestack-ansible/pull/8); not on `main` |
-| `jellyfin` | Private media server — the reference application brick | optional | in review — [PR #9](https://github.com/importriri/privatestack-ansible/pull/9); not on `main` |
-| `nextcloud` | Private drive | optional | documented slot |
-| `vaultwarden` | Password manager | optional | documented slot |
-| `immich` | Private photo library | optional | documented slot |
-| `pihole` | Filtering DNS | optional | documented slot |
-
-Entries marked `available` are part of `main`. Entries marked `in review`
-exist only in the linked draft pull requests and are not supported from
-`main` yet.
-
-The cockpit is opt-in: `playbooks/desktop.yml` mounts the desktop on the
-host or on any VM in `workstations` (the host rides its free iGPU — the
-dGPU belongs to `gpu_handoff`); `playbooks/dev.yml` turns a guest into a
-dev workstation — same cockpit plus the Emacs IDE wired to eglot and its
-language servers; interactive account credentials remain outside automation;
-`playbooks/looking-glass.yml` adds the window onto the GPU VM — the kvmfr
-transport, the node permissions QEMU and the desktop session both need, and
-the client built from a pinned commit. Its guest half stays manual by design
-and is documented in
-[arch-hypervisor-lab](https://github.com/importriri/arch-hypervisor-lab/blob/main/configs/looking-glass.md):
-a signed .exe is not a brick.
-The lab bundle never mounts any of them — the blind host stays the default.
-
-## Assembly
-
-On a freshly bootstrapped host (first run as root, since the admin user is
-one of the things `base` creates):
-
+```text
+arch-bootstrap  ->  privatestack-ansible  ->  arch-hypervisor-lab
+base install        host configuration        design notes and test records
 ```
+
+## What `main` configures
+
+| Role | Purpose |
+|---|---|
+| `base` | Admin account, sudoers validation, sysctls and basic packages |
+| `hardware_probe` | Selects the Nitro RTX 3060 or Predator RTX 3070 profile and validates PCI devices |
+| `kvm_host` | Headless QEMU/libvirt installation with socket activation |
+| `image_store` | Validates and prepares `/var/lib/libvirt/images` without creating images or domains |
+| `vfio_boot` | Renders the systemd-boot profiles and reads the LUKS UUID at runtime |
+| `network_domains` | Creates four NAT networks and one isolated lab network |
+| `lab_isolation` | Loads the nftables rules that block cross-domain forwarding |
+| `gpu_handoff` | Controls which workload domain may receive the dGPU |
+| `desktop` | Optional Sway session with waybar, rofi, foot and the local shell setup |
+| `dev_ide` | Optional Emacs/eglot workstation setup for guests |
+| `looking_glass` | Optional kvmfr module, permissions and pinned client build |
+| `brick_guard` | Checks role prerequisites and records completed roles |
+
+VM lifecycle, image sealing and service roles are intentionally not published
+on `main` yet. They remain local until their hardware checks are complete.
+
+## Host model
+
+The base host stays TTY-only and runs the virtualization layer, network
+isolation and GPU hand-off. Applications and private services belong in VMs.
+The interactive desktop is an opt-in administration interface on the iGPU; it
+is not required for the headless target.
+
+The repository contains profiles for:
+
+- Acer Nitro 5, RTX 3060 Mobile;
+- Acer Predator Helios 300, RTX 3070 Mobile.
+
+The profile data is documented in
+[`docs/hardware-profiles.md`](docs/hardware-profiles.md). A profile being
+present does not by itself mean the full install has passed on that laptop.
+
+## Run
+
+On a freshly installed host, run the first pass as root because the `base` role
+creates the normal administrator account:
+
+```bash
 pacman -S --needed git ansible
 git clone https://github.com/importriri/privatestack-ansible.git
 cd privatestack-ansible
 
-# identify the laptop profile before writing boot/network configuration
 ansible-playbook playbooks/preflight.yml
-
-# dress rehearsal first, always
 ansible-playbook playbooks/lab.yml --check --diff
-
-# the real run
 ansible-playbook playbooks/lab.yml
-
-# base created your admin user with a locked password - claim it
 passwd sid
 ```
 
-Subsequent runs as the admin user: `ansible-playbook playbooks/lab.yml
---ask-become-pass`. A second run right after the first must report
-`changed=0` — that is the definition of done.
+Later runs can use:
 
-The shared contract is split by concern under [`group_vars/all/`](group_vars/all/):
-identity, boot values matching what arch-bootstrap produced, the five
-network domains, the GPU trust map, and the LAN exposure allowlist. Bricks
-consume the contract; they never redefine it.
+```bash
+ansible-playbook playbooks/lab.yml --ask-become-pass
+```
 
-## The extension contract
+A second run after a successful apply should report `changed=0`.
 
-Adding a brick is a mechanical, reviewable change:
+Optional playbooks:
 
-1. add `roles/<name>/` — one job, with a final `brick_guard` stamp;
-2. add `playbooks/<name>.yml` — its assembly instructions;
-3. declare prerequisites in `brick_requires` and its mounting playbook in
-   `brick_playbooks`;
-4. add one row in the catalog and the tests that protect its invariants.
+```bash
+ansible-playbook playbooks/desktop.yml --ask-become-pass
+ansible-playbook playbooks/dev.yml --ask-become-pass
+ansible-playbook playbooks/looking-glass.yml --ask-become-pass
+```
 
-CI still discovers playbooks, roles and tests automatically. The two central
-maps are intentional contract data: without them an unknown prerequisite
-would silently behave like an empty list, and a refusal could not name the
-command that fixes it.
+The Windows side of Looking Glass remains manual because it installs a signed
+Windows executable. The guest steps are in
+[`arch-hypervisor-lab/configs/looking-glass.md`](https://github.com/importriri/arch-hypervisor-lab/blob/main/configs/looking-glass.md).
 
-The image and VM contracts live in [`schemas/`](schemas/), with the six
-manifests in [`images/`](images/) and example instances in
-[`vm-specs/`](vm-specs/). Manifests describe artefacts and carry a
-checksum; the artefacts themselves never enter Git. Brick prerequisites
-are data in [`group_vars/all/bricks.yml`](group_vars/all/bricks.yml) and
-enforced by `brick_guard`, not by a comment.
+## Repository layout
 
-Design decisions are recorded in [`docs/adr/`](docs/adr/); the audit that
-produced them is [`docs/AUDIT.md`](docs/AUDIT.md).
+```text
+group_vars/all/   shared identity, boot, network and hardware data
+playbooks/        entry points
+roles/            one role per host function
+schemas/          image and VM specification schemas
+images/           image manifests; image files never enter Git
+vm-specs/         example VM specifications
+docs/adr/         design decisions
+tests/            render, refusal and protocol checks
+```
 
-Hardware profile details: [`docs/hardware-profiles.md`](docs/hardware-profiles.md).
-Network drift handling: [`docs/network-reconciliation.md`](docs/network-reconciliation.md).
+A new role needs its own playbook, prerequisite entry, `brick_guard` stamp and
+tests. In [`group_vars/all/bricks.yml`](group_vars/all/bricks.yml),
+`brick_requires` is the dependency graph and `brick_playbooks` maps every role
+to the playbook that installs it.
 
-## Testing
+## Verification
 
-Locally, the whole battery is one command from the repo root: `./verify.sh`
-(it mirrors CI by discovery, and doubles as a git pre-commit hook:
-`ln -s ../../verify.sh .git/hooks/pre-commit`).
+Run the same discovery-based checks used by CI:
 
-Every push runs, via discovery:
+```bash
+./verify.sh
+```
 
-- **`ansible-lint`** on the whole repo, production profile — FQCN, explicit
-  modes, `changed_when` on read-only commands, role-prefixed variables;
-- **syntax-check** on every playbook in `playbooks/`;
-- **`tests/render.yml`** — invariant tests: shipped and generated files are
-  validated against the properties that past bugs paid for (the sudoers
-  drop-in must pass `visudo -cf`, `rp_filter` must be loose, the lab domain
-  must be the only isolated one, the GPU rotation must never include
-  `services`, ...). The suite grows with every brick;
-- **`bats`** protocol suites and **`shellcheck`**, when a brick ships shell.
-The whole battery runs locally in one shot: **`./verify.sh`** - the
-same levels CI runs, by discovery, correct at every stage of the repo,
-and usable as a pre-commit hook. And because a test that has never
-been seen red proves nothing, [`tests/MUTATIONS.md`](tests/MUTATIONS.md)
-catalogs deliberate breakages for the invariants, with the
-exact command, the check expected to turn red, and the restore.
-Replay one before you push.
+The verification covers Ansible lint, playbook syntax, rendered configuration,
+Python contract tests, ShellCheck and Bats suites when the corresponding files
+are present. Deliberate failure cases are documented in
+[`tests/MUTATIONS.md`](tests/MUTATIONS.md).
 
 ## License
 
