@@ -64,26 +64,32 @@ destructive actions are displayed for review and are never executed directly
 from Waybar or Rofi.
 
 The surface and its refusal boundary are recorded in
-[`ADR 0013`](docs/adr/0013-cockpit-surface.md).
+[`ADR 0014`](docs/adr/0014-cockpit-surface.md).
 
 ## Clean-install order
 
-A fresh installation must come from the matching `arch-bootstrap` release
-candidate and its public `bash bootstrap` entrypoint. Stage 1 writes
+A fresh installation must come from the matching published `arch-bootstrap`
+commit on `main` and its public `bash bootstrap` entrypoint. Stage 1 writes
 `/etc/privatestack/bootstrap-storage.yml` only after the mounted VM store passes
 its mapper, Btrfs root and `+C` checks.
 
 ### 1. Clone stage 2
 
 ```bash
+# Fetch the published stage-2 repository.
 git clone https://github.com/importriri/privatestack-ansible.git
+
+# Enter the repository so every relative path resolves against the reviewed tree.
 cd privatestack-ansible
+
+# Install the Ansible collections pinned by the repository contract.
 ansible-galaxy collection install -r collections/requirements.yml
 ```
 
 ### 2. Validate the laptop profile
 
 ```bash
+# Detect and validate the Nitro or Predator profile without changing the host.
 ansible-playbook playbooks/preflight.yml
 ```
 
@@ -93,8 +99,13 @@ into commands or public VM manifests.
 ### 3. Build the headless foundation
 
 ```bash
+# Preview the headless foundation and display the managed diff.
 ansible-playbook playbooks/foundation.yml --check --diff
+
+# Apply the reviewed headless foundation.
 ansible-playbook playbooks/foundation.yml
+
+# Prove idempotence; this pass must report changed=0.
 ansible-playbook playbooks/foundation.yml
 ```
 
@@ -105,8 +116,12 @@ An already validated legacy Nitro host may adopt its observed mount once,
 without repartitioning or remounting:
 
 ```bash
+# Inspect the existing mount and print the exact one-time confirmation.
 ansible-playbook playbooks/bootstrap-storage-adopt.yml --check --diff
-# repeat the real command with the exact confirmation printed by check mode
+
+# Write only the reviewed contract; replace the placeholder with check-mode output.
+ansible-playbook playbooks/bootstrap-storage-adopt.yml --diff \
+  -e bootstrap_storage_confirm_adopt='adopt:/var/lib/libvirt/images:<observed-mapper>'
 ```
 
 Fresh machines do not use adoption; they receive the contract from
@@ -118,10 +133,17 @@ Images are explicit transactions because Windows bytes and workshop evidence
 are private, while public cloud images require independently pinned checksums.
 
 ```bash
+# Preview import of the pinned official Arch cloud image.
 ansible-playbook playbooks/image-prepare.yml --check --diff \
-  -e image_factory_manifest=images/debian.yml \
-  -e image_factory_source_url=https://vendor.example/image.qcow2 \
-  -e image_factory_source_sha256=<64-lowercase-hex>
+  -e image_factory_manifest=images/arch.yml
+
+# Acquire, inspect and commit the image transaction.
+ansible-playbook playbooks/image-prepare.yml \
+  -e image_factory_manifest=images/arch.yml
+
+# Revalidate the sealed base without replacing it.
+ansible-playbook playbooks/image-validate.yml \
+  -e image_factory_manifest=images/arch.yml
 ```
 
 Windows first follows [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) and passes through `playbooks/windows-workshop.yml`; the resulting private qcow2 is then imported through `image-prepare.yml`. Distributions published only as installer media use the local qcow2 hand-off in [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md). A prepared base is finished with `playbooks/image-validate.yml`.
@@ -129,8 +151,13 @@ Windows first follows [`docs/windows-image-workshop.md`](docs/windows-image-work
 ### 5. Reconcile the complete laptop lab
 
 ```bash
+# Preview the complete laptop target: foundation, Sway and Looking Glass host side.
 ansible-playbook playbooks/lab.yml --check --diff
+
+# Apply the complete laptop target.
 ansible-playbook playbooks/lab.yml
+
+# Prove idempotence; this pass must report changed=0.
 ansible-playbook playbooks/lab.yml
 ```
 
@@ -148,10 +175,12 @@ VM lifecycle stays outside `lab.yml`. A host update must never imply create,
 reset, stop or destroy decisions for private workloads.
 
 ```bash
+# Preview a cloud-init Linux transaction with a host-local public key.
 ansible-playbook playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/debian-dev.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 
+# Create the reviewed Windows workload from its sealed private base.
 ansible-playbook playbooks/vm-create.yml \
   -e guest_spec=vm-specs/win11clean-valley.yml
 ```
@@ -159,12 +188,17 @@ ansible-playbook playbooks/vm-create.yml \
 The disposable Arch release-gate guest uses the same lifecycle boundary:
 
 ```bash
+# Resolve the reviewed Arch image import to a quoted Ansible command.
 hyperlabctl actions --resolve image.import --manifest images/arch.yml
+
+# Resolve creation of the disposable storage-gate guest.
 hyperlabctl actions --resolve vm.create --spec vm-specs/arch-bootstrap-gate.yml
+
+# Resolve the lifecycle-managed start command for that guest.
 hyperlabctl actions --resolve vm.managed-start --spec vm-specs/arch-bootstrap-gate.yml
 ```
 
-Hyperctl resolves reviewed targets to quoted commands; Ansible performs the
+`hyperlabctl` resolves reviewed targets to quoted commands; Ansible performs the
 privileged image and VM transactions. The Arch base is the versioned official
 arch-boxes cloud image, while the instance disk is grown to 20 GiB for the
 storage gate.
@@ -176,15 +210,20 @@ confirmations.
 ### 7. Register services before creating them
 
 ```bash
+# Preview registration and its identity, lease and memory reservations.
 ansible-playbook playbooks/service-register.yml --check --diff \
   -e service_spec=service-specs/svc-jellyfin.yml
+
+# Commit the reviewed service registration.
 ansible-playbook playbooks/service-register.yml \
   -e service_spec=service-specs/svc-jellyfin.yml
 
+# Create the registered service VM with a host-local public key.
 ansible-playbook playbooks/vm-create.yml \
   -e guest_spec=vm-specs/svc-jellyfin.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 
+# Configure Jellyfin inside the service guest, never on the hypervisor.
 ansible-playbook playbooks/jellyfin.yml
 ```
 
@@ -194,6 +233,7 @@ and offline recovery policy before the VM exists.
 ### 8. Verify the repository contract
 
 ```bash
+# Run the complete discovery-based software verification battery.
 ./verify.sh
 ```
 
@@ -204,6 +244,7 @@ software contract; Nitro and Predator prove frozen commits on real hardware.
 The focused Nitro boundary for the integrated desktop surface is automated by:
 
 ```bash
+# Run the focused Nitro cockpit boundary and retain its local evidence.
 ./run-nitro-m9-cockpit-gate.sh
 ```
 
@@ -245,6 +286,10 @@ turning every host reconciliation into a workload event.
   and the commands that belong together.
 - [`docs/brick-catalog.md`](docs/brick-catalog.md) — roles grouped by the
   responsibility they protect, without a flat status table.
+- [`docs/adr/README.md`](docs/adr/README.md) — ordered architecture decisions
+  and their current supersession state.
+- [`docs/historical-audit-m0.md`](docs/historical-audit-m0.md) — the linked,
+  explicitly historical baseline from before VM lifecycle work.
 - [`docs/release-evidence.md`](docs/release-evidence.md) — frozen commits,
   probe-driven evidence and ordered merge gates.
 - [`docs/roadmap.md`](docs/roadmap.md) — stacked milestones and final hardware
@@ -256,10 +301,18 @@ turning every host reconciliation into a workload event.
   ownership and drift handling.
 - [`docs/service-vm-contract.md`](docs/service-vm-contract.md) — service
   registration, backup and restore.
+- [`docs/service-slots.md`](docs/service-slots.md) — intentionally inert future
+  service identities and the conditions required before activation.
+- [`docs/jellyfin-appliance.md`](docs/jellyfin-appliance.md) — the reference
+  guest appliance and lifecycle-bound exposure contract.
 - [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — the
   temporary virt-manager boundary, Windows evidence and sealing order.
 - [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md) — ISO installation
   media converted into a local qcow2 transaction.
+- [`tests/MUTATIONS.md`](tests/MUTATIONS.md) — deliberate contract breakage used
+  to prove that the verification battery fails closed.
+- [`tools/hyperlabctl/README.md`](tools/hyperlabctl/README.md) — cockpit command
+  surface, provider boundaries and terminal usage.
 
 Policy data lives under `group_vars/all/`, image manifests under `images/`, VM
 instances under `vm-specs/`, service ownership under `service-specs/`, and

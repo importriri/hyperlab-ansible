@@ -10,17 +10,22 @@ verified foundations trapped behind unrelated later workload work.
 ## Milestone state
 
 ```text
-M0  cockpit and audit                         merged
-M1  image, VM and brick contracts            merged after Nitro gate
-M2  Hyperlab image store                     merged after Nitro gate
-M3  standard guest lifecycle                 draft; next Nitro gate
-M4  VFIO guest ownership                     stacked draft
-M5  image acquisition and sealing            stacked draft
-M6  Windows workshop                         stacked draft
-M7  service VM registration and recovery     stacked draft
-M8  reference Jellyfin appliance             stacked draft
-M9  release and evidence runner              stacked draft
+M0  cockpit and audit                         published foundation
+M1  image, VM and brick contracts            published foundation
+M2  Hyperlab image store                     published foundation
+M3  standard guest lifecycle                 Nitro VM gate passed
+M4  VFIO guest ownership                     software green; hardware gate pending
+M5  image acquisition and sealing            Arch path passed; private paths pending
+M6  Windows workshop                         software green; guest evidence pending
+M7  service registration and recovery        software green; hardware gate pending
+M8  reference Jellyfin appliance             software green; appliance gate pending
+M9  release and evidence runner              software green; full campaign pending
 ```
+
+“Software green” means the discovery-based repository battery passed. It is not
+a hardware claim. The disposable Arch guest and two-loop storage path completed
+on the Nitro; VFIO, private Windows images, service recovery, Jellyfin and the
+full Predator campaign keep their own pending evidence boundaries.
 
 ### M0 — cockpit and audit
 
@@ -42,8 +47,9 @@ second apply.
 
 Deterministic plan, sealed-base checks, clone/overlay creation, cloud-init,
 UEFI/TPM state, libvirt definition, capacity locking, reset and destruction.
-Its current hardware gate must prove the `not-built` refusal after the required
-network foundation exists and before any package or VM artifact is written.
+The Nitro gate proved the `not-built` refusal, deterministic create/validate/
+start flow, QEMU Guest Agent readiness, runtime SSH identity and the complete
+two-loop Arch storage test without changing the sealed base.
 
 ### M4 — VFIO guest ownership
 
@@ -98,17 +104,18 @@ validation:
 
 The complete operator protocol is
 [`release-evidence.md`](release-evidence.md). The storage and freeze decision is
-recorded in ADR 0012.
+recorded in ADR 0013.
 
 ## Remaining campaign
 
-1. freeze exact green `arch-bootstrap` and M9 commits;
-2. pass the two-loop-device bootstrap gate in an Arch-capable throwaway VM;
-3. run the ordered Nitro gates;
-4. fix only observed bugs and repeat affected gates when a head changes;
-5. merge each milestone whose exact documented hardware gate passes;
-6. run Predator with the same stage-1/stage-2 pair that completed Nitro;
-7. publish sanitized evidence and final receipts in `arch-hypervisor-lab`;
-8. merge the remaining verified milestones in order.
+1. publish the exact green stage-1 and stage-2 trees on `main`;
+2. keep the completed Nitro disposable-VM and two-loop evidence bound to those
+   code trees;
+3. run the remaining ordered Nitro gates without broadening their claims;
+4. fix only observed bugs and repeat every affected gate when executable code
+   changes;
+5. run Predator with the same stage-1/stage-2 code trees that completed Nitro;
+6. publish only sanitized evidence and final receipts in
+   `arch-hypervisor-lab`.
 
 CI proves repository contracts. Hardware evidence authorizes merges.

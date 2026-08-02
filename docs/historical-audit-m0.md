@@ -1,9 +1,9 @@
-# Audit - M0
+# Historical audit: M0 baseline
 
 State of the three repositories before any work on the VM factory, and the
-decisions taken because of it. This file is a snapshot: it is true at the
-commits below and is not maintained afterwards. The ADRs in
-[`adr/`](adr/) are the part that outlives it.
+decisions taken because of it. This linked archive is true only at the commits
+below and is intentionally not a description of current `main`. The maintained
+decisions are indexed in [`adr/README.md`](adr/README.md).
 
 ## Repositories at audit time
 

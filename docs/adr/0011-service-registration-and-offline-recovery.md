@@ -1,4 +1,4 @@
-# ADR 0010: Register service capacity before VM creation and recover offline
+# ADR 0011: Register service capacity before VM creation and recover offline
 
 - Status: accepted for M7 software validation
 - Date: 2026-07-28

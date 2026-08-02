@@ -1,4 +1,4 @@
-# ADR 0011: Expose one reference service through a libvirt lifecycle hook
+# ADR 0012: Expose one reference service through a libvirt lifecycle hook
 
 - Status: accepted for M8 software validation
 - Date: 2026-07-28

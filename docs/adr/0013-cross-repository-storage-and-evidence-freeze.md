@@ -1,4 +1,4 @@
-# ADR 0012: Freeze storage ownership and evidence across repositories
+# ADR 0013: Freeze storage ownership and evidence across repositories
 
 - Status: accepted for M9 software validation
 - Date: 2026-07-28

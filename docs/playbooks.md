@@ -11,6 +11,7 @@ Identifies and validates the laptop profile before boot or PCI policy is
 rendered.
 
 ```bash
+# Detect and validate one reviewed hardware profile without changing the host.
 ansible-playbook playbooks/preflight.yml
 ```
 
@@ -28,9 +29,14 @@ Builds the complete headless host target:
 8. Hyperlab image-store layout.
 
 ```bash
+# Preview the complete headless foundation and display the managed diff.
 ansible-playbook playbooks/foundation.yml --check --diff
+
+# Apply the complete headless foundation.
 ansible-playbook playbooks/foundation.yml
-ansible-playbook playbooks/foundation.yml   # expected: changed=0
+
+# Prove immediate idempotence; this pass must report changed=0.
+ansible-playbook playbooks/foundation.yml
 ```
 
 Use this target for a blind host, storage validation or early recovery.
@@ -41,9 +47,14 @@ Builds the intended laptop laboratory. It imports `foundation.yml`, then adds th
 local desktop and Looking Glass host transport.
 
 ```bash
+# Preview foundation, Sway and Looking Glass host transport.
 ansible-playbook playbooks/lab.yml --check --diff
+
+# Apply the complete laptop target.
 ansible-playbook playbooks/lab.yml
-ansible-playbook playbooks/lab.yml          # expected: changed=0
+
+# Prove immediate idempotence; this pass must report changed=0.
+ansible-playbook playbooks/lab.yml
 ```
 
 `lab.yml` deliberately does not create, reset or destroy VMs. Those operations
@@ -87,21 +98,29 @@ The same playbooks serve standard and VFIO specs:
 Pass exactly one checked-in spec:
 
 ```bash
+# Preview one standard guest transaction with a host-local SSH public key.
 ansible-playbook playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/debian-dev.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 ```
+
+[`vm-specs/arch-dev.yml`](../vm-specs/arch-dev.yml) is the permanent Arch
+development-workstation example; `arch-bootstrap-gate.yml` is the disposable
+release-gate shape. Both consume the same standard lifecycle engine.
 
 Creation remains separate from `lab.yml` because a rerun of the host target must
 never imply a workload lifecycle decision.
 
 ## Service lifecycle
 
-1. reconcile `network-domains.yml`;
-2. register the service with `service-register.yml`;
-3. create its VM through `vm-create.yml`;
-4. configure the application playbook, currently `jellyfin.yml`;
-5. use offline `service-backup.yml` and `service-restore.yml` for recovery.
+1. `network-domains.yml` reconciles the five network identities.
+2. `service-register.yml` reserves service identity, lease and inactive RAM.
+3. `service-validate.yml` checks the committed registration without changing it.
+4. `vm-create.yml` creates the registered service VM from its checked-in spec.
+5. `jellyfin.yml` configures the reference application inside that guest.
+6. `service-backup.yml` and `service-restore.yml` perform offline recovery.
+7. `service-delete-backup.yml` removes only one exactly confirmed owned backup.
+8. `service-unregister.yml` releases an exactly confirmed inactive service.
 
 Unregister, restore, backup deletion and forced VM actions require exact
 confirmations. The reason is ownership: automation may remove only state whose

@@ -71,7 +71,7 @@ def test_targeted_playbooks_remain_available() -> None:
 
 def test_operator_docs_match_the_playbook_topology() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    adr = (ROOT / "docs/adr/0013-cockpit-surface.md").read_text(encoding="utf-8")
+    adr = (ROOT / "docs/adr/0014-cockpit-surface.md").read_text(encoding="utf-8")
     desktop_defaults = (ROOT / "roles/desktop/defaults/main.yml").read_text(encoding="utf-8")
     assert "`playbooks/lab.yml` imports the complete foundation" in readme
     assert "`desktop.yml` and `looking-glass.yml` playbooks remain available for focused" in readme

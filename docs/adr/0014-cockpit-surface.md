@@ -1,4 +1,4 @@
-# 13. The cockpit is a renderer, and privilege is data
+# ADR 0014: The cockpit is a renderer, and privilege is data
 
 Status: accepted
 

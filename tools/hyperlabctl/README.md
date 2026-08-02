@@ -5,24 +5,27 @@ libvirt, renders one document three ways, and owns no policy of its own.
 
 Per ADR 0004: standard library plus PyYAML, `virsh` rather than
 `libvirt-python`, `--json` and `--no-color` in the core rather than an extra.
-Per ADR 0013: the bar, the palette and the panel are renderers of that one
+Per ADR 0014: the bar, the palette and the panel are renderers of that one
 document, and privilege is a field rather than a convention.
 
 ## Running it
 
-No install step. From a checkout:
+No install step is required. From a checkout, each public command has one
+operator-facing purpose:
 
-    tools/hyperlabctl/bin/hyperlabctl status
-    tools/hyperlabctl/bin/hyperlabctl panel
-    tools/hyperlabctl/bin/hyperlabctl doctor
-    tools/hyperlabctl/bin/hyperlabctl vm list
-    tools/hyperlabctl/bin/hyperlabctl net list
-    tools/hyperlabctl/bin/hyperlabctl image list
-    tools/hyperlabctl/bin/hyperlabctl trust
-    tools/hyperlabctl/bin/hyperlabctl logs --level warn
-    tools/hyperlabctl/bin/hyperlabctl schema
-    tools/hyperlabctl/bin/hyperlabctl actions --all
-    tools/hyperlabctl/bin/hyperlabctl completion
+| Command | Purpose |
+|---|---|
+| `tools/hyperlabctl/bin/hyperlabctl status` | Render the complete read-only host document. |
+| `tools/hyperlabctl/bin/hyperlabctl panel` | Open the terminal cockpit over the same document. |
+| `tools/hyperlabctl/bin/hyperlabctl doctor` | Report contract problems with concrete remedies. |
+| `tools/hyperlabctl/bin/hyperlabctl vm list` | List domains and their managed/unmanaged identity. |
+| `tools/hyperlabctl/bin/hyperlabctl net list` | List the five network domains and live state. |
+| `tools/hyperlabctl/bin/hyperlabctl image list` | List image manifests and sealed-base state. |
+| `tools/hyperlabctl/bin/hyperlabctl trust` | Show current GPU trust ownership and permitted transitions. |
+| `tools/hyperlabctl/bin/hyperlabctl logs --level warn` | Show warning-or-higher Hyperlab journal events. |
+| `tools/hyperlabctl/bin/hyperlabctl schema` | Describe every discovered status provider and field. |
+| `tools/hyperlabctl/bin/hyperlabctl actions --all` | Show available and currently blocked reviewed actions. |
+| `tools/hyperlabctl/bin/hyperlabctl completion` | Emit shell-completion candidates without changing the host. |
 
 `preflight.yml` must have run once. Without
 `/etc/privatestack/hardware-profile.yml` there is no selected profile, so the
@@ -71,9 +74,16 @@ cannot exist at this revision. Targets are selected from real, non-symlinked
 files below `vm-specs/` or `images/`; the registry resolves them to an argv list
 and only then emits a shell-quoted command.
 
-    hyperlabctl actions --all     # including actions still waiting on a playbook
-    hyperlabctl actions --choices spec
-    hyperlabctl actions --resolve vm.managed-start --spec vm-specs/debian-dev.yml
+```bash
+# Include actions whose required playbook is not present at this revision.
+hyperlabctl actions --all
+
+# Print the checked-in VM specs accepted by the action registry.
+hyperlabctl actions --choices spec
+
+# Resolve one managed start to a shell-quoted Ansible command; do not execute it.
+hyperlabctl actions --resolve vm.managed-start --spec vm-specs/debian-dev.yml
+```
 
 Global flags such as `--json`, `--no-color` and `--repo` are accepted before or
 after the subcommand, so both `hyperlabctl --json actions` and
@@ -155,8 +165,13 @@ that moves an unmanaged domain. The signal number is asserted on both sides by
 
 ## Tests
 
-    PYTHONDONTWRITEBYTECODE=1 python tools/hyperlabctl/tests/run.py
-    python tests/hyperlabctl_contract.py      # also runs the above
+```bash
+# Run the isolated CLI suite without reading or writing bytecode caches.
+PYTHONDONTWRITEBYTECODE=1 python tools/hyperlabctl/tests/run.py
+
+# Run the repository integration contract; it also executes the isolated suite.
+python tests/hyperlabctl_contract.py
+```
 
 524 checks, no pytest, exit 1 on any failure. `tests/world.py` builds a whole
 fake host in a temp directory: repository, group_vars, sysfs PCI tree, meminfo,
@@ -169,7 +184,7 @@ which is the rule that file states about itself.
 Lint with `ruff check tools/hyperlabctl`. `ruff.toml` records which rules are
 on and why the rest are off.
 
-`MUTATIONS.md` lists what was deliberately broken to confirm the suite notices,
+[`MUTATIONS.md`](MUTATIONS.md) lists what was deliberately broken to confirm the suite notices,
 including the five mutations that survived their first run and what each one
 exposed. Replay them with `PYTHONDONTWRITEBYTECODE=1` and a timeout: a
 same-length edit can be masked by a stale bytecode cache, and one mutation makes
