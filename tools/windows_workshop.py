@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import windows_workshop_legacy as legacy
+import windows_workshop_core as core
 
-_original_expected_switch = legacy.expected_switch
+_original_expected_switch = core.expected_switch
 
 
 def expected_switch(
@@ -22,10 +22,10 @@ def expected_switch(
     _original_expected_switch(policy, evidence, section, key)
 
 
-legacy.expected_switch = expected_switch
-WorkshopError = legacy.WorkshopError
-validate = legacy.validate
-main = legacy.main
+core.expected_switch = expected_switch
+WorkshopError = core.WorkshopError
+validate = core.validate
+main = core.main
 
 
 if __name__ == "__main__":

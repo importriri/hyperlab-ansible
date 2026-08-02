@@ -271,7 +271,7 @@ def test_repository_structure() -> None:
     dirty_policy = yaml.safe_load((ROOT / "windows-workshops/win11dirty.yml").read_text())
     collector = (ROOT / "windows/collect-hyperlab-evidence.ps1").read_text(encoding="utf-8")
     validator = VALIDATOR.read_text(encoding="utf-8")
-    legacy_validator = (ROOT / "tools/windows_workshop_legacy.py").read_text(encoding="utf-8")
+    core_validator = (ROOT / "tools/windows_workshop_core.py").read_text(encoding="utf-8")
     role = (ROOT / "roles/windows_workshop/tasks/main.yml").read_text(encoding="utf-8")
     factory = (ROOT / "roles/image_factory/tasks/main.yml").read_text(encoding="utf-8")
     guest = (ROOT / "roles/guest/tasks/verify-base.yml").read_text(encoding="utf-8")
@@ -300,7 +300,7 @@ def test_repository_structure() -> None:
     assert "Get-LocalUser" not in collector
     assert "ConvertTo-Json" in collector
     assert "IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE" in collector
-    assert "setup_image_state" in legacy_validator
+    assert "setup_image_state" in core_validator
     assert "setup_image_state" in receipt_template
     assert "C:\\Users\\" not in receipt_template
     assert "local_source" not in receipt_template

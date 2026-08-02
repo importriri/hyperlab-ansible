@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a Windows workshop evidence bundle and bind it to one qcow2 source."""
+"""Core Windows workshop validator and qcow2 evidence binding."""
 from __future__ import annotations
 
 import argparse
