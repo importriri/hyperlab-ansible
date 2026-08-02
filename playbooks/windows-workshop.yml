@@ -1,0 +1,11 @@
+---
+- name: Validate and record one Windows workshop handoff
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: windows_workshop
+    - windows_workshop

@@ -1,0 +1,31 @@
+---
+- name: Validate the managed guest before forced stop
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Require an understood state and exact confirmation for forced stop
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state in ['running', 'idle', 'paused', 'in shutdown', 'shut off', 'crashed', 'pmsuspended']
+      - guest_confirm_stop == guest_plan.name
+    fail_msg: >-
+      Forced stop may lose guest data and accepts only a known libvirt state.
+      Repeat with -e guest_confirm_stop={{ guest_plan.name }}.
+
+- name: Force-stop the active domain
+  when:
+    - guest_domain_state != 'shut off'
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - destroy
+      - "{{ guest_plan.name }}"
+  changed_when: true
+
+- name: Predict forced stop in check mode
+  when:
+    - guest_domain_state != 'shut off'
+    - ansible_check_mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: would force-stop {{ guest_plan.name }}."
+  changed_when: true

@@ -1,0 +1,45 @@
+---
+- name: Validate the managed guest before shutdown
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Refuse shutdown from an unsupported state
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state in ['running', 'shut off']
+    fail_msg: >-
+      {{ guest_plan.name }} is {{ guest_domain_state }}. Resolve the libvirt
+      state explicitly before requesting a managed shutdown.
+
+- name: Request a graceful guest shutdown
+  when:
+    - guest_domain_state == 'running'
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - shutdown
+      - "{{ guest_plan.name }}"
+  changed_when: true
+
+- name: Predict graceful shutdown in check mode
+  when:
+    - guest_domain_state == 'running'
+    - ansible_check_mode
+  ansible.builtin.debug:
+    msg: "CHECK MODE: would request graceful shutdown of {{ guest_plan.name }}."
+  changed_when: true
+
+- name: Wait until the guest is shut off
+  when:
+    - guest_domain_state == 'running'
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domstate
+      - "{{ guest_plan.name }}"
+  register: guest_shutdown_state
+  changed_when: false
+  retries: "{{ [guest_shutdown_timeout_seconds | int // 5, 1] | max }}"
+  delay: 5
+  until: guest_shutdown_state.stdout | trim | lower == 'shut off'

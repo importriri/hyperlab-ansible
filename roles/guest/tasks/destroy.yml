@@ -1,0 +1,54 @@
+---
+- name: Validate the managed guest before destruction
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Require a shut-off domain and exact destruction confirmation
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state == 'shut off'
+      - guest_confirm_destroy == guest_plan.name
+    fail_msg: >-
+      Destroy permanently removes the managed disk and identity state. Shut
+      the guest down and repeat with
+      -e guest_confirm_destroy={{ guest_plan.name }}.
+
+- name: Predict managed destruction in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would undefine {{ guest_plan.name }} and remove its managed
+      disk, seed, NVRAM, TPM, XML and state record. The sealed base is outside
+      this deletion set.
+  changed_when: true
+
+- name: Destroy the complete managed transaction
+  when: not ansible_check_mode
+  block:
+    - name: Undefine the managed domain and remove identity state
+      ansible.builtin.command:
+        argv: "{{ guest_undefine_argv }}"
+      changed_when: true
+
+    - name: Remove only guest-owned managed artefacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ guest_plan.disk_path }}"
+        - "{{ guest_plan.disk_path }}.new"
+        - "{{ guest_plan.seed_dir }}"
+        - "{{ guest_plan.nvram_path }}"
+        - "{{ guest_plan.tpm_path }}"
+        - "{{ guest_plan.xml_path }}"
+        - "{{ guest_plan.state_path }}"
+
+    - name: Refresh observations after managed destruction
+      ansible.builtin.include_tasks: inspect.yml
+
+    - name: Verify that managed destruction left no guest-owned artefacts
+      ansible.builtin.assert:
+        that:
+          - guest_transaction_clean
+        fail_msg: >-
+          Destruction did not reach a zero-artifact state. The sealed base was
+          not touched; inspect the remaining guest-owned paths explicitly.

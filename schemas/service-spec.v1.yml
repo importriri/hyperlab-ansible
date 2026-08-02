@@ -1,0 +1,25 @@
+---
+# Service spec schema v1. A service spec binds one long-lived standard VM to a
+# reviewed services-network lease and recovery policy. M7 declares exposure
+# intent but does not open ports.
+schema_version: 1
+kind: service-spec
+fields:
+  schema_version: {type: int, enum: [1]}
+  id: {type: str, pattern: "^svc-[a-z0-9][a-z0-9-]*$"}
+  vm: {type: str, pattern: "^svc-[a-z0-9][a-z0-9-]*$"}
+  network_profile: {type: str, enum: [services]}
+  memory_reservation_mb: {type: int, min: 512, max: 1048576}
+  backup_policy: {type: str, enum: [manual, weekly]}
+  restore_policy: {type: str, enum: [offline-only]}
+  dhcp:
+    type: map
+    fields:
+      mac: {type: str, pattern: "^52:54:00:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$"}
+      ip: {type: str, pattern: "^10\\.10\\.5\\.[0-9]{1,3}$"}
+  exposures:
+    type: list
+    of: str
+    unique_items: true
+  owner: {type: str, min_length: 1}
+  purpose: {type: str, min_length: 1}

@@ -1,0 +1,26 @@
+---
+- name: Read active domains before libvirt hook reload
+  listen: Restart libvirt for service exposure hooks
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_virsh_bin }}"
+      - list
+      - --name
+  register: service_exposure_active_domains
+  changed_when: false
+  check_mode: false
+
+- name: Refuse libvirt hook reload while any domain is active
+  listen: Restart libvirt for service exposure hooks
+  ansible.builtin.assert:
+    that:
+      - service_exposure_active_domains.stdout_lines | reject('equalto', '') | list | length == 0
+    fail_msg: >-
+      Stop every libvirt domain before the first M8 hook install or any hook
+      contract update. Existing files were written, but libvirt was not
+      restarted and the new hook is not active yet.
+
+- name: Restart libvirt for service exposure hooks
+  ansible.builtin.systemd_service:
+    name: libvirtd.service
+    state: restarted

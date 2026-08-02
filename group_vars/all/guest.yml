@@ -1,0 +1,33 @@
+---
+# M4 guest lifecycle: standard and reviewed VFIO domains share one transaction
+# engine. Host PCI addresses always come from the validated local profile report.
+guest_repository_root: "{{ playbook_dir | dirname }}"
+guest_operation: validate
+guest_spec: ""
+guest_start_after_create: false
+guest_wait_for_qga: true
+guest_qga_timeout_seconds: 180
+guest_shutdown_timeout_seconds: 120
+guest_confirm_reset: ""
+guest_confirm_stop: ""
+guest_confirm_destroy: ""
+guest_cloud_init_ssh_public_keys: []
+guest_cloud_init_user: sid
+
+guest_required_packages:
+  - cloud-image-utils
+  - swtpm
+  - qemu-ui-spice-core
+  - qemu-chardev-spice
+  - qemu-audio-spice
+
+guest_python_bin: /usr/bin/python
+guest_qemu_img_bin: /usr/bin/qemu-img
+guest_cloud_localds_bin: /usr/bin/cloud-localds
+guest_virsh_bin: /usr/bin/virsh
+guest_virt_xml_validate_bin: /usr/bin/virt-xml-validate
+guest_mkdir_bin: /usr/bin/mkdir
+guest_rmdir_bin: /usr/bin/rmdir
+guest_mv_bin: /usr/bin/mv
+guest_realpath_bin: /usr/bin/realpath
+guest_readlink_bin: /usr/bin/readlink

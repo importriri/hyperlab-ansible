@@ -2,28 +2,23 @@
 # The host half of Looking Glass: the kvmfr shared-memory transport, its
 # permissions, and the client built from a pinned commit.
 #
-# Keep the immutable source identity and the human-facing build identity
-# separate. The full SHA is what Git checks out. The build string is what the
-# client prints, generated with git describe --abbrev=10.
-looking_glass_commit: 0140a3f6fb616c5636d6c430eb71b8a7d5338e39
-looking_glass_build: B7-263-g0140a3f6fb
+# Immutable transport identity lives in group_vars/all/looking-glass.yml so the
+# host brick and the VFIO guest renderer consume one contract.
+looking_glass_commit: "{{ hyperlab_looking_glass_commit }}"
+looking_glass_build: "{{ hyperlab_looking_glass_build }}"
 looking_glass_repo: https://github.com/gnif/LookingGlass.git
 looking_glass_src: /usr/local/src/looking-glass
 looking_glass_stamp: /usr/local/share/looking-glass/built-from
-looking_glass_width: 1920
-looking_glass_height: 1080
-looking_glass_shm_mb: >-
-  {{ [32, 64, 128, 256, 512]
-     | select('ge', ((looking_glass_width * looking_glass_height * 8 / 1048576) + 10)
-                    | round(0, 'ceil') | int)
-     | first }}
-looking_glass_device: /dev/kvmfr0
+looking_glass_width: "{{ hyperlab_looking_glass_width }}"
+looking_glass_height: "{{ hyperlab_looking_glass_height }}"
+looking_glass_shm_mb: "{{ hyperlab_looking_glass_shm_mb }}"
+looking_glass_device: "{{ hyperlab_looking_glass_device }}"
 looking_glass_qemu_user: libvirt-qemu
 looking_glass_device_group: kvm
 looking_glass_escape_key: KEY_RIGHTCTRL
 looking_glass_fullscreen: true
-looking_glass_spice_host: 127.0.0.1
-looking_glass_spice_port: 5900
+looking_glass_spice_host: "{{ hyperlab_looking_glass_spice_host }}"
+looking_glass_spice_port: "{{ hyperlab_looking_glass_spice_port }}"
 looking_glass_packages:
   - dkms
   - "{{ kernel_name }}-headers"

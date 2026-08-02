@@ -15,10 +15,10 @@ contains_personal_data: false
 generalized: true
 instance_policy: multiple
 
-# Parrot publishes ISOs, not a cloud image fit for this pipeline. The
-# honest path is a sealed manual or Packer build from the official ISO and
-# its official checksum - not a cloud URL that does not exist.
-source_type: official-iso
+# Parrot publishes installer media, not an official cloud qcow2. The ISO is
+# verified and installed in a temporary workshop; only the resulting qcow2
+# enters image_factory through the supported local-import transaction.
+source_type: local
 source_url: null
 source_checksum_url: null
 filename: parrot.qcow2
@@ -38,5 +38,7 @@ licensing: {redistributable: true}
 looking_glass_host_build_required: null
 looking_glass_host_build_observed: null
 notes: >-
-  Defensive work against authorized systems only. Disposable by default so
-  a session leaves nothing behind.
+  Build a private qcow2 from the pinned official ISO, verify its checksum,
+  install QEMU Guest Agent and shut down cleanly. Import that qcow2 as a local
+  source; the ISO itself is never passed to image_factory. Defensive work
+  against authorized systems only. Disposable by default.

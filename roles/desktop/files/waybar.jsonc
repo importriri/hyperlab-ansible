@@ -5,7 +5,7 @@
     "spacing": 0,
     "modules-left": ["custom/logo", "sway/workspaces", "sway/mode", "custom/cava"],
     "modules-center": ["clock"],
-    "modules-right": ["idle_inhibitor", "pulseaudio", "backlight", "network", "cpu", "memory", "temperature", "battery", "tray"],
+    "modules-right": ["group/hyperlab", "idle_inhibitor", "pulseaudio", "backlight", "network", "cpu", "memory", "temperature", "battery", "tray"],
 
     "custom/logo": {
         "format": "  ",
@@ -22,6 +22,51 @@
         "exec": "/usr/local/bin/privatestack-cava",
         "tooltip": false,
         "restart-interval": 5
+    },
+    // The Hyperlab cockpit. Collapsed it is one pill: the trust level, because
+    // that is the only lab fact you cannot recover by looking. Hovering opens
+    // the drawer over the other three. Every pill is the same script with a
+    // different field, and every payload carries the same four keys, so one
+    // set of CSS rules covers all of them.
+    "group/hyperlab": {
+        "orientation": "horizontal",
+        "drawer": { "transition-duration": 300, "transition-left-to-right": false },
+        "modules": ["custom/hyperlab", "custom/hyperlab-ram", "custom/hyperlab-gpu", "custom/hyperlab-vms"]
+    },
+    // The collapsed pill is a STREAM, not a poll: hyperlabctl blocks on
+    // `virsh event` and prints the instant a domain moves. No "interval" here on
+    // purpose - restart-interval only covers libvirt going away underneath it.
+    // The drawer pills, visible only while the mouse is over the group, stay on
+    // a slow poll plus SIGRTMIN+8 after anything the CLI itself caused.
+    "custom/hyperlab": {
+        "exec": "/usr/local/bin/privatestack-hyperlab watch trust",
+        "return-type": "json",
+        "restart-interval": 10,
+        "format": "  {}",
+        "on-click": "/usr/local/bin/privatestack-hyperlab-palette",
+        "on-click-right": "foot --app-id=hyperlab-panel hyperlabctl panel"
+    },
+    "custom/hyperlab-ram": {
+        "exec": "/usr/local/bin/privatestack-hyperlab ram",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 8,
+        "format": "  {}"
+    },
+    "custom/hyperlab-gpu": {
+        "exec": "/usr/local/bin/privatestack-hyperlab gpu",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 8,
+        "format": "  {}"
+    },
+    "custom/hyperlab-vms": {
+        "exec": "/usr/local/bin/privatestack-hyperlab vms",
+        "return-type": "json",
+        "interval": 30,
+        "signal": 8,
+        "format": "  {}",
+        "on-click": "foot --app-id=hyperlab-panel hyperlabctl panel"
     },
     "clock": {
         "format": "  {:%a %d %b   %H:%M}",

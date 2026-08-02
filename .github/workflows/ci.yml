@@ -1,17 +1,10 @@
 ---
-# ============================================================================
+# ==========================================================================
 # CI - discovery, not enumeration.
-# ----------------------------------------------------------------------------
-# This workflow is NEVER edited to add a brick. It discovers what exists:
-#   - every playbook in playbooks/       -> syntax-check
-#   - every role and playbook            -> ansible-lint (production profile)
-#   - tests/render.yml                   -> render/invariant tests
-#   - every tests/*.bats                 -> protocol tests
-#   - every shell script it can find     -> shellcheck
-# The toolchain is installed unconditionally: a few seconds buys a workflow
-# that never drifts. If adding a brick ever requires touching this file,
-# that is an architecture bug - treat it as one.
-# ============================================================================
+# --------------------------------------------------------------------------
+# Every playbook, role, contract, protocol and shell path is discovered.
+# Failure artifacts keep the first useful diagnostic instead of a truncated log.
+# ==========================================================================
 name: ci
 
 on:
@@ -33,7 +26,18 @@ jobs:
           ansible-galaxy collection install -r collections/requirements.yml
 
       - name: Lint every role and playbook (production profile)
-        run: ansible-lint
+        run: |
+          set -o pipefail
+          ansible-lint 2>&1 | tee ansible-lint.log
+
+      - name: Preserve lint diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-lint-diagnostics
+          path: ansible-lint.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Syntax-check every playbook (discovered)
         run: |
@@ -44,9 +48,22 @@ jobs:
 
       - name: Per-brick structural contracts (discovered)
         run: |
-          for contract in tests/*_contract.py; do
-            python "${contract}"
-          done
+          set -o pipefail
+          {
+            for contract in tests/*_contract.py; do
+              echo "--- ${contract}"
+              python "${contract}"
+            done
+          } 2>&1 | tee structural-contracts.log
+
+      - name: Preserve structural diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-contract-diagnostics
+          path: structural-contracts.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Refusal suites (discovered)
         run: |
@@ -66,13 +83,20 @@ jobs:
           python tests/contract_mutations.py
 
       - name: Render and invariant tests
-        # M0's renderer still names the old variable in one isolated fake-data
-        # expression. Supply that fixture explicitly while production data and
-        # every M1 contract use host_profiles. The fixture disappears when the
-        # render suite is migrated in the next test-only cleanup.
-        run: >-
-          ansible-playbook -i inventory.ini tests/render.yml
-          --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
+        run: |
+          set -o pipefail
+          ansible-playbook -i inventory.ini tests/render.yml \
+            --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}' \
+            2>&1 | tee render-invariants.log
+
+      - name: Preserve render diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-invariant-diagnostics
+          path: render-invariants.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Protocol tests (bats, when a brick ships them)
         run: |

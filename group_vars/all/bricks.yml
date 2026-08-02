@@ -1,14 +1,6 @@
 ---
-# Brick prerequisites, as data.
-#
-# playbooks/looking-glass.yml used to carry a comment saying to run
-# desktop.yml first. In the wrong order it still *succeeded*: packages
-# installed, the module built, the client landed - and it failed an hour
-# later, when the client could not open the node, because TAG+="uaccess"
-# grants access to an active seat session and without the cockpit there is
-# none. A prerequisite enforced by a comment is not enforced.
-#
-# Each brick records that it landed; brick_guard reads the records.
+# Brick prerequisites are executable policy. Unknown or unstamped dependencies
+# must fail instead of behaving like an empty list.
 brick_stamp_dir: /etc/privatestack/bricks
 
 brick_requires:
@@ -19,22 +11,35 @@ brick_requires:
   network_domains: [kvm_host]
   lab_isolation: [network_domains]
   gpu_handoff: [network_domains]
-  image_store: [kvm_host]
+  bootstrap_storage: [kvm_host]
+  image_store: [kvm_host, bootstrap_storage]
+  windows_workshop: [image_store, looking_glass]
+  image_factory: [image_store]
+  guest: [image_factory, network_domains]
+  service_registry: [image_store, network_domains]
+  service_exposure: [service_registry]
+  jellyfin: []
   desktop: []
   dev_ide: [desktop]
   looking_glass: [desktop, kvm_host]
 
-# Which playbook mounts a brick, so a refusal can name the fix instead of
-# leaving the reader to grep for it.
+# Point refusals at the narrowest playbook that can establish the prerequisite.
 brick_playbooks:
-  base: playbooks/lab.yml
+  base: playbooks/kvm-host.yml
   hardware_probe: playbooks/preflight.yml
-  kvm_host: playbooks/lab.yml
-  vfio_boot: playbooks/lab.yml
-  network_domains: playbooks/lab.yml
-  lab_isolation: playbooks/lab.yml
-  gpu_handoff: playbooks/lab.yml
+  kvm_host: playbooks/kvm-host.yml
+  vfio_boot: playbooks/foundation.yml
+  network_domains: playbooks/network-domains.yml
+  lab_isolation: playbooks/foundation.yml
+  gpu_handoff: playbooks/foundation.yml
+  bootstrap_storage: playbooks/image-store.yml
   image_store: playbooks/image-store.yml
+  windows_workshop: playbooks/windows-workshop.yml
+  image_factory: playbooks/image-prepare.yml
+  guest: playbooks/vm-create.yml
+  service_registry: playbooks/service-register.yml
+  service_exposure: playbooks/jellyfin.yml
+  jellyfin: playbooks/jellyfin.yml
   desktop: playbooks/desktop.yml
   dev_ide: playbooks/dev.yml
   looking_glass: playbooks/looking-glass.yml

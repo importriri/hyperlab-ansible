@@ -7,6 +7,9 @@
 kvm_host_packages:
   - qemu-base
   - libvirt
+  # image_store validates the effective swtpm identity before the guest brick
+  # runs, so the host account and emulator belong to the KVM foundation.
+  - swtpm
   - iptables-nft
   - dnsmasq
   - edk2-ovmf

@@ -1,0 +1,201 @@
+---
+- name: Refuse an unsupported bootstrap storage operation
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_operation in bootstrap_storage_supported_operations
+      - hyperlab_root is string
+      - hyperlab_root == bootstrap_storage_mountpoint
+        or hyperlab_root.startswith(bootstrap_storage_mountpoint + '/')
+    fail_msg: >-
+      bootstrap_storage_operation must be validate or adopt, and hyperlab_root
+      must remain below the canonical libvirt image mountpoint.
+
+- name: Inspect the canonical VM-store mountpoint
+  ansible.builtin.stat:
+    path: "{{ bootstrap_storage_mountpoint }}"
+    follow: false
+  register: bootstrap_storage_mountpoint_stat
+  changed_when: false
+
+- name: Refuse a missing, redirected or non-directory VM-store mountpoint
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_mountpoint_stat.stat.exists | default(false)
+      - bootstrap_storage_mountpoint_stat.stat.isdir | default(false)
+      - not (bootstrap_storage_mountpoint_stat.stat.islnk | default(false))
+    fail_msg: >-
+      {{ bootstrap_storage_mountpoint }} must be one real mounted directory
+      created by arch-bootstrap before image-store reconciliation.
+
+- name: Read the mounted VM-store identity
+  ansible.builtin.command:
+    argv:
+      - "{{ bootstrap_storage_findmnt_bin }}"
+      - -J
+      - -T
+      - "{{ bootstrap_storage_mountpoint }}"
+      - -o
+      - TARGET,SOURCE,FSTYPE,FSROOT,OPTIONS
+  register: bootstrap_storage_findmnt
+  changed_when: false
+  check_mode: false
+
+- name: Publish the observed VM-store source
+  ansible.builtin.set_fact:
+    bootstrap_storage_observed_source: >-
+      {{ ((bootstrap_storage_findmnt.stdout | from_json).filesystems[0].source)
+         .split('[', 1)[0] }}
+
+- name: Read the VM-store NOCOW inheritance attribute
+  ansible.builtin.command:
+    argv:
+      - "{{ bootstrap_storage_lsattr_bin }}"
+      - -d
+      - --
+      - "{{ bootstrap_storage_mountpoint }}"
+  register: bootstrap_storage_lsattr
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse a VM store without inherited NOCOW
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_lsattr.rc == 0
+      - bootstrap_storage_lsattr.stdout.split() | length > 0
+      - "'C' in bootstrap_storage_lsattr.stdout.split()[0]"
+    fail_msg: >-
+      {{ bootstrap_storage_mountpoint }} lacks +C. Refusing before Hyperlab
+      creates or imports any qcow2 image.
+
+- name: Inspect the arch-bootstrap storage contract
+  ansible.builtin.stat:
+    path: "{{ bootstrap_storage_contract_path }}"
+    follow: false
+  register: bootstrap_storage_contract_stat
+  changed_when: false
+
+- name: Refuse validation without an arch-bootstrap storage contract
+  when: bootstrap_storage_operation == 'validate'
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_contract_stat.stat.exists | default(false)
+    fail_msg: >-
+      {{ bootstrap_storage_contract_path }} is missing. A fresh Predator install
+      must be performed through arch-bootstrap's ./bootstrap entrypoint. For an
+      already validated legacy Nitro host, run playbooks/bootstrap-storage-adopt.yml
+      in check mode to obtain the exact non-destructive adoption confirmation.
+
+- name: Refuse legacy adoption over any existing contract
+  when: bootstrap_storage_operation == 'adopt'
+  ansible.builtin.assert:
+    that:
+      - not (bootstrap_storage_contract_stat.stat.exists | default(false))
+    fail_msg: >-
+      Legacy adoption never replaces an existing bootstrap storage contract.
+
+- name: Derive the legacy contract from observed mounted state
+  when: bootstrap_storage_operation == 'adopt'
+  ansible.builtin.command:
+    argv:
+      - "{{ bootstrap_storage_python_bin }}"
+      - "{{ bootstrap_storage_guard_tool }}"
+      - --mode
+      - adopt
+      - --hyperlab-root
+      - "{{ hyperlab_root }}"
+    stdin: "{{ bootstrap_storage_findmnt.stdout }}"
+  register: bootstrap_storage_adopt_command
+  changed_when: false
+  check_mode: false
+
+- name: Explain the exact legacy adoption transaction in check mode
+  when:
+    - bootstrap_storage_operation == 'adopt'
+    - ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: no mount, filesystem, image or VM state is changed. The real
+      pass would write only {{ bootstrap_storage_contract_path }} with the
+      observed safe contract {{ bootstrap_storage_adopt_command.stdout | from_yaml | to_nice_json }}.
+      Exact confirmation for the real pass:
+      {{ bootstrap_storage_expected_adopt_confirmation }}
+
+- name: Require exact confirmation for the real legacy adoption pass
+  when:
+    - bootstrap_storage_operation == 'adopt'
+    - not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_confirm_adopt == bootstrap_storage_expected_adopt_confirmation
+    fail_msg: >-
+      Legacy adoption requires exact confirmation:
+      {{ bootstrap_storage_expected_adopt_confirmation }}
+
+- name: Commit the observed legacy contract without changing storage
+  when:
+    - bootstrap_storage_operation == 'adopt'
+    - not ansible_check_mode
+  ansible.builtin.copy:
+    content: "{{ bootstrap_storage_adopt_command.stdout }}"
+    dest: "{{ bootstrap_storage_contract_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Re-inspect the committed bootstrap storage contract
+  when:
+    - bootstrap_storage_operation == 'validate' or not ansible_check_mode
+  ansible.builtin.stat:
+    path: "{{ bootstrap_storage_contract_path }}"
+    follow: false
+  register: bootstrap_storage_final_contract_stat
+  changed_when: false
+
+- name: Refuse an unsafe bootstrap storage contract file
+  when:
+    - bootstrap_storage_operation == 'validate' or not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - bootstrap_storage_final_contract_stat.stat.exists | default(false)
+      - bootstrap_storage_final_contract_stat.stat.isreg | default(false)
+      - not (bootstrap_storage_final_contract_stat.stat.islnk | default(false))
+      - bootstrap_storage_final_contract_stat.stat.pw_name == 'root'
+      - bootstrap_storage_final_contract_stat.stat.gr_name == 'root'
+      - bootstrap_storage_final_contract_stat.stat.mode == '0644'
+    fail_msg: >-
+      The bootstrap storage contract must be a root:root regular non-symlink file
+      with mode 0644.
+
+- name: Validate declared topology against the mounted source and fsroot
+  when:
+    - bootstrap_storage_operation == 'validate' or not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ bootstrap_storage_python_bin }}"
+      - "{{ bootstrap_storage_guard_tool }}"
+      - --mode
+      - validate
+      - --contract
+      - "{{ bootstrap_storage_contract_path }}"
+      - --hyperlab-root
+      - "{{ hyperlab_root }}"
+    stdin: "{{ bootstrap_storage_findmnt.stdout }}"
+  register: bootstrap_storage_guard_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the verified bootstrap storage identity
+  when:
+    - bootstrap_storage_operation == 'validate' or not ansible_check_mode
+  ansible.builtin.set_fact:
+    bootstrap_storage_verified: "{{ bootstrap_storage_guard_command.stdout | from_json }}"
+
+- name: Record that the bootstrap_storage brick is available
+  when:
+    - bootstrap_storage_operation == 'validate' or not ansible_check_mode
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: bootstrap_storage

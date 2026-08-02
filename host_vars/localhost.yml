@@ -1,0 +1,14 @@
+---
+# Runtime identities reviewed on the Arch Linux Nitro host. Keep these outside
+# shared group data: they describe the libvirt build installed on the physical
+# hypervisor, not a portable upstream default.
+#
+# Arch's libvirt package creates libvirt-qemu and builds the privileged QEMU
+# driver for that identity. Libvirt's swtpm default is the tss account supplied
+# by the TPM stack. The image_store role still resolves explicit qemu.conf
+# overrides first and verifies every resulting user/group with getent before it
+# creates a directory.
+hyperlab_qemu_user_declared: libvirt-qemu
+hyperlab_qemu_group_declared: libvirt-qemu
+hyperlab_swtpm_user_declared: tss
+hyperlab_swtpm_group_declared: tss

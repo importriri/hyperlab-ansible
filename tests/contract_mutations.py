@@ -80,6 +80,51 @@ class ContractMutationTests(unittest.TestCase):
             "nitro-3060 must declare the complete memory budget contract",
         )
 
+    def test_reviewed_runtime_identity_cannot_fall_back_to_the_sentinel(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(
+                root,
+                "host_vars/localhost.yml",
+                lambda d: d.update(hyperlab_swtpm_user_declared="__REQUIRED_FROM_HARDWARE__"),
+            ),
+            "localhost must declare the reviewed Arch libvirt and swtpm identities",
+        )
+
+    def test_swtpm_belongs_to_the_kvm_foundation(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(
+                root,
+                "roles/kvm_host/defaults/main.yml",
+                lambda d: d["kvm_host_packages"].remove("swtpm"),
+            ),
+            "KVM foundation must create the swtpm runtime identity before image_store",
+        )
+
+    def test_spice_audio_module_is_a_guest_dependency(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(
+                root,
+                "group_vars/all/guest.yml",
+                lambda d: d["guest_required_packages"].remove("qemu-audio-spice"),
+            ),
+            "SPICE guests require the complete split QEMU UI, chardev and audio modules",
+        )
+
+    def test_managed_disk_must_refuse_dac_relabel(self) -> None:
+        def mutation(root: Path) -> None:
+            path = root / "roles/guest/templates/domain.xml.j2"
+            path.write_text(
+                path.read_text().replace(
+                    '        <seclabel model="dac" relabel="no"/>\n',
+                    "",
+                )
+            )
+
+        self.assert_mutation_fails(
+            mutation,
+            "managed disks must refuse libvirt DAC relabel of sealed backing chains",
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

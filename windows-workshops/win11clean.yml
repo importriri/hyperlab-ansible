@@ -1,0 +1,40 @@
+---
+schema_version: 1
+id: win11clean
+image: win11clean
+identity_mode: personal-singleton
+generalized: false
+setup_image_state: IMAGE_STATE_COMPLETE
+microsoft_account: required
+local_lab_account: optional
+credential_reuse: forbidden
+firmware:
+  secure_boot: true
+  tpm2_present: true
+  tpm2_ready: true
+drivers:
+  nvidia_gpu: true
+  emulated_gpu_recovery: true
+  virtio_input: true
+  ivshmem: true
+services:
+  qemu_guest_agent: running
+  looking_glass_host: running
+looking_glass:
+  build: B7-263-g0140a3f6fb
+  capture_started: true
+  capture_interface: D12
+virtual_display:
+  present: true
+  active: true
+  width: 1920
+  height: 1080
+hygiene:
+  reboot_pending: false
+  update_reboot_pending: false
+handoff:
+  source_type: local
+  private: true
+  instance_policy: singleton
+  lifecycle: permanent
+  network_profile: clean

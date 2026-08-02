@@ -1,0 +1,15 @@
+---
+# Shared host/guest transport contract. Both the Looking Glass host brick and
+# VFIO domain renderer consume these values; neither may redefine them.
+hyperlab_looking_glass_commit: 0140a3f6fb616c5636d6c430eb71b8a7d5338e39
+hyperlab_looking_glass_build: B7-263-g0140a3f6fb
+hyperlab_looking_glass_width: 1920
+hyperlab_looking_glass_height: 1080
+hyperlab_looking_glass_shm_mb: >-
+  {{ [32, 64, 128, 256, 512]
+     | select('ge', ((hyperlab_looking_glass_width * hyperlab_looking_glass_height * 8 / 1048576) + 10)
+                    | round(0, 'ceil') | int)
+     | first }}
+hyperlab_looking_glass_device: /dev/kvmfr0
+hyperlab_looking_glass_spice_host: 127.0.0.1
+hyperlab_looking_glass_spice_port: 5900

@@ -24,7 +24,7 @@
       vfio_boot requires the validated hardware_probe_vfio_ids_csv fact.
       Run hardware_probe first; do not hand-write PCI IDs into boot profiles.
 
-- name: Read the LUKS UUID at runtime (a placeholder cannot reach /boot)
+- name: Read the LUKS UUID at runtime
   ansible.builtin.command: cryptsetup luksUUID {{ luks_root_device }}
   register: vfio_boot_luks_raw
   changed_when: false
@@ -53,7 +53,7 @@
   loop_control:
     label: "{{ item.file }}"
 
-- name: Early-bind vfio in the initramfs (drop-in - never edit mkinitcpio.conf)
+- name: Early-bind vfio in the initramfs
   ansible.builtin.copy:
     src: 10-vfio.conf
     dest: /etc/mkinitcpio.conf.d/10-vfio.conf
@@ -62,14 +62,14 @@
     mode: "0644"
   notify: Regenerate the initramfs
 
-- name: Point the loader default at the managed Hardened entry
+- name: Make VFIO the normal laboratory boot path
   ansible.builtin.lineinfile:
     path: /boot/loader/loader.conf
     regexp: '^default '
-    line: default Arch-Linux-Hardened.conf
+    line: default Arch-Linux-Hardened-Vfio.conf
     mode: "0644"
 
-- name: Retire the installer's own entry (same title, zero blacklists)
+- name: Retire the installer's unguarded bootstrap entry
   ansible.builtin.file:
     path: /boot/loader/entries/arch-hardened.conf
     state: absent

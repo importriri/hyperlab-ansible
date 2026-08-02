@@ -1,0 +1,124 @@
+---
+- name: Build the service backup deletion plan
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_recovery_plan_tool }}"
+      - --operation
+      - delete-backup
+      - --backup-id
+      - "{{ service_backup_id }}"
+    stdin: "{{ service_registry_plan | to_json }}"
+  register: service_registry_recovery_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the service backup deletion plan
+  ansible.builtin.set_fact:
+    service_registry_recovery_plan: >-
+      {{ service_registry_recovery_plan_command.stdout | from_json }}
+
+- name: Require exact backup deletion confirmation
+  ansible.builtin.assert:
+    that:
+      - service_confirm_delete_backup == service_registry_recovery_plan.confirmation
+    fail_msg: >-
+      Deleting this backup requires
+      -e service_confirm_delete_backup={{ service_registry_recovery_plan.confirmation }}.
+
+- name: Inspect the selected service backup
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  loop:
+    - {name: disk, path: "{{ service_registry_recovery_plan.backup_disk }}"}
+    - {name: receipt, path: "{{ service_registry_recovery_plan.backup_receipt }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_delete_backup_paths
+
+- name: Refuse an incomplete or redirected backup deletion target
+  ansible.builtin.assert:
+    that:
+      - service_registry_delete_backup_paths.results[0].stat.isreg | default(false)
+      - not (service_registry_delete_backup_paths.results[0].stat.islnk | default(false))
+      - service_registry_delete_backup_paths.results[1].stat.isreg | default(false)
+      - not (service_registry_delete_backup_paths.results[1].stat.islnk | default(false))
+    fail_msg: Backup deletion target is incomplete, missing or redirected.
+
+- name: Publish backup deletion verification context
+  ansible.builtin.set_fact:
+    service_registry_backup_context: >-
+      {{ service_registry_plan
+         | combine(service_registry_recovery_plan)
+         | combine({'service_receipt_sha256': service_registry_receipt_sha256}) }}
+
+- name: Verify the backup before deletion
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_backup_guard_tool }}"
+      - --receipt
+      - "{{ service_registry_recovery_plan.backup_receipt }}"
+      - --disk
+      - "{{ service_registry_recovery_plan.backup_disk }}"
+      - --qemu-img
+      - "{{ service_registry_qemu_img_bin }}"
+    stdin: "{{ service_registry_backup_context | to_json }}"
+  changed_when: false
+  check_mode: false
+
+- name: Predict verified backup deletion in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would delete only verified backup directory
+      {{ service_registry_recovery_plan.backup_dir }}.
+  changed_when: true
+
+- name: Delete the verified backup under the service lock
+  when: not ansible_check_mode
+  block:
+    - name: Acquire the per-service backup deletion lock
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_mkdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_delete_backup_lock
+      changed_when: service_registry_delete_backup_lock.rc == 0
+
+    - name: Reinspect backup hashes under deletion lock
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      loop:
+        - "{{ service_registry_recovery_plan.backup_disk }}"
+        - "{{ service_registry_recovery_plan.backup_receipt }}"
+      register: service_registry_locked_delete_backup_paths
+
+    - name: Refuse backup drift after deletion lock acquisition
+      ansible.builtin.assert:
+        that:
+          - service_registry_locked_delete_backup_paths.results[0].stat.checksum == service_registry_delete_backup_paths.results[0].stat.checksum
+          - service_registry_locked_delete_backup_paths.results[1].stat.checksum == service_registry_delete_backup_paths.results[1].stat.checksum
+        fail_msg: Backup changed after validation; refusing deletion.
+
+    - name: Remove only the verified immutable backup directory
+      ansible.builtin.file:
+        path: "{{ service_registry_recovery_plan.backup_dir }}"
+        state: absent
+
+  always:
+    - name: Release the per-service backup deletion lock
+      when:
+        - service_registry_delete_backup_lock is defined
+        - service_registry_delete_backup_lock.rc == 0
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_rmdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_delete_backup_unlock
+      changed_when: service_registry_delete_backup_unlock.rc == 0
+      failed_when: service_registry_delete_backup_unlock.rc != 0

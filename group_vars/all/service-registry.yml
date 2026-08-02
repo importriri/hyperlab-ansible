@@ -1,0 +1,15 @@
+---
+service_registry_repository_root: "{{ playbook_dir | dirname }}"
+service_registry_operation: validate
+service_spec: ""
+service_backup_id: ""
+service_confirm_unregister: ""
+service_confirm_restore: ""
+service_confirm_delete_backup: ""
+
+service_registry_python_bin: /usr/bin/python
+service_registry_virsh_bin: /usr/bin/virsh
+service_registry_qemu_img_bin: /usr/bin/qemu-img
+service_registry_mkdir_bin: /usr/bin/mkdir
+service_registry_rmdir_bin: /usr/bin/rmdir
+service_registry_mv_bin: /usr/bin/mv

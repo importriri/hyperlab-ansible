@@ -1,0 +1,145 @@
+---
+schema_version: 1
+profiles:
+  nitro-3060:
+    order: 1
+    label: Acer Nitro 5 / RTX 3060 Mobile
+  predator-3070:
+    order: 2
+    label: Acer Predator Helios 300 / RTX 3070 Mobile
+
+repositories:
+  privatestack_ansible:
+    remote: importriri/privatestack-ansible
+    required_branch: review/m9-postrestore-v1
+  arch_bootstrap:
+    remote: importriri/arch-bootstrap
+    required_branch: review/nitro-release-candidate-v1
+
+# Ordered release gates. `execution` states whether the gate is intrinsically
+# read-only or needs an explicit hardware/destructive operator transaction.
+gates:
+  - id: repository-software
+    order: 10
+    execution: read-only
+    required_evidence:
+      - verify_sha256
+      - clean_worktrees
+      - exact_commits
+  - id: bootstrap-dry-run
+    order: 20
+    execution: read-only
+    required_evidence:
+      - dry_run_sha256
+      - selected_primary_disk
+      - selected_vm_disk
+      - no_writes_observed
+  - id: bootstrap-clean-install
+    order: 30
+    execution: destructive-hardware
+    required_evidence:
+      - install_log_sha256
+      - booted_linux_hardened_twice
+      - secure_boot_state
+      - network_ready
+  - id: storage-handoff
+    order: 40
+    execution: read-only
+    required_evidence:
+      - topology
+      - mapper
+      - fsroot
+      - fstype
+      - nocow
+      - contract_sha256
+      - hyperlab_device_match
+  - id: host-idempotence
+    order: 50
+    execution: operator-apply
+    required_evidence:
+      - check_mode_sha256
+      - first_apply_sha256
+      - second_apply_sha256
+      - second_apply_changed_zero
+  - id: network-isolation
+    order: 60
+    execution: hardware-runtime
+    required_evidence:
+      - persistent_network_hashes
+      - active_networks
+      - cross_domain_refusals
+      - isolated_lab_refusals
+  - id: standard-vm-lifecycle
+    order: 70
+    execution: hardware-runtime
+    required_evidence:
+      - create_sha256
+      - validate_sha256
+      - start_sha256
+      - shutdown_sha256
+      - destroy_confirmation
+  - id: vfio-trust-lifecycle
+    order: 80
+    execution: hardware-runtime
+    required_evidence:
+      - pci_binding
+      - iommu_group
+      - exclusive_owner
+      - downward_trust_transitions
+      - reboot_resets_trust
+  - id: looking-glass
+    order: 90
+    execution: hardware-runtime
+    required_evidence:
+      - host_build
+      - guest_build
+      - kvmfr_identity
+      - loopback_spice
+      - visual_proof_sha256
+  - id: jellyfin-service
+    order: 100
+    execution: hardware-runtime
+    required_evidence:
+      - service_receipt_sha256
+      - guest_health
+      - lan_http_health
+      - tcp_8096_only
+      - stopped_vm_closes_exposure
+  - id: service-recovery
+    order: 110
+    execution: destructive-hardware
+    required_evidence:
+      - backup_receipt_sha256
+      - restored_disk_sha256
+      - post_restore_health
+      - failed_restore_rollback
+  - id: sanitized-publication
+    order: 120
+    execution: read-only
+    required_evidence:
+      - publication_bundle_sha256
+      - no_sensitive_patterns
+      - exact_commit_matrix
+      - known_limits
+
+allowed_storage_topologies:
+  single-disk:
+    mapper: /dev/mapper/cryptroot
+    fsroot: /@vm
+    subvolume: "@vm"
+  dedicated-disk:
+    mapper: /dev/mapper/cryptvm
+    fsroot: /
+    subvolume: null
+
+# Evidence is intentionally a summary/receipt format. Raw command logs stay
+# local until reviewed; publication copies only individually approved hashes and
+# summaries, never home directories, environment dumps or private guest data.
+forbidden_evidence_patterns:
+  - '-----BEGIN .*PRIVATE KEY-----'
+  - '(?i)password\s*[:=]'
+  - '(?i)passphrase\s*[:=]'
+  - '(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[:=]'
+  - '/home/[^/\s]+'
+  - '/root/'
+  - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'

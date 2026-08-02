@@ -7,6 +7,11 @@
   <ip address="{{ item.gateway }}" netmask="255.255.255.0">
     <dhcp>
       <range start="{{ item.subnet | regex_replace('\.0/24$', '.100') }}" end="{{ item.subnet | regex_replace('\.0/24$', '.199') }}"/>
+{% if item.name == 'services' %}
+{% for lease in service_dhcp_leases %}
+      <host mac="{{ lease.mac }}" name="{{ lease.name }}" ip="{{ lease.ip }}"/>
+{% endfor %}
+{% endif %}
     </dhcp>
   </ip>
 </network>

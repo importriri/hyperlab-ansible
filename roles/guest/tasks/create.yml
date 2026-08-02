@@ -1,0 +1,329 @@
+---
+- name: Require safe host-local SSH public keys for a Linux guest
+  when: guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_cloud_init_ssh_public_keys is sequence
+      - guest_cloud_init_ssh_public_keys is not string
+      - guest_cloud_init_ssh_public_keys | length > 0
+      - >-
+        guest_cloud_init_ssh_public_keys
+        | select('match', guest_ssh_public_key_pattern)
+        | list | length == guest_cloud_init_ssh_public_keys | length
+    fail_msg: >-
+      Linux guest creation needs one or more complete one-line OpenSSH
+      public keys in guest_cloud_init_ssh_public_keys. Passwords, private
+      keys and malformed key material are never accepted.
+
+- name: Refuse a partial guest transaction
+  ansible.builtin.assert:
+    that:
+      - guest_transaction_clean or guest_transaction_complete
+    fail_msg: >-
+      {{ guest_plan.name }} is a partial managed transaction:
+      {{ guest_present_required_artifact_count }}/{{ guest_required_artifact_count }}
+      required artefacts are present, transient staging files may remain, or
+      an orphan NVRAM file exists. Refusing to overwrite or infer ownership.
+
+- name: Validate an already-created guest instead of recreating it
+  when: guest_transaction_complete
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Freeze ownership of a new guest transaction
+  ansible.builtin.set_fact:
+    guest_create_new_transaction: "{{ guest_transaction_clean }}"
+
+- name: Create a new standard guest transaction
+  when: guest_create_new_transaction
+  block:
+    - name: Check singleton, UUID and MAC registry collisions
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_state_guard_tool }}"
+          - --state-root
+          - "{{ guest_runtime_state_root }}"
+        stdin: "{{ guest_plan | to_json }}"
+      changed_when: false
+      check_mode: false
+
+    - name: Resolve memory for a new transaction
+      when: not guest_reuse_resolved_memory | default(false) | bool
+      ansible.builtin.include_tasks: memory.yml
+
+    - name: Predict the guest transaction in check mode
+      when: ansible_check_mode
+      ansible.builtin.debug:
+        msg: >-
+          CHECK MODE: would create {{ guest_plan.lifecycle }} disk,
+          cloud-init={{ guest_plan.cloud_init }}, managed XML, libvirt domain,
+          state record and autostart={{ guest_plan.autostart }} for
+          {{ guest_plan.name }}. No qemu-img, cloud-localds or virsh write ran.
+      changed_when: true
+
+    - name: Create guest transaction directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ guest_runtime_state_root }}"
+        - "{{ guest_runtime_xml_root }}"
+        - "{{ guest_runtime_lock_root }}"
+
+    - name: Build, verify and commit the guest artefacts
+      when: not ansible_check_mode
+      block:
+        - name: Create the per-VM cloud-init directory
+          when: guest_plan.cloud_init
+          ansible.builtin.file:
+            path: "{{ guest_plan.seed_dir }}"
+            state: directory
+            owner: root
+            group: "{{ guest_qemu_group }}"
+            mode: "0750"
+
+        - name: Render secret-free cloud-init user data
+          when: guest_plan.cloud_init
+          ansible.builtin.template:
+            src: user-data.j2
+            dest: "{{ guest_plan.seed_user_data }}"
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Render cloud-init instance metadata
+          when: guest_plan.cloud_init
+          ansible.builtin.template:
+            src: meta-data.j2
+            dest: "{{ guest_plan.seed_meta_data }}"
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Build the NoCloud seed atomically
+          when: guest_plan.cloud_init
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_cloud_localds_bin }}"
+              - "{{ guest_plan.seed_image }}.new"
+              - "{{ guest_plan.seed_user_data }}"
+              - "{{ guest_plan.seed_meta_data }}"
+          changed_when: true
+
+        - name: Commit the NoCloud seed  # noqa command-instead-of-module
+          when: guest_plan.cloud_init
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_mv_bin }}"
+              - "{{ guest_plan.seed_image }}.new"
+              - "{{ guest_plan.seed_image }}"
+          changed_when: true
+
+        - name: Protect the committed NoCloud seed for QEMU read access
+          when: guest_plan.cloud_init
+          ansible.builtin.file:
+            path: "{{ guest_plan.seed_image }}"
+            owner: "{{ guest_qemu_user }}"
+            group: "{{ guest_qemu_group }}"
+            mode: "0440"
+
+        - name: Create the disposable qcow2 overlay
+          when: guest_plan.lifecycle == 'disposable'
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_qemu_img_bin }}"
+              - create
+              - -f
+              - qcow2
+              - -F
+              - qcow2
+              - -b
+              - "{{ guest_plan.base_path }}"
+              - "{{ guest_plan.disk_path }}"
+          changed_when: true
+
+        - name: Grow a disposable overlay beyond the base virtual size
+          when:
+            - guest_plan.lifecycle == 'disposable'
+            - guest_plan.disk_gib | int > guest_plan.image_virtual_size_gib | int
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_qemu_img_bin }}"
+              - resize
+              - -f
+              - qcow2
+              - "{{ guest_plan.disk_path }}"
+              - "{{ guest_plan.disk_gib }}G"
+          changed_when: true
+
+        - name: Create the independent permanent qcow2 clone
+          when: guest_plan.lifecycle == 'permanent'
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_qemu_img_bin }}"
+              - convert
+              - -f
+              - qcow2
+              - -O
+              - qcow2
+              - -o
+              - compat=1.1,lazy_refcounts=on
+              - "{{ guest_plan.base_path }}"
+              - "{{ guest_plan.disk_path }}.new"
+          changed_when: true
+
+        - name: Grow a permanent clone beyond the base virtual size
+          when:
+            - guest_plan.lifecycle == 'permanent'
+            - guest_plan.disk_gib | int > guest_plan.image_virtual_size_gib | int
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_qemu_img_bin }}"
+              - resize
+              - -f
+              - qcow2
+              - "{{ guest_plan.disk_path }}.new"
+              - "{{ guest_plan.disk_gib }}G"
+          changed_when: true
+
+        - name: Check the independent clone before committing it
+          when: guest_plan.lifecycle == 'permanent'
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_qemu_img_bin }}"
+              - check
+              - -f
+              - qcow2
+              - "{{ guest_plan.disk_path }}.new"
+          changed_when: false
+
+        - name: Commit the independent permanent clone atomically  # noqa command-instead-of-module
+          when: guest_plan.lifecycle == 'permanent'
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_mv_bin }}"
+              - "{{ guest_plan.disk_path }}.new"
+              - "{{ guest_plan.disk_path }}"
+          changed_when: true
+
+        - name: Protect the committed VM disk for QEMU
+          ansible.builtin.file:
+            path: "{{ guest_plan.disk_path }}"
+            owner: "{{ guest_qemu_user }}"
+            group: "{{ guest_qemu_group }}"
+            mode: "0640"
+
+        - name: Create the private swtpm state directory
+          when: guest_plan.requires_tpm2
+          ansible.builtin.file:
+            path: "{{ guest_plan.tpm_path }}"
+            state: directory
+            owner: "{{ guest_swtpm_user }}"
+            group: "{{ guest_swtpm_group }}"
+            mode: "0700"
+
+        - name: Render the managed domain XML
+          ansible.builtin.template:
+            src: domain.xml.j2
+            dest: "{{ guest_plan.xml_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+
+        - name: Validate the domain XML before libvirt sees it
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virt_xml_validate_bin }}"
+              - "{{ guest_plan.xml_path }}"
+          changed_when: false
+
+        - name: Define the persistent libvirt domain
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - define
+              - --validate
+              - "{{ guest_plan.xml_path }}"
+          register: guest_domain_define
+          changed_when: guest_domain_define.rc == 0
+
+        - name: Enable declared domain autostart
+          when: guest_plan.autostart
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - autostart
+              - "{{ guest_plan.name }}"
+          changed_when: true
+
+        - name: Disable undeclared domain autostart
+          when: not guest_plan.autostart
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - autostart
+              - --disable
+              - "{{ guest_plan.name }}"
+          changed_when: true
+
+        - name: Record the committed guest transaction
+          ansible.builtin.template:
+            src: state.yml.j2
+            dest: "{{ guest_plan.state_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+
+        - name: Refresh committed artifact observations
+          ansible.builtin.include_tasks: inspect.yml
+
+        - name: Read the new managed state
+          ansible.builtin.slurp:
+            src: "{{ guest_plan.state_path }}"
+          register: guest_new_state_slurp
+
+        - name: Publish the new managed state
+          ansible.builtin.set_fact:
+            guest_existing_state: "{{ guest_new_state_slurp.content | b64decode | from_yaml }}"
+
+        - name: Verify the complete transaction before returning success
+          ansible.builtin.include_tasks: validate.yml
+
+      rescue:
+        - name: Undefine a domain created by the failed transaction
+          when:
+            - guest_domain_define is defined
+            - guest_domain_define.rc | default(1) == 0
+          ansible.builtin.command:
+            argv: "{{ guest_undefine_argv }}"
+          register: guest_create_rescue_undefine
+          changed_when: guest_create_rescue_undefine.rc == 0
+          failed_when: false
+
+        - name: Remove only artefacts owned by the failed new transaction
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ guest_plan.disk_path }}"
+            - "{{ guest_plan.disk_path }}.new"
+            - "{{ guest_plan.seed_dir }}"
+            - "{{ guest_plan.nvram_path }}"
+            - "{{ guest_plan.tpm_path }}"
+            - "{{ guest_plan.xml_path }}"
+            - "{{ guest_plan.state_path }}"
+
+        - name: Fail after rolling back the new guest transaction
+          ansible.builtin.fail:
+            msg: >-
+              Guest creation failed and its newly-owned artefacts were rolled
+              back. The sealed base was never modified.
+
+    - name: Start after create only when explicitly requested
+      when:
+        - not ansible_check_mode
+        - guest_start_after_create | bool
+      ansible.builtin.include_tasks: start.yml

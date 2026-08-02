@@ -1,0 +1,165 @@
+---
+- name: Build the reviewed service plan for exposure
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_python_bin }}"
+      - "{{ service_exposure_service_plan_tool }}"
+      - --root
+      - "{{ service_exposure_repository_root }}"
+      - --spec
+      - "{{ service_exposure_spec }}"
+      - --store
+      - "{{ hyperlab_root }}"
+  register: service_exposure_service_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the reviewed service plan
+  ansible.builtin.set_fact:
+    service_exposure_service_plan: >-
+      {{ service_exposure_service_plan_command.stdout | from_json }}
+
+- name: Inspect the service registration receipt
+  ansible.builtin.stat:
+    path: "{{ service_exposure_service_plan.receipt_path }}"
+  register: service_exposure_receipt_stat
+
+- name: Refuse exposure without a safe M7 registration receipt
+  ansible.builtin.assert:
+    that:
+      - service_exposure_receipt_stat.stat.exists | default(false)
+      - service_exposure_receipt_stat.stat.isreg | default(false)
+      - not (service_exposure_receipt_stat.stat.islnk | default(false))
+      - service_exposure_receipt_stat.stat.pw_name == 'root'
+      - service_exposure_receipt_stat.stat.gr_name == 'root'
+      - service_exposure_receipt_stat.stat.mode == '0640'
+    fail_msg: >-
+      M8 exposure requires the current root-owned M7 service registration
+      receipt. Validate or register the service before exposing it.
+
+- name: Verify the M7 service registration receipt before exposure
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_python_bin }}"
+      - "{{ service_exposure_receipt_guard_tool }}"
+      - --receipt
+      - "{{ service_exposure_service_plan.receipt_path }}"
+    stdin: "{{ service_exposure_service_plan | to_json }}"
+  changed_when: false
+  check_mode: false
+
+- name: Read IPv4 default-route evidence
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_ip_bin }}"
+      - -j
+      - -4
+      - route
+      - show
+      - default
+  register: service_exposure_routes_command
+  changed_when: false
+  check_mode: false
+
+- name: Build the fail-closed exposure plan
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_python_bin }}"
+      - "{{ service_exposure_plan_tool }}"
+      - --bridge
+      - "{{ service_exposure_bridge }}"
+      - --interface-override
+      - "{{ service_exposure_lan_interface_override }}"
+    stdin: >-
+      {{ {'service_plan': service_exposure_service_plan,
+          'routes': (service_exposure_routes_command.stdout | from_json)} | to_json }}
+  register: service_exposure_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the fail-closed exposure plan
+  ansible.builtin.set_fact:
+    service_exposure_plan: "{{ service_exposure_plan_command.stdout | from_json }}"
+
+- name: Refuse any M8 exposure except Jellyfin HTTP
+  ansible.builtin.assert:
+    that:
+      - service_exposure_service_plan.id == 'svc-jellyfin'
+      - service_exposure_service_plan.exposures == ['tcp/8096']
+      - service_exposure_plan.domains.keys() | list == ['svc-jellyfin']
+      - service_exposure_plan.domains['svc-jellyfin'] | length == 1
+      - service_exposure_plan.domains['svc-jellyfin'][0].host_port == 8096
+      - service_exposure_plan.domains['svc-jellyfin'][0].guest_port == 8096
+      - service_exposure_plan.domains['svc-jellyfin'][0].protocol == 'tcp'
+    fail_msg: M8 may expose only svc-jellyfin tcp/8096.
+
+- name: Install nftables for service exposure
+  community.general.pacman:
+    name: nftables
+    state: present
+
+- name: Create service exposure configuration and hook directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/privatestack, mode: "0750"}
+    - {path: /usr/local/lib/privatestack, mode: "0755"}
+    - {path: /etc/libvirt/hooks/qemu.d, mode: "0755"}
+
+- name: Install the service exposure runtime
+  ansible.builtin.copy:
+    src: "{{ service_exposure_source_tool }}"
+    dest: "{{ service_exposure_runtime_tool_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart libvirt for service exposure hooks
+
+- name: Render the root-only service exposure contract
+  ansible.builtin.template:
+    src: exposures.json.j2
+    dest: "{{ service_exposure_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart libvirt for service exposure hooks
+
+- name: Install the static qemu.d service exposure hook
+  ansible.builtin.copy:
+    src: qemu-hook
+    dest: "{{ service_exposure_hook_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart libvirt for service exposure hooks
+
+- name: Activate newly installed libvirt hook files safely
+  ansible.builtin.meta: flush_handlers
+
+- name: Reconcile stale service exposure state now
+  ansible.builtin.command:
+    argv:
+      - "{{ service_exposure_python_bin }}"
+      - "{{ service_exposure_runtime_tool_path }}"
+      - --config
+      - "{{ service_exposure_config_path }}"
+      - --nft
+      - "{{ service_exposure_nft_bin }}"
+      - --domain
+      - '-'
+      - --operation
+      - reconcile
+  register: service_exposure_reconcile
+  changed_when: false
+  check_mode: false
+
+- name: Record that the service_exposure brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: service_exposure

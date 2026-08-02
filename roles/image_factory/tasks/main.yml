@@ -1,0 +1,200 @@
+---
+- name: Refuse an unknown image factory operation or selector
+  ansible.builtin.assert:
+    that:
+      - image_factory_operation in image_factory_supported_operations
+      - image_factory_manifest is string
+      - image_factory_manifest | length > 0
+    fail_msg: >-
+      image_factory_operation must be prepare or validate, and
+      image_factory_manifest must name one checked-in file below images/.
+
+- name: Inspect the verified image-store identity manifest
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}/state/layout.yml"
+  register: image_factory_layout_stat
+
+- name: Refuse a missing or redirected image-store identity manifest
+  ansible.builtin.assert:
+    that:
+      - image_factory_layout_stat.stat.exists | default(false)
+      - image_factory_layout_stat.stat.isreg | default(false)
+      - not (image_factory_layout_stat.stat.islnk | default(false))
+    fail_msg: >-
+      M5 requires the verified M2 image store. Reconcile
+      playbooks/image-store.yml before preparing images.
+
+- name: Read the verified image-store identity manifest
+  ansible.builtin.slurp:
+    src: "{{ hyperlab_root }}/state/layout.yml"
+  register: image_factory_layout_slurp
+
+- name: Parse the verified image-store identity manifest
+  ansible.builtin.set_fact:
+    image_factory_layout: "{{ image_factory_layout_slurp.content | b64decode | from_yaml }}"
+
+- name: Refuse an image-store manifest from another root
+  ansible.builtin.assert:
+    that:
+      - image_factory_layout is mapping
+      - image_factory_layout.root == hyperlab_root
+      - image_factory_layout.qemu_identity is match('^[^:]+:[^:]+$')
+    fail_msg: The image-store layout manifest does not describe this root.
+
+- name: Publish the observed QEMU identity
+  ansible.builtin.set_fact:
+    image_factory_qemu_user: "{{ image_factory_layout.qemu_identity.split(':', 1)[0] }}"
+    image_factory_qemu_group: "{{ image_factory_layout.qemu_identity.split(':', 1)[1] }}"
+
+- name: Validate every checked-in image and VM contract before selection
+  ansible.builtin.command:
+    argv:
+      - "{{ image_factory_python_bin }}"
+      - "{{ image_factory_schema_validator }}"
+      - --root
+      - "{{ image_factory_repository_root }}"
+      - --manifest
+      - "{{ image_factory_manifest }}"
+  changed_when: false
+  check_mode: false
+
+- name: Build the deterministic image factory plan without side effects
+  ansible.builtin.command:
+    argv:
+      - "{{ image_factory_python_bin }}"
+      - "{{ image_factory_plan_tool }}"
+      - --root
+      - "{{ image_factory_repository_root }}"
+      - --manifest
+      - "{{ image_factory_manifest }}"
+      - --store
+      - "{{ hyperlab_root }}"
+      - --operation
+      - "{{ image_factory_operation }}"
+      - --source-url
+      - "{{ image_factory_source_url }}"
+      - --source-sha256
+      - "{{ image_factory_source_sha256 }}"
+      - --local-source
+      - "{{ image_factory_local_source }}"
+      - --looking-glass-observed-build
+      - "{{ image_factory_looking_glass_observed_build }}"
+  register: image_factory_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the deterministic image factory plan
+  ansible.builtin.set_fact:
+    image_factory_plan: "{{ image_factory_plan_command.stdout | from_json }}"
+
+- name: Inspect the Windows workshop receipt before image operations
+  when: image_factory_plan.os_family == 'windows'
+  ansible.builtin.stat:
+    path: "{{ image_factory_plan.windows_workshop_receipt_path }}"
+  register: image_factory_windows_workshop_receipt_stat
+
+- name: Refuse an unsafe Windows workshop receipt before image operations
+  when: image_factory_plan.os_family == 'windows'
+  ansible.builtin.assert:
+    that:
+      - image_factory_windows_workshop_receipt_stat.stat.exists | default(false)
+      - image_factory_windows_workshop_receipt_stat.stat.isreg | default(false)
+      - not (image_factory_windows_workshop_receipt_stat.stat.islnk | default(false))
+      - image_factory_windows_workshop_receipt_stat.stat.pw_name == 'root'
+      - image_factory_windows_workshop_receipt_stat.stat.gr_name == 'root'
+      - image_factory_windows_workshop_receipt_stat.stat.mode == '0640'
+    fail_msg: >-
+      Windows images require a root-owned M6 workshop receipt. Run
+      playbooks/windows-workshop.yml before image preparation.
+
+- name: Verify the Windows workshop receipt before image operations
+  when: image_factory_plan.os_family == 'windows'
+  ansible.builtin.command:
+    argv:
+      - "{{ image_factory_python_bin }}"
+      - "{{ image_factory_windows_workshop_guard_tool }}"
+      - --policy
+      - "{{ image_factory_plan.windows_workshop_policy_path }}"
+      - --receipt
+      - "{{ image_factory_plan.windows_workshop_receipt_path }}"
+      - --image
+      - "{{ image_factory_plan.id }}"
+      - --source-sha256
+      - "{{ image_factory_plan.source_sha256 }}"
+      - --looking-glass-build
+      - "{{ hyperlab_looking_glass_build }}"
+  register: image_factory_windows_workshop_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the verified Windows workshop provenance
+  when: image_factory_plan.os_family == 'windows'
+  ansible.builtin.set_fact:
+    image_factory_windows_workshop: >-
+      {{ image_factory_windows_workshop_command.stdout | from_json }}
+
+- name: Bind Windows workshop hashes into the image plan
+  when: image_factory_plan.os_family == 'windows'
+  ansible.builtin.set_fact:
+    image_factory_plan: >-
+      {{ image_factory_plan | combine({
+           'windows_workshop_policy_sha256': image_factory_windows_workshop.policy_sha256,
+           'windows_workshop_receipt_sha256': image_factory_windows_workshop.receipt_sha256
+         }) }}
+
+- name: Inspect committed and transient image transaction paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - {name: base, path: "{{ image_factory_plan.base_path }}"}
+    - {name: base_new, path: "{{ image_factory_plan.base_new_path }}"}
+    - {name: receipt, path: "{{ image_factory_plan.receipt_path }}"}
+    - {name: receipt_new, path: "{{ image_factory_plan.receipt_new_path }}"}
+    - {name: cache_new, path: "{{ image_factory_plan.cache_new_path }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: image_factory_path_stats
+
+- name: Index image transaction observations by path name
+  ansible.builtin.set_fact:
+    image_factory_observed: >-
+      {{ dict(image_factory_path_stats.results
+              | map(attribute='item.name')
+              | zip(image_factory_path_stats.results | map(attribute='stat.exists'))) }}
+
+- name: Classify the image transaction
+  ansible.builtin.set_fact:
+    image_factory_transaction_complete: >-
+      {{ image_factory_observed.base and image_factory_observed.receipt and
+         not image_factory_observed.base_new and
+         not image_factory_observed.receipt_new and
+         not image_factory_observed.cache_new }}
+    image_factory_transaction_clean: >-
+      {{ not image_factory_observed.base and
+         not image_factory_observed.receipt and
+         not image_factory_observed.base_new and
+         not image_factory_observed.receipt_new and
+         not image_factory_observed.cache_new }}
+
+- name: Refuse a partial image transaction
+  ansible.builtin.assert:
+    that:
+      - image_factory_transaction_clean or image_factory_transaction_complete
+    fail_msg: >-
+      {{ image_factory_plan.id }} has a partial image transaction. Refusing to
+      infer ownership or overwrite base, receipt or staging paths.
+
+- name: Validate the selected image transaction
+  when: image_factory_operation == 'validate'
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Prepare the selected image transaction
+  when: image_factory_operation == 'prepare'
+  ansible.builtin.include_tasks: prepare.yml
+
+- name: Record that the image_factory brick is available
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: image_factory

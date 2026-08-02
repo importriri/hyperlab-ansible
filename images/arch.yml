@@ -4,28 +4,25 @@ id: arch
 display_name: Arch Linux
 os_family: linux
 os_variant: archlinux
-version: "pinned-at-build"
+version: "20260715.556894"
 format: qcow2
 
-status: not-built
-sha256: null
+status: sealed
+sha256: f419d4e29aebfc017ad4c9de330a3be0d7eefba710b269108b116aaca1122926
 
 private: false
 contains_personal_data: false
 generalized: true
 instance_policy: multiple
 
-# The exact release and its official checksum URL are filled in when the
-# image is actually pulled, at M7, from the distribution's own download
-# page. They are null here because an invented URL is worse than a blank:
-# a blank fails the sealing check, a wrong one downloads something.
 source_type: official-cloud
-source_url: null
-source_checksum_url: null
+source_url: https://geo.mirror.pkgbuild.com/images/v20260715.556894/Arch-Linux-x86_64-cloudimg-20260715.556894.qcow2
+source_checksum_url: https://geo.mirror.pkgbuild.com/images/v20260715.556894/Arch-Linux-x86_64-cloudimg-20260715.556894.qcow2.SHA256
+source_sha256: f419d4e29aebfc017ad4c9de330a3be0d7eefba710b269108b116aaca1122926
 filename: arch.qcow2
 
-virtual_size_gib: 20
-minimum_size_gib: 8
+virtual_size_gib: 2
+minimum_size_gib: 2
 min_memory_mb: 2048
 
 supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
@@ -37,5 +34,7 @@ licensing: {redistributable: true}
 looking_glass_host_build_required: null
 looking_glass_host_build_observed: null
 notes: >-
-  Cloud image plus NoCloud seed: hostname and user are created at first
-  boot, and no private key ever enters the artefact.
+  Official arch-boxes cloud image plus NoCloud seed. The sealed base retains
+  its upstream 2 GiB virtual size; VM specs request larger instance disks and
+  cloud-init grows the root filesystem on first boot. No private key enters
+  the artefact.

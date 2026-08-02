@@ -1,14 +1,16 @@
 ---
-# The core lab bundle, in dependency order. Desktop and Looking Glass remain
-# opt-in so the secure headless host is still the default.
-- name: Assemble the hypervisor lab host
+# The intended laptop target. Foundation stays reusable for a blind host; this
+# playbook adds the cockpit because Looking Glass is how the GPU VM is used.
+- name: Assemble the headless foundation first
+  import_playbook: foundation.yml
+
+- name: Add the local cockpit and Looking Glass transport
   hosts: hypervisor
   become: true
+  gather_facts: true
   roles:
-    - base
-    - hardware_probe
-    - kvm_host
-    - vfio_boot
-    - network_domains
-    - lab_isolation
-    - gpu_handoff
+    - desktop
+    - role: brick_guard
+      vars:
+        brick_guard_brick: looking_glass
+    - looking_glass

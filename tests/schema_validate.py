@@ -2,7 +2,8 @@
 """Validate image manifests and VM specs against versioned YAML schemas.
 
 This validator is deliberately static: it never talks to libvirt and never
-claims a VM will fit on a host. Runtime capacity belongs to M2 (ADR 0007).
+claims a VM will fit on a host. Runtime capacity and PCI identity belong to the
+transaction roles, not to checked-in schema validation.
 """
 from __future__ import annotations
 
@@ -246,6 +247,10 @@ class RepositoryValidator:
             self.fail(where, f"{device} requested, image does not support it")
         if device == "vfio" and spec.get("memory_overcommit"):
             self.fail(where, "overcommit on vfio is forbidden")
+        if device == "vfio" and spec.get("autostart"):
+            self.fail(where, "autostart on vfio is forbidden")
+        if device == "vfio" and not spec.get("looking_glass"):
+            self.fail(where, "M4 VFIO guests require Looking Glass")
         if spec.get("qemu_guest_agent") and not supports.get("qemu_guest_agent"):
             self.fail(where, "QEMU Guest Agent requested but the image does not support it")
         if spec.get("looking_glass"):
@@ -284,10 +289,10 @@ class RepositoryValidator:
         self.valid_domains = self.domains()
         image_schema = self.load_yaml(self.root / "schemas/image-manifest.v1.yml")
         spec_schema = self.load_yaml(self.root / "schemas/vm-spec.v1.yml")
-        looking_defaults = self.load_yaml(self.root / "roles/looking_glass/defaults/main.yml")
-        client_build = looking_defaults.get("looking_glass_build", "")
+        looking_contract = self.load_yaml(self.root / "group_vars/all/looking-glass.yml")
+        client_build = looking_contract.get("hyperlab_looking_glass_build", "")
         if not isinstance(client_build, str) or not client_build:
-            self.fail("roles/looking_glass/defaults/main.yml", "looking_glass_build must be a non-empty string")
+            self.fail("group_vars/all/looking-glass.yml", "hyperlab_looking_glass_build must be a non-empty string")
         images: dict[str, dict[str, Any]] = {}
         for path in sorted((self.root / "images").glob("*.yml")):
             document = self.load_yaml(path)

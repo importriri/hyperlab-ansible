@@ -1,0 +1,46 @@
+---
+guest_supported_operations:
+  - validate
+  - create
+  - start
+  - shutdown
+  - stop
+  - reset
+  - destroy
+
+# Safe empty defaults keep refusal paths deterministic when no committed guest
+# state or no VFIO plan exists yet.
+guest_existing_state: {}
+guest_vfio: {}
+guest_windows_workshop: {}
+guest_service_reservations: {reserved_mb: 0, reservations: {}}
+
+guest_plan_tool: "{{ guest_repository_root }}/tools/guest_plan.py"
+guest_vfio_plan_tool: "{{ guest_repository_root }}/tools/vfio_plan.py"
+guest_vfio_registry_tool: "{{ guest_repository_root }}/tools/vfio_registry.py"
+guest_image_plan_tool: "{{ guest_repository_root }}/tools/image_plan.py"
+guest_image_receipt_guard_tool: "{{ guest_repository_root }}/tools/image_receipt_guard.py"
+guest_windows_workshop_guard_tool: >-
+  {{ guest_repository_root }}/tools/windows_workshop_guard.py
+guest_service_reservations_tool: >-
+  {{ guest_repository_root }}/tools/service_reservations.py
+guest_memory_tool: "{{ guest_repository_root }}/tools/guest_memory.py"
+guest_state_guard_tool: "{{ guest_repository_root }}/tools/guest_state_guard.py"
+guest_xml_contract_tool: "{{ guest_repository_root }}/tools/guest_xml_contract.py"
+guest_store_guard_tool: "{{ guest_repository_root }}/tools/guest_store_guard.py"
+guest_schema_validator: "{{ guest_repository_root }}/tools/schema_select.py"
+guest_host_profile_report_path: "{{ host_profile_report_path }}"
+guest_runtime_state_root: "{{ hyperlab_root }}/state/vms"
+guest_runtime_xml_root: "{{ hyperlab_root }}/state/domains"
+guest_runtime_lock_root: "{{ hyperlab_root }}/state/locks"
+guest_service_receipt_root: "{{ hyperlab_root }}/state/services"
+guest_registry_lock_path: "{{ guest_runtime_lock_root }}/registry.lock"
+# Existing system runtime parent; validation workspaces are removed in always.
+guest_tmp_root: /run
+
+# Extended mode makes YAML line folding harmless. Literal separators are \x20
+# because unescaped whitespace is ignored by a verbose regular expression.
+guest_ssh_public_key_pattern: >-
+  (?x)^(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)|
+  sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)
+  \x20[A-Za-z0-9+/]+={0,3}(?:\x20[^\r\n]+)?$

@@ -1,0 +1,68 @@
+---
+- name: Require a complete image transaction for validation
+  ansible.builtin.assert:
+    that:
+      - image_factory_transaction_complete
+    fail_msg: >-
+      {{ image_factory_plan.id }} has no complete base-and-receipt transaction.
+      Run playbooks/image-prepare.yml first.
+
+- name: Inspect committed base ownership and mode
+  ansible.builtin.stat:
+    path: "{{ image_factory_plan.base_path }}"
+  register: image_factory_base_stat
+
+- name: Inspect committed receipt ownership and mode
+  ansible.builtin.stat:
+    path: "{{ image_factory_plan.receipt_path }}"
+  register: image_factory_receipt_stat
+
+- name: Refuse redirected or mutable committed image files
+  ansible.builtin.assert:
+    that:
+      - image_factory_base_stat.stat.isreg
+      - not image_factory_base_stat.stat.islnk
+      - image_factory_base_stat.stat.pw_name == 'root'
+      - image_factory_base_stat.stat.gr_name == image_factory_qemu_group
+      - image_factory_base_stat.stat.mode == '0440'
+      - image_factory_receipt_stat.stat.isreg
+      - not image_factory_receipt_stat.stat.islnk
+      - image_factory_receipt_stat.stat.pw_name == 'root'
+      - image_factory_receipt_stat.stat.gr_name == 'root'
+      - image_factory_receipt_stat.stat.mode == '0640'
+    fail_msg: >-
+      Committed base or provenance receipt has unsafe type, ownership or mode.
+
+- name: Verify the base and receipt against the current manifest policy
+  ansible.builtin.command:
+    argv:
+      - "{{ image_factory_python_bin }}"
+      - "{{ image_factory_receipt_guard_tool }}"
+      - --receipt
+      - "{{ image_factory_plan.receipt_path }}"
+      - --base
+      - "{{ image_factory_plan.base_path }}"
+      - --qemu-img
+      - "{{ image_factory_qemu_img_bin }}"
+      - --mode
+      - "{{ 'sealed' if image_factory_plan.manifest_status == 'sealed' else 'prepared' }}"
+    stdin: "{{ image_factory_plan | to_json }}"
+  register: image_factory_validation
+  changed_when: false
+  check_mode: false
+
+- name: Publish validated image evidence
+  ansible.builtin.set_fact:
+    image_factory_validation_evidence: "{{ image_factory_validation.stdout | from_json }}"
+
+- name: Explain the checked-in manifest update still required
+  when: image_factory_plan.manifest_status != 'sealed'
+  ansible.builtin.debug:
+    msg: >-
+      Prepared base {{ image_factory_plan.id }} is valid. Update
+      {{ image_factory_plan.manifest_path }} to status=sealed,
+      sha256={{ image_factory_validation_evidence.artifact_sha256 }},
+      source_sha256={{ image_factory_plan.source_sha256 }}{% if image_factory_plan.source_type == 'official-cloud' %},
+      source_url={{ image_factory_plan.source_url }}{% endif %}{% if image_factory_plan.looking_glass_host_build_required %},
+      looking_glass_host_build_observed={{ image_factory_plan.looking_glass_host_build_observed }}{% endif %};
+      commit that evidence, pull it, then rerun playbooks/image-validate.yml.

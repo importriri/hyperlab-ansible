@@ -1,0 +1,260 @@
+---
+- name: Refuse incomplete Windows workshop selectors
+  ansible.builtin.assert:
+    that:
+      - windows_workshop_policy is string
+      - windows_workshop_policy | length > 0
+      - windows_workshop_evidence is string
+      - windows_workshop_evidence | length > 0
+      - windows_workshop_manifest is string
+      - windows_workshop_manifest | length > 0
+      - windows_workshop_local_source is string
+      - windows_workshop_local_source is match('^/.*')
+      - windows_workshop_source_sha256 is match('^[a-f0-9]{64}$')
+    fail_msg: >-
+      M6 requires one checked-in workshop policy and image manifest, one
+      privacy-safe JSON evidence file, one absolute local qcow2 path and its
+      independently supplied lowercase SHA-256.
+
+- name: Inspect the verified image-store identity manifest
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}/state/layout.yml"
+  register: windows_workshop_layout_stat
+
+- name: Refuse a missing or redirected image-store identity manifest
+  ansible.builtin.assert:
+    that:
+      - windows_workshop_layout_stat.stat.exists | default(false)
+      - windows_workshop_layout_stat.stat.isreg | default(false)
+      - not (windows_workshop_layout_stat.stat.islnk | default(false))
+    fail_msg: >-
+      M6 requires the verified M2 image store. Reconcile
+      playbooks/image-store.yml before validating a Windows workshop.
+
+- name: Validate repository schemas and the selected image manifest
+  ansible.builtin.command:
+    argv:
+      - "{{ windows_workshop_python_bin }}"
+      - "{{ windows_workshop_schema_selector }}"
+      - --root
+      - "{{ windows_workshop_repository_root }}"
+      - --manifest
+      - "{{ windows_workshop_manifest }}"
+  changed_when: false
+  check_mode: false
+
+- name: Validate guest evidence and bind it to the local qcow2 source
+  ansible.builtin.command:
+    argv:
+      - "{{ windows_workshop_python_bin }}"
+      - "{{ windows_workshop_validator }}"
+      - --root
+      - "{{ windows_workshop_repository_root }}"
+      - --policy
+      - "{{ windows_workshop_policy }}"
+      - --evidence
+      - "{{ windows_workshop_evidence }}"
+      - --manifest
+      - "{{ windows_workshop_manifest }}"
+      - --source
+      - "{{ windows_workshop_local_source }}"
+      - --source-sha256
+      - "{{ windows_workshop_source_sha256 }}"
+      - --looking-glass-build
+      - "{{ hyperlab_looking_glass_build }}"
+      - --store
+      - "{{ hyperlab_root }}"
+  register: windows_workshop_validation
+  changed_when: false
+  check_mode: false
+
+- name: Publish the validated Windows workshop result
+  ansible.builtin.set_fact:
+    windows_workshop_result: "{{ windows_workshop_validation.stdout | from_json }}"
+    windows_workshop_receipt_path: >-
+      {{ windows_workshop_receipt_root }}/{{ (windows_workshop_validation.stdout | from_json).id }}.yml
+    windows_workshop_receipt_new_path: >-
+      {{ windows_workshop_receipt_root }}/{{ (windows_workshop_validation.stdout | from_json).id }}.yml.new
+    windows_workshop_lock_path: >-
+      {{ windows_workshop_lock_root }}/windows-workshop-{{ (windows_workshop_validation.stdout | from_json).id }}.lock
+
+- name: Inspect an existing Windows workshop receipt
+  ansible.builtin.stat:
+    path: "{{ windows_workshop_receipt_path }}"
+  register: windows_workshop_receipt_stat
+
+- name: Validate an existing workshop receipt without replacing it
+  when: windows_workshop_receipt_stat.stat.exists | default(false)
+  block:
+    - name: Refuse an unsafe existing Windows workshop receipt
+      ansible.builtin.assert:
+        that:
+          - windows_workshop_receipt_stat.stat.isreg | default(false)
+          - not (windows_workshop_receipt_stat.stat.islnk | default(false))
+          - windows_workshop_receipt_stat.stat.pw_name == 'root'
+          - windows_workshop_receipt_stat.stat.gr_name == 'root'
+          - windows_workshop_receipt_stat.stat.mode == '0640'
+        fail_msg: Existing Windows workshop receipt has unsafe type, owner or mode.
+
+    - name: Read the existing Windows workshop receipt
+      ansible.builtin.slurp:
+        src: "{{ windows_workshop_receipt_path }}"
+      register: windows_workshop_existing_receipt_slurp
+
+    - name: Publish the existing Windows workshop receipt
+      ansible.builtin.set_fact:
+        windows_workshop_existing_receipt: >-
+          {{ windows_workshop_existing_receipt_slurp.content | b64decode | from_yaml }}
+
+    - name: Refuse stale evidence hidden behind a valid source checksum
+      ansible.builtin.assert:
+        that:
+          - windows_workshop_existing_receipt.evidence_sha256 == windows_workshop_result.evidence_sha256
+          - windows_workshop_existing_receipt.collected_at_utc == windows_workshop_result.collected_at_utc
+          - windows_workshop_existing_receipt.identity_mode == windows_workshop_result.identity_mode
+          - windows_workshop_existing_receipt.generalized | bool == windows_workshop_result.generalized | bool
+        fail_msg: >-
+          The committed workshop receipt describes different evidence. Remove
+          or archive the old receipt explicitly before accepting a new Windows
+          workshop run.
+
+    - name: Verify the existing workshop receipt against current policy
+      ansible.builtin.command:
+        argv:
+          - "{{ windows_workshop_python_bin }}"
+          - "{{ windows_workshop_guard }}"
+          - --policy
+          - "{{ windows_workshop_policy }}"
+          - --receipt
+          - "{{ windows_workshop_receipt_path }}"
+          - --image
+          - "{{ windows_workshop_result.id }}"
+          - --source-sha256
+          - "{{ windows_workshop_result.source_sha256 }}"
+          - --looking-glass-build
+          - "{{ hyperlab_looking_glass_build }}"
+      changed_when: false
+      check_mode: false
+
+- name: Predict a new workshop receipt in check mode
+  when:
+    - not (windows_workshop_receipt_stat.stat.exists | default(false))
+    - ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would atomically commit a private-safe workshop receipt for
+      {{ windows_workshop_result.id }}, bound to policy, evidence, source
+      SHA-256 and Looking Glass build {{ hyperlab_looking_glass_build }}.
+  changed_when: true
+
+- name: Commit a new Windows workshop receipt
+  when:
+    - not (windows_workshop_receipt_stat.stat.exists | default(false))
+    - not ansible_check_mode
+  block:
+    - name: Create Windows workshop receipt and lock roots
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ windows_workshop_receipt_root }}"
+        - "{{ windows_workshop_lock_root }}"
+
+    - name: Acquire the per-workshop receipt lock
+      ansible.builtin.command:
+        argv:
+          - "{{ windows_workshop_mkdir_bin }}"
+          - "{{ windows_workshop_lock_path }}"
+      register: windows_workshop_lock_acquire
+      changed_when: windows_workshop_lock_acquire.rc == 0
+
+    - name: Commit while owning the workshop lock
+      block:
+        - name: Reinspect receipt paths after lock acquisition
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ windows_workshop_receipt_path }}"
+            - "{{ windows_workshop_receipt_new_path }}"
+          register: windows_workshop_locked_receipt_stats
+
+        - name: Refuse a receipt created after the initial observation
+          ansible.builtin.assert:
+            that:
+              - >-
+                windows_workshop_locked_receipt_stats.results
+                | map(attribute='stat.exists')
+                | select('equalto', true)
+                | list | length == 0
+            fail_msg: >-
+              Workshop receipt paths changed after lock acquisition. Refusing
+              to overwrite another validated evidence handoff.
+
+        - name: Render the private-safe workshop receipt to staging
+          ansible.builtin.template:
+            src: receipt.yml.j2
+            dest: "{{ windows_workshop_receipt_new_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+
+        - name: Verify the staged Windows workshop receipt
+          ansible.builtin.command:
+            argv:
+              - "{{ windows_workshop_python_bin }}"
+              - "{{ windows_workshop_guard }}"
+              - --policy
+              - "{{ windows_workshop_policy }}"
+              - --receipt
+              - "{{ windows_workshop_receipt_new_path }}"
+              - --image
+              - "{{ windows_workshop_result.id }}"
+              - --source-sha256
+              - "{{ windows_workshop_result.source_sha256 }}"
+              - --looking-glass-build
+              - "{{ hyperlab_looking_glass_build }}"
+          changed_when: false
+          check_mode: false
+
+        - name: Commit the workshop receipt atomically  # noqa command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ windows_workshop_mv_bin }}"
+              - "{{ windows_workshop_receipt_new_path }}"
+              - "{{ windows_workshop_receipt_path }}"
+          changed_when: true
+
+      rescue:
+        - name: Remove only the newly-owned workshop receipt staging file
+          ansible.builtin.file:
+            path: "{{ windows_workshop_receipt_new_path }}"
+            state: absent
+
+        - name: Fail after rolling back workshop receipt staging
+          ansible.builtin.fail:
+            msg: >-
+              Windows workshop receipt creation failed and its staging file was
+              removed. Evidence, qcow2 source and committed receipts were not modified.
+
+      always:
+        - name: Release the per-workshop receipt lock
+          when:
+            - windows_workshop_lock_acquire is defined
+            - windows_workshop_lock_acquire.rc == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ windows_workshop_rmdir_bin }}"
+              - "{{ windows_workshop_lock_path }}"
+          register: windows_workshop_lock_release
+          changed_when: windows_workshop_lock_release.rc == 0
+          failed_when: windows_workshop_lock_release.rc != 0
+
+- name: Record that the windows_workshop brick is available
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: windows_workshop

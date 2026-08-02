@@ -1,0 +1,23 @@
+---
+# The safe base target. It prepares every host-side dependency while leaving
+# the local cockpit and workload lifecycle explicit.
+- name: Assemble the headless hypervisor foundation
+  hosts: hypervisor
+  become: true
+  gather_facts: true
+  roles:
+    - base
+    - hardware_probe
+    - kvm_host
+    - vfio_boot
+    - network_domains
+    - lab_isolation
+    - gpu_handoff
+    - role: brick_guard
+      vars:
+        brick_guard_brick: bootstrap_storage
+    - bootstrap_storage
+    - role: brick_guard
+      vars:
+        brick_guard_brick: image_store
+    - image_store

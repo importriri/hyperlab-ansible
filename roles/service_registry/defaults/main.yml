@@ -1,0 +1,25 @@
+---
+service_registry_supported_operations:
+  - register
+  - validate
+  - unregister
+  - backup
+  - restore
+  - delete-backup
+
+service_registry_plan_tool: "{{ service_registry_repository_root }}/tools/service_plan.py"
+service_registry_receipt_guard_tool: >-
+  {{ service_registry_repository_root }}/tools/service_receipt_guard.py
+service_registry_network_guard_tool: >-
+  {{ service_registry_repository_root }}/tools/service_network_guard.py
+service_registry_recovery_plan_tool: >-
+  {{ service_registry_repository_root }}/tools/service_recovery_plan.py
+service_registry_backup_guard_tool: >-
+  {{ service_registry_repository_root }}/tools/service_backup_guard.py
+
+service_registry_receipt_root: "{{ hyperlab_root }}/state/services"
+service_registry_lock_root: "{{ hyperlab_root }}/state/locks"
+service_registry_backup_root: "{{ hyperlab_root }}/snapshots/services"
+service_registry_plan: {}
+service_registry_recovery_plan: {}
+service_registry_backup_context: {}

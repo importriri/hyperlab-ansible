@@ -1,0 +1,153 @@
+---
+- name: Inspect the managed state file
+  ansible.builtin.stat:
+    path: "{{ guest_plan.state_path }}"
+  register: guest_state_stat
+
+- name: Inspect the managed disk
+  ansible.builtin.stat:
+    path: "{{ guest_plan.disk_path }}"
+  register: guest_disk_stat
+
+- name: Inspect a stranded permanent clone staging file
+  ansible.builtin.stat:
+    path: "{{ guest_plan.disk_path }}.new"
+  register: guest_disk_new_stat
+
+- name: Inspect the managed domain XML
+  ansible.builtin.stat:
+    path: "{{ guest_plan.xml_path }}"
+  register: guest_xml_stat
+
+- name: Inspect the per-VM cloud-init directory
+  ansible.builtin.stat:
+    path: "{{ guest_plan.seed_dir }}"
+  register: guest_seed_dir_stat
+
+- name: Inspect cloud-init user data
+  ansible.builtin.stat:
+    path: "{{ guest_plan.seed_user_data }}"
+  register: guest_seed_user_data_stat
+
+- name: Inspect cloud-init instance metadata
+  ansible.builtin.stat:
+    path: "{{ guest_plan.seed_meta_data }}"
+  register: guest_seed_meta_data_stat
+
+- name: Inspect the committed NoCloud seed
+  ansible.builtin.stat:
+    path: "{{ guest_plan.seed_image }}"
+  register: guest_seed_image_stat
+
+- name: Inspect a stranded NoCloud seed staging file
+  ansible.builtin.stat:
+    path: "{{ guest_plan.seed_image }}.new"
+  register: guest_seed_new_stat
+
+- name: Inspect the VM-specific NVRAM file
+  ansible.builtin.stat:
+    path: "{{ guest_plan.nvram_path }}"
+  register: guest_nvram_stat
+
+- name: Inspect the VM-specific swtpm directory
+  ansible.builtin.stat:
+    path: "{{ guest_plan.tpm_path }}"
+  register: guest_tpm_stat
+
+- name: Ask libvirt whether the domain is defined
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - dominfo
+      - "{{ guest_plan.name }}"
+  register: guest_dominfo
+  changed_when: false
+  failed_when: guest_dominfo.rc not in [0, 1]
+  check_mode: false
+
+- name: Record whether the domain is defined and autostarts
+  ansible.builtin.set_fact:
+    guest_domain_defined: "{{ guest_dominfo.rc == 0 }}"
+    guest_domain_autostart: >-
+      {{ guest_dominfo.rc == 0 and
+         (guest_dominfo.stdout | regex_search('(?m)^Autostart:\s+yes\s*$')) is not none }}
+
+- name: Read the domain power state
+  when: guest_domain_defined
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domstate
+      - "{{ guest_plan.name }}"
+  register: guest_domstate
+  changed_when: false
+  check_mode: false
+
+- name: Normalize the domain power state
+  ansible.builtin.set_fact:
+    guest_domain_state: >-
+      {{ (guest_domstate.stdout | trim | lower)
+         if guest_domain_defined else 'undefined' }}
+
+- name: Inspect the selected libvirt network
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - net-info
+      - "{{ guest_plan.network_profile }}"
+  register: guest_network_info
+  changed_when: false
+  failed_when: guest_network_info.rc not in [0, 1]
+  check_mode: false
+
+- name: Record selected network state
+  ansible.builtin.set_fact:
+    guest_network_defined: "{{ guest_network_info.rc == 0 }}"
+    guest_network_active: >-
+      {{ guest_network_info.rc == 0 and
+         (guest_network_info.stdout | regex_search('(?m)^Active:\s+yes\s*$')) is not none }}
+
+- name: Build the required and transient artifact observations
+  ansible.builtin.set_fact:
+    # Libvirt initializes per-domain UEFI NVRAM on first start. A defined but
+    # never-started transaction is therefore complete without that file.
+    guest_required_artifact_flags: >-
+      {{ [guest_state_stat.stat.exists,
+          guest_disk_stat.stat.exists,
+          guest_xml_stat.stat.exists,
+          guest_domain_defined]
+         + ([guest_seed_dir_stat.stat.exists,
+             guest_seed_user_data_stat.stat.exists,
+             guest_seed_meta_data_stat.stat.exists,
+             guest_seed_image_stat.stat.exists]
+            if guest_plan.cloud_init else [])
+         + ([guest_tpm_stat.stat.exists]
+            if guest_plan.requires_tpm2 else []) }}
+    guest_transient_artifact_flags: >-
+      {{ [guest_disk_new_stat.stat.exists,
+          guest_seed_new_stat.stat.exists] }}
+    guest_unexpected_artifact_flags: >-
+      {{ ([guest_seed_dir_stat.stat.exists,
+           guest_seed_user_data_stat.stat.exists,
+           guest_seed_meta_data_stat.stat.exists,
+           guest_seed_image_stat.stat.exists]
+          if not guest_plan.cloud_init else [])
+         + ([guest_tpm_stat.stat.exists]
+            if not guest_plan.requires_tpm2 else [])
+         + ([guest_nvram_stat.stat.exists]
+            if not guest_plan.requires_uefi else []) }}
+
+- name: Classify the managed guest transaction
+  ansible.builtin.set_fact:
+    guest_required_artifact_count: "{{ guest_required_artifact_flags | length }}"
+    guest_present_required_artifact_count: >-
+      {{ guest_required_artifact_flags | select('equalto', true) | list | length }}
+    guest_transaction_complete: >-
+      {{ (guest_required_artifact_flags | reject('equalto', true) | list | length == 0)
+         and (guest_transient_artifact_flags | select('equalto', true) | list | length == 0)
+         and (guest_unexpected_artifact_flags | select('equalto', true) | list | length == 0) }}
+    guest_transaction_clean: >-
+      {{ (guest_required_artifact_flags | select('equalto', true) | list | length == 0)
+         and (guest_transient_artifact_flags | select('equalto', true) | list | length == 0)
+         and (guest_unexpected_artifact_flags | select('equalto', true) | list | length == 0)
+         and not guest_nvram_stat.stat.exists }}

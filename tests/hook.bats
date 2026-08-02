@@ -5,14 +5,22 @@
 setup() {
     TESTDIR="$(mktemp -d)"
     export GPU_HANDOFF_ROTATION="${TESTDIR}/rotation"
+    export GPU_HANDOFF_DOMAINS="${TESTDIR}/domains"
     export GPU_HANDOFF_STATE_DIR="${TESTDIR}/state"
     HOOK="${BATS_TEST_DIRNAME}/../roles/gpu_handoff/files/qemu"
     cat > "${GPU_HANDOFF_ROTATION}" <<EOF
-# domain trust
+# network trust
 clean 3
 dev 2
 dirty 1
 lab 0
+EOF
+    cat > "${GPU_HANDOFF_DOMAINS}" <<EOF
+# exact-libvirt-domain network-profile
+win11clean-valley clean
+win11dev-test dev
+win11dirty-disposable dirty
+win11lab-test lab
 EOF
 }
 
@@ -28,95 +36,114 @@ state() {
     [ -x "${HOOK}" ]
 }
 
-@test "first GPU domain is allowed and records its trust" {
-    run "${HOOK}" clean prepare
+@test "first reviewed GPU domain is allowed and records network trust" {
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "3" ]
 }
 
-@test "downgrade is allowed (clean -> dirty)" {
-    "${HOOK}" clean prepare
-    run "${HOOK}" dirty prepare
+@test "downgrade is allowed across exact domains (clean -> dirty)" {
+    "${HOOK}" win11clean-valley prepare
+    run "${HOOK}" win11dirty-disposable prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "1" ]
 }
 
 @test "lateral restart at the same trust is allowed" {
-    "${HOOK}" dirty prepare
-    run "${HOOK}" dirty prepare
+    "${HOOK}" win11dirty-disposable prepare
+    run "${HOOK}" win11dirty-disposable prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "1" ]
 }
 
 @test "upgrade is refused and leaves state untouched (dirty -> clean)" {
-    "${HOOK}" dirty prepare
-    run "${HOOK}" clean prepare
+    "${HOOK}" win11dirty-disposable prepare
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 1 ]
     [[ "$output" == *REFUSING* ]]
     [ "$(state)" = "1" ]
 }
 
-@test "lab can start first" {
-    run "${HOOK}" lab prepare
+@test "lab can start first when explicitly reviewed" {
+    run "${HOOK}" win11lab-test prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "0" ]
 }
 
-@test "after lab, every GPU domain is refused until reboot" {
-    "${HOOK}" lab prepare
-    run "${HOOK}" dirty prepare
+@test "after lab every cleaner reviewed GPU domain is refused until reboot" {
+    "${HOOK}" win11lab-test prepare
+    run "${HOOK}" win11dirty-disposable prepare
     [ "$status" -eq 1 ]
 }
 
 @test "a reboot (state dir gone) reopens the ladder" {
-    "${HOOK}" lab prepare
+    "${HOOK}" win11lab-test prepare
     rm -rf "${GPU_HANDOFF_STATE_DIR}"
-    run "${HOOK}" clean prepare
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "3" ]
 }
 
-@test "corrupt state refuses GPU domains (fail closed)" {
+@test "corrupt state refuses reviewed GPU domains" {
     mkdir -p "${GPU_HANDOFF_STATE_DIR}"
     echo garbage > "${GPU_HANDOFF_STATE_DIR}/trust"
-    run "${HOOK}" clean prepare
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 1 ]
 }
 
-@test "corrupt rotation refuses even unlisted domains (fail closed)" {
+@test "corrupt rotation refuses a reviewed GPU domain" {
     echo "clean banana" > "${GPU_HANDOFF_ROTATION}"
-    run "${HOOK}" svc-jellyfin prepare
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 1 ]
 }
 
-@test "missing rotation refuses (fail closed)" {
+@test "missing rotation refuses before membership decisions" {
     rm -f "${GPU_HANDOFF_ROTATION}"
-    run "${HOOK}" clean prepare
+    run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 1 ]
 }
 
-@test "empty rotation is a broken config, not a disabled handoff" {
+@test "empty rotation is a broken config" {
     : > "${GPU_HANDOFF_ROTATION}"
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+}
+
+@test "missing domain allowlist fails closed even for a service VM" {
+    rm -f "${GPU_HANDOFF_DOMAINS}"
     run "${HOOK}" svc-jellyfin prepare
     [ "$status" -eq 1 ]
 }
 
-@test "a service domain passes while the GPU is held, state untouched" {
-    "${HOOK}" clean prepare
+@test "an unknown profile in the exact allowlist is refused" {
+    echo "win11clean-valley unknown" > "${GPU_HANDOFF_DOMAINS}"
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unknown profile"* ]]
+}
+
+@test "an unlisted service domain passes while GPU trust is held" {
+    "${HOOK}" win11clean-valley prepare
     run "${HOOK}" svc-jellyfin prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "3" ]
 }
 
-@test "a service domain passes with no state and creates none" {
+@test "an unlisted service domain passes with no state and creates none" {
     run "${HOOK}" svc-jellyfin prepare
     [ "$status" -eq 0 ]
     [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
 }
 
-@test "non-prepare phases pass instantly, even for an upgrade" {
-    "${HOOK}" dirty prepare
-    run "${HOOK}" clean started
+@test "network profile names alone are not GPU domain names" {
+    run "${HOOK}" clean prepare
+    [ "$status" -eq 0 ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "non-prepare phases pass instantly even for an upgrade" {
+    "${HOOK}" win11dirty-disposable prepare
+    run "${HOOK}" win11clean-valley started
     [ "$status" -eq 0 ]
     [ "$(state)" = "1" ]
 }

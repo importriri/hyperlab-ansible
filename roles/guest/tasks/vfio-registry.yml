@@ -1,0 +1,63 @@
+---
+- name: List every defined libvirt domain for VFIO collision checks
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - list
+      - --all
+      - --name
+  register: guest_vfio_registry_names
+  changed_when: false
+  check_mode: false
+
+- name: List active libvirt domains for fixed-port checks
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - list
+      - --name
+  register: guest_vfio_registry_active_names
+  changed_when: false
+  check_mode: false
+
+- name: Read inactive XML from every defined domain
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - dumpxml
+      - --inactive
+      - "{{ item }}"
+  loop: "{{ guest_vfio_registry_names.stdout_lines | reject('equalto', '') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: guest_vfio_registry_xml
+  changed_when: false
+  check_mode: false
+
+- name: Initialize the normalized VFIO domain registry
+  ansible.builtin.set_fact:
+    guest_vfio_registry_domains: []
+
+- name: Normalize every libvirt domain XML record
+  ansible.builtin.set_fact:
+    guest_vfio_registry_domains: >-
+      {{ guest_vfio_registry_domains +
+         [{'name': item.item, 'xml': item.stdout}] }}
+  loop: "{{ guest_vfio_registry_xml.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Refuse PCI or fixed-SPICE ownership collisions
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_vfio_registry_tool }}"
+    stdin: >-
+      {{ {'planned_name': guest_plan.name,
+          'planned_bdfs': guest_vfio.devices | map(attribute='bdf') | list,
+          'domains': guest_vfio_registry_domains,
+          'active_names': guest_vfio_registry_active_names.stdout_lines | reject('equalto', '') | list,
+          'spice_port': guest_vfio.spice_port,
+          'mode': guest_vfio_registry_mode} | to_json }}
+  changed_when: false
+  check_mode: false

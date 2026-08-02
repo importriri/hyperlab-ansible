@@ -88,6 +88,42 @@ window#waybar.hidden {
     font-size: 15px;
 }
 
+/* the cockpit group: one pill visible, three revealed on hover. Colour is
+   state, never decoration - green quiet, yellow needs a decision, red is
+   already wrong. */
+#custom-hyperlab,
+#custom-hyperlab-ram,
+#custom-hyperlab-gpu,
+#custom-hyperlab-vms {
+    padding: 0 9px;
+    margin: 4px 1px;
+    border-radius: 8px;
+    background: alpha(@mantle, 0.85);
+    color: @subtext0;
+}
+#custom-hyperlab.ok,
+#custom-hyperlab-ram.ok,
+#custom-hyperlab-gpu.ok,
+#custom-hyperlab-vms.ok { color: @green; }
+#custom-hyperlab.warn,
+#custom-hyperlab-ram.warn,
+#custom-hyperlab-gpu.warn,
+#custom-hyperlab-vms.warn { color: @yellow; }
+#custom-hyperlab.error,
+#custom-hyperlab-ram.error,
+#custom-hyperlab-gpu.error,
+#custom-hyperlab-vms.error {
+    color: @crust;
+    background: @red;
+}
+#custom-hyperlab {
+    color: @mauve;
+    border: 1px solid @surface1;
+}
+#custom-hyperlab.ok    { color: @green;  border-color: @green; }
+#custom-hyperlab.warn  { color: @yellow; border-color: @yellow; }
+#custom-hyperlab.error { color: @crust;  border-color: @red; }
+
 #clock {
     color: @lavender;
     padding: 0 14px;

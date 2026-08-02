@@ -1,0 +1,105 @@
+---
+- name: Refuse memory resolution without gathered host facts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['memtotal_mb'] is defined
+    fail_msg: guest memory allocation requires gathered host memory facts.
+
+- name: Read the validated host profile report
+  ansible.builtin.slurp:
+    src: "{{ guest_host_profile_report_path }}"
+  register: guest_host_profile_report_slurp
+
+- name: Parse the validated host profile report
+  ansible.builtin.set_fact:
+    guest_host_profile_report: >-
+      {{ guest_host_profile_report_slurp.content | b64decode | from_yaml }}
+
+- name: Refuse a host profile not present in the reviewed contract
+  ansible.builtin.assert:
+    that:
+      - guest_host_profile_report is mapping
+      - guest_host_profile_report.host_profile is string
+      - guest_host_profile_report.host_profile in host_profiles
+    fail_msg: >-
+      Selected host profile {{ guest_host_profile_report.host_profile | default('<missing>') }}
+      is absent from host_profiles. Run preflight from the same reviewed
+      repository revision.
+
+- name: Publish the validated selected host profile
+  ansible.builtin.set_fact:
+    guest_selected_host_profile: "{{ guest_host_profile_report.host_profile }}"
+
+- name: Read live libvirt memory commitments
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domstats
+      - --list-active
+      - --balloon
+      - --state
+  register: guest_live_domstats
+  changed_when: false
+  check_mode: false
+
+- name: Resolve inactive registered service reservations
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_service_reservations_tool }}"
+      - --receipt-root
+      - "{{ guest_service_receipt_root }}"
+      - --candidate-name
+      - "{{ guest_plan.name }}"
+    # Ansible's command runner only creates and closes a stdin pipe when the
+    # supplied value is non-empty.  The first VM has no active domstats, so a
+    # raw empty string leaves helpers using sys.stdin.read() blocked forever.
+    # Both parsers deliberately ignore non-Domain lines.
+    stdin: |-
+      {{ guest_live_domstats.stdout }}
+      # hyperlab-domstats-eof
+  register: guest_service_reservations_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish inactive service reservation evidence
+  ansible.builtin.set_fact:
+    guest_service_reservations: >-
+      {{ guest_service_reservations_command.stdout | from_json }}
+
+- name: Resolve the candidate memory from the live budget
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_memory_tool }}"
+      - --profile-json
+      - "{{ host_profiles[guest_selected_host_profile].memory | to_json }}"
+      - --memtotal-mb
+      - "{{ ansible_facts['memtotal_mb'] | int }}"
+      - --request
+      - >-
+        {{ guest_existing_state.memory_mb
+           if guest_state_stat.stat.exists
+           else guest_plan.memory_request }}
+      - --floor-mb
+      - "{{ guest_plan.image_min_memory_mb | int }}"
+      - --overcommit
+      - "{{ guest_plan.memory_overcommit | bool | lower }}"
+      - --device-profile
+      - "{{ guest_plan.device_profile }}"
+      - --service-reservations-json
+      - "{{ guest_service_reservations | to_json }}"
+      - --candidate-name
+      - "{{ guest_plan.name }}"
+    stdin: |-
+      {{ guest_live_domstats.stdout }}
+      # hyperlab-domstats-eof
+  register: guest_memory_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the resolved memory and evidence
+  ansible.builtin.set_fact:
+    guest_memory_evidence: "{{ guest_memory_command.stdout | from_json }}"
+    guest_resolved_memory_mb: >-
+      {{ (guest_memory_command.stdout | from_json).resolved_memory_mb | int }}

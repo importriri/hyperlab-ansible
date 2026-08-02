@@ -29,7 +29,18 @@ run() {
 
 run_render() {
     if [ -t 0 ]; then
-        if ansible-playbook -K -i inventory.ini tests/render.yml \
+        local -a become_args=()
+        if [ -n "${PRIVATESTACK_BECOME_PASSWORD_FILE:-}" ]; then
+            if [ ! -r "${PRIVATESTACK_BECOME_PASSWORD_FILE}" ]; then
+                echo "Configured become password file is not readable." >&2
+                fail=1
+                return
+            fi
+            become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")
+        elif ! sudo -n true 2>/dev/null; then
+            become_args=(-K)
+        fi
+        if ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'; then
             echo "   OK"
         else

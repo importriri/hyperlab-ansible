@@ -1,0 +1,375 @@
+---
+- name: Require a complete managed guest transaction
+  ansible.builtin.assert:
+    that:
+      - guest_transaction_complete
+      - guest_state_stat.stat.isreg
+      - not guest_state_stat.stat.islnk
+      - guest_disk_stat.stat.isreg
+      - not guest_disk_stat.stat.islnk
+      - guest_xml_stat.stat.isreg
+      - not guest_xml_stat.stat.islnk
+      - guest_domain_defined
+    fail_msg: >-
+      {{ guest_plan.name }} is not a complete managed guest. Expected every
+      lifecycle-specific artefact and a libvirt definition. Refusing to infer
+      ownership from a partial transaction.
+
+- name: Verify immutable state fields against the selected plan
+  ansible.builtin.assert:
+    that:
+      - guest_existing_state.schema_version | int == 1
+      - guest_existing_state.name == guest_plan.name
+      - guest_existing_state.uuid == guest_plan.uuid
+      - guest_existing_state.mac == guest_plan.mac
+      - guest_existing_state.image == guest_plan.image
+      - guest_existing_state.image_sha256 == guest_plan.image_sha256
+      - guest_existing_state.instance_policy == guest_plan.instance_policy
+      - guest_existing_state.lifecycle == guest_plan.lifecycle
+      - guest_existing_state.device_profile == guest_plan.device_profile
+      - guest_existing_state.network_profile == guest_plan.network_profile
+      - guest_existing_state.disk_path == guest_plan.disk_path
+      - guest_existing_state.xml_path == guest_plan.xml_path
+      - guest_existing_state.vcpus | int == guest_plan.vcpus | int
+      - guest_existing_state.disk_gib | int == guest_plan.disk_gib | int
+      - guest_existing_state.memory_mb | int >= guest_plan.image_min_memory_mb | int
+      - guest_existing_state.autostart | bool == guest_plan.autostart | bool
+      - guest_existing_state.qemu_guest_agent | bool == guest_plan.qemu_guest_agent | bool
+      - guest_existing_state.looking_glass | bool == guest_plan.looking_glass | bool
+      - >-
+        (guest_plan.device_profile == 'vfio' and guest_existing_state.vfio == guest_vfio) or
+        (guest_plan.device_profile == 'standard' and guest_existing_state.vfio is none)
+      - guest_existing_state.owner == guest_plan.owner
+      - guest_existing_state.purpose == guest_plan.purpose
+      - guest_existing_state.tags == guest_plan.tags
+      - guest_existing_state.benchmark | default(none) == guest_plan.benchmark
+    fail_msg: >-
+      {{ guest_plan.state_path }} no longer matches the selected VM spec,
+      sealed image or host-local VFIO identity. Rebuild explicitly; never
+      reinterpret an existing disk or PCI assignment.
+
+- name: Verify immutable cloud-init SSH identities during create reconciliation
+  when:
+    - guest_operation == 'create'
+    - guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_existing_state.cloud_init_user | default('') == guest_cloud_init_user
+      - >-
+        guest_existing_state.cloud_init_ssh_public_keys | default([])
+        == guest_cloud_init_ssh_public_keys
+    fail_msg: >-
+      The supplied cloud-init account or SSH identities do not match the committed
+      NoCloud transaction. Destroy and recreate the guest explicitly; never
+      accept a new runtime key while reusing an old seed.
+
+- name: Bind the committed memory allocation to domain validation
+  ansible.builtin.set_fact:
+    guest_resolved_memory_mb: "{{ guest_existing_state.memory_mb | int }}"
+
+- name: Verify managed file ownership and modes
+  ansible.builtin.assert:
+    that:
+      - guest_state_stat.stat.pw_name == 'root'
+      - guest_state_stat.stat.gr_name == 'root'
+      - guest_state_stat.stat.mode == '0640'
+      - guest_xml_stat.stat.pw_name == 'root'
+      - guest_xml_stat.stat.gr_name == 'root'
+      - guest_xml_stat.stat.mode == '0640'
+      - guest_disk_stat.stat.pw_name == guest_qemu_user
+      - guest_disk_stat.stat.gr_name == guest_qemu_group
+      - guest_disk_stat.stat.mode == '0640'
+    fail_msg: Managed state, XML or disk ownership/mode drifted from the guest contract.
+
+- name: Verify cloud-init artefact ownership and modes
+  when: guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_seed_dir_stat.stat.isdir
+      - not guest_seed_dir_stat.stat.islnk
+      - guest_seed_dir_stat.stat.pw_name == 'root'
+      - guest_seed_dir_stat.stat.gr_name == guest_qemu_group
+      - guest_seed_dir_stat.stat.mode == '0750'
+      - guest_seed_user_data_stat.stat.isreg
+      - guest_seed_user_data_stat.stat.pw_name == 'root'
+      - guest_seed_user_data_stat.stat.gr_name == 'root'
+      - guest_seed_user_data_stat.stat.mode == '0600'
+      - guest_seed_meta_data_stat.stat.isreg
+      - guest_seed_meta_data_stat.stat.pw_name == 'root'
+      - guest_seed_meta_data_stat.stat.gr_name == 'root'
+      - guest_seed_meta_data_stat.stat.mode == '0600'
+      - guest_seed_image_stat.stat.isreg
+      - guest_seed_image_stat.stat.pw_name == guest_qemu_user
+      - guest_seed_image_stat.stat.gr_name == guest_qemu_group
+      - guest_seed_image_stat.stat.mode == '0440'
+    fail_msg: The NoCloud seed transaction is incomplete or has unsafe permissions.
+
+- name: Verify private swtpm state ownership and mode
+  when: guest_plan.requires_tpm2
+  ansible.builtin.assert:
+    that:
+      - guest_tpm_stat.stat.isdir
+      - not guest_tpm_stat.stat.islnk
+      - guest_tpm_stat.stat.pw_name == guest_swtpm_user
+      - guest_tpm_stat.stat.gr_name == guest_swtpm_group
+      - guest_tpm_stat.stat.mode == '0700'
+    fail_msg: The VM-specific swtpm state directory is missing or unsafe.
+
+- name: Verify NVRAM created lazily by libvirt is regular and local to the store
+  when: guest_nvram_stat.stat.exists
+  ansible.builtin.assert:
+    that:
+      - guest_plan.requires_uefi
+      - guest_nvram_stat.stat.isreg
+      - not guest_nvram_stat.stat.islnk
+      - guest_nvram_stat.stat.dev == guest_disk_stat.stat.dev
+    fail_msg: The VM-specific NVRAM path is redirected or has the wrong type/device.
+
+- name: Verify declared autostart state
+  ansible.builtin.assert:
+    that:
+      - guest_domain_autostart | bool == guest_plan.autostart | bool
+    fail_msg: >-
+      Libvirt autostart for {{ guest_plan.name }} no longer matches the VM spec.
+
+- name: Inspect the managed qcow2 chain while the domain is shut off
+  when: guest_domain_state == 'shut off'
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_qemu_img_bin }}"
+      - info
+      - --output=json
+      - --backing-chain
+      - "{{ guest_plan.disk_path }}"
+  register: guest_disk_info_command
+  changed_when: false
+  check_mode: false
+
+- name: Parse the managed disk chain
+  when: guest_domain_state == 'shut off'
+  ansible.builtin.set_fact:
+    guest_disk_chain: "{{ guest_disk_info_command.stdout | from_json }}"
+
+- name: Refuse the wrong qcow2 lifecycle or virtual-size shape
+  when: guest_domain_state == 'shut off'
+  ansible.builtin.assert:
+    that:
+      - guest_disk_chain | length >= 1
+      - guest_disk_chain[0].format == 'qcow2'
+      - guest_disk_chain[0]['virtual-size'] | int == guest_plan.disk_gib | int * 1073741824
+      - >-
+        (guest_plan.lifecycle == 'disposable' and
+         guest_disk_chain | length == 2 and
+         guest_disk_chain[0]['backing-filename'] == guest_plan.base_path and
+         guest_disk_chain[0]['backing-filename-format'] == 'qcow2') or
+        (guest_plan.lifecycle == 'permanent' and
+         guest_disk_chain | length == 1 and
+         'backing-filename' not in guest_disk_chain[0])
+    fail_msg: >-
+      {{ guest_plan.disk_path }} violates lifecycle={{ guest_plan.lifecycle }}:
+      disposable must be one qcow2 overlay over exactly the sealed base;
+      permanent must be an independent qcow2; virtual size must match the spec.
+
+- name: Explain the offline disk-check boundary for an active guest
+  when: guest_domain_state != 'shut off'
+  ansible.builtin.debug:
+    msg: >-
+      The domain is {{ guest_domain_state }}. Disk source and managed XML are
+      verified live; qemu-img backing-chain inspection is intentionally
+      deferred until shut off because offline image tools must not inspect a
+      disk being modified by QEMU.
+
+- name: Verify the managed domain contract in a transient directory
+  block:
+    - name: Create a private transient XML workspace
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ guest_tmp_root }}"
+        prefix: "privatestack-guest.{{ guest_plan.name }}."
+      register: guest_xml_workspace
+      changed_when: false
+      check_mode: false
+
+    - name: Render the desired domain contract for comparison
+      ansible.builtin.template:
+        src: domain.xml.j2
+        dest: "{{ guest_xml_workspace.path }}/desired.xml"
+        owner: root
+        group: root
+        mode: "0600"
+      changed_when: false
+      check_mode: false
+
+    - name: Validate the desired domain XML against libvirt schemas
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virt_xml_validate_bin }}"
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+      changed_when: false
+      check_mode: false
+
+    - name: Read the inactive domain XML from libvirt
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - dumpxml
+          - --inactive
+          - "{{ guest_plan.name }}"
+      register: guest_actual_xml_command
+      changed_when: false
+      check_mode: false
+
+    - name: Store the inactive XML only in the transient workspace
+      ansible.builtin.copy:
+        content: "{{ guest_actual_xml_command.stdout }}\n"
+        dest: "{{ guest_xml_workspace.path }}/actual.xml"
+        owner: root
+        group: root
+        mode: "0600"
+      changed_when: false
+      check_mode: false
+
+    - name: Compare only the domain fields owned by the guest brick
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_xml_contract_tool }}"
+          - --expected
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+          - --actual
+          - "{{ guest_xml_workspace.path }}/actual.xml"
+      register: guest_xml_contract_strict
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Recognize only the pre-DAC-pin managed domain contract
+      when: guest_xml_contract_strict.rc != 0
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_xml_contract_tool }}"
+          - --expected
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+          - --actual
+          - "{{ guest_xml_workspace.path }}/actual.xml"
+          - --allow-legacy-missing-dac-relabel
+      register: guest_xml_contract_legacy_dac
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Classify the exact legacy DAC relabel migration
+      ansible.builtin.set_fact:
+        guest_needs_dac_relabel_migration: >-
+          {{ guest_xml_contract_strict.rc != 0 and
+             guest_xml_contract_legacy_dac.rc | default(1) == 0 }}
+
+    - name: Refuse domain drift or an unsafe DAC migration context
+      ansible.builtin.assert:
+        that:
+          - >-
+            guest_xml_contract_strict.rc == 0 or
+            (guest_needs_dac_relabel_migration and
+             guest_operation == 'create' and
+             guest_domain_state == 'shut off')
+        fail_msg: >-
+          The inactive domain differs from the managed contract. The only
+          automatic migration is an otherwise exact, shut-off domain created
+          before the per-disk DAC relabel pin, and it runs only through
+          vm-create. Strict comparison reported:
+          {{ guest_xml_contract_strict.stderr | trim }}
+
+    - name: Predict the exact legacy DAC relabel migration
+      when:
+        - guest_needs_dac_relabel_migration
+        - ansible_check_mode
+      ansible.builtin.debug:
+        msg: >-
+          CHECK MODE: would add the per-disk DAC relabel refusal to the
+          managed XML and redefine the shut-off domain without changing its
+          UUID, disk, NVRAM, state receipt or autostart policy.
+      changed_when: true
+
+    - name: Commit the DAC-pinned managed XML
+      when:
+        - guest_needs_dac_relabel_migration
+        - not ansible_check_mode
+      ansible.builtin.copy:
+        src: "{{ guest_xml_workspace.path }}/desired.xml"
+        dest: "{{ guest_plan.xml_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Redefine only the exact shut-off legacy domain
+      when:
+        - guest_needs_dac_relabel_migration
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - define
+          - --validate
+          - "{{ guest_plan.xml_path }}"
+      register: guest_domain_dac_redefine
+      changed_when: guest_domain_dac_redefine.rc == 0
+
+    - name: Read the DAC-pinned inactive domain XML
+      when:
+        - guest_needs_dac_relabel_migration
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - dumpxml
+          - --inactive
+          - "{{ guest_plan.name }}"
+      register: guest_migrated_xml_command
+      changed_when: false
+
+    - name: Store the migrated inactive XML transiently
+      when:
+        - guest_needs_dac_relabel_migration
+        - not ansible_check_mode
+      ansible.builtin.copy:
+        content: "{{ guest_migrated_xml_command.stdout }}\n"
+        dest: "{{ guest_xml_workspace.path }}/actual-migrated.xml"
+        owner: root
+        group: root
+        mode: "0600"
+      changed_when: false
+
+    - name: Verify the migrated domain against the strict contract
+      when:
+        - guest_needs_dac_relabel_migration
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_xml_contract_tool }}"
+          - --expected
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+          - --actual
+          - "{{ guest_xml_workspace.path }}/actual-migrated.xml"
+      changed_when: false
+
+    - name: Validate the checked-in managed XML too
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virt_xml_validate_bin }}"
+          - "{{ guest_plan.xml_path }}"
+      changed_when: false
+      check_mode: false
+
+  always:
+    - name: Remove transient XML validation evidence
+      when:
+        - guest_xml_workspace is defined
+        - guest_xml_workspace.path is defined
+      ansible.builtin.file:
+        path: "{{ guest_xml_workspace.path }}"
+        state: absent
+      changed_when: false
+      check_mode: false

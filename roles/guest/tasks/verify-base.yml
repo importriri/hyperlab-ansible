@@ -1,0 +1,203 @@
+---
+- name: Rebuild the immutable image provenance plan
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_image_plan_tool }}"
+      - --root
+      - "{{ guest_repository_root }}"
+      - --manifest
+      - "{{ guest_plan.manifest_path }}"
+      - --store
+      - "{{ hyperlab_root }}"
+      - --operation
+      - validate
+  register: guest_image_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the immutable image provenance plan
+  ansible.builtin.set_fact:
+    guest_image_plan: "{{ guest_image_plan_command.stdout | from_json }}"
+
+- name: Require guest and image-factory path identity
+  ansible.builtin.assert:
+    that:
+      - guest_image_plan.id == guest_plan.image
+      - guest_image_plan.base_path == guest_plan.base_path
+      - guest_image_plan.manifest_artifact_sha256 == guest_plan.image_sha256
+      - guest_image_plan.manifest_status == 'sealed'
+    fail_msg: >-
+      Guest and image-factory plans disagree about the selected sealed base.
+      Refusing to create or reset a VM from ambiguous provenance.
+
+- name: Inspect the Windows workshop receipt before guest operations
+  when: guest_image_plan.os_family == 'windows'
+  ansible.builtin.stat:
+    path: "{{ guest_image_plan.windows_workshop_receipt_path }}"
+  register: guest_windows_workshop_receipt_stat
+
+- name: Refuse an unsafe Windows workshop receipt before guest operations
+  when: guest_image_plan.os_family == 'windows'
+  ansible.builtin.assert:
+    that:
+      - guest_windows_workshop_receipt_stat.stat.exists | default(false)
+      - guest_windows_workshop_receipt_stat.stat.isreg | default(false)
+      - not (guest_windows_workshop_receipt_stat.stat.islnk | default(false))
+      - guest_windows_workshop_receipt_stat.stat.pw_name == 'root'
+      - guest_windows_workshop_receipt_stat.stat.gr_name == 'root'
+      - guest_windows_workshop_receipt_stat.stat.mode == '0640'
+    fail_msg: >-
+      Windows guests require the root-owned M6 workshop receipt that produced
+      the sealed image. Refusing stale or missing workshop provenance.
+
+- name: Verify the Windows workshop receipt before guest operations
+  when: guest_image_plan.os_family == 'windows'
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_windows_workshop_guard_tool }}"
+      - --policy
+      - "{{ guest_image_plan.windows_workshop_policy_path }}"
+      - --receipt
+      - "{{ guest_image_plan.windows_workshop_receipt_path }}"
+      - --image
+      - "{{ guest_image_plan.id }}"
+      - --source-sha256
+      - "{{ guest_image_plan.source_sha256 }}"
+      - --looking-glass-build
+      - "{{ hyperlab_looking_glass_build }}"
+  register: guest_windows_workshop_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the verified Windows workshop provenance
+  when: guest_image_plan.os_family == 'windows'
+  ansible.builtin.set_fact:
+    guest_windows_workshop: "{{ guest_windows_workshop_command.stdout | from_json }}"
+
+- name: Bind Windows workshop hashes into the guest image plan
+  when: guest_image_plan.os_family == 'windows'
+  ansible.builtin.set_fact:
+    guest_image_plan: >-
+      {{ guest_image_plan | combine({
+           'windows_workshop_policy_sha256': guest_windows_workshop.policy_sha256,
+           'windows_workshop_receipt_sha256': guest_windows_workshop.receipt_sha256
+         }) }}
+
+- name: Resolve the sealed base path as the kernel would
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_realpath_bin }}"
+      - -e
+      - --
+      - "{{ guest_plan.base_path }}"
+  register: guest_base_realpath
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Inspect the sealed base image
+  ansible.builtin.stat:
+    path: "{{ guest_plan.base_path }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  register: guest_base_stat
+
+- name: Inspect the image provenance receipt
+  ansible.builtin.stat:
+    path: "{{ guest_image_plan.receipt_path }}"
+  register: guest_image_receipt_stat
+
+- name: Inspect the image-store root device
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}"
+  register: guest_store_root_stat
+
+- name: Refuse a missing, redirected or non-regular sealed base
+  ansible.builtin.assert:
+    that:
+      - guest_base_realpath.rc == 0
+      - guest_base_realpath.stdout | trim == guest_plan.base_path
+      - guest_base_stat.stat.exists | default(false)
+      - guest_base_stat.stat.isreg | default(false)
+      - not guest_base_stat.stat.islnk | default(false)
+      - guest_store_root_stat.stat.isdir | default(false)
+    fail_msg: >-
+      Sealed base {{ guest_plan.base_path }} is missing, redirected or not a
+      regular file below the verified image store.
+
+- name: Refuse a missing, redirected or mutable provenance receipt
+  ansible.builtin.assert:
+    that:
+      - guest_image_receipt_stat.stat.exists | default(false)
+      - guest_image_receipt_stat.stat.isreg | default(false)
+      - not (guest_image_receipt_stat.stat.islnk | default(false))
+      - guest_image_receipt_stat.stat.pw_name == 'root'
+      - guest_image_receipt_stat.stat.gr_name == 'root'
+      - guest_image_receipt_stat.stat.mode == '0640'
+      - guest_image_receipt_stat.stat.dev == guest_store_root_stat.stat.dev
+    fail_msg: >-
+      Sealed image provenance receipt {{ guest_image_plan.receipt_path }} is
+      missing, redirected, mutable or on another filesystem.
+
+- name: Refuse a mutable, misplaced or changed sealed base
+  ansible.builtin.assert:
+    that:
+      - guest_base_stat.stat.dev == guest_store_root_stat.stat.dev
+      - guest_base_stat.stat.pw_name == 'root'
+      - guest_base_stat.stat.mode == '0440'
+      - guest_base_stat.stat.gr_name == guest_qemu_group
+      - guest_base_stat.stat.checksum == guest_plan.image_sha256
+    fail_msg: >-
+      Sealed base {{ guest_plan.base_path }} is mutable, on another filesystem,
+      unreadable by QEMU, or its SHA-256 differs from
+      {{ guest_plan.image_sha256 }}. Import and seal the image first.
+
+- name: Verify the committed base against its M5 provenance receipt
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_image_receipt_guard_tool }}"
+      - --receipt
+      - "{{ guest_image_plan.receipt_path }}"
+      - --base
+      - "{{ guest_plan.base_path }}"
+      - --qemu-img
+      - "{{ guest_qemu_img_bin }}"
+      - --mode
+      - sealed
+    stdin: "{{ guest_image_plan | to_json }}"
+  register: guest_image_receipt_validation
+  changed_when: false
+  check_mode: false
+
+- name: Publish verified image provenance evidence
+  ansible.builtin.set_fact:
+    guest_image_provenance: "{{ guest_image_receipt_validation.stdout | from_json }}"
+
+- name: Inspect sealed qcow2 metadata independently
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_qemu_img_bin }}"
+      - info
+      - --output=json
+      - "{{ guest_plan.base_path }}"
+  register: guest_base_info_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish sealed qcow2 metadata
+  ansible.builtin.set_fact:
+    guest_base_info: "{{ guest_base_info_command.stdout | from_json }}"
+
+- name: Refuse a base whose qcow2 shape disagrees with its manifest
+  ansible.builtin.assert:
+    that:
+      - guest_base_info.format == 'qcow2'
+      - guest_base_info['virtual-size'] | int == guest_plan.image_virtual_size_gib | int * 1073741824
+      - guest_base_info.get('backing-filename') is none
+      - guest_image_provenance.artifact_sha256 == guest_plan.image_sha256
+    fail_msg: >-
+      The sealed base must be an independent qcow2 whose virtual size exactly
+      matches the reviewed manifest and whose receipt proves the same SHA-256.

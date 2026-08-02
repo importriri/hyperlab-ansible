@@ -1,0 +1,17 @@
+---
+# M7/M8 service VM contract. Static leases are reviewed here and rendered into
+# persistent libvirt XML; runtime receipts may attest them but never invent a
+# different address.
+service_dhcp_leases:
+  - name: svc-jellyfin
+    mac: "52:54:00:66:29:6e"
+    ip: 10.10.5.10
+
+service_registry_receipt_root: "{{ hyperlab_root }}/state/services"
+service_registry_lock_root: "{{ hyperlab_root }}/state/locks"
+service_backup_root: "{{ hyperlab_root }}/snapshots/services"
+
+# M8 implements only Jellyfin's default HTTP endpoint. HTTPS, discovery and
+# every future service remain closed until added by a separate reviewed stage.
+service_lan_exposure_allowlist:
+  - tcp/8096

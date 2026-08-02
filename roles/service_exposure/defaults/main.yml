@@ -1,0 +1,12 @@
+---
+service_exposure_plan_tool: >-
+  {{ service_exposure_repository_root }}/tools/service_exposure_plan.py
+service_exposure_service_plan_tool: >-
+  {{ service_exposure_repository_root }}/tools/service_plan.py
+service_exposure_receipt_guard_tool: >-
+  {{ service_exposure_repository_root }}/tools/service_receipt_guard.py
+service_exposure_source_tool: >-
+  {{ service_exposure_repository_root }}/tools/service_exposure_apply.py
+service_exposure_receipt_root: "{{ hyperlab_root }}/state/services"
+service_exposure_plan: {}
+service_exposure_service_plan: {}

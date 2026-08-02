@@ -2,122 +2,279 @@
 
 [![ci](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml)
 
-Ansible configuration for the Arch/KVM/VFIO laptop built by
-[arch-bootstrap](https://github.com/importriri/arch-bootstrap).
+Stage 2 of the Hyperlab pipeline. `arch-bootstrap` creates the encrypted Arch
+host; this repository turns it into the VFIO hypervisor, local cockpit and
+private-service platform; `arch-hypervisor-lab` records the architecture and
+hardware evidence.
 
-The default target is a headless hypervisor. The local Sway desktop, Emacs
-workstation setup and Looking Glass host transport are separate playbooks and
-are never pulled in by the base lab playbook.
+The repository is built around one rule: **roles own mechanisms, checked-in
+specs own intent, playbooks define the safe order**.
 
-This is stage 2 of a three-repository project:
+## Final target
+
+The intended laptop result is:
+
+- systemd-boot defaults to the managed **VFIO** entry;
+- the dGPU belongs to reviewed VFIO guests, not the host desktop;
+- the host uses its integrated GPU for Sway and Looking Glass;
+- five libvirt domains separate clean, development, dirty, isolated-lab and
+  service traffic;
+- VM state lives below the storage contract produced by `arch-bootstrap`;
+- Windows, Linux and service guests use one transactional lifecycle engine;
+- applications run inside dedicated VMs, never as host services.
+
+## Two operator targets
+
+### Headless foundation
+
+`playbooks/foundation.yml` reconciles everything required before a local
+cockpit is useful:
+
+`base → hardware profile → KVM → VFIO boot → networks → isolation → GPU guard → storage contract → image store`
+
+Use it for a blind host, first storage validation or recovery.
+
+### Interactive laboratory
+
+`playbooks/lab.yml` imports the complete foundation, then adds:
+
+`desktop → Looking Glass host transport`
+
+This is the normal final target for Nitro and Predator. The narrow
+`desktop.yml` and `looking-glass.yml` playbooks remain available for focused
+maintenance.
+
+### Local cockpit
+
+The desktop role points `/usr/local/bin/hyperlabctl` at the reviewed checkout
+instead of copying repository code into the host. The same command drives the
+Waybar status group, the Rofi action palette and the terminal panel:
 
 ```text
-arch-bootstrap  ->  privatestack-ansible  ->  arch-hypervisor-lab
-base install        host configuration        design notes and test records
+Mod+F1  action palette
+Mod+F2  cockpit panel
+Mod+F3  diagnostic report
 ```
 
-## What `main` configures
+`hyperlabctl status --json`, `hyperlabctl doctor` and `hyperlabctl actions`
+remain usable without the graphical session. Unmanaged libvirt domains may use
+the narrow direct start and shutdown helpers. A domain carrying the managed
+Hyperlab metadata must go through its lifecycle playbook; privileged or
+destructive actions are displayed for review and are never executed directly
+from Waybar or Rofi.
 
-| Role | Purpose |
-|---|---|
-| `base` | Admin account, sudoers validation, sysctls and basic packages |
-| `hardware_probe` | Selects the Nitro RTX 3060 or Predator RTX 3070 profile and validates PCI devices |
-| `kvm_host` | Headless QEMU/libvirt installation with socket activation |
-| `image_store` | Validates and prepares `/var/lib/libvirt/images` without creating images or domains |
-| `vfio_boot` | Renders the systemd-boot profiles and reads the LUKS UUID at runtime |
-| `network_domains` | Creates four NAT networks and one isolated lab network |
-| `lab_isolation` | Loads the nftables rules that block cross-domain forwarding |
-| `gpu_handoff` | Controls which workload domain may receive the dGPU |
-| `desktop` | Optional Sway session with waybar, rofi, foot and the local shell setup |
-| `dev_ide` | Optional Emacs/eglot workstation setup for guests |
-| `looking_glass` | Optional kvmfr module, permissions and pinned client build |
-| `brick_guard` | Checks role prerequisites and records completed roles |
+The surface and its refusal boundary are recorded in
+[`ADR 0013`](docs/adr/0013-cockpit-surface.md).
 
-VM lifecycle, image sealing and service roles are intentionally not published
-on `main` yet. They remain local until their hardware checks are complete.
+## Clean-install order
 
-## Host model
+A fresh installation must come from the matching `arch-bootstrap` release
+candidate and its public `bash bootstrap` entrypoint. Stage 1 writes
+`/etc/privatestack/bootstrap-storage.yml` only after the mounted VM store passes
+its mapper, Btrfs root and `+C` checks.
 
-The base host stays TTY-only and runs the virtualization layer, network
-isolation and GPU hand-off. Applications and private services belong in VMs.
-The interactive desktop is an opt-in administration interface on the iGPU; it
-is not required for the headless target.
-
-The repository contains profiles for:
-
-- Acer Nitro 5, RTX 3060 Mobile;
-- Acer Predator Helios 300, RTX 3070 Mobile.
-
-The profile data is documented in
-[`docs/hardware-profiles.md`](docs/hardware-profiles.md). A profile being
-present does not by itself mean the full install has passed on that laptop.
-
-## Run
-
-On a freshly installed host, run the first pass as root because the `base` role
-creates the normal administrator account:
+### 1. Clone stage 2
 
 ```bash
-pacman -S --needed git ansible
 git clone https://github.com/importriri/privatestack-ansible.git
 cd privatestack-ansible
+ansible-galaxy collection install -r collections/requirements.yml
+```
 
+### 2. Validate the laptop profile
+
+```bash
 ansible-playbook playbooks/preflight.yml
+```
+
+PCI IDs come from the reviewed Nitro or Predator profile. They are not copied
+into commands or public VM manifests.
+
+### 3. Build the headless foundation
+
+```bash
+ansible-playbook playbooks/foundation.yml --check --diff
+ansible-playbook playbooks/foundation.yml
+ansible-playbook playbooks/foundation.yml
+```
+
+The third command must report `changed=0`. A missing or mismatched bootstrap
+storage contract stops the run before the Hyperlab image tree is created.
+
+An already validated legacy Nitro host may adopt its observed mount once,
+without repartitioning or remounting:
+
+```bash
+ansible-playbook playbooks/bootstrap-storage-adopt.yml --check --diff
+# repeat the real command with the exact confirmation printed by check mode
+```
+
+Fresh machines do not use adoption; they receive the contract from
+`arch-bootstrap`.
+
+### 4. Prepare and seal images
+
+Images are explicit transactions because Windows bytes and workshop evidence
+are private, while public cloud images require independently pinned checksums.
+
+```bash
+ansible-playbook playbooks/image-prepare.yml --check --diff \
+  -e image_factory_manifest=images/debian.yml \
+  -e image_factory_source_url=https://vendor.example/image.qcow2 \
+  -e image_factory_source_sha256=<64-lowercase-hex>
+```
+
+Windows first follows [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) and passes through `playbooks/windows-workshop.yml`; the resulting private qcow2 is then imported through `image-prepare.yml`. Distributions published only as installer media use the local qcow2 hand-off in [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md). A prepared base is finished with `playbooks/image-validate.yml`.
+
+### 5. Reconcile the complete laptop lab
+
+```bash
 ansible-playbook playbooks/lab.yml --check --diff
 ansible-playbook playbooks/lab.yml
-passwd sid
+ansible-playbook playbooks/lab.yml
 ```
 
-Later runs can use:
+The last pass must report `changed=0`. `lab.yml` includes the desktop and
+Looking Glass host side because they are part of the intended laptop workflow,
+not optional documentation examples.
+
+The signed Windows Looking Glass application, virtual display and interactive
+Windows account setup remain guest-side manual steps. Host automation cannot
+safely infer or redistribute them.
+
+### 6. Create workloads deliberately
+
+VM lifecycle stays outside `lab.yml`. A host update must never imply create,
+reset, stop or destroy decisions for private workloads.
 
 ```bash
-ansible-playbook playbooks/lab.yml --ask-become-pass
+ansible-playbook playbooks/vm-create.yml --check --diff \
+  -e guest_spec=vm-specs/debian-dev.yml \
+  -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
+
+ansible-playbook playbooks/vm-create.yml \
+  -e guest_spec=vm-specs/win11clean-valley.yml
 ```
 
-A second run after a successful apply should report `changed=0`.
-
-Optional playbooks:
+The disposable Arch release-gate guest uses the same lifecycle boundary:
 
 ```bash
-ansible-playbook playbooks/desktop.yml --ask-become-pass
-ansible-playbook playbooks/dev.yml --ask-become-pass
-ansible-playbook playbooks/looking-glass.yml --ask-become-pass
+hyperlabctl actions --resolve image.import --manifest images/arch.yml
+hyperlabctl actions --resolve vm.create --spec vm-specs/arch-bootstrap-gate.yml
+hyperlabctl actions --resolve vm.managed-start --spec vm-specs/arch-bootstrap-gate.yml
 ```
 
-The Windows side of Looking Glass remains manual because it installs a signed
-Windows executable. The guest steps are in
-[`arch-hypervisor-lab/configs/looking-glass.md`](https://github.com/importriri/arch-hypervisor-lab/blob/main/configs/looking-glass.md).
+Hyperctl resolves reviewed targets to quoted commands; Ansible performs the
+privileged image and VM transactions. The Arch base is the versioned official
+arch-boxes cloud image, while the instance disk is grown to 20 GiB for the
+storage gate.
 
-## Repository layout
+Standard and VFIO specs use the same planner, locks, capacity checks, provenance
+chain and rollback boundary. Forced stop, reset and destruction require exact
+confirmations.
 
-```text
-group_vars/all/   shared identity, boot, network and hardware data
-playbooks/        entry points
-roles/            one role per host function
-schemas/          image and VM specification schemas
-images/           image manifests; image files never enter Git
-vm-specs/         example VM specifications
-docs/adr/         design decisions
-tests/            render, refusal and protocol checks
+### 7. Register services before creating them
+
+```bash
+ansible-playbook playbooks/service-register.yml --check --diff \
+  -e service_spec=service-specs/svc-jellyfin.yml
+ansible-playbook playbooks/service-register.yml \
+  -e service_spec=service-specs/svc-jellyfin.yml
+
+ansible-playbook playbooks/vm-create.yml \
+  -e guest_spec=vm-specs/svc-jellyfin.yml \
+  -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
+
+ansible-playbook playbooks/jellyfin.yml
 ```
 
-A new role needs its own playbook, prerequisite entry, `brick_guard` stamp and
-tests. In [`group_vars/all/bricks.yml`](group_vars/all/bricks.yml),
-`brick_requires` is the dependency graph and `brick_playbooks` maps every role
-to the playbook that installs it.
+Registration owns the service identity, static lease, inactive RAM reservation
+and offline recovery policy before the VM exists.
 
-## Verification
-
-Run the same discovery-based checks used by CI:
+### 8. Verify the repository contract
 
 ```bash
 ./verify.sh
 ```
 
-The verification covers Ansible lint, playbook syntax, rendered configuration,
-Python contract tests, ShellCheck and Bats suites when the corresponding files
-are present. Deliberate failure cases are documented in
-[`tests/MUTATIONS.md`](tests/MUTATIONS.md).
+CI and `verify.sh` discover every playbook, structural contract, refusal suite,
+schema mutation, render test, Bats protocol and shell script. CI proves the
+software contract; Nitro and Predator prove frozen commits on real hardware.
+
+The focused Nitro boundary for the integrated desktop surface is automated by:
+
+```bash
+./run-nitro-m9-cockpit-gate.sh
+```
+
+It records the repository battery, network and desktop idempotence, action
+registry, event stream and the intentionally refused unsealed-image create.
+Only the printed Sway/Waybar checks remain interactive.
+
+### 9. Run the evidence campaign
+
+The final campaign is not a checklist edited by hand. M9 creates a canonical
+plan, a mode-`0600` evidence scaffold and ordered gate records:
+
+```text
+release_acceptance.py   plan → scaffold → record → status → seal
+release_probe.py        storage, Ansible recap and typed file/scalar evidence
+```
+
+Start with [`docs/release-evidence.md`](docs/release-evidence.md). It contains the
+exact Nitro-first command order, the disposable two-disk gate, the Predator
+reuse rule and the milestone merge boundary.
+
+## Why VM creation is not inside `lab.yml`
+
+A single all-powerful playbook looks convenient but creates the wrong safety
+boundary:
+
+- image sealing may need private local input and operator-reviewed hashes;
+- VFIO start depends on current GPU ownership and available memory;
+- reset and destruction are lifecycle decisions, not host configuration;
+- service VMs must be registered before their disks and domains exist.
+
+`lab.yml` therefore owns the **complete host target**. Workload playbooks own
+**explicit transactions**. This gives one clear installation path without
+turning every host reconciliation into a workload event.
+
+## Repository map
+
+- [`docs/playbooks.md`](docs/playbooks.md) — playbooks grouped by operator intent
+  and the commands that belong together.
+- [`docs/brick-catalog.md`](docs/brick-catalog.md) — roles grouped by the
+  responsibility they protect, without a flat status table.
+- [`docs/release-evidence.md`](docs/release-evidence.md) — frozen commits,
+  probe-driven evidence and ordered merge gates.
+- [`docs/roadmap.md`](docs/roadmap.md) — stacked milestones and final hardware
+  campaign.
+- [`docs/adr/`](docs/adr/) — decisions and rejected alternatives.
+- [`docs/hardware-profiles.md`](docs/hardware-profiles.md) — Nitro and Predator
+  profile boundaries.
+- [`docs/network-reconciliation.md`](docs/network-reconciliation.md) — network
+  ownership and drift handling.
+- [`docs/service-vm-contract.md`](docs/service-vm-contract.md) — service
+  registration, backup and restore.
+- [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — the
+  temporary virt-manager boundary, Windows evidence and sealing order.
+- [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md) — ISO installation
+  media converted into a local qcow2 transaction.
+
+Policy data lives under `group_vars/all/`, image manifests under `images/`, VM
+instances under `vm-specs/`, service ownership under `service-specs/`, and
+schemas under `schemas/`. Disk images, credentials, signed guest binaries and
+host-local PCI addresses never enter Git.
+
+## Development rule
+
+One brick does one job. Comments explain **why a boundary exists**; module names
+and upstream documentation already explain mechanics. A new brick needs:
+
+1. one role;
+2. one narrow playbook or a deliberate place in a broad target;
+3. declared prerequisites in `group_vars/all/bricks.yml`;
+4. executable contracts that prove its refusal and ownership boundaries.
 
 ## License
 

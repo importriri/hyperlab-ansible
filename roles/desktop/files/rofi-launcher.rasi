@@ -1,77 +1,140 @@
-/* launcher: centred card, icon list, mauve selection */
+/* Dark translucent application launcher: no inherited light rows. */
+@import "rofi-mocha.rasi"
+
+* {
+    background-color: @transparent;
+    text-color:       @text;
+}
+
 window {
     transparency:     "real";
-    background-color: @base;
+    background-color: #1e1e2ef2;
     text-color:       @text;
     border:           2px;
-    border-color:     @mauve;
+    border-color:     @surface1;
     border-radius:    14px;
-    width:            36%;
+    width:            560px;
     location:         center;
     padding:          0px;
 }
+
 mainbox {
     background-color: @transparent;
     children:         [ inputbar, message, listview ];
     spacing:          0px;
-    padding:          10px;
+    padding:          12px;
 }
+
 inputbar {
-    background-color: @mantle;
+    background-color: #181825f2;
     text-color:       @text;
+    border:           1px;
+    border-color:     @surface1;
     border-radius:    10px;
     padding:          10px 14px;
-    margin:           0px 0px 8px 0px;
+    margin:           0px 0px 10px 0px;
     children:         [ prompt, entry ];
     spacing:          10px;
 }
+
 prompt {
     background-color: @transparent;
     text-color:       @mauve;
 }
+
 entry {
-    background-color: @transparent;
-    text-color:       @text;
-    placeholder:      "search";
+    background-color:  @transparent;
+    text-color:        @text;
+    placeholder:       "cerca applicazione";
     placeholder-color: @overlay0;
-    cursor:           text;
+    cursor:            text;
 }
+
 message {
     background-color: @transparent;
     padding:          0px;
 }
+
+textbox {
+    background-color: @transparent;
+    text-color:       @subtext0;
+}
+
 listview {
     background-color: @transparent;
     columns:          1;
-    lines:            9;
-    spacing:          2px;
+    lines:            8;
+    spacing:          4px;
     cycle:            false;
     dynamic:          true;
     scrollbar:        false;
 }
+
 element {
+    orientation:      horizontal;
+    children:         [ element-icon, element-text ];
     background-color: @transparent;
     text-color:       @subtext0;
-    border-radius:    10px;
-    padding:          7px 10px;
+    border:           1px;
+    border-color:     @transparent;
+    border-radius:    9px;
+    padding:          8px 10px;
     spacing:          12px;
     cursor:           pointer;
 }
+
+element normal.normal {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border-color:     @transparent;
+}
+
+element alternate.normal {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border-color:     @transparent;
+}
+
+element normal.active {
+    background-color: @transparent;
+    text-color:       @blue;
+    border-color:     @transparent;
+}
+
+element normal.urgent {
+    background-color: @transparent;
+    text-color:       @red;
+    border-color:     @transparent;
+}
+
+element selected.normal {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @mauve;
+}
+
+element selected.active {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @mauve;
+}
+
+element selected.urgent {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @mauve;
+}
+
 element-icon {
     background-color: @transparent;
+    text-color:       inherit;
     size:             24px;
     cursor:           inherit;
 }
+
 element-text {
     background-color: @transparent;
     text-color:       inherit;
     vertical-align:   0.5;
     cursor:           inherit;
-}
-element selected.normal {
-    background-color: @mauve;
-    text-color:       @crust;
-}
-element alternate.normal {
-    background-color: @transparent;
 }

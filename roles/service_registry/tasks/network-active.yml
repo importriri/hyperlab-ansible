@@ -1,0 +1,25 @@
+---
+- name: Read active services network XML
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - net-dumpxml
+      - services
+  register: service_registry_active_network_xml
+  changed_when: false
+  check_mode: false
+
+- name: Verify active DHCP ownership before registration
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_network_guard_tool }}"
+      - --name
+      - "{{ service_registry_plan.id }}"
+      - --mac
+      - "{{ service_registry_plan.dhcp.mac }}"
+      - --ip
+      - "{{ service_registry_plan.dhcp.ip }}"
+    stdin: "{{ service_registry_active_network_xml.stdout }}"
+  changed_when: false
+  check_mode: false

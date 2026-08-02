@@ -1,0 +1,23 @@
+---
+schema_version: 1
+name: svc-jellyfin
+image: debian
+lifecycle: permanent
+device_profile: standard
+network_profile: services
+resources:
+  memory_mb: 4096
+  vcpus: 4
+  disk_gib: 64
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: false
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Private Jellyfin service appliance
+tags: [linux, service, jellyfin]
+snapshot_policy: none
+backup_policy: weekly

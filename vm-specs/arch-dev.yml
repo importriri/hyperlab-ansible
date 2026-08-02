@@ -8,7 +8,7 @@ network_profile: dev
 resources:
   memory_mb: auto
   vcpus: 4
-  disk_gib: null
+  disk_gib: 20
 memory_overcommit: false
 autostart: false
 qemu_guest_agent: true

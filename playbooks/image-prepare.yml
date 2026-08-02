@@ -1,0 +1,13 @@
+---
+- name: Acquire or import and prepare one verified Hyperlab base image
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    image_factory_operation: prepare
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: image_factory
+    - image_factory

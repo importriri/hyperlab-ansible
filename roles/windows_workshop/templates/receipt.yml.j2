@@ -1,0 +1,16 @@
+---
+schema_version: 1
+id: {{ windows_workshop_result.id }}
+image: {{ windows_workshop_result.image }}
+policy_sha256: {{ windows_workshop_result.policy_sha256 }}
+evidence_sha256: {{ windows_workshop_result.evidence_sha256 }}
+source_sha256: {{ windows_workshop_result.source_sha256 }}
+identity_mode: {{ windows_workshop_result.identity_mode }}
+generalized: {{ windows_workshop_result.generalized | bool | lower }}
+setup_image_state: {{ windows_workshop_result.setup_image_state }}
+looking_glass_build: {{ windows_workshop_result.looking_glass_build }}
+capture_interface: {{ windows_workshop_result.capture_interface }}
+virtual_display: {{ windows_workshop_result.virtual_display | to_json }}
+collected_at_utc: {{ windows_workshop_result.collected_at_utc | to_json }}
+private: true
+ready: true

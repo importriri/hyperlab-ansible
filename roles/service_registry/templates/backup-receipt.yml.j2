@@ -1,0 +1,12 @@
+---
+schema_version: 1
+service_id: {{ service_registry_backup_context.id }}
+vm: {{ service_registry_backup_context.vm }}
+backup_id: {{ service_registry_backup_context.backup_id }}
+service_spec_sha256: {{ service_registry_backup_context.spec_sha256 }}
+service_vm_spec_sha256: {{ service_registry_backup_context.vm_spec_sha256 }}
+service_receipt_sha256: {{ service_registry_backup_context.service_receipt_sha256 }}
+source_disk_path: {{ service_registry_backup_context.disk_path | to_json }}
+disk_sha256: {{ service_registry_backup_disk_stat.stat.checksum }}
+virtual_size_bytes: {{ service_registry_backup_disk_info['virtual-size'] }}
+qemu_img_check: pass

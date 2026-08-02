@@ -1,0 +1,129 @@
+<domain type="kvm"{% if guest_plan.device_profile == 'vfio' %} xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0"{% endif %}>
+  <name>{{ guest_plan.name }}</name>
+  <uuid>{{ guest_plan.uuid }}</uuid>
+  <metadata>
+    <hyperlab:instance xmlns:hyperlab="https://github.com/importriri/privatestack-ansible/hyperlab/1"
+      schema="1"
+      image="{{ guest_plan.image }}"
+      lifecycle="{{ guest_plan.lifecycle }}"
+      device-profile="{{ guest_plan.device_profile }}"
+      network-profile="{{ guest_plan.network_profile }}"/>
+  </metadata>
+  <memory unit="MiB">{{ guest_resolved_memory_mb }}</memory>
+  <currentMemory unit="MiB">{{ guest_resolved_memory_mb }}</currentMemory>
+  <vcpu placement="static">{{ guest_plan.vcpus }}</vcpu>
+  <os{% if guest_plan.requires_uefi %} firmware="efi"{% endif %}>
+    <type arch="x86_64" machine="q35">hvm</type>
+{% if guest_plan.requires_secure_boot %}
+    <firmware>
+      <feature enabled="yes" name="secure-boot"/>
+      <feature enabled="yes" name="enrolled-keys"/>
+    </firmware>
+{% endif %}
+{% if guest_plan.requires_uefi %}
+    <nvram>{{ guest_plan.nvram_path }}</nvram>
+{% endif %}
+    <boot dev="hd"/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <vmport state="off"/>
+{% if guest_plan.device_profile == 'vfio' %}
+    <hyperv mode="custom">
+      <relaxed state="on"/>
+      <vapic state="on"/>
+      <spinlocks state="on" retries="8191"/>
+      <vendor_id state="on" value="hyperlab"/>
+    </hyperv>
+    <kvm>
+      <hidden state="on"/>
+    </kvm>
+{% endif %}
+  </features>
+  <cpu mode="host-passthrough" check="none" migratable="{{ 'off' if guest_plan.device_profile == 'vfio' else 'on' }}"/>
+  <clock offset="utc">
+    <timer name="rtc" tickpolicy="catchup"/>
+    <timer name="pit" tickpolicy="delay"/>
+    <timer name="hpet" present="no"/>
+{% if guest_plan.os_family == 'windows' %}
+    <timer name="hypervclock" present="yes"/>
+{% endif %}
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2" cache="none" discard="unmap"/>
+      <source file="{{ guest_plan.disk_path }}">
+        <seclabel model="dac" relabel="no"/>
+      </source>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+{% if guest_plan.cloud_init %}
+    <disk type="file" device="cdrom">
+      <driver name="qemu" type="raw"/>
+      <source file="{{ guest_plan.seed_image }}"/>
+      <target dev="sda" bus="sata"/>
+      <readonly/>
+    </disk>
+{% endif %}
+    <interface type="network">
+      <mac address="{{ guest_plan.mac }}"/>
+      <source network="{{ guest_plan.network_profile }}"/>
+      <model type="virtio"/>
+    </interface>
+    <serial type="pty">
+      <target type="isa-serial" port="0"/>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+{% if guest_plan.qemu_guest_agent %}
+    <channel type="unix">
+      <target type="virtio" name="org.qemu.guest_agent.0"/>
+    </channel>
+{% endif %}
+{% if guest_plan.device_profile == 'vfio' %}
+{% for device in guest_vfio.devices %}
+    <hostdev mode="subsystem" type="pci" managed="yes">
+      <driver name="vfio"/>
+      <source>
+        <address domain="{{ device.xml_domain }}" bus="{{ device.xml_bus }}" slot="{{ device.xml_slot }}" function="{{ device.xml_function }}"/>
+      </source>
+    </hostdev>
+{% endfor %}
+{% endif %}
+    <graphics type="spice"{% if guest_plan.device_profile == 'vfio' %} port="{{ guest_vfio.spice_port }}" autoport="no"{% else %} autoport="yes"{% endif %} listen="127.0.0.1">
+      <listen type="address" address="127.0.0.1"/>
+      <clipboard copypaste="{{ 'yes' if guest_plan.clipboard else 'no' }}"/>
+      <filetransfer enable="no"/>
+    </graphics>
+    <video>
+      <model type="vga" vram="16384" heads="1" primary="yes"/>
+    </video>
+{% if guest_plan.device_profile == 'vfio' %}
+    <input type="mouse" bus="virtio"/>
+    <input type="keyboard" bus="virtio"/>
+{% else %}
+    <input type="tablet" bus="usb"/>
+{% endif %}
+{% if guest_plan.requires_tpm2 %}
+    <tpm model="tpm-crb">
+      <backend type="emulator" version="2.0" persistent_state="yes">
+        <source type="dir" path="{{ guest_plan.tpm_path }}"/>
+      </backend>
+    </tpm>
+{% endif %}
+    <memballoon model="{{ 'none' if guest_plan.device_profile == 'vfio' else 'virtio' }}"/>
+  </devices>
+{% if guest_plan.device_profile == 'vfio' %}
+  <qemu:commandline>
+    <qemu:arg value="-device"/>
+    <qemu:arg value="{'driver':'ivshmem-plain','id':'shmem0','memdev':'looking-glass'}"/>
+    <qemu:arg value="-object"/>
+    <qemu:arg value="{'qom-type':'memory-backend-file','id':'looking-glass','mem-path':'{{ guest_vfio.looking_glass_device }}','size':{{ guest_vfio.looking_glass_shm_bytes }},'share':true}"/>
+  </qemu:commandline>
+{% endif %}
+</domain>

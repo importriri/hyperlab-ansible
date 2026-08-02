@@ -1,0 +1,16 @@
+#cloud-config
+hostname: {{ guest_plan.name | to_json }}
+manage_etc_hosts: true
+preserve_hostname: false
+ssh_pwauth: false
+disable_root: true
+users:
+  - name: {{ guest_cloud_init_user | to_json }}
+    sudo: "ALL=(ALL:ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+{% for key in guest_cloud_init_ssh_public_keys %}
+      - {{ key | to_json }}
+{% endfor %}
+package_update: false

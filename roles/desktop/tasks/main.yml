@@ -1,4 +1,24 @@
 ---
+- name: Inspect the configured Hyperlab checkout before host writes
+  ansible.builtin.stat:
+    path: "{{ desktop_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
+  register: desktop_hyperlab_checkout_stat
+  changed_when: false
+
+- name: Refuse a checkout that cannot supply the cockpit CLI
+  ansible.builtin.assert:
+    that:
+      - desktop_hyperlab_checkout is string
+      - desktop_hyperlab_checkout is match('^/')
+      - desktop_hyperlab_checkout_stat.stat.exists | default(false)
+      - desktop_hyperlab_checkout_stat.stat.isreg | default(false)
+      - not (desktop_hyperlab_checkout_stat.stat.islnk | default(false))
+      - desktop_hyperlab_checkout_stat.stat.executable | default(false)
+    fail_msg: >-
+      desktop_hyperlab_checkout must be an absolute checkout containing an
+      executable tools/hyperlabctl/bin/hyperlabctl. Correct the variable before
+      installing or repointing the desktop cockpit.
+
 - name: Install the desktop stack
   community.general.pacman:
     name: "{{ desktop_packages }}"
@@ -19,6 +39,9 @@
   loop:
     - { src: privatestack-cava.sh, dest: privatestack-cava }
     - { src: privatestack-powermenu.sh, dest: privatestack-powermenu }
+    - { src: privatestack-hyperlab.sh, dest: privatestack-hyperlab }
+    - { src: privatestack-hyperlab-palette.sh, dest: privatestack-hyperlab-palette }
+    - { src: hyperlabctl-wrapper.sh, dest: hyperlabctl }
 
 - name: Create the wallpaper directory
   ansible.builtin.file:
@@ -70,11 +93,57 @@
     - { src: rofi-mocha.rasi, dest: rofi/rofi-mocha.rasi }
     - { src: rofi-launcher.rasi, dest: rofi/rofi-launcher.rasi }
     - { src: rofi-powermenu.rasi, dest: rofi/rofi-powermenu.rasi }
+    - { src: rofi-hyperlab.rasi, dest: rofi/rofi-hyperlab.rasi }
     - { src: cava.conf, dest: cava/config }
     - { src: cava-waybar.conf, dest: cava/cava-waybar.conf }
     - { src: swaylock.conf, dest: swaylock/config }
     - { src: gtk3-settings.ini, dest: gtk-3.0/settings.ini }
     - { src: starship.toml, dest: starship.toml }
+
+- name: Create the CLI pointer directory
+  ansible.builtin.file:
+    path: /etc/hyperlabctl
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Point the cockpit at the checkout the CLI must read
+  ansible.builtin.copy:
+    content: "{{ desktop_hyperlab_checkout }}\n"
+    dest: /etc/hyperlabctl/checkout
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the cockpit extension directory
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/.config/hyperlabctl/providers"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+
+- name: Generate shell completion from the subcommands that exist
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ desktop_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
+      - completion
+  register: desktop_hyperlab_completion
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install the completion, when the CLI could produce one
+  ansible.builtin.copy:
+    content: "{{ desktop_hyperlab_completion.stdout }}\n"
+    dest: /usr/share/bash-completion/completions/hyperlabctl
+    owner: root
+    group: root
+    mode: "0644"
+  when: desktop_hyperlab_completion.rc == 0
 
 - name: Read the recorded hardware profile, when this host has one
   ansible.builtin.slurp:

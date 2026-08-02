@@ -1,0 +1,13 @@
+---
+# M6 Windows guest workshop evidence handoff.
+windows_workshop_repository_root: "{{ playbook_dir | dirname }}"
+windows_workshop_policy: ""
+windows_workshop_evidence: ""
+windows_workshop_manifest: ""
+windows_workshop_local_source: ""
+windows_workshop_source_sha256: ""
+
+windows_workshop_python_bin: /usr/bin/python
+windows_workshop_mv_bin: /usr/bin/mv
+windows_workshop_mkdir_bin: /usr/bin/mkdir
+windows_workshop_rmdir_bin: /usr/bin/rmdir

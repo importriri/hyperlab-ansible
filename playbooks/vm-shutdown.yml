@@ -1,0 +1,13 @@
+---
+- name: Shutdown one managed standard Hyperlab VM
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    guest_operation: shutdown
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest
+    - guest

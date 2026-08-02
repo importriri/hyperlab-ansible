@@ -1,0 +1,257 @@
+---
+- name: Build the service backup plan
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_recovery_plan_tool }}"
+      - --operation
+      - backup
+      - --backup-id
+      - "{{ service_backup_id }}"
+    stdin: "{{ service_registry_plan | to_json }}"
+  register: service_registry_recovery_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the service backup plan
+  ansible.builtin.set_fact:
+    service_registry_recovery_plan: >-
+      {{ service_registry_recovery_plan_command.stdout | from_json }}
+
+- name: Require the service domain to be shut off for backup
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - domstate
+      - "{{ service_registry_plan.vm }}"
+  register: service_registry_backup_domain_state
+  changed_when: false
+  check_mode: false
+
+- name: Refuse live or ambiguous service backup
+  ansible.builtin.assert:
+    that:
+      - service_registry_backup_domain_state.stdout | trim == 'shut off'
+    fail_msg: >-
+      Service backups are offline-only. Shut down
+      {{ service_registry_plan.vm }} cleanly before backup.
+
+- name: Inspect source disk, receipt and backup paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  loop:
+    - {name: disk, path: "{{ service_registry_plan.disk_path }}"}
+    - {name: receipt, path: "{{ service_registry_plan.receipt_path }}"}
+    - {name: backup, path: "{{ service_registry_recovery_plan.backup_dir }}"}
+    - {name: staging, path: "{{ service_registry_recovery_plan.backup_staging_dir }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_backup_paths
+
+- name: Publish source disk and receipt observations
+  ansible.builtin.set_fact:
+    service_registry_backup_source_disk: "{{ service_registry_backup_paths.results[0] }}"
+    service_registry_backup_source_receipt: "{{ service_registry_backup_paths.results[1] }}"
+
+- name: Refuse unsafe source or existing backup transaction
+  ansible.builtin.assert:
+    that:
+      - service_registry_backup_source_disk.stat.exists | default(false)
+      - service_registry_backup_source_disk.stat.isreg | default(false)
+      - not (service_registry_backup_source_disk.stat.islnk | default(false))
+      - service_registry_backup_source_disk.stat.pw_name == service_registry_qemu_user
+      - service_registry_backup_source_disk.stat.gr_name == service_registry_qemu_group
+      - service_registry_backup_source_disk.stat.mode == '0640'
+      - service_registry_backup_source_receipt.stat.checksum == service_registry_receipt_sha256
+      - not (service_registry_backup_paths.results[2].stat.exists | default(false))
+      - not (service_registry_backup_paths.results[3].stat.exists | default(false))
+    fail_msg: >-
+      Source disk/receipt is unsafe or backup/staging already exists. A backup ID
+      is immutable and may never be overwritten.
+
+- name: Publish service backup provenance context
+  ansible.builtin.set_fact:
+    service_registry_backup_context: >-
+      {{ service_registry_plan
+         | combine(service_registry_recovery_plan)
+         | combine({'service_receipt_sha256': service_registry_receipt_sha256}) }}
+
+- name: Predict verified offline backup in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would build and verify immutable offline backup
+      {{ service_registry_recovery_plan.backup_id }} for
+      {{ service_registry_plan.id }}, then atomically rename its directory.
+  changed_when: true
+
+- name: Build and commit the offline backup transaction
+  when: not ansible_check_mode
+  block:
+    - name: Create service backup and lock roots
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ service_registry_backup_root }}"
+        - "{{ service_registry_plan.backup_dir }}"
+        - "{{ service_registry_lock_root }}"
+
+    - name: Acquire the per-service backup lock
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_mkdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_backup_lock
+      changed_when: service_registry_backup_lock.rc == 0
+
+    - name: Build the backup while owning the service lock
+      block:
+        - name: Reinspect immutable backup paths under lock
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ service_registry_recovery_plan.backup_dir }}"
+            - "{{ service_registry_recovery_plan.backup_staging_dir }}"
+          register: service_registry_locked_backup_paths
+
+        - name: Refuse backup paths changed after lock acquisition
+          ansible.builtin.assert:
+            that:
+              - >-
+                service_registry_locked_backup_paths.results
+                | map(attribute='stat.exists')
+                | select('equalto', true)
+                | list | length == 0
+            fail_msg: Another transaction created this backup ID under lock.
+
+        - name: Create the atomic backup staging directory
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.backup_staging_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0750"
+
+        - name: Convert the offline service disk into an independent backup
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - convert
+              - -f
+              - qcow2
+              - -O
+              - qcow2
+              - -o
+              - compat=1.1,lazy_refcounts=on
+              - "{{ service_registry_plan.disk_path }}"
+              - "{{ service_registry_recovery_plan.backup_staging_disk }}"
+          changed_when: true
+
+        - name: Check the staged service backup disk
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - check
+              - -f
+              - qcow2
+              - "{{ service_registry_recovery_plan.backup_staging_disk }}"
+          changed_when: false
+
+        - name: Read staged service backup metadata
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - info
+              - --output=json
+              - "{{ service_registry_recovery_plan.backup_staging_disk }}"
+          register: service_registry_backup_disk_info_command
+          changed_when: false
+
+        - name: Publish staged service backup metadata
+          ansible.builtin.set_fact:
+            service_registry_backup_disk_info: >-
+              {{ service_registry_backup_disk_info_command.stdout | from_json }}
+
+        - name: Refuse a dependent or malformed service backup disk
+          ansible.builtin.assert:
+            that:
+              - service_registry_backup_disk_info.format == 'qcow2'
+              - service_registry_backup_disk_info.get('backing-filename') is none
+              - service_registry_backup_disk_info['virtual-size'] | int > 0
+            fail_msg: Service backup must be an independent qcow2 image.
+
+        - name: Protect the staged backup disk
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.backup_staging_disk }}"
+            owner: root
+            group: root
+            mode: "0440"
+
+        - name: Hash the staged service backup disk
+          ansible.builtin.stat:
+            path: "{{ service_registry_recovery_plan.backup_staging_disk }}"
+            checksum_algorithm: sha256
+            get_checksum: true
+          register: service_registry_backup_disk_stat
+
+        - name: Render the service backup receipt in staging
+          ansible.builtin.template:
+            src: backup-receipt.yml.j2
+            dest: "{{ service_registry_recovery_plan.backup_staging_receipt }}"
+            owner: root
+            group: root
+            mode: "0640"
+
+        - name: Verify the complete staged service backup
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_python_bin }}"
+              - "{{ service_registry_backup_guard_tool }}"
+              - --receipt
+              - "{{ service_registry_recovery_plan.backup_staging_receipt }}"
+              - --disk
+              - "{{ service_registry_recovery_plan.backup_staging_disk }}"
+              - --qemu-img
+              - "{{ service_registry_qemu_img_bin }}"
+            stdin: "{{ service_registry_backup_context | to_json }}"
+          changed_when: false
+          check_mode: false
+
+        - name: Commit the verified backup directory atomically  # noqa command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_mv_bin }}"
+              - "{{ service_registry_recovery_plan.backup_staging_dir }}"
+              - "{{ service_registry_recovery_plan.backup_dir }}"
+          changed_when: true
+
+      rescue:
+        - name: Remove only the failed backup staging directory
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.backup_staging_dir }}"
+            state: absent
+
+        - name: Fail after rolling back service backup staging
+          ansible.builtin.fail:
+            msg: >-
+              Service backup failed and only its staging directory was removed.
+              The live service disk and committed backups were untouched.
+
+      always:
+        - name: Release the per-service backup lock
+          when:
+            - service_registry_backup_lock is defined
+            - service_registry_backup_lock.rc == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_rmdir_bin }}"
+              - "{{ service_registry_plan.lock_path }}"
+          register: service_registry_backup_unlock
+          changed_when: service_registry_backup_unlock.rc == 0
+          failed_when: service_registry_backup_unlock.rc != 0

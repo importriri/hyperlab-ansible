@@ -140,7 +140,7 @@
     - name: Boot entry invariants (the M0 bug classes, pinned forever)
       ansible.builtin.assert:
         that:
-          - render_entry_text | regex_findall('(?m)\\$') | length == 0
+          - render_entry_text | regex_findall('(?m)\$') | length == 0
           - render_entry_text | regex_findall('(?m)^options ') | length >= 2
           - "'cryptdevice' not in render_entry_text"
           - "'YOUR-LUKS-UUID' not in render_entry_text"
@@ -157,7 +157,9 @@
         label: "{{ item.item.file }}"
       vars:
         render_entry_text: "{{ item.content | b64decode }}"
-        render_entry_keys: "{{ render_entry_text | regex_findall('(?m)^options\\s+(.*)$') | join(' ') | split | map('regex_replace', '=.*', '') | list }}"
+        render_entry_keys: >-
+          {{ render_entry_text | regex_findall('(?m)^options\s+(.*)$')
+             | join(' ') | split | map('regex_replace', '=.*', '') | list }}
 
     - name: The runtime UUID guard must reject the placeholder shape
       ansible.builtin.assert:
@@ -242,14 +244,14 @@
     - name: Matrix invariants (flush scope, completeness, priority, reload-only)
       ansible.builtin.assert:
         that:
-          - render_nft_matrix | regex_findall('(?m)^\\s*flush ruleset') | length == 0
+          - render_nft_matrix | regex_findall('(?m)^\s*flush ruleset') | length == 0
           - render_nft_matrix | regex_findall('flush table inet lab_isolation') | length == 1
           - render_nft_matrix | regex_findall('iifname "virbr-[a-z]+" oifname "virbr-[a-z]+" counter drop') | length == render_nft_pairs | int
           - "'priority -10' in render_nft_matrix"
           - "'policy accept' in render_nft_matrix"
           - "'iifname \"virbr-lab\" counter drop' in render_nft_matrix"
           - "'oifname \"virbr-lab\" counter drop' in render_nft_matrix"
-          - render_nft_conf | regex_findall('(?m)^\\s*flush ruleset') | length == 0
+          - render_nft_conf | regex_findall('(?m)^\s*flush ruleset') | length == 0
           - "'include \"/etc/nftables.d/*.nft\"' in render_nft_conf"
           - "'state: reloaded' in render_nft_handlers"
           - "'state: restarted' not in render_nft_handlers"
@@ -315,8 +317,12 @@
         - roles/desktop/files/rofi-powermenu.rasi
         - roles/desktop/files/privatestack-cava.sh
         - roles/desktop/files/cava-waybar.conf
+        - roles/desktop/files/privatestack-hyperlab.sh
+        - roles/desktop/files/privatestack-hyperlab-palette.sh
+        - roles/desktop/files/hyperlabctl-wrapper.sh
+        - roles/desktop/files/waybar.css
 
-    - name: Cockpit invariants (opt-in, wayland-pure, guests-only IDE)
+    - name: Cockpit invariants (final lab, Wayland-pure, guests-only IDE)
       ansible.builtin.assert:
         that:
           - "'sway' in render_desk_pkgs"
@@ -334,8 +340,10 @@
           - "'emacs' not in render_ide_pkgs"
           - "render_desktop_hosts == 'hypervisor:workstations'"
           - "render_dev_hosts == 'workstations'"
-          - "'desktop' not in render_lab_roles"
-          - "'dev_ide' not in render_lab_roles"
+          - "render_lab[0].import_playbook == 'foundation.yml'"
+          - "'desktop' in render_lab[1].roles"
+          - "'looking_glass' in render_lab[1].roles"
+          - "'dev_ide' not in render_lab[1].roles"
         quiet: true
       vars:
         render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_packages }}"
@@ -347,7 +355,7 @@
         render_ide_pkgs: "{{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_packages }}"
         render_desktop_hosts: "{{ (render_cockpit.results[3].content | b64decode | from_yaml)[0].hosts }}"
         render_dev_hosts: "{{ (render_cockpit.results[4].content | b64decode | from_yaml)[0].hosts }}"
-        render_lab_roles: "{{ (render_cockpit.results[5].content | b64decode | from_yaml)[0].roles }}"
+        render_lab: "{{ render_cockpit.results[5].content | b64decode | from_yaml }}"
 
     - name: Rice invariants (helpers executable, every path agrees with every file)
       ansible.builtin.assert:
@@ -421,6 +429,118 @@
           - tooltip
           - notification
 
+    - name: Cockpit control invariants (the bar may only offer what the CLI has)
+      ansible.builtin.assert:
+        that:
+          - "'group/hyperlab' in render_waybar['modules-right']"
+          - "render_waybar['group/hyperlab']['modules'][0] == 'custom/hyperlab'"
+          - "render_hyper_modules | length == 4"
+          - "render_hyper_execs | length == 1"
+          - "render_hyper_execs | difference(render_desk_bin_paths) == []"
+          - "render_hyper_clicks | difference(render_hyper_allowed_clicks) == []"
+          - "render_hyper_collapsed.interval is not defined"
+          - "'watch' in render_hyper_collapsed.exec"
+          - "render_hyper_collapsed['restart-interval'] | int > 0"
+          - "render_hyper_drawer | length == 3"
+          - "render_hyper_intervals | min | int >= 15"
+          - "render_hyper_signals | unique | length == 1"
+          - "render_hyper_signals[0] | int == render_cli_signal | int"
+          - "render_hyper_fields | sort == ['gpu', 'ram', 'trust', 'vms']"
+          - "render_hyper_css_classes | difference(render_hyper_states) == []"
+          - "'hyperlabctl' in render_desk_dests"
+          - "render_pointer_mode == '0644'"
+          - "render_desk_bin_modes | unique == ['0755']"
+          - "'hyperlab-panel' in render_sway"
+          - "render_sway_hyper_binds | length == 3"
+          - "render_palette_never_runs_privileged"
+          - "'destroy' not in render_waybar | to_json"
+        fail_msg: >-
+          A cockpit control invariant broke. The bar may only exec helpers the
+          role actually deploys, may only click through the palette or the
+          panel, must never poll faster than 15 seconds, must agree with the
+          CLI about the refresh signal, and must never reach a destructive
+          action. The palette hands privileged commands over instead of running
+          them; that branch is what keeps a password prompt off the bar.
+        quiet: true
+      vars:
+        render_waybar: >-
+          {{ render_cockpit.results[7].content | b64decode
+             | regex_replace('(?m)^\s*//.*$', '') | from_json }}
+        render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
+        render_desk_dests: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'loop')
+             | map(attribute='value') | flatten
+             | selectattr('dest', 'defined') | map(attribute='dest') | list }}
+        render_hyper_modules: >-
+          {{ render_waybar | dict2items
+             | selectattr('key', 'search', '^custom/hyperlab')
+             | map(attribute='value') | list }}
+        render_hyper_execs: >-
+          {{ render_hyper_modules | map(attribute='exec')
+             | map('regex_replace', ' .*$', '') | unique | list }}
+        render_desk_bin_paths: >-
+          {{ render_desk_dests | select('search', '^privatestack-')
+             | map('regex_replace', '^', '/usr/local/bin/') | list
+             + ['/usr/local/bin/hyperlabctl'] }}
+        render_hyper_fields: >-
+          {{ render_hyper_modules | map(attribute='exec')
+             | map('regex_replace', '^.* ', '') | unique | list }}
+        render_hyper_collapsed: >-
+          {{ render_waybar[render_waybar['group/hyperlab']['modules'][0]] }}
+        render_hyper_drawer: >-
+          {{ render_waybar['group/hyperlab']['modules'][1:]
+             | map('extract', render_waybar) | list }}
+        render_hyper_intervals: >-
+          {{ render_hyper_drawer | map(attribute='interval') | list }}
+        render_hyper_signals: >-
+          {{ render_hyper_drawer | map(attribute='signal') | list }}
+        render_hyper_clicks: >-
+          {{ render_hyper_modules
+             | map('dict2items') | flatten
+             | selectattr('key', 'search', '^on-click')
+             | map(attribute='value') | unique | list }}
+        render_hyper_allowed_clicks:
+          - /usr/local/bin/privatestack-hyperlab-palette
+          - foot --app-id=hyperlab-panel hyperlabctl panel
+        render_hyper_states:
+          - ok
+          - warn
+          - error
+        render_hyper_css_classes: >-
+          {{ (render_cockpit.results[16].content | b64decode)
+             | regex_findall('#custom-hyperlab[a-z-]*\.([a-z]+)') | unique | list }}
+        render_cli_signal: >-
+          {{ (lookup('file', repo_root ~ '/tools/hyperlabctl/hyperlabctl/operations.py')
+              | regex_findall('WAYBAR_SIGNAL = ([0-9]+)') | first) }}
+        render_desk_copy_values: >-
+          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.copy')
+             | map(attribute='value') | list }}
+        render_desk_bin_modes: >-
+          {{ render_desk_copy_values
+             | selectattr('dest', 'search', '/usr/local/bin/')
+             | map(attribute='mode') | list }}
+        render_pointer_mode: >-
+          {{ render_desk_copy_values
+             | selectattr('dest', 'defined')
+             | selectattr('dest', 'equalto', '/etc/hyperlabctl/checkout')
+             | map(attribute='mode') | first }}
+        render_sway_hyper_binds: >-
+          {{ render_sway | regex_findall('(?m)^bindsym \$mod\+F[123] ') }}
+        render_palette_never_runs_privileged: >-
+          {{ (
+               ((render_cockpit.results[14].content | b64decode)
+                | regex_search('if \[\[ \${privileged} == yes \]\]; then[\s\S]{0,160}show_prepared[\s\S]{0,80}return 0'))
+               is not none
+             ) and (
+               ((render_cockpit.results[14].content | b64decode)
+                | regex_search('show_prepared\(\)[\s\S]{0,360}review it, then run it yourself'))
+               is not none
+             ) }}
+
     - name: Load the Looking Glass defaults as real variables
       ansible.builtin.include_vars:
         file: "{{ repo_root }}/roles/looking_glass/defaults/main.yml"
@@ -452,7 +572,7 @@
         - "{{ repo_root }}/playbooks/looking-glass.yml"
         - "{{ repo_root }}/playbooks/lab.yml"
 
-    - name: Looking Glass invariants (sized shm, two openers, wayland-pure, opt-in)
+    - name: Looking Glass invariants (sized shm, two openers, Wayland-pure, final lab)
       ansible.builtin.assert:
         that:
           - looking_glass_shm_mb | int == 32
@@ -463,7 +583,8 @@
           - "'-DENABLE_X11=no' in render_lg_tasks"
           - looking_glass_packages | intersect(looking_glass_x11_deps) | length == 0
           - render_lg_hosts == 'hypervisor'
-          - "'looking_glass' not in render_lg_lab_roles"
+          - "render_lg_lab[0].import_playbook == 'foundation.yml'"
+          - "'looking_glass' in render_lg_lab[1].roles"
           - >-
             (looking_glass_stamp | dirname) in render_lg_dirs
             or render_lg_dirs
@@ -488,7 +609,7 @@
         render_lg_tasks: "{{ render_lg.results[2].content | b64decode }}"
         render_lg_handlers: "{{ render_lg.results[3].content | b64decode }}"
         render_lg_hosts: "{{ (render_lg.results[4].content | b64decode | from_yaml)[0].hosts }}"
-        render_lg_lab_roles: "{{ (render_lg.results[5].content | b64decode | from_yaml)[0].roles }}"
+        render_lg_lab: "{{ render_lg.results[5].content | b64decode | from_yaml }}"
         render_lg_dirs: >-
           {{ (render_lg.results[2].content | b64decode | from_yaml)
              | map('dict2items') | flatten

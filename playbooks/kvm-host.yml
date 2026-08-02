@@ -1,0 +1,9 @@
+---
+# Reconcile only the base and headless KVM foundation. Deliberately excludes
+# boot entries, libvirt networks, nftables isolation and GPU handoff.
+- name: Reconcile the headless KVM host foundation
+  hosts: hypervisor
+  become: true
+  roles:
+    - base
+    - kvm_host

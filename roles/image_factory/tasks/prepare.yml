@@ -1,0 +1,241 @@
+---
+- name: Validate an already-prepared image instead of replacing it
+  when: image_factory_transaction_complete
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Prepare a new image transaction
+  when: image_factory_transaction_clean
+  block:
+    - name: Inspect the local import source before any managed write
+      when: image_factory_plan.source_type == 'local'
+      ansible.builtin.stat:
+        path: "{{ image_factory_plan.local_source }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: image_factory_local_source_stat
+
+    - name: Refuse an unsafe or changed local import source
+      when: image_factory_plan.source_type == 'local'
+      ansible.builtin.assert:
+        that:
+          - image_factory_local_source_stat.stat.exists | default(false)
+          - image_factory_local_source_stat.stat.isreg | default(false)
+          - not (image_factory_local_source_stat.stat.islnk | default(false))
+          - image_factory_local_source_stat.stat.checksum == image_factory_plan.source_sha256
+        fail_msg: >-
+          Local image source must be one regular non-symlink file whose SHA-256
+          equals {{ image_factory_plan.source_sha256 }}.
+
+    - name: Read free bytes on the verified image store filesystem
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_df_bin }}"
+          - -B1
+          - --output=avail
+          - "{{ hyperlab_root }}"
+      register: image_factory_free_space
+      changed_when: false
+      check_mode: false
+
+    - name: Publish the conservative image preparation requirement
+      ansible.builtin.set_fact:
+        image_factory_required_free_bytes: >-
+          {{ (image_factory_plan.virtual_size_gib | int * 1610612736) | int }}
+        image_factory_available_free_bytes: >-
+          {{ image_factory_free_space.stdout_lines[-1] | trim | int }}
+
+    - name: Refuse image preparation without conservative free space
+      ansible.builtin.assert:
+        that:
+          - image_factory_available_free_bytes | int >= image_factory_required_free_bytes | int
+        fail_msg: >-
+          Preparing {{ image_factory_plan.id }} requires at least
+          {{ image_factory_required_free_bytes }} free bytes; only
+          {{ image_factory_available_free_bytes }} are available.
+
+    - name: Predict verified acquisition and sealing in check mode
+      when: ansible_check_mode
+      ansible.builtin.debug:
+        msg: >-
+          CHECK MODE: would {{ 'download' if image_factory_plan.source_type == 'official-cloud' else 'copy' }}
+          {{ image_factory_plan.source_basename }}, verify source SHA-256,
+          independent qcow2 shape and virtual size, atomically commit
+          {{ image_factory_plan.base_path }}, and write a private-safe receipt.
+      changed_when: true
+
+    - name: Create receipt and lock roots before acquiring the image lock
+      when: not ansible_check_mode
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ image_factory_receipt_root }}"
+        - "{{ image_factory_lock_root }}"
+
+    - name: Acquire the per-image factory lock before rollback ownership exists
+      when: not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_mkdir_bin }}"
+          - "{{ image_factory_plan.lock_path }}"
+      register: image_factory_lock_acquire
+      changed_when: image_factory_lock_acquire.rc == 0
+
+    - name: Build and commit while owning the per-image lock
+      when: not ansible_check_mode
+      block:
+        - name: Reinspect transaction paths after lock acquisition
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ image_factory_plan.cache_new_path }}"
+            - "{{ image_factory_plan.base_new_path }}"
+            - "{{ image_factory_plan.base_path }}"
+            - "{{ image_factory_plan.receipt_new_path }}"
+            - "{{ image_factory_plan.receipt_path }}"
+          register: image_factory_locked_path_stats
+
+        - name: Refuse stale observations or another completed transaction
+          ansible.builtin.assert:
+            that:
+              - >-
+                image_factory_locked_path_stats.results
+                | map(attribute='stat.exists')
+                | select('equalto', true)
+                | list | length == 0
+            fail_msg: >-
+              Image paths changed between planning and lock acquisition.
+              Refusing to overwrite; rerun so the complete transaction can be
+              validated or the partial state can be inspected explicitly.
+
+        - name: Commit the newly-owned image transaction
+          block:
+            - name: Download the pinned official cloud image to staging
+              when: image_factory_plan.source_type == 'official-cloud'
+              ansible.builtin.get_url:
+                url: "{{ image_factory_plan.source_url }}"
+                dest: "{{ image_factory_plan.cache_new_path }}"
+                checksum: "sha256:{{ image_factory_plan.source_sha256 }}"
+                owner: root
+                group: root
+                mode: "0600"
+                force: true
+
+            - name: Copy the pinned local workshop image to staging
+              when: image_factory_plan.source_type == 'local'
+              ansible.builtin.copy:
+                src: "{{ image_factory_plan.local_source }}"
+                dest: "{{ image_factory_plan.cache_new_path }}"
+                remote_src: true
+                owner: root
+                group: root
+                mode: "0600"
+
+            - name: Inspect the staged qcow2 candidate
+              ansible.builtin.command:
+                argv:
+                  - "{{ image_factory_python_bin }}"
+                  - "{{ image_factory_inspect_tool }}"
+                  - --path
+                  - "{{ image_factory_plan.cache_new_path }}"
+                  - --qemu-img
+                  - "{{ image_factory_qemu_img_bin }}"
+                  - --expected-format
+                  - "{{ image_factory_plan.format }}"
+                  - --expected-size-gib
+                  - "{{ image_factory_plan.virtual_size_gib | int }}"
+              register: image_factory_candidate_command
+              changed_when: false
+              check_mode: false
+
+            - name: Publish staged image inspection evidence
+              ansible.builtin.set_fact:
+                image_factory_candidate: "{{ image_factory_candidate_command.stdout | from_json }}"
+
+            - name: Require the staged artefact to equal the pinned source
+              ansible.builtin.assert:
+                that:
+                  - image_factory_candidate.sha256 == image_factory_plan.source_sha256
+                fail_msg: >-
+                  Staged image SHA-256 differs from the pinned source checksum.
+
+            - name: Move the verified candidate into the base staging path
+              ansible.builtin.command:
+                argv:
+                  - "{{ image_factory_mv_bin }}"
+                  - "{{ image_factory_plan.cache_new_path }}"
+                  - "{{ image_factory_plan.base_new_path }}"
+              changed_when: true
+
+            - name: Protect the verified base staging file for QEMU read access
+              ansible.builtin.file:
+                path: "{{ image_factory_plan.base_new_path }}"
+                owner: root
+                group: "{{ image_factory_qemu_group }}"
+                mode: "0440"
+
+            - name: Commit the verified base atomically
+              ansible.builtin.command:
+                argv:
+                  - "{{ image_factory_mv_bin }}"
+                  - "{{ image_factory_plan.base_new_path }}"
+                  - "{{ image_factory_plan.base_path }}"
+              changed_when: true
+
+            - name: Render the provenance receipt beside managed state
+              ansible.builtin.template:
+                src: receipt.yml.j2
+                dest: "{{ image_factory_plan.receipt_new_path }}"
+                owner: root
+                group: root
+                mode: "0640"
+
+            - name: Commit the provenance receipt atomically
+              ansible.builtin.command:
+                argv:
+                  - "{{ image_factory_mv_bin }}"
+                  - "{{ image_factory_plan.receipt_new_path }}"
+                  - "{{ image_factory_plan.receipt_path }}"
+              changed_when: true
+
+            - name: Publish the complete image transaction
+              ansible.builtin.set_fact:
+                image_factory_transaction_complete: true
+                image_factory_transaction_clean: false
+
+            - name: Verify the committed image transaction before success
+              ansible.builtin.include_tasks: validate.yml
+
+          rescue:
+            - name: Remove only artefacts owned by the failed new image transaction
+              ansible.builtin.file:
+                path: "{{ item }}"
+                state: absent
+              loop:
+                - "{{ image_factory_plan.cache_new_path }}"
+                - "{{ image_factory_plan.base_new_path }}"
+                - "{{ image_factory_plan.base_path }}"
+                - "{{ image_factory_plan.receipt_new_path }}"
+                - "{{ image_factory_plan.receipt_path }}"
+
+            - name: Fail after rolling back the new image transaction
+              ansible.builtin.fail:
+                msg: >-
+                  Image preparation failed and newly-owned base, receipt and
+                  staging files were removed. No existing image was overwritten.
+
+      always:
+        - name: Release the per-image factory lock
+          when:
+            - image_factory_lock_acquire is defined
+            - image_factory_lock_acquire.rc == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ image_factory_rmdir_bin }}"
+              - "{{ image_factory_plan.lock_path }}"
+          register: image_factory_lock_release
+          changed_when: image_factory_lock_release.rc == 0
+          failed_when: image_factory_lock_release.rc != 0

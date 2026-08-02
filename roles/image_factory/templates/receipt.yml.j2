@@ -1,0 +1,18 @@
+---
+schema_version: 1
+id: {{ image_factory_plan.id }}
+policy_sha256: {{ image_factory_plan.policy_sha256 }}
+base_path: {{ image_factory_plan.base_path | to_json }}
+artifact_sha256: {{ image_factory_candidate.sha256 }}
+format: {{ image_factory_candidate.format }}
+virtual_size_bytes: {{ image_factory_candidate.virtual_size_bytes }}
+source_type: {{ image_factory_plan.source_type }}
+source_url: {{ (none if image_factory_plan.private else image_factory_plan.source_url) | to_json }}
+source_basename: {{ image_factory_plan.source_basename | to_json }}
+source_sha256: {{ image_factory_plan.source_sha256 }}
+private: {{ image_factory_plan.private | bool | lower }}
+looking_glass_host_build_required: {{ image_factory_plan.looking_glass_host_build_required | to_json }}
+looking_glass_host_build_observed: {{ image_factory_plan.looking_glass_host_build_observed | to_json }}
+windows_workshop_policy_sha256: {{ image_factory_plan.windows_workshop_policy_sha256 | to_json }}
+windows_workshop_receipt_sha256: {{ image_factory_plan.windows_workshop_receipt_sha256 | to_json }}
+qemu_img_check: pass

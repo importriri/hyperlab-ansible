@@ -1,0 +1,5 @@
+# Managed by privatestack-ansible (roles/gpu_handoff).
+# exact-libvirt-domain network-profile
+{% for domain_name, network_profile in gpu_domain_profiles.items() %}
+{{ domain_name }} {{ network_profile }}
+{% endfor %}

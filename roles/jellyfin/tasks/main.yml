@@ -1,0 +1,158 @@
+---
+- name: Refuse the Jellyfin role on the wrong inventory host or OS
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == jellyfin_expected_hostname
+      - ansible_facts['distribution'] == 'Debian'
+      - ansible_facts['distribution_major_version'] == '12'
+      - ansible_facts['default_ipv4']['address'] == jellyfin_expected_ipv4
+      - ansible_facts['hostname'] == jellyfin_expected_hostname
+    fail_msg: >-
+      The Jellyfin role is limited to the reviewed Debian 12 appliance
+      svc-jellyfin at 10.10.5.10. Refusing a different guest identity.
+
+- name: Read installed packages before changing the appliance
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse container engines on the Jellyfin appliance
+  ansible.builtin.assert:
+    that:
+      - "'docker.io' not in ansible_facts.packages"
+      - "'docker-ce' not in ansible_facts.packages"
+      - "'podman' not in ansible_facts.packages"
+    fail_msg: >-
+      M8 installs Jellyfin directly inside its dedicated VM. Container engines
+      would add a second lifecycle and networking layer and are not supported.
+
+- name: Install the Debian external-repository trust chain
+  ansible.builtin.apt:
+    name: "{{ jellyfin_prerequisite_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Find an existing extrepo Jellyfin source
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "{{ jellyfin_extrepo_pattern }}"
+    file_type: file
+    recurse: false
+  register: jellyfin_extrepo_sources
+
+- name: Refuse duplicate Jellyfin repository definitions
+  ansible.builtin.assert:
+    that:
+      - jellyfin_extrepo_sources.matched | int <= 1
+    fail_msg: >-
+      Multiple extrepo Jellyfin source files exist. Refusing ambiguous package
+      provenance until the duplicate is removed explicitly.
+
+- name: Read the existing Jellyfin repository definition
+  when: jellyfin_extrepo_sources.matched | int == 1
+  ansible.builtin.slurp:
+    src: "{{ jellyfin_extrepo_sources.files[0].path }}"
+  register: jellyfin_extrepo_existing
+
+- name: Publish whether the existing Jellyfin repository is disabled
+  ansible.builtin.set_fact:
+    jellyfin_extrepo_disabled: >-
+      {{ jellyfin_extrepo_sources.matched | int == 1 and
+         (jellyfin_extrepo_existing.content | b64decode) is search('(?mi)^Enabled:\s*no\s*$') }}
+
+- name: Enable the reviewed Jellyfin repository through extrepo
+  when:
+    - jellyfin_extrepo_sources.matched | int == 0 or jellyfin_extrepo_disabled
+  ansible.builtin.command:
+    argv:
+      - "{{ jellyfin_extrepo_bin }}"
+      - enable
+      - jellyfin
+  register: jellyfin_extrepo_enable
+  changed_when: true
+
+- name: Re-read the enabled extrepo Jellyfin source
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "{{ jellyfin_extrepo_pattern }}"
+    file_type: file
+    recurse: false
+  register: jellyfin_extrepo_enabled_sources
+
+- name: Require exactly one enabled Jellyfin repository definition
+  ansible.builtin.assert:
+    that:
+      - jellyfin_extrepo_enabled_sources.matched | int == 1
+    fail_msg: extrepo did not produce exactly one Jellyfin source definition.
+
+- name: Read the enabled Jellyfin repository definition
+  ansible.builtin.slurp:
+    src: "{{ jellyfin_extrepo_enabled_sources.files[0].path }}"
+  register: jellyfin_extrepo_enabled_source
+
+- name: Refuse a disabled or redirected Jellyfin repository
+  ansible.builtin.assert:
+    that:
+      - (jellyfin_extrepo_enabled_source.content | b64decode) is search('repo\.jellyfin\.org')
+      - not ((jellyfin_extrepo_enabled_source.content | b64decode) is search('(?mi)^Enabled:\s*no\s*$'))
+      - (jellyfin_extrepo_enabled_source.content | b64decode) is search('(?mi)^Signed-By:')
+    fail_msg: >-
+      The extrepo Jellyfin source must point to repo.jellyfin.org, remain enabled
+      and name its dedicated signing key.
+
+- name: Install the Jellyfin server, web client and packaged FFmpeg dependency
+  ansible.builtin.apt:
+    name: "{{ jellyfin_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create the empty media root without granting write access to Jellyfin
+  ansible.builtin.file:
+    path: "{{ jellyfin_media_root }}"
+    state: directory
+    owner: root
+    group: jellyfin
+    mode: "0750"
+
+- name: Enable and start Jellyfin inside the service VM
+  ansible.builtin.systemd_service:
+    name: "{{ jellyfin_service_name }}"
+    enabled: true
+    state: started
+
+- name: Wait for the local Jellyfin HTTP listener
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ jellyfin_http_port }}"
+    state: started
+    timeout: 60
+
+- name: Verify the unauthenticated Jellyfin web bootstrap
+  ansible.builtin.uri:
+    url: "{{ jellyfin_health_url }}"
+    method: GET
+    status_code: 200
+    return_content: false
+  register: jellyfin_health
+  retries: 12
+  delay: 5
+  until: jellyfin_health.status == 200
+
+- name: Refresh installed package evidence
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Require the Jellyfin server and web packages from the metapackage
+  ansible.builtin.assert:
+    that:
+      - "'jellyfin' in ansible_facts.packages"
+      - "'jellyfin-server' in ansible_facts.packages"
+      - "'jellyfin-web' in ansible_facts.packages"
+    fail_msg: The Jellyfin metapackage did not install server and web components.
+
+- name: Record that the Jellyfin application brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: jellyfin

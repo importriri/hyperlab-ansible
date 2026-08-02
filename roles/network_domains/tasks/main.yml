@@ -22,6 +22,14 @@
     group: root
     mode: "0755"
 
+- name: Install the identity-preserving network XML preparer
+  ansible.builtin.copy:
+    src: network_xml_prepare_define.py
+    dest: "{{ network_domains_prepare_tool }}"
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Create the managed network XML directory
   ansible.builtin.file:
     path: "{{ network_domains_config_dir }}"
@@ -55,6 +63,29 @@
   register: network_domains_current_xml
   changed_when: false
   failed_when: false
+  check_mode: false
+
+- name: Create the private runtime definition directory
+  ansible.builtin.file:
+    path: "{{ network_domains_runtime_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  check_mode: false
+
+- name: Prepare definitions with the existing libvirt identity
+  ansible.builtin.command:
+    argv:
+      - "{{ network_domains_prepare_tool }}"
+      - "{{ network_domains_config_dir }}/{{ item.item.name }}.xml"
+      - "-"
+      - "{{ network_domains_runtime_dir }}/{{ item.item.name }}.xml"
+    stdin: "{{ item.stdout if item.rc == 0 else '' }}"
+  loop: "{{ network_domains_current_xml.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  changed_when: false
   check_mode: false
 
 - name: Compare current and desired network semantics
@@ -123,14 +154,15 @@
   when: network_domains_restart_changed | bool
 
 - name: Define missing or changed persistent networks
-  community.libvirt.virt_net:
-    command: define
-    name: "{{ item.name }}"
-    xml: "{{ lookup('ansible.builtin.template', 'net.xml.j2') }}"
-  loop: "{{ network_domains }}"
+  ansible.builtin.command:
+    argv:
+      - virsh
+      - net-define
+      - "{{ network_domains_runtime_dir }}/{{ item }}.xml"
+  loop: "{{ network_domains_reconcile }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: item.name in network_domains_reconcile
+    label: "{{ item }}"
+  changed_when: true
 
 - name: Activate every network domain
   community.libvirt.virt_net:

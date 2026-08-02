@@ -1,0 +1,30 @@
+---
+- name: Refuse an unsafe committed service receipt
+  ansible.builtin.assert:
+    that:
+      - service_registry_receipt_stat.stat.isreg | default(false)
+      - not (service_registry_receipt_stat.stat.islnk | default(false))
+      - service_registry_receipt_stat.stat.pw_name == 'root'
+      - service_registry_receipt_stat.stat.gr_name == 'root'
+      - service_registry_receipt_stat.stat.mode == '0640'
+    fail_msg: >-
+      Committed service receipt has unsafe type, ownership or mode.
+
+- name: Verify the committed service receipt against current contracts
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_receipt_guard_tool }}"
+      - --receipt
+      - "{{ service_registry_plan.receipt_path }}"
+    stdin: "{{ service_registry_plan | to_json }}"
+  register: service_registry_validation_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish verified service registration evidence
+  ansible.builtin.set_fact:
+    service_registry_validation: >-
+      {{ service_registry_validation_command.stdout | from_json }}
+    service_registry_receipt_sha256: >-
+      {{ service_registry_receipt_stat.stat.checksum }}

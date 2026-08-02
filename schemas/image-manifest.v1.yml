@@ -51,6 +51,7 @@ fields:
     fields:
       redistributable: {type: bool}
 optional:
+  source_sha256: {type: str, nullable: true, pattern: "^[a-f0-9]{64}$"}
   looking_glass_host_build_required: {type: str, nullable: true, min_length: 1}
   looking_glass_host_build_observed: {type: str, nullable: true, min_length: 1}
   notes: {type: str, min_length: 1}

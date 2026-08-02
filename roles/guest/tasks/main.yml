@@ -1,0 +1,323 @@
+---
+- name: Refuse an unknown guest operation or selector
+  ansible.builtin.assert:
+    that:
+      - guest_operation in guest_supported_operations
+      - guest_spec is string
+      - guest_spec | length > 0
+      - guest_cloud_init_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+    fail_msg: >-
+      guest_operation must be one of {{ guest_supported_operations | join(', ') }},
+      guest_spec must name a file below vm-specs/, and guest_cloud_init_user
+      must be a portable local account name.
+
+- name: Inspect the verified image-store identity manifest
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}/state/layout.yml"
+  register: guest_store_layout_stat
+
+- name: Refuse a missing or unsafe image-store identity manifest
+  ansible.builtin.assert:
+    that:
+      - guest_store_layout_stat.stat.exists | default(false)
+      - guest_store_layout_stat.stat.isreg | default(false)
+      - not (guest_store_layout_stat.stat.islnk | default(false))
+      - guest_store_layout_stat.stat.pw_name == 'root'
+      - guest_store_layout_stat.stat.gr_name == 'root'
+      - guest_store_layout_stat.stat.mode == '0644'
+    fail_msg: >-
+      Guest lifecycle requires the root-owned verified image-store layout
+      manifest below the selected store. Reconcile playbooks/image-store.yml
+      before managing guests.
+
+- name: Read the verified image-store identity manifest
+  ansible.builtin.slurp:
+    src: "{{ hyperlab_root }}/state/layout.yml"
+  register: guest_store_layout_slurp
+
+- name: Parse the verified store manifest
+  ansible.builtin.set_fact:
+    guest_store_layout: "{{ guest_store_layout_slurp.content | b64decode | from_yaml }}"
+
+- name: Refuse an image-store manifest from another root
+  ansible.builtin.assert:
+    that:
+      - guest_store_layout is mapping
+      - guest_store_layout.root == hyperlab_root
+      - guest_store_layout.administered_by == 'root:root'
+      - guest_store_layout.directories is sequence
+      - guest_store_layout.directories is not string
+      - guest_store_layout.qemu_identity is match('^[^:]+:[^:]+$')
+      - guest_store_layout.swtpm_identity is match('^[^:]+:[^:]+$')
+    fail_msg: The image-store layout manifest is missing or does not describe this root.
+
+- name: Resolve runtime identities from the verified store manifest
+  ansible.builtin.set_fact:
+    guest_qemu_user: "{{ guest_store_layout.qemu_identity.split(':', 1)[0] }}"
+    guest_qemu_group: "{{ guest_store_layout.qemu_identity.split(':', 1)[1] }}"
+    guest_swtpm_user: "{{ guest_store_layout.swtpm_identity.split(':', 1)[0] }}"
+    guest_swtpm_group: "{{ guest_store_layout.swtpm_identity.split(':', 1)[1] }}"
+
+- name: Validate the selected VM spec against the repository schema
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_schema_validator }}"
+      - --root
+      - "{{ guest_repository_root }}"
+      - --spec
+      - "{{ guest_spec }}"
+  changed_when: false
+  check_mode: false
+
+- name: Build the deterministic guest plan without side effects
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_plan_tool }}"
+      - --root
+      - "{{ guest_repository_root }}"
+      - --spec
+      - "{{ guest_spec }}"
+      - --store
+      - "{{ hyperlab_root }}"
+  register: guest_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the deterministic guest plan
+  ansible.builtin.set_fact:
+    guest_plan: "{{ guest_plan_command.stdout | from_json }}"
+
+- name: Verify managed store paths before inspecting guest-owned artefacts
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_store_guard_tool }}"
+      - --layout
+      - "{{ hyperlab_root }}/state/layout.yml"
+      - --store
+      - "{{ hyperlab_root }}"
+      - --require-management-roots
+      - "{{ 'false' if guest_operation == 'create' else 'true' }}"
+  changed_when: false
+  check_mode: false
+
+- name: Build the safe libvirt undefine command
+  ansible.builtin.set_fact:
+    guest_undefine_argv: >-
+      {{ [guest_virsh_bin, 'undefine']
+         + (['--nvram'] if guest_plan.requires_uefi else [])
+         + (['--tpm'] if guest_plan.requires_tpm2 else [])
+         + [guest_plan.name] }}
+
+- name: Inspect existing guest-owned state
+  ansible.builtin.include_tasks: inspect.yml
+
+- name: Refuse a missing or inactive selected network before VM operations
+  when: guest_operation in ['create', 'reset', 'start', 'validate']
+  ansible.builtin.assert:
+    that:
+      - guest_network_defined
+      - guest_network_active
+    fail_msg: >-
+      Libvirt network {{ guest_plan.network_profile }} is missing or inactive.
+      Reconcile playbooks/network-domains.yml before {{ guest_operation }}.
+
+- name: Load existing managed state when present
+  when: guest_state_stat.stat.exists
+  ansible.builtin.slurp:
+    src: "{{ guest_plan.state_path }}"
+  register: guest_existing_state_slurp
+
+- name: Publish existing managed state
+  when: guest_state_stat.stat.exists
+  ansible.builtin.set_fact:
+    guest_existing_state: "{{ guest_existing_state_slurp.content | b64decode | from_yaml }}"
+
+- name: Refuse create or reset on an unsafe transaction shape before host writes
+  when: guest_operation in ['create', 'reset']
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_operation != 'create' or
+        guest_transaction_clean or guest_transaction_complete
+      - guest_operation != 'reset' or guest_transaction_complete
+    fail_msg: >-
+      {{ guest_plan.name }} has a partial or missing managed transaction. Refusing
+      package, directory, disk and libvirt writes before lifecycle dispatch.
+
+- name: Refuse an unsafe reset request before host writes
+  when: guest_operation == 'reset'
+  ansible.builtin.assert:
+    that:
+      - guest_plan.lifecycle == 'disposable'
+      - guest_domain_state == 'shut off'
+      - guest_confirm_reset == guest_plan.name
+    fail_msg: >-
+      Reset requires a complete shut-off disposable guest and exact confirmation
+      guest_confirm_reset={{ guest_plan.name }} before any host write.
+
+- name: Rebuild the live VFIO contract for hardware-sensitive operations
+  when:
+    - guest_plan.device_profile == 'vfio'
+    - guest_operation in ['create', 'reset', 'start', 'validate']
+  ansible.builtin.include_tasks: vfio.yml
+
+- name: Load the committed VFIO contract for offline destructive operations
+  when:
+    - guest_plan.device_profile == 'vfio'
+    - guest_operation in ['shutdown', 'stop', 'destroy']
+  block:
+    - name: Require committed VFIO state before an offline operation
+      ansible.builtin.assert:
+        that:
+          - guest_existing_state is mapping
+          - guest_existing_state.vfio is mapping
+        fail_msg: >-
+          {{ guest_plan.name }} has no committed VFIO identity. Refusing to
+          infer host devices during {{ guest_operation }}.
+
+    - name: Publish the committed VFIO contract
+      ansible.builtin.set_fact:
+        guest_vfio: "{{ guest_existing_state.vfio }}"
+
+- name: Verify the sealed base before any operation that depends on it
+  when:
+    - >-
+      (guest_operation == 'create' and guest_transaction_clean) or
+      (guest_plan.lifecycle == 'disposable' and
+       guest_operation in ['create', 'reset', 'start', 'validate'])
+  ansible.builtin.include_tasks: verify-base.yml
+
+- name: Install lifecycle dependencies after every read-only gate
+  when: guest_operation in ['create', 'reset']
+  ansible.builtin.package:
+    name: "{{ guest_required_packages }}"
+    state: present
+
+- name: Create guest management roots before acquiring the first VM lock
+  when: guest_operation in ['create', 'reset']
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ guest_runtime_state_root }}"
+    - "{{ guest_runtime_xml_root }}"
+    - "{{ guest_runtime_lock_root }}"
+
+- name: Verify the reconciled guest management roots
+  when:
+    - guest_operation in ['create', 'reset']
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_store_guard_tool }}"
+      - --layout
+      - "{{ hyperlab_root }}/state/layout.yml"
+      - --store
+      - "{{ hyperlab_root }}"
+      - --require-management-roots
+      - "true"
+  changed_when: false
+  check_mode: false
+
+- name: Check whether the operation lock already exists
+  ansible.builtin.stat:
+    path: "{{ guest_plan.lock_path }}"
+  register: guest_operation_lock_stat
+
+- name: Refuse a concurrent operation on the same VM
+  ansible.builtin.assert:
+    that:
+      - not guest_operation_lock_stat.stat.exists
+    fail_msg: >-
+      {{ guest_plan.name }} already has an operation lock at
+      {{ guest_plan.lock_path }}. Another lifecycle operation may still be
+      running; inspect it before removing a stale lock.
+
+- name: Acquire the per-VM operation lock
+  when:
+    - guest_operation != 'validate'
+    - not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_mkdir_bin }}"
+      - "{{ guest_plan.lock_path }}"
+  changed_when: true
+
+- name: Execute the selected operation under the lifecycle locks
+  block:
+    - name: Acquire the global guest registry lock
+      when:
+        - guest_operation in ['create', 'reset']
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_mkdir_bin }}"
+          - "{{ guest_registry_lock_path }}"
+      register: guest_registry_lock_acquire
+      changed_when: guest_registry_lock_acquire.rc == 0
+
+    - name: Check UUID, MAC and host-device ownership across libvirt
+      when: guest_operation in ['create', 'reset']
+      ansible.builtin.include_tasks: libvirt-registry.yml
+
+    - name: Dispatch guest validation
+      when: guest_operation == 'validate'
+      ansible.builtin.include_tasks: validate.yml
+
+    - name: Dispatch guest creation
+      when: guest_operation == 'create'
+      ansible.builtin.include_tasks: create.yml
+
+    - name: Dispatch guest start
+      when: guest_operation == 'start'
+      ansible.builtin.include_tasks: start.yml
+
+    - name: Dispatch guest shutdown
+      when: guest_operation == 'shutdown'
+      ansible.builtin.include_tasks: shutdown.yml
+
+    - name: Dispatch forced guest stop
+      when: guest_operation == 'stop'
+      ansible.builtin.include_tasks: stop.yml
+
+    - name: Dispatch disposable guest reset
+      when: guest_operation == 'reset'
+      ansible.builtin.include_tasks: reset.yml
+
+    - name: Dispatch guest destruction
+      when: guest_operation == 'destroy'
+      ansible.builtin.include_tasks: destroy.yml
+
+  always:
+    - name: Release the global guest registry lock owned by this operation
+      when:
+        - guest_operation in ['create', 'reset']
+        - not ansible_check_mode
+        - guest_registry_lock_acquire is defined
+        - guest_registry_lock_acquire.rc == 0
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_rmdir_bin }}"
+          - "{{ guest_registry_lock_path }}"
+      register: guest_registry_lock_release
+      changed_when: guest_registry_lock_release.rc == 0
+      failed_when: guest_registry_lock_release.rc != 0
+
+    - name: Release the per-VM operation lock
+      when:
+        - guest_operation != 'validate'
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_rmdir_bin }}"
+          - "{{ guest_plan.lock_path }}"
+      register: guest_operation_lock_release
+      changed_when: guest_operation_lock_release.rc == 0
+      failed_when: guest_operation_lock_release.rc != 0

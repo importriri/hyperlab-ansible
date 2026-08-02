@@ -1,5 +1,5 @@
 # Managed by privatestack-ansible (roles/gpu_handoff).
-# domain trust - higher means cleaner. Between reboots the GPU only
+# network trust - higher means cleaner. Between reboots the GPU only
 # moves DOWN this ladder; a reboot (wiping /run) is the only way up.
 {% for name, level in gpu_trust_levels.items() %}
 {{ name }} {{ level }}

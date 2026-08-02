@@ -7,10 +7,18 @@
     group: root
     mode: "0755"
 
-- name: Install the trust rotation (rendered from the contract)
+- name: Install the network trust rotation
   ansible.builtin.template:
     src: rotation.j2
     dest: /etc/gpu-handoff/rotation
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the reviewed VFIO domain allowlist
+  ansible.builtin.template:
+    src: domains.j2
+    dest: /etc/gpu-handoff/domains
     owner: root
     group: root
     mode: "0644"

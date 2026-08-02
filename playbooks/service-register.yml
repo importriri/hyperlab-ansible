@@ -1,0 +1,13 @@
+---
+- name: Register one reviewed service VM contract
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    service_registry_operation: register
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: service_registry
+    - service_registry

@@ -1,0 +1,122 @@
+---
+- name: Inspect the validated local hardware profile report
+  ansible.builtin.stat:
+    path: "{{ guest_host_profile_report_path }}"
+  register: guest_vfio_report_stat
+
+- name: Refuse a missing or redirected hardware profile report
+  ansible.builtin.assert:
+    that:
+      - guest_vfio_report_stat.stat.exists | default(false)
+      - guest_vfio_report_stat.stat.isreg | default(false)
+      - not (guest_vfio_report_stat.stat.islnk | default(false))
+      - guest_vfio_report_stat.stat.pw_name == 'root'
+      - guest_vfio_report_stat.stat.mode == '0644'
+    fail_msg: >-
+      VFIO requires the root-owned profile report produced by
+      playbooks/preflight.yml at {{ guest_host_profile_report_path }}.
+
+- name: Build the host-local VFIO plan without side effects
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_vfio_plan_tool }}"
+      - --report
+      - "{{ guest_host_profile_report_path }}"
+      - --profiles-json
+      - "{{ host_profiles | to_json }}"
+      - --trust-levels-json
+      - "{{ gpu_trust_levels | to_json }}"
+      - --looking-glass-build
+      - "{{ hyperlab_looking_glass_build }}"
+      - --looking-glass-device
+      - "{{ hyperlab_looking_glass_device }}"
+      - --looking-glass-shm-mb
+      - "{{ hyperlab_looking_glass_shm_mb | int }}"
+      - --spice-host
+      - "{{ hyperlab_looking_glass_spice_host }}"
+      - --spice-port
+      - "{{ hyperlab_looking_glass_spice_port | int }}"
+    stdin: "{{ guest_plan | to_json }}"
+  register: guest_vfio_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the validated VFIO plan
+  ansible.builtin.set_fact:
+    guest_vfio: "{{ guest_vfio_plan_command.stdout | from_json }}"
+
+- name: Inspect the kvmfr character device
+  ansible.builtin.stat:
+    path: "{{ guest_vfio.looking_glass_device }}"
+  register: guest_vfio_kvmfr_stat
+
+- name: Refuse an absent or unsafe Looking Glass transport
+  ansible.builtin.assert:
+    that:
+      - guest_vfio_kvmfr_stat.stat.exists | default(false)
+      - guest_vfio_kvmfr_stat.stat.ischr | default(false)
+      - guest_vfio_kvmfr_stat.stat.gr_name == 'kvm'
+      - guest_vfio_kvmfr_stat.stat.mode == '0660'
+    fail_msg: >-
+      {{ guest_vfio.looking_glass_device }} must be the reviewed kvmfr character
+      device, group kvm and mode 0660. Reconcile playbooks/looking-glass.yml.
+
+- name: Read the loaded kvmfr shared-memory size
+  ansible.builtin.slurp:
+    src: /sys/module/kvmfr/parameters/static_size_mb
+  register: guest_vfio_kvmfr_size_slurp
+
+- name: Require the kernel and XML shared-memory sizes to match
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_vfio_kvmfr_size_slurp.content | b64decode | trim | int ==
+        guest_vfio.looking_glass_shm_mb | int
+    fail_msg: >-
+      Loaded kvmfr size differs from the {{ guest_vfio.looking_glass_shm_mb }} MiB
+      XML contract. Reboot after reconciling playbooks/looking-glass.yml.
+
+- name: Inspect every reviewed VFIO PCI function
+  ansible.builtin.stat:
+    path: "/sys/bus/pci/devices/{{ item.bdf }}"
+  loop: "{{ guest_vfio.devices }}"
+  loop_control:
+    label: "{{ item.bdf }}"
+  register: guest_vfio_pci_stats
+
+- name: Resolve the current driver for every VFIO PCI function
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_readlink_bin }}"
+      - -f
+      - "/sys/bus/pci/devices/{{ item.bdf }}/driver"
+  loop: "{{ guest_vfio.devices }}"
+  loop_control:
+    label: "{{ item.bdf }}"
+  register: guest_vfio_driver_links
+  changed_when: false
+  check_mode: false
+
+- name: Resolve the IOMMU group for every VFIO PCI function
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_readlink_bin }}"
+      - -f
+      - "/sys/bus/pci/devices/{{ item.bdf }}/iommu_group"
+  loop: "{{ guest_vfio.devices }}"
+  loop_control:
+    label: "{{ item.bdf }}"
+  register: guest_vfio_iommu_groups
+  changed_when: false
+  check_mode: false
+
+- name: Refuse missing devices, wrong drivers or split IOMMU topology
+  ansible.builtin.assert:
+    that:
+      - guest_vfio_pci_stats.results | map(attribute='stat.exists') | select('equalto', true) | list | length == 2
+      - guest_vfio_driver_links.results | map(attribute='stdout') | map('basename') | unique | list == ['vfio-pci']
+      - guest_vfio_iommu_groups.results | map(attribute='stdout') | unique | list | length == 1
+    fail_msg: >-
+      The reviewed GPU functions must exist, both be bound to vfio-pci and share
+      one IOMMU group before a VFIO domain can be managed.

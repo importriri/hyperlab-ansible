@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Managed by privatestack-ansible. Empty stdout preserves the qemu.d XML filter.
+set -euo pipefail
+
+exec /usr/bin/python /usr/local/lib/privatestack/service-exposure.py \
+  --config /etc/privatestack/service-exposures.json \
+  --nft /usr/bin/nft \
+  --domain "${1:--}" \
+  --operation "${2:-unknown}" >/dev/null

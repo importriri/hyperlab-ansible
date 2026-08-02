@@ -1,0 +1,101 @@
+---
+- name: List active libvirt domains for live MAC collision checks
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - list
+      - --name
+  register: guest_libvirt_active_domain_names
+  changed_when: false
+  check_mode: false
+
+- name: List persistent libvirt domains for next-boot MAC collision checks
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - list
+      - --all
+      - --persistent
+      - --name
+  register: guest_libvirt_persistent_domain_names
+  changed_when: false
+  check_mode: false
+
+- name: Look up any domain already owning the planned UUID
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domname
+      - "{{ guest_plan.uuid }}"
+  register: guest_libvirt_uuid_owner
+  changed_when: false
+  failed_when: guest_libvirt_uuid_owner.rc not in [0, 1]
+  check_mode: false
+
+- name: Read live interface identities from every active domain
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domiflist
+      - "{{ item }}"
+  loop: "{{ guest_libvirt_active_domain_names.stdout_lines | reject('equalto', '') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: guest_libvirt_live_interfaces
+  changed_when: false
+  check_mode: false
+
+- name: Read next-boot interface identities from every persistent domain
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domiflist
+      - --inactive
+      - "{{ item }}"
+  loop: "{{ guest_libvirt_persistent_domain_names.stdout_lines | reject('equalto', '') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: guest_libvirt_persistent_interfaces
+  changed_when: false
+  check_mode: false
+
+- name: Refuse UUID ownership by another libvirt domain
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_libvirt_uuid_owner.rc == 1 or
+        guest_libvirt_uuid_owner.stdout | trim == guest_plan.name
+    fail_msg: >-
+      Planned UUID {{ guest_plan.uuid }} is already owned by libvirt domain
+      {{ guest_libvirt_uuid_owner.stdout | trim }}.
+
+- name: Refuse a planned MAC used by another active libvirt domain
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.item == guest_plan.name or
+        guest_plan.mac | lower not in (item.stdout | lower)
+    fail_msg: >-
+      Planned MAC {{ guest_plan.mac }} is live on libvirt domain {{ item.item }}.
+  loop: "{{ guest_libvirt_live_interfaces.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Refuse a planned MAC reserved by another persistent libvirt domain
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.item == guest_plan.name or
+        guest_plan.mac | lower not in (item.stdout | lower)
+    fail_msg: >-
+      Planned MAC {{ guest_plan.mac }} is present in the next-boot configuration
+      of libvirt domain {{ item.item }}.
+  loop: "{{ guest_libvirt_persistent_interfaces.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check defined VFIO ownership before create or reset
+  when: guest_plan.device_profile == 'vfio'
+  ansible.builtin.include_tasks: vfio-registry.yml
+  vars:
+    guest_vfio_registry_mode: define

@@ -11,9 +11,9 @@ format: qcow2
 status: not-built
 sha256: null
 
-private: false
-# A local lab account, because Windows still needs an identity to log in
-# with. No Microsoft account, and no credential reused anywhere else.
+# Generalized means cloneable, not redistributable. The Windows artefact and
+# its local account remain private to this lab.
+private: true
 contains_personal_data: false
 generalized: true
 instance_policy: multiple
@@ -29,13 +29,15 @@ min_memory_mb: 4096
 
 supports: {standard: true, vfio: true, cloud_init: false, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: true, tpm2: true}
-defaults: {lifecycle: disposable, device_profile: standard, network_profile: dirty}
+defaults: {lifecycle: disposable, device_profile: vfio, network_profile: dirty}
 network_allowlist: [dirty, lab]
 licensing: {redistributable: false}
 
-looking_glass_host_build_required: null
+# Both local Windows masters install the same pinned host application before
+# sealing. Dirty remains isolated by network, clipboard and lifecycle policy.
+looking_glass_host_build_required: B7-263-g0140a3f6fb
 looking_glass_host_build_observed: null
 notes: >-
-  Sysprep generalized, so clones get their own identity. Clipboard and
-  shared folders stay off: the whole point of dirty is that nothing it
-  touches reaches the host.
+  Sysprep generalized, so clones get their own identity. Clipboard and shared
+  folders stay off. M4 passes the reviewed GPU and uses Looking Glass, but the
+  dirty trust level can never rise again without a reboot.

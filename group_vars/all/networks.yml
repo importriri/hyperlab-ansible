@@ -27,12 +27,19 @@ network_domains:
     gateway: 10.10.5.1
     forward: nat
 
-# Only GPU-owning workload domains participate. Services never receive the GPU.
+# Domain trust - higher means cleaner. This maps security domains, not VM names.
 gpu_trust_levels:
   clean: 3
   dev: 2
   dirty: 1
   lab: 0
+
+# Exact libvirt domain names that may own the GPU. The hook receives a VM name,
+# so rendering network names here would silently leave every real VFIO guest
+# unguarded. Services is structurally impossible because it has no trust level.
+gpu_domain_profiles:
+  win11clean-valley: clean
+  win11dirty-disposable: dirty
 
 # Deliberate DNAT holes for service VMs. Empty by default.
 services_exposed: []

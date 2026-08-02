@@ -1,0 +1,12 @@
+---
+- name: Adopt an already validated legacy VM-store mount without changing storage
+  hosts: hypervisor
+  become: true
+  gather_facts: true
+  vars:
+    bootstrap_storage_operation: adopt
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: bootstrap_storage
+    - bootstrap_storage

@@ -1,0 +1,20 @@
+---
+# M5 verified acquisition/import and sealing pipeline.
+image_factory_repository_root: "{{ playbook_dir | dirname }}"
+image_factory_operation: validate
+image_factory_manifest: ""
+
+# Official cloud images may take URL/checksum overrides during the final
+# campaign. Local Windows workshop outputs require an absolute source path and
+# an independently recorded SHA-256. No private path is written to receipts.
+image_factory_source_url: ""
+image_factory_source_sha256: ""
+image_factory_local_source: ""
+image_factory_looking_glass_observed_build: ""
+
+image_factory_python_bin: /usr/bin/python
+image_factory_qemu_img_bin: /usr/bin/qemu-img
+image_factory_mv_bin: /usr/bin/mv
+image_factory_mkdir_bin: /usr/bin/mkdir
+image_factory_rmdir_bin: /usr/bin/rmdir
+image_factory_df_bin: /usr/bin/df

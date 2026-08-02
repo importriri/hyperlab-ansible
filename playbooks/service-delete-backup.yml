@@ -1,0 +1,13 @@
+---
+- name: Delete one verified immutable service backup
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    service_registry_operation: delete-backup
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: service_registry
+    - service_registry

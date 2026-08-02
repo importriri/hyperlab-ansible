@@ -1,0 +1,31 @@
+---
+schema_version: 1
+name: {{ guest_plan.name }}
+uuid: {{ guest_plan.uuid }}
+mac: {{ guest_plan.mac }}
+image: {{ guest_plan.image }}
+image_sha256: {{ guest_plan.image_sha256 }}
+instance_policy: {{ guest_plan.instance_policy }}
+lifecycle: {{ guest_plan.lifecycle }}
+device_profile: {{ guest_plan.device_profile }}
+network_profile: {{ guest_plan.network_profile }}
+memory_mb: {{ guest_resolved_memory_mb }}
+vcpus: {{ guest_plan.vcpus }}
+disk_gib: {{ guest_plan.disk_gib }}
+disk_path: {{ guest_plan.disk_path | to_json }}
+xml_path: {{ guest_plan.xml_path | to_json }}
+seed_image: {{ guest_plan.seed_image | to_json if guest_plan.cloud_init else 'null' }}
+cloud_init_user: {{ guest_cloud_init_user | to_json if guest_plan.cloud_init else 'null' }}
+cloud_init_ssh_public_keys: {{ guest_cloud_init_ssh_public_keys | to_json if guest_plan.cloud_init else '[]' }}
+nvram_path: {{ guest_plan.nvram_path | to_json if guest_plan.requires_uefi else 'null' }}
+tpm_path: {{ guest_plan.tpm_path | to_json if guest_plan.requires_tpm2 else 'null' }}
+autostart: {{ guest_plan.autostart | bool | lower }}
+qemu_guest_agent: {{ guest_plan.qemu_guest_agent | bool | lower }}
+looking_glass: {{ guest_plan.looking_glass | bool | lower }}
+vfio: {{ guest_vfio | to_json if guest_plan.device_profile == 'vfio' else 'null' }}
+owner: {{ guest_plan.owner | to_json }}
+purpose: {{ guest_plan.purpose | to_json }}
+tags: {{ guest_plan.tags | to_json }}
+snapshot_policy: {{ guest_plan.snapshot_policy | to_json }}
+backup_policy: {{ guest_plan.backup_policy | to_json }}
+benchmark: {{ guest_plan.benchmark | to_json }}

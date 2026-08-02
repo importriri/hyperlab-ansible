@@ -15,10 +15,9 @@ contains_personal_data: false
 generalized: true
 instance_policy: multiple
 
-# The exact release and its official checksum URL are filled in when the
-# image is actually pulled, at M7, from the distribution's own download
-# page. They are null here because an invented URL is worse than a blank:
-# a blank fails the sealing check, a wrong one downloads something.
+# The exact release and its official checksum URL are filled in when the image
+# is actually pulled from the distribution's own download page. They are null
+# here because an invented URL is worse than a blank: a blank fails closed.
 source_type: official-cloud
 source_url: null
 source_checksum_url: null
@@ -31,11 +30,12 @@ min_memory_mb: 2048
 supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: false, tpm2: false}
 defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
-network_allowlist: [dev, lab]
+network_allowlist: [dev, lab, services]
 licensing: {redistributable: true}
 
 looking_glass_host_build_required: null
 looking_glass_host_build_observed: null
 notes: >-
-  Cloud image plus NoCloud seed: hostname and user are created at first
-  boot, and no private key ever enters the artefact.
+  Cloud image plus NoCloud seed: hostname and user are created at first boot,
+  and no private key ever enters the artefact. M7 also permits reviewed service
+  VMs on the services network; the service registry owns their static lease.

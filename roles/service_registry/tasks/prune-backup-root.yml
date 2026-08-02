@@ -1,0 +1,9 @@
+---
+- name: Remove the service backup parent only when it is empty
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_rmdir_bin }}"
+      - "{{ service_registry_plan.backup_dir }}"
+  register: service_registry_prune_backup_root
+  changed_when: service_registry_prune_backup_root.rc == 0
+  failed_when: service_registry_prune_backup_root.rc not in [0, 1]

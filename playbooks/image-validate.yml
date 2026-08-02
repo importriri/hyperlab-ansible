@@ -1,0 +1,13 @@
+---
+- name: Validate one committed Hyperlab base image and provenance receipt
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    image_factory_operation: validate
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: image_factory
+    - image_factory

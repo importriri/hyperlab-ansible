@@ -4,3 +4,5 @@
 network_domains_restart_changed: false
 network_domains_config_dir: /etc/privatestack/networks
 network_domains_compare_tool: /usr/local/libexec/privatestack-network-xml-equivalent
+network_domains_prepare_tool: /usr/local/libexec/privatestack-network-xml-prepare-define
+network_domains_runtime_dir: /run/privatestack/network-domains

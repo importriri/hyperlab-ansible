@@ -1,0 +1,72 @@
+---
+- name: Validate the managed guest before reset
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Refuse reset for permanent or running guests
+  ansible.builtin.assert:
+    that:
+      - guest_plan.lifecycle == 'disposable'
+      - guest_domain_state == 'shut off'
+      - guest_confirm_reset == guest_plan.name
+    fail_msg: >-
+      Reset is only for a shut-off disposable guest and destroys its overlay,
+      NVRAM and TPM identity. Repeat with
+      -e guest_confirm_reset={{ guest_plan.name }}.
+
+- name: Predict the disposable reset in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would undefine {{ guest_plan.name }}, delete only its
+      disposable overlay/seed/NVRAM/TPM/state, and recreate it from the sealed
+      base with the same UUID, MAC and recorded memory allocation.
+  changed_when: true
+
+- name: Reset and recreate the disposable transaction under one operation lock
+  when: not ansible_check_mode
+  block:
+    - name: Preserve the committed memory allocation across reset
+      ansible.builtin.set_fact:
+        guest_reset_memory_mb: "{{ guest_existing_state.memory_mb | int }}"
+
+    - name: Undefine the disposable domain and delete runtime identity state
+      ansible.builtin.command:
+        argv: "{{ guest_undefine_argv }}"
+      changed_when: true
+
+    - name: Delete only disposable guest-owned artefacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ guest_plan.disk_path }}"
+        - "{{ guest_plan.disk_path }}.new"
+        - "{{ guest_plan.seed_dir }}"
+        - "{{ guest_plan.nvram_path }}"
+        - "{{ guest_plan.tpm_path }}"
+        - "{{ guest_plan.xml_path }}"
+        - "{{ guest_plan.state_path }}"
+
+    - name: Refresh observations after reset cleanup
+      ansible.builtin.include_tasks: inspect.yml
+
+    - name: Refuse to recreate on top of incomplete reset cleanup
+      ansible.builtin.assert:
+        that:
+          - guest_transaction_clean
+        fail_msg: >-
+          Reset cleanup did not reach a zero-artifact state. Refusing to
+          recreate {{ guest_plan.name }} on top of ambiguous ownership.
+
+    - name: Reuse the committed allocation for the replacement transaction
+      ansible.builtin.set_fact:
+        guest_resolved_memory_mb: "{{ guest_reset_memory_mb | int }}"
+        guest_reuse_resolved_memory: true
+
+    - name: Recreate the disposable guest from the sealed base
+      ansible.builtin.include_tasks: create.yml
+
+  always:
+    - name: Clear reset-only memory reuse state
+      ansible.builtin.set_fact:
+        guest_reuse_resolved_memory: false

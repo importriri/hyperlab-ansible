@@ -1,0 +1,8 @@
+---
+jellyfin_prerequisite_packages:
+  - ca-certificates
+  - extrepo
+jellyfin_packages:
+  - jellyfin
+jellyfin_service_name: jellyfin.service
+jellyfin_extrepo_bin: /usr/bin/extrepo

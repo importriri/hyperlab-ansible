@@ -1,0 +1,278 @@
+---
+- name: Build the service restore plan
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_recovery_plan_tool }}"
+      - --operation
+      - restore
+      - --backup-id
+      - "{{ service_backup_id }}"
+    stdin: "{{ service_registry_plan | to_json }}"
+  register: service_registry_recovery_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the service restore plan
+  ansible.builtin.set_fact:
+    service_registry_recovery_plan: >-
+      {{ service_registry_recovery_plan_command.stdout | from_json }}
+
+- name: Require exact restore confirmation
+  ansible.builtin.assert:
+    that:
+      - service_confirm_restore == service_registry_recovery_plan.confirmation
+    fail_msg: >-
+      Restoring this backup requires
+      -e service_confirm_restore={{ service_registry_recovery_plan.confirmation }}.
+
+- name: Require the service domain to be shut off for restore
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - domstate
+      - "{{ service_registry_plan.vm }}"
+  register: service_registry_restore_domain_state
+  changed_when: false
+  check_mode: false
+
+- name: Refuse live or ambiguous service restore
+  ansible.builtin.assert:
+    that:
+      - service_registry_restore_domain_state.stdout | trim == 'shut off'
+    fail_msg: >-
+      Service restore is offline-only. Shut down
+      {{ service_registry_plan.vm }} cleanly before restore.
+
+- name: Inspect restore source and transaction paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  loop:
+    - {name: disk, path: "{{ service_registry_plan.disk_path }}"}
+    - {name: backup_disk, path: "{{ service_registry_recovery_plan.backup_disk }}"}
+    - {name: backup_receipt, path: "{{ service_registry_recovery_plan.backup_receipt }}"}
+    - {name: restore_new, path: "{{ service_registry_recovery_plan.restore_new_path }}"}
+    - {name: rollback, path: "{{ service_registry_recovery_plan.restore_rollback_path }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_restore_paths
+
+- name: Publish restore path observations
+  ansible.builtin.set_fact:
+    service_registry_restore_source_disk: "{{ service_registry_restore_paths.results[0] }}"
+
+- name: Refuse unsafe or partial service restore state
+  ansible.builtin.assert:
+    that:
+      - service_registry_restore_source_disk.stat.exists | default(false)
+      - service_registry_restore_source_disk.stat.isreg | default(false)
+      - not (service_registry_restore_source_disk.stat.islnk | default(false))
+      - service_registry_restore_source_disk.stat.pw_name == service_registry_qemu_user
+      - service_registry_restore_source_disk.stat.gr_name == service_registry_qemu_group
+      - service_registry_restore_source_disk.stat.mode == '0640'
+      - service_registry_restore_paths.results[1].stat.isreg | default(false)
+      - not (service_registry_restore_paths.results[1].stat.islnk | default(false))
+      - service_registry_restore_paths.results[2].stat.isreg | default(false)
+      - not (service_registry_restore_paths.results[2].stat.islnk | default(false))
+      - not (service_registry_restore_paths.results[3].stat.exists | default(false))
+      - not (service_registry_restore_paths.results[4].stat.exists | default(false))
+    fail_msg: >-
+      Restore source is unsafe, backup is incomplete, or stale restore/rollback
+      paths already exist. Refusing to infer transaction ownership.
+
+- name: Publish service backup verification context for restore
+  ansible.builtin.set_fact:
+    service_registry_backup_context: >-
+      {{ service_registry_plan
+         | combine(service_registry_recovery_plan)
+         | combine({'service_receipt_sha256': service_registry_receipt_sha256}) }}
+
+- name: Verify the selected backup before restore
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_backup_guard_tool }}"
+      - --receipt
+      - "{{ service_registry_recovery_plan.backup_receipt }}"
+      - --disk
+      - "{{ service_registry_recovery_plan.backup_disk }}"
+      - --qemu-img
+      - "{{ service_registry_qemu_img_bin }}"
+    stdin: "{{ service_registry_backup_context | to_json }}"
+  register: service_registry_restore_backup_validation
+  changed_when: false
+  check_mode: false
+
+- name: Predict verified service restore in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would restore {{ service_registry_recovery_plan.backup_id }} to
+      {{ service_registry_plan.vm }}, retaining the previous disk as rollback
+      until the restored qcow2 passes validation.
+  changed_when: true
+
+- name: Restore the service disk transactionally
+  when: not ansible_check_mode
+  block:
+    - name: Acquire the per-service restore lock
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_mkdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_restore_lock
+      changed_when: service_registry_restore_lock.rc == 0
+
+    - name: Restore while owning the service lock
+      block:
+        - name: Reinspect live disk and restore paths under lock
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            checksum_algorithm: sha256
+            get_checksum: true
+          loop:
+            - "{{ service_registry_plan.disk_path }}"
+            - "{{ service_registry_recovery_plan.restore_new_path }}"
+            - "{{ service_registry_recovery_plan.restore_rollback_path }}"
+          register: service_registry_locked_restore_paths
+
+        - name: Refuse disk drift or concurrent restore paths
+          ansible.builtin.assert:
+            that:
+              - service_registry_locked_restore_paths.results[0].stat.checksum == service_registry_restore_source_disk.stat.checksum
+              - not (service_registry_locked_restore_paths.results[1].stat.exists | default(false))
+              - not (service_registry_locked_restore_paths.results[2].stat.exists | default(false))
+            fail_msg: Service disk or restore paths changed after lock acquisition.
+
+        - name: Convert the verified backup into restore staging
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - convert
+              - -f
+              - qcow2
+              - -O
+              - qcow2
+              - -o
+              - compat=1.1,lazy_refcounts=on
+              - "{{ service_registry_recovery_plan.backup_disk }}"
+              - "{{ service_registry_recovery_plan.restore_new_path }}"
+          changed_when: true
+
+        - name: Check restore staging before touching the live disk
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - check
+              - -f
+              - qcow2
+              - "{{ service_registry_recovery_plan.restore_new_path }}"
+          changed_when: false
+
+        - name: Protect restore staging for QEMU
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.restore_new_path }}"
+            owner: "{{ service_registry_qemu_user }}"
+            group: "{{ service_registry_qemu_group }}"
+            mode: "0640"
+
+        - name: Preserve the previous service disk as rollback  # noqa command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_mv_bin }}"
+              - "{{ service_registry_plan.disk_path }}"
+              - "{{ service_registry_recovery_plan.restore_rollback_path }}"
+          changed_when: true
+
+        - name: Commit the restored service disk  # noqa command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_mv_bin }}"
+              - "{{ service_registry_recovery_plan.restore_new_path }}"
+              - "{{ service_registry_plan.disk_path }}"
+          changed_when: true
+
+        - name: Check the committed restored service disk
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - check
+              - -f
+              - qcow2
+              - "{{ service_registry_plan.disk_path }}"
+          changed_when: false
+
+        - name: Read committed restored disk metadata
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_qemu_img_bin }}"
+              - info
+              - --output=json
+              - "{{ service_registry_plan.disk_path }}"
+          register: service_registry_restored_disk_info_command
+          changed_when: false
+
+        - name: Publish committed restored disk metadata
+          ansible.builtin.set_fact:
+            service_registry_restored_disk_info: >-
+              {{ service_registry_restored_disk_info_command.stdout | from_json }}
+
+        - name: Refuse a malformed committed restored disk
+          ansible.builtin.assert:
+            that:
+              - service_registry_restored_disk_info.format == 'qcow2'
+              - service_registry_restored_disk_info.get('backing-filename') is none
+              - service_registry_restored_disk_info['virtual-size'] | int > 0
+            fail_msg: Committed restored disk is not an independent qcow2 image.
+
+        - name: Remove rollback only after committed restore validation
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.restore_rollback_path }}"
+            state: absent
+
+      rescue:
+        - name: Inspect rollback availability after failed restore
+          ansible.builtin.stat:
+            path: "{{ service_registry_recovery_plan.restore_rollback_path }}"
+          register: service_registry_restore_rollback_stat
+
+        - name: Remove an unverified committed restore before rollback
+          when: service_registry_restore_rollback_stat.stat.exists | default(false)
+          ansible.builtin.file:
+            path: "{{ service_registry_plan.disk_path }}"
+            state: absent
+
+        - name: Restore the preserved previous service disk  # noqa command-instead-of-module
+          when: service_registry_restore_rollback_stat.stat.exists | default(false)
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_mv_bin }}"
+              - "{{ service_registry_recovery_plan.restore_rollback_path }}"
+              - "{{ service_registry_plan.disk_path }}"
+          changed_when: true
+
+        - name: Remove failed restore staging
+          ansible.builtin.file:
+            path: "{{ service_registry_recovery_plan.restore_new_path }}"
+            state: absent
+
+        - name: Fail after restoring the previous service disk
+          ansible.builtin.fail:
+            msg: >-
+              Service restore failed. The previous disk was restored whenever
+              the rollback move had occurred; restore staging was removed.
+
+      always:
+        - name: Release the per-service restore lock
+          when:
+            - service_registry_restore_lock is defined
+            - service_registry_restore_lock.rc == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_rmdir_bin }}"
+              - "{{ service_registry_plan.lock_path }}"
+          register: service_registry_restore_unlock
+          changed_when: service_registry_restore_unlock.rc == 0
+          failed_when: service_registry_restore_unlock.rc != 0

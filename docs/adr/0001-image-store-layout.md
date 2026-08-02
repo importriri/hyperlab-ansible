@@ -84,6 +84,14 @@ When any value is not explicitly configured, the corresponding
 directory while any sentinel remains. It then verifies every administrator,
 QEMU and swtpm user/group through `getent`.
 
+For the reviewed Arch hypervisors, `host_vars/localhost.yml` records the Nitro
+observation and package contract as QEMU `libvirt-qemu:libvirt-qemu` and swtpm
+`tss:tss`. The shared variables deliberately retain their sentinels so a new
+inventory cannot inherit those host facts accidentally. `kvm_host` installs
+`swtpm` before `image_store`, ensuring the `tss` account exists at the point
+where the identity gate runs. An explicit setting in `qemu.conf` still wins and
+must pass the same account and traversal checks.
+
 After creation, each non-root runtime user executes `/usr/bin/test -x` against
 every directory assigned to its access class. This proves the complete path,
 including parent directories and supplementary-group membership, is actually

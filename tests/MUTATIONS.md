@@ -131,12 +131,18 @@ push.
   module and nothing anywhere says why.
 - Restore: `git checkout -- roles/desktop/tasks/main.yml`
 
-### 17. rofi @import pointing at a name nobody deploys
-- Break: `sed -i 's/@import "rofi-launcher.rasi"/@import "launcher.rasi"/' roles/desktop/files/rofi-config.rasi`
-- Red: render suite, "A rice invariant broke" - rofi resolves @import
-  against the file's own directory, so a rename in the copy loop and a
-  rename in the theme have to happen together or the launcher falls back
-  to the stock theme.
+### 17. rofi launcher theme points at a name nobody deploys
+- Break: `sed -i 's/@theme "rofi-launcher.rasi"/@theme "launcher.rasi"/' roles/desktop/files/rofi-config.rasi`
+- Red: `rofi_theme_contract.py` - the launcher must replace the stock theme
+  with the exact file deployed by the desktop role. Replacing `@theme` with
+  `@import` is also refused because it brought back the light fallback rows
+  and broke Mod+D on the Nitro.
+- Restore: `git checkout -- roles/desktop/files/rofi-config.rasi`
+
+### 17a. rofi selection follows the mouse again
+- Break: `sed -i 's/hover-select:        false/hover-select:        true/' roles/desktop/files/rofi-config.rasi`
+- Red: `rofi_theme_contract.py` - keyboard selection must stay stable instead
+  of jumping whenever the pointer crosses a row.
 - Restore: `git checkout -- roles/desktop/files/rofi-config.rasi`
 
 ### 18. Backdrop path drift
@@ -227,15 +233,28 @@ push.
 - Red: static contract, "network drift must compare persistent XML".
 - Restore: `git checkout -- roles/network_domains/tasks/main.yml`
 
-### 29. Looking Glass comments regress to hash markers
+### 29. Existing libvirt networks stop receiving persistent XML updates
+- Break: replace the `virsh net-define` command in
+  `roles/network_domains/tasks/main.yml` with `community.libvirt.virt_net`
+  using `command: define`.
+- Red: static contract, "network reconciliation must update persistent XML with virsh net-define".
+- Restore: `git checkout -- roles/network_domains/tasks/main.yml`
+
+### 30. Looking Glass comments regress to hash markers
 - Break: `sed -i '1s/^;/#/' roles/looking_glass/templates/client.ini.j2`
 - Red: static contract, "Looking Glass B7 comments must use semicolons".
 - Restore: `git checkout -- roles/looking_glass/templates/client.ini.j2`
 
-### 30. kvmfr unload failures are ignored again
+### 31. kvmfr unload failures are ignored again
 - Break: `sed -i 's/failed_when: looking_glass_unload.rc != 0/failed_when: false/' roles/looking_glass/handlers/main.yml`
 - Red: static contract, "kvmfr resize must fail when unload fails".
 - Restore: `git checkout -- roles/looking_glass/handlers/main.yml`
+
+### 32. Nitro gate starts prompting for every Ansible invocation again
+- Break: add `-K` back to an `ansible-playbook` command in
+  `run-nitro-m9-cockpit-gate.sh`.
+- Red: Nitro gate contract, "ansible-playbook -K" must remain absent.
+- Restore: `git checkout -- run-nitro-m9-cockpit-gate.sh`
 
 ## Image store (M2)
 
@@ -358,3 +377,133 @@ of mutations; it is that each safety claim has a test capable of becoming red.
 - Red: `python tests/image_store_contract.py` — the inheritance source must be a
   pre-write refusal, while the created root is independently verified on the
   real pass.
+
+### 73. The bar execs a helper the role does not deploy
+- Break: point any `custom/hyperlab*` `exec` at a path that is not in the
+  desktop role's `/usr/local/bin` copy loop.
+- Red: the cockpit control invariants - `render_hyper_execs` must be a subset of
+  what the role actually installs, or the module silently shows nothing.
+
+### 74. A cockpit module polls faster than 15 seconds
+- Break: lower any `interval` on a `custom/hyperlab*` module.
+- Red: the minimum interval assertion. Each poll is a process spawn; the signal
+  is the fast path, the interval is only the safety net for changes made
+  outside the CLI.
+
+### 75. The collapsed pill is no longer the trust level
+- Break: reorder `group/hyperlab.modules` so `custom/hyperlab` is not first.
+- Red: the drawer's first child is the always-visible one, and trust is the
+  single lab fact that cannot be recovered by looking at anything else.
+
+### 76. The CLI and the bar disagree about the refresh signal
+- Break: change `WAYBAR_SIGNAL` in `tools/hyperlabctl/hyperlabctl/operations.py`
+  without changing `signal` in `waybar.jsonc`.
+- Red: the invariant reads the number out of the Python source and compares it
+  with the one in the bar config. Drift here is invisible at runtime: the bar
+  just stops updating after an action, and nothing errors.
+
+### 77. A cockpit click reaches something other than the palette or the panel
+- Break: point an `on-click` at any other command.
+- Red: the allowed-clicks difference. The bar is a session surface with no
+  password to give, so what it can launch is a closed list.
+
+### 78. The palette runs a privileged action instead of handing it over
+- Break: remove the `privileged == yes` branch from
+  `privatestack-hyperlab-palette.sh`.
+- Red: the palette invariant. That branch is the only thing keeping a sudo
+  prompt off a mouse click.
+
+### 79. The checkout pointer lands executable
+- Break: set `/etc/hyperlabctl/checkout` to mode `0755`.
+- Red: the pointer is data the wrapper reads, not something anyone runs. It is
+  asserted 0644 exactly so it cannot drift into the executable class by
+  copy-paste from the helper task above it.
+
+### 80. The collapsed cockpit pill goes back to polling
+- Break: replace the collapsed module's `exec ... watch` and `restart-interval`
+  with a plain `interval`.
+- Red: the collapsed module must be a stream. Polling is a process spawn on a
+  timer; blocking on `virsh event` costs nothing while nothing happens and
+  redraws the instant a domain moves.
+
+### 81. The drawer loses a pill
+- Break: remove one entry from `group/hyperlab.modules`.
+- Red: the drawer is asserted at exactly three pills behind the collapsed one.
+  A silently missing pill looks identical to a pill whose script is failing.
+
+### 82. The CLI wrapper leaves the helper loop
+- Break: remove `hyperlabctl-wrapper.sh` from the `/usr/local/bin` copy loop.
+- Red: the bar execs `/usr/local/bin/hyperlabctl` through its helper. Without
+  the wrapper every pill falls back to "hyperlabctl is not installed", which
+  looks exactly like a broken CLI rather than a missing deploy.
+
+### 83. A second copy task installs into /usr/local/bin with the wrong mode
+- Break: add any second `ansible.builtin.copy` targeting `/usr/local/bin` with
+  a mode other than `0755`.
+- Red: the existing rice invariant, which compares the whole list of bin modes
+  rather than checking one. This is the reason the new helpers were added to
+  the loop that was already there instead of getting a task of their own - a
+  second task would have turned that list into `['0755', '0755']` and broken
+  CI on push.
+
+### 84. An offered action references a playbook that is not in the checkout
+- Break: set any action's `requires` to `None` while its command still names a
+  playbook this checkout does not have.
+- Red: `tests/hyperlabctl_contract.py`. The palette is generated from the
+  registry, so an action that cannot run is an action the operator will pick
+  and watch fail.
+
+
+## Cockpit and M3 integration
+
+These mutations pin the boundary between the desktop role, the shell surface
+and the M3 lifecycle. They are cross-file contracts, so
+`tests/hyperlabctl_contract.py` or `tests/m3_cockpit_contract.py` is the expected
+red check.
+
+### Cockpit command strings regain shell execution
+- Break: replace `subprocess.call(argv)` with
+  `subprocess.call(" ".join(argv), shell=True)` in
+  `roles/desktop/files/privatestack-hyperlab-palette.sh`.
+- Red: `tests/hyperlabctl_contract.py`, "the palette executes validated JSON argv".
+- Restore: `git checkout -- roles/desktop/files/privatestack-hyperlab-palette.sh`
+
+### Completion executes a mutable checkout as root
+- Break: delete `become_user: "{{ admin_user }}"` from the completion task in
+  `roles/desktop/tasks/main.yml`.
+- Red: `tests/hyperlabctl_contract.py`, "completion runs as the admin user".
+- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+
+### Completion becomes a shell command
+- Break: replace the completion task's `argv:` block with a `cmd:` string.
+- Red: `tests/hyperlabctl_contract.py`, "completion uses argv rather than a shell command".
+- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+
+### Managed-domain metadata drifts from the cockpit parser
+- Break: change the `xmlns:hyperlab` URI in
+  `roles/guest/templates/domain.xml.j2`.
+- Red: `tests/m3_cockpit_contract.py`.
+- Restore: `git checkout -- roles/guest/templates/domain.xml.j2`
+
+### A managed action bypasses its lifecycle playbook
+- Break: point `vm.managed-start` in `tools/hyperlabctl/hyperlabctl/registry.py`
+  at `hyperlabctl vm start {domain}` and mark it unprivileged.
+- Red: `tests/m3_cockpit_contract.py`.
+- Restore: `git checkout -- tools/hyperlabctl/hyperlabctl/registry.py`
+
+### The split QEMU SPICE audio module disappears
+- Break: remove `qemu-audio-spice` from `guest_required_packages` in
+  `group_vars/all/guest.yml`.
+- Red: `tests/static_contract.py` and `tests/contract_mutations.py`. Libvirt
+  emits `-audiodev driver=spice` for the managed SPICE display, so Arch's
+  separately packaged `audio-spice.so` is a hard runtime dependency.
+- Restore: `git checkout -- group_vars/all/guest.yml`
+
+### A managed disk regains libvirt DAC relabel
+- Break: remove `<seclabel model="dac" relabel="no"/>` from the primary disk
+  source in `roles/guest/templates/domain.xml.j2`.
+- Red: `tests/static_contract.py`, `tests/contract_mutations.py` and
+  `tests/guest_contract.py`. A disposable start would otherwise let libvirt
+  change the sealed backing image from `root:<qemu-group>` to the QEMU user and
+  leave it that way after shutdown.
+- Restore: `git checkout -- roles/guest/templates/domain.xml.j2`

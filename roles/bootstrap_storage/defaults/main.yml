@@ -1,0 +1,15 @@
+---
+bootstrap_storage_operation: validate
+bootstrap_storage_supported_operations:
+  - validate
+  - adopt
+bootstrap_storage_contract_path: /etc/privatestack/bootstrap-storage.yml
+bootstrap_storage_mountpoint: /var/lib/libvirt/images
+bootstrap_storage_repository_root: "{{ playbook_dir | dirname }}"
+bootstrap_storage_guard_tool: "{{ (bootstrap_storage_repository_root, 'tools/bootstrap_storage_guard.py') | path_join }}"
+bootstrap_storage_python_bin: /usr/bin/python
+bootstrap_storage_findmnt_bin: /usr/bin/findmnt
+bootstrap_storage_lsattr_bin: /usr/bin/lsattr
+bootstrap_storage_confirm_adopt: ""
+bootstrap_storage_expected_adopt_confirmation: >-
+  adopt:{{ bootstrap_storage_mountpoint }}:{{ bootstrap_storage_observed_source | default('unobserved') }}

@@ -1,0 +1,167 @@
+---
+- name: Read persistent services network XML
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - net-dumpxml
+      - --inactive
+      - services
+  register: service_registry_network_xml
+  changed_when: false
+  check_mode: false
+
+- name: Verify persistent DHCP ownership before registration
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_network_guard_tool }}"
+      - --name
+      - "{{ service_registry_plan.id }}"
+      - --mac
+      - "{{ service_registry_plan.dhcp.mac }}"
+      - --ip
+      - "{{ service_registry_plan.dhcp.ip }}"
+    stdin: "{{ service_registry_network_xml.stdout }}"
+  register: service_registry_network_validation
+  changed_when: false
+  check_mode: false
+
+- name: Probe for a pre-existing libvirt service domain
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - dominfo
+      - "{{ service_registry_plan.vm }}"
+  register: service_registry_domain_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Inspect pre-existing service VM artefacts
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - {name: disk, path: "{{ service_registry_plan.disk_path }}"}
+    - {name: state, path: "{{ service_registry_plan.vm_state_path }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_preexisting_artifacts
+
+- name: Refuse retroactive ownership of an existing service VM
+  ansible.builtin.assert:
+    that:
+      - service_registry_domain_probe.rc != 0
+      - >-
+        service_registry_preexisting_artifacts.results
+        | map(attribute='stat.exists')
+        | select('equalto', true)
+        | list | length == 0
+    fail_msg: >-
+      A domain, disk or managed VM state already exists for
+      {{ service_registry_plan.vm }}. M7 registration must precede guest creation
+      and cannot claim retroactive ownership.
+
+- name: Predict service registration in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would register {{ service_registry_plan.id }}, reserve
+      {{ service_registry_plan.memory_reservation_mb }} MiB, and attest lease
+      {{ service_registry_plan.dhcp.mac }} / {{ service_registry_plan.dhcp.ip }}.
+  changed_when: true
+
+- name: Commit the service registration transaction
+  when: not ansible_check_mode
+  block:
+    - name: Create service receipt and lock roots
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      loop:
+        - "{{ service_registry_receipt_root }}"
+        - "{{ service_registry_lock_root }}"
+
+    - name: Acquire the per-service registration lock
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_mkdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_lock_acquire
+      changed_when: service_registry_lock_acquire.rc == 0
+
+    - name: Commit while owning the service registration lock
+      block:
+        - name: Reinspect service receipt paths after lock acquisition
+          ansible.builtin.stat:
+            path: "{{ item }}"
+          loop:
+            - "{{ service_registry_plan.receipt_path }}"
+            - "{{ service_registry_plan.receipt_new_path }}"
+          register: service_registry_locked_receipt_stats
+
+        - name: Refuse service receipt paths changed during registration
+          ansible.builtin.assert:
+            that:
+              - >-
+                service_registry_locked_receipt_stats.results
+                | map(attribute='stat.exists')
+                | select('equalto', true)
+                | list | length == 0
+            fail_msg: >-
+              Service receipt paths changed after lock acquisition. Refusing to
+              overwrite another registration transaction.
+
+        - name: Render the service registration receipt to staging
+          ansible.builtin.template:
+            src: receipt.yml.j2
+            dest: "{{ service_registry_plan.receipt_new_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+
+        - name: Verify the staged service registration receipt
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_python_bin }}"
+              - "{{ service_registry_receipt_guard_tool }}"
+              - --receipt
+              - "{{ service_registry_plan.receipt_new_path }}"
+            stdin: "{{ service_registry_plan | to_json }}"
+          changed_when: false
+          check_mode: false
+
+        - name: Commit the service registration receipt atomically  # noqa command-instead-of-module
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_mv_bin }}"
+              - "{{ service_registry_plan.receipt_new_path }}"
+              - "{{ service_registry_plan.receipt_path }}"
+          changed_when: true
+
+      rescue:
+        - name: Remove only newly-owned service receipt staging
+          ansible.builtin.file:
+            path: "{{ service_registry_plan.receipt_new_path }}"
+            state: absent
+
+        - name: Fail after rolling back service registration staging
+          ansible.builtin.fail:
+            msg: >-
+              Service registration failed and only its staging receipt was
+              removed. Existing service receipts and VM artefacts were untouched.
+
+      always:
+        - name: Release the per-service registration lock
+          when:
+            - service_registry_lock_acquire is defined
+            - service_registry_lock_acquire.rc == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ service_registry_rmdir_bin }}"
+              - "{{ service_registry_plan.lock_path }}"
+          register: service_registry_lock_release
+          changed_when: service_registry_lock_release.rc == 0
+          failed_when: service_registry_lock_release.rc != 0

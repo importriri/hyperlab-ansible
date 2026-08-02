@@ -133,6 +133,17 @@ def main() -> int:
         check(storage.get(key) == sentinel,
               f"{key} must remain a blocking hardware sentinel in shared data")
 
+    host_identity = load(ROOT / "host_vars/localhost.yml")
+    check(host_identity == {
+        "hyperlab_qemu_user_declared": "libvirt-qemu",
+        "hyperlab_qemu_group_declared": "libvirt-qemu",
+        "hyperlab_swtpm_user_declared": "tss",
+        "hyperlab_swtpm_group_declared": "tss",
+    }, "localhost host_vars must resolve every shared runtime identity sentinel")
+    kvm_defaults = load(ROOT / "roles/kvm_host/defaults/main.yml")
+    check("swtpm" in kvm_defaults.get("kvm_host_packages", []),
+          "kvm_host must install swtpm before image_store checks the tss identity")
+
     sizes = [load(path).get("virtual_size_gib", 0) for path in sorted((ROOT / "images").glob("*.yml"))]
     if sizes:
         expected = -(-int(max(sizes) * 3) // 2)
@@ -142,7 +153,6 @@ def main() -> int:
           "M2 must warn about future capacity, not refuse empty-directory creation")
 
     source_paths = [path for path in ROLE.rglob("*") if path.is_file()]
-    source_paths.append(ROOT / "playbooks/image-store.yml")
     source_text = "\n".join(path.read_text(errors="replace") for path in sorted(source_paths)).lower()
     for command in FORBIDDEN_TEXT:
         check(command not in source_text, f"the brick must not contain destructive operation `{command}`")
@@ -223,11 +233,20 @@ def main() -> int:
 
     play = load(ROOT / "playbooks/image-store.yml")[0]
     role_names = [entry["role"] if isinstance(entry, dict) else entry for entry in play["roles"]]
-    check(role_names == ["brick_guard", "image_store"],
-          f"image-store.yml must mount only the guard and brick, got {role_names}")
+    expected_roles = ["brick_guard", "bootstrap_storage", "brick_guard", "image_store"]
+    check(role_names == expected_roles,
+          f"image-store.yml must validate bootstrap storage before its own brick, got {role_names}")
+    playbook_text = (ROOT / "playbooks/image-store.yml").read_text()
+    check(playbook_text.index("- bootstrap_storage") < playbook_text.index("- image_store"),
+          "bootstrap storage validation must precede image-store directory writes")
+
     bricks = load(ROOT / "group_vars/all/bricks.yml")
-    check(bricks["brick_requires"].get("image_store") == ["kvm_host"],
-          "image_store must depend on kvm_host")
+    check(bricks["brick_requires"].get("bootstrap_storage") == ["kvm_host"],
+          "bootstrap_storage must depend on kvm_host")
+    check(bricks["brick_requires"].get("image_store") == ["kvm_host", "bootstrap_storage"],
+          "image_store must depend on the verified bootstrap storage identity")
+    check(bricks["brick_playbooks"].get("bootstrap_storage") == "playbooks/image-store.yml",
+          "brick graph must name the bootstrap-storage mounting playbook")
     check(bricks["brick_playbooks"].get("image_store") == "playbooks/image-store.yml",
           "brick graph must name the image-store playbook")
 

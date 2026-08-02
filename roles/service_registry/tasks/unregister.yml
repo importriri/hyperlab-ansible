@@ -1,0 +1,95 @@
+---
+- name: Require exact service unregister confirmation
+  ansible.builtin.assert:
+    that:
+      - service_confirm_unregister == service_registry_plan.id
+    fail_msg: >-
+      Unregistering a service requires
+      -e service_confirm_unregister={{ service_registry_plan.id }}.
+
+- name: Probe the service domain before unregister
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_virsh_bin }}"
+      - dominfo
+      - "{{ service_registry_plan.vm }}"
+  register: service_registry_unregister_domain
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Inspect service artefacts before unregister
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - {name: disk, path: "{{ service_registry_plan.disk_path }}"}
+    - {name: state, path: "{{ service_registry_plan.vm_state_path }}"}
+    - {name: backups, path: "{{ service_registry_plan.backup_dir }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_unregister_artifacts
+
+- name: Refuse unregister while VM or recovery artefacts remain
+  ansible.builtin.assert:
+    that:
+      - service_registry_unregister_domain.rc != 0
+      - >-
+        service_registry_unregister_artifacts.results
+        | map(attribute='stat.exists')
+        | select('equalto', true)
+        | list | length == 0
+    fail_msg: >-
+      Remove the service VM through the guest lifecycle and explicitly delete
+      every service backup before unregistering {{ service_registry_plan.id }}.
+
+- name: Predict service unregister in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would remove only the registration receipt for
+      {{ service_registry_plan.id }}. The reviewed static DHCP lease remains in
+      Git and persistent network XML until a separate reviewed change removes it.
+  changed_when: true
+
+- name: Commit service unregister under its lock
+  when: not ansible_check_mode
+  block:
+    - name: Acquire the per-service unregister lock
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_mkdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_unregister_lock
+      changed_when: service_registry_unregister_lock.rc == 0
+
+    - name: Reinspect the service receipt under unregister lock
+      ansible.builtin.stat:
+        path: "{{ service_registry_plan.receipt_path }}"
+        checksum_algorithm: sha256
+        get_checksum: true
+      register: service_registry_unregister_receipt
+
+    - name: Refuse a service receipt changed during unregister
+      ansible.builtin.assert:
+        that:
+          - service_registry_unregister_receipt.stat.exists | default(false)
+          - service_registry_unregister_receipt.stat.checksum == service_registry_receipt_sha256
+        fail_msg: Service receipt changed after validation; refusing unregister.
+
+    - name: Remove only the validated service registration receipt
+      ansible.builtin.file:
+        path: "{{ service_registry_plan.receipt_path }}"
+        state: absent
+
+  always:
+    - name: Release the per-service unregister lock
+      when:
+        - service_registry_unregister_lock is defined
+        - service_registry_unregister_lock.rc == 0
+      ansible.builtin.command:
+        argv:
+          - "{{ service_registry_rmdir_bin }}"
+          - "{{ service_registry_plan.lock_path }}"
+      register: service_registry_unregister_unlock
+      changed_when: service_registry_unregister_unlock.rc == 0
+      failed_when: service_registry_unregister_unlock.rc != 0

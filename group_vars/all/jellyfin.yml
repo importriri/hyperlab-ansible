@@ -1,0 +1,7 @@
+---
+jellyfin_expected_hostname: svc-jellyfin
+jellyfin_expected_ipv4: 10.10.5.10
+jellyfin_http_port: 8096
+jellyfin_health_url: http://127.0.0.1:8096/web/index.html
+jellyfin_media_root: /srv/media
+jellyfin_extrepo_pattern: extrepo_jellyfin.*

@@ -1,0 +1,33 @@
+---
+# Reusable application slots. A slot is documentation and naming policy only;
+# it does not reserve RAM/IP, create inventory hosts, expose ports or imply that
+# an application role exists.
+service_slots:
+  nextcloud:
+    status: planned
+    service_id: svc-nextcloud
+    purpose: Private file synchronization and sharing
+    application_role: null
+    service_spec: null
+    vm_spec: null
+  vaultwarden:
+    status: planned
+    service_id: svc-vaultwarden
+    purpose: Private password vault
+    application_role: null
+    service_spec: null
+    vm_spec: null
+  immich:
+    status: planned
+    service_id: svc-immich
+    purpose: Private photo library
+    application_role: null
+    service_spec: null
+    vm_spec: null
+  pihole:
+    status: planned
+    service_id: svc-pihole
+    purpose: Filtering DNS service
+    application_role: null
+    service_spec: null
+    vm_spec: null

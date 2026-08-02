@@ -1,0 +1,146 @@
+---
+- name: Refuse an unknown service registry operation or selector
+  ansible.builtin.assert:
+    that:
+      - service_registry_operation in service_registry_supported_operations
+      - service_spec is string
+      - service_spec | length > 0
+    fail_msg: >-
+      service_registry_operation is unsupported or service_spec does not name
+      one checked-in file below service-specs/.
+
+- name: Inspect the verified image-store identity manifest
+  ansible.builtin.stat:
+    path: "{{ hyperlab_root }}/state/layout.yml"
+  register: service_registry_layout_stat
+
+- name: Refuse a missing or redirected image-store identity manifest
+  ansible.builtin.assert:
+    that:
+      - service_registry_layout_stat.stat.exists | default(false)
+      - service_registry_layout_stat.stat.isreg | default(false)
+      - not (service_registry_layout_stat.stat.islnk | default(false))
+    fail_msg: >-
+      M7 requires the verified M2 image store. Reconcile
+      playbooks/image-store.yml before service registration or recovery.
+
+- name: Read the verified image-store identity manifest
+  ansible.builtin.slurp:
+    src: "{{ hyperlab_root }}/state/layout.yml"
+  register: service_registry_layout_slurp
+
+- name: Parse the verified image-store identity manifest
+  ansible.builtin.set_fact:
+    service_registry_layout: >-
+      {{ service_registry_layout_slurp.content | b64decode | from_yaml }}
+
+- name: Refuse an image-store manifest from another root
+  ansible.builtin.assert:
+    that:
+      - service_registry_layout is mapping
+      - service_registry_layout.root == hyperlab_root
+      - service_registry_layout.qemu_identity is match('^[^:]+:[^:]+$')
+    fail_msg: The image-store layout manifest does not describe this root.
+
+- name: Publish the observed QEMU identity
+  ansible.builtin.set_fact:
+    service_registry_qemu_user: "{{ service_registry_layout.qemu_identity.split(':', 1)[0] }}"
+    service_registry_qemu_group: "{{ service_registry_layout.qemu_identity.split(':', 1)[1] }}"
+
+- name: Build the deterministic service plan without side effects
+  ansible.builtin.command:
+    argv:
+      - "{{ service_registry_python_bin }}"
+      - "{{ service_registry_plan_tool }}"
+      - --root
+      - "{{ service_registry_repository_root }}"
+      - --spec
+      - "{{ service_spec }}"
+      - --store
+      - "{{ hyperlab_root }}"
+  register: service_registry_plan_command
+  changed_when: false
+  check_mode: false
+
+- name: Publish the deterministic service plan
+  ansible.builtin.set_fact:
+    service_registry_plan: "{{ service_registry_plan_command.stdout | from_json }}"
+
+- name: Inspect committed and transient service receipt paths
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  loop:
+    - {name: receipt, path: "{{ service_registry_plan.receipt_path }}"}
+    - {name: receipt_new, path: "{{ service_registry_plan.receipt_new_path }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  register: service_registry_receipt_stats
+
+- name: Publish service receipt observations
+  ansible.builtin.set_fact:
+    service_registry_receipt_stat: "{{ service_registry_receipt_stats.results[0] }}"
+    service_registry_receipt_new_stat: "{{ service_registry_receipt_stats.results[1] }}"
+
+- name: Refuse abandoned service receipt staging
+  ansible.builtin.assert:
+    that:
+      - not (service_registry_receipt_new_stat.stat.exists | default(false))
+    fail_msg: >-
+      {{ service_registry_plan.id }} has an abandoned service receipt staging
+      file. Refusing to infer transaction ownership.
+
+- name: Require a committed receipt for non-registration operations
+  when: service_registry_operation != 'register'
+  ansible.builtin.assert:
+    that:
+      - service_registry_receipt_stat.stat.exists | default(false)
+    fail_msg: >-
+      {{ service_registry_plan.id }} is not registered. Run
+      playbooks/service-register.yml first.
+
+- name: Validate an existing service registration
+  when: service_registry_receipt_stat.stat.exists | default(false)
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Verify the active network before first registration
+  when:
+    - service_registry_operation == 'register'
+    - not (service_registry_receipt_stat.stat.exists | default(false))
+  ansible.builtin.include_tasks: network-active.yml
+
+- name: Register a new service
+  when:
+    - service_registry_operation == 'register'
+    - not (service_registry_receipt_stat.stat.exists | default(false))
+  ansible.builtin.include_tasks: register.yml
+
+- name: Unregister a service
+  when: service_registry_operation == 'unregister'
+  ansible.builtin.include_tasks: unregister.yml
+
+- name: Create an offline service backup
+  when: service_registry_operation == 'backup'
+  ansible.builtin.include_tasks: backup.yml
+
+- name: Restore an offline service backup
+  when: service_registry_operation == 'restore'
+  ansible.builtin.include_tasks: restore.yml
+
+- name: Delete an offline service backup
+  when: service_registry_operation == 'delete-backup'
+  ansible.builtin.include_tasks: delete-backup.yml
+
+- name: Prune an empty service backup parent
+  when:
+    - service_registry_operation == 'delete-backup'
+    - not ansible_check_mode
+  ansible.builtin.include_tasks: prune-backup-root.yml
+
+- name: Record that the service_registry brick is available
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: service_registry

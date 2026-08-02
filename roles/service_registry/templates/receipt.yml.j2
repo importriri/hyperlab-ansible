@@ -1,0 +1,14 @@
+---
+schema_version: 1
+id: {{ service_registry_plan.id }}
+vm: {{ service_registry_plan.vm }}
+spec_sha256: {{ service_registry_plan.spec_sha256 }}
+vm_spec_sha256: {{ service_registry_plan.vm_spec_sha256 }}
+network_profile: {{ service_registry_plan.network_profile }}
+memory_reservation_mb: {{ service_registry_plan.memory_reservation_mb }}
+dhcp: {{ service_registry_plan.dhcp | to_json }}
+exposures: {{ service_registry_plan.exposures | to_json }}
+backup_policy: {{ service_registry_plan.backup_policy }}
+restore_policy: {{ service_registry_plan.restore_policy }}
+disk_path: {{ service_registry_plan.disk_path | to_json }}
+registered: true

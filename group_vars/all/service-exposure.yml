@@ -1,0 +1,12 @@
+---
+service_exposure_repository_root: "{{ playbook_dir | dirname }}"
+service_exposure_spec: service-specs/svc-jellyfin.yml
+service_exposure_lan_interface_override: ""
+service_exposure_bridge: virbr-services
+service_exposure_config_path: /etc/privatestack/service-exposures.json
+service_exposure_runtime_tool_path: /usr/local/lib/privatestack/service-exposure.py
+service_exposure_hook_path: /etc/libvirt/hooks/qemu.d/50-service-exposure
+service_exposure_nft_bin: /usr/bin/nft
+service_exposure_ip_bin: /usr/bin/ip
+service_exposure_python_bin: /usr/bin/python
+service_exposure_virsh_bin: /usr/bin/virsh

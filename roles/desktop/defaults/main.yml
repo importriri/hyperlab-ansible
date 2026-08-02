@@ -1,7 +1,8 @@
 ---
-# The optional cockpit. The lab bundle keeps the host blind (TTY): this
-# brick is opt-in, mounted by playbooks/desktop.yml - never by lab.yml.
-# On the host it rides the free iGPU: the dGPU belongs to gpu_handoff.
+# The local cockpit. foundation.yml keeps a recovery host blind (TTY), while
+# the normal laptop target lab.yml mounts this brick before Looking Glass.
+# desktop.yml remains the narrow maintenance entrypoint. On the host the
+# cockpit rides the free iGPU: the dGPU belongs to gpu_handoff.
 #
 # sway, NOT swayfx and NOT a DE: official repos only (no AUR in bricks),
 # one compositor, no dependency chain. The eye candy is theming
@@ -24,6 +25,12 @@
 # profile's `desktop:` block instead (group_vars/all/hardware.yml), merged
 # over these. A guest VM has no profile and keeps them, which is right: it
 # has no touchpad and no opinion about the keyboard.
+# --- the Hyperlab cockpit -----------------------------------------------------
+# Where this host keeps the checkout. The CLI reads group_vars, so it runs FROM
+# the repository: /usr/local/bin/hyperlabctl is a wrapper that points here, not
+# a copy. A host that clones somewhere else overrides this and nothing else.
+desktop_hyperlab_checkout: "/home/{{ admin_user }}/privatestack-ansible"
+
 desktop_input_defaults:
   keyboard_layout: it
   keyboard_variant: ""

@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# gpu-handoff - libvirt qemu hook. Managed by privatestack-ansible
-# (roles/gpu_handoff). Do not hand-edit: the next run overwrites this file.
+# gpu-handoff - libvirt qemu hook. Managed by privatestack-ansible.
 #
-# Protocol: between reboots the GPU only moves DOWN the trust ladder.
+# Protocol: exact VM names map to security domains, and security domains map to
+# trust levels. Between reboots the GPU only moves DOWN the trust ladder:
 #   clean(3) -> dev(2) -> dirty(1) -> lab(0)
-# Same level restarts freely; any step UP is refused until a reboot wipes
-# /run. Domains not listed in the rotation are not GPU domains: they pass
-# through untouched. Anything ambiguous about the protocol's own config or
-# state REFUSES - fail closed.
+# Same-level restarts are allowed. Any upward move is refused until a reboot
+# wipes /run. Domains absent from the reviewed allowlist never touch state.
 set -u
 
 ROTATION_FILE="${GPU_HANDOFF_ROTATION:-/etc/gpu-handoff/rotation}"
+DOMAINS_FILE="${GPU_HANDOFF_DOMAINS:-/etc/gpu-handoff/domains}"
 STATE_DIR="${GPU_HANDOFF_STATE_DIR:-/run/gpu-handoff}"
 STATE_FILE="${STATE_DIR}/trust"
 
@@ -25,54 +24,92 @@ if [[ -z "${domain}" ]]; then
     exit 1
 fi
 
-# The rotation list is the protocol's own config. Unreadable means we
-# cannot even decide membership: fail closed for everyone.
-if [[ ! -r "${ROTATION_FILE}" ]]; then
-    echo "gpu-handoff: rotation ${ROTATION_FILE} missing or unreadable: refusing (fail closed)" >&2
-    exit 1
-fi
+# Both files are protocol configuration. Unreadable means membership or trust
+# cannot be decided, so the safe result is refusal for every prepare event.
+for config in "${DOMAINS_FILE}" "${ROTATION_FILE}"; do
+    if [[ ! -r "${config}" ]]; then
+        echo "gpu-handoff: ${config} missing or unreadable: refusing (fail closed)" >&2
+        exit 1
+    fi
+done
 
-trust=""
-entries=0
-while read -r name level _; do
+profile=""
+domain_entries=0
+declare -A seen_domains=()
+while read -r name network extra; do
     if [[ -z "${name}" || "${name}" == \#* ]]; then
         continue
     fi
-    if [[ ! "${level}" =~ ^[0-9]+$ ]]; then
-        echo "gpu-handoff: corrupt rotation line ('${name} ${level}'): refusing (fail closed)" >&2
+    if [[ -n "${extra:-}" || ! "${name}" =~ ^[a-z0-9][a-z0-9-]{1,30}$ || ! "${network}" =~ ^[a-z]+$ ]]; then
+        echo "gpu-handoff: corrupt domain line ('${name} ${network} ${extra:-}'): refusing" >&2
         exit 1
     fi
-    entries=$((entries + 1))
+    if [[ -n "${seen_domains[$name]:-}" ]]; then
+        echo "gpu-handoff: duplicate domain '${name}': refusing" >&2
+        exit 1
+    fi
+    seen_domains["${name}"]=1
+    domain_entries=$((domain_entries + 1))
     if [[ "${name}" == "${domain}" ]]; then
+        profile="${network}"
+    fi
+done < "${DOMAINS_FILE}"
+
+if (( domain_entries == 0 )); then
+    echo "gpu-handoff: ${DOMAINS_FILE} has no valid entries: refusing" >&2
+    exit 1
+fi
+
+# Not in the explicit allowlist: not a GPU domain. Pass through and never touch
+# the trust state, even if its name happens to resemble a security domain.
+if [[ -z "${profile}" ]]; then
+    exit 0
+fi
+
+trust=""
+rotation_entries=0
+declare -A seen_profiles=()
+while read -r network level extra; do
+    if [[ -z "${network}" || "${network}" == \#* ]]; then
+        continue
+    fi
+    if [[ -n "${extra:-}" || ! "${network}" =~ ^[a-z]+$ || ! "${level}" =~ ^[0-9]+$ ]]; then
+        echo "gpu-handoff: corrupt rotation line ('${network} ${level} ${extra:-}'): refusing" >&2
+        exit 1
+    fi
+    if [[ -n "${seen_profiles[$network]:-}" ]]; then
+        echo "gpu-handoff: duplicate trust profile '${network}': refusing" >&2
+        exit 1
+    fi
+    seen_profiles["${network}"]=1
+    rotation_entries=$((rotation_entries + 1))
+    if [[ "${network}" == "${profile}" ]]; then
         trust="${level}"
     fi
 done < "${ROTATION_FILE}"
 
-# An empty rotation is not "handoff disabled" - it is a broken config.
-# Disabling the handoff means removing the hook, deliberately.
-if (( entries == 0 )); then
-    echo "gpu-handoff: rotation ${ROTATION_FILE} has no valid entries: refusing (fail closed)" >&2
+if (( rotation_entries == 0 )); then
+    echo "gpu-handoff: ${ROTATION_FILE} has no valid entries: refusing" >&2
+    exit 1
+fi
+if [[ -z "${trust}" ]]; then
+    echo "gpu-handoff: domain ${domain} maps to unknown profile ${profile}: refusing" >&2
     exit 1
 fi
 
-# Not in rotation: not a GPU domain. Pass through, never touch state.
-if [[ -z "${trust}" ]]; then
-    exit 0
-fi
-
 if ! mkdir -p "${STATE_DIR}"; then
-    echo "gpu-handoff: cannot create ${STATE_DIR}: refusing (fail closed)" >&2
+    echo "gpu-handoff: cannot create ${STATE_DIR}: refusing" >&2
     exit 1
 fi
 
 if [[ -e "${STATE_FILE}" ]]; then
     current="$(cat "${STATE_FILE}" 2>/dev/null || true)"
     if [[ ! "${current}" =~ ^[0-9]+$ ]]; then
-        echo "gpu-handoff: corrupt state '${current}': refusing (fail closed) - a reboot resets it" >&2
+        echo "gpu-handoff: corrupt state '${current}': refusing - a reboot resets it" >&2
         exit 1
     fi
     if (( trust > current )); then
-        echo "gpu-handoff: REFUSING ${domain} (trust ${trust}): GPU held at trust ${current}; trust only rises through a reboot" >&2
+        echo "gpu-handoff: REFUSING ${domain} (${profile}/${trust}): GPU held at trust ${current}; trust only rises through a reboot" >&2
         exit 1
     fi
 fi

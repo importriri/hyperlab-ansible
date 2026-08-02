@@ -1,0 +1,16 @@
+---
+schema_version: 1
+id: svc-jellyfin
+vm: svc-jellyfin
+network_profile: services
+memory_reservation_mb: 4096
+backup_policy: weekly
+restore_policy: offline-only
+dhcp:
+  mac: "52:54:00:66:29:6e"
+  ip: 10.10.5.10
+# M8 forwards only the default HTTP endpoint. Discovery and HTTPS stay closed.
+exposures:
+  - tcp/8096
+owner: sid
+purpose: Private media service VM

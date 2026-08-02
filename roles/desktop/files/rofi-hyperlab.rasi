@@ -1,0 +1,100 @@
+/* Hyperlab palette: translucent dark companion to the terminal cockpit. */
+@import "rofi-mocha.rasi"
+
+* {
+    background-color: @transparent;
+    text-color:       @text;
+}
+
+window {
+    transparency:     "real";
+    width:            680px;
+    location:         center;
+    background-color: #1e1e2ef2;
+    border:           2px;
+    border-color:     @blue;
+    border-radius:    14px;
+    padding:          0px;
+}
+
+mainbox {
+    background-color: @transparent;
+    children:         [ inputbar, listview ];
+    padding:          12px;
+    spacing:          10px;
+}
+
+inputbar {
+    children:         [ prompt, entry ];
+    padding:          10px 14px;
+    spacing:          10px;
+    background-color: #181825f2;
+    border:           1px;
+    border-color:     @surface1;
+    border-radius:    10px;
+}
+
+prompt {
+    text-color:       @blue;
+    background-color: @transparent;
+}
+
+entry {
+    placeholder:       "filtra azioni";
+    placeholder-color: @overlay0;
+    text-color:        @text;
+    background-color:  @transparent;
+}
+
+listview {
+    lines:            10;
+    columns:          1;
+    scrollbar:        false;
+    spacing:          4px;
+    background-color: @transparent;
+}
+
+element {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border:           1px;
+    border-color:     @transparent;
+    border-radius:    9px;
+    padding:          8px 11px;
+}
+
+element normal.normal {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border-color:     @transparent;
+}
+
+element alternate.normal {
+    background-color: @transparent;
+    text-color:       @subtext0;
+    border-color:     @transparent;
+}
+
+element selected.normal {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @blue;
+}
+
+element selected.active {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @blue;
+}
+
+element selected.urgent {
+    background-color: @surface0;
+    text-color:       @text;
+    border-color:     @blue;
+}
+
+element-text {
+    background-color: @transparent;
+    text-color:       inherit;
+    vertical-align:   0.5;
+}

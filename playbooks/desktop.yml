@@ -1,8 +1,7 @@
 ---
-# The optional cockpit. Host and workstation VMs alike: the hypervisor
-# rides its free iGPU (the dGPU belongs to gpu_handoff), guests their
-# virtual one. lab.yml never mounts this - the blind host stays the
-# default.
+# Targeted cockpit reconciliation. lab.yml mounts it on the hypervisor; this
+# playbook also serves workstation guests without coupling their availability
+# to the host build.
 - name: Mount the desktop cockpit
   hosts: hypervisor:workstations
   become: true
