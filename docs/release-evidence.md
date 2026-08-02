@@ -28,10 +28,11 @@ sudo install -d -m 0700 -o "$USER" -g "$(id -gn)" "$RELEASE_DIR"
 
 Raw logs and mutable evidence stay here. They never enter Git automatically.
 
-## 2. Freeze one candidate
+## 2. Freeze one published revision
 
-Use exact 40-character commits. Branch names define the reviewed development
-line, but they are not evidence identities.
+Use exact 40-character commits from `main`. The acceptance manifest refuses
+review branches, detached candidates and unpublished checkout names; the commit
+identity remains the durable evidence key.
 
 ```bash
 python tools/release_acceptance.py \

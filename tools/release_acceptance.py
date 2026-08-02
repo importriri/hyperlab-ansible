@@ -197,9 +197,8 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
             f"acceptance repository {repository} remote is invalid",
         )
         require(
-            isinstance(contract["required_branch"], str)
-            and contract["required_branch"].startswith("review/"),
-            f"acceptance repository {repository} branch is invalid",
+            contract["required_branch"] == "main",
+            f"acceptance repository {repository} must publish from main",
         )
     for pattern in patterns:
         require(isinstance(pattern, str) and pattern, "forbidden evidence pattern must be text")

@@ -370,13 +370,13 @@ def test_repository_proof_binds_clean_exact_checkouts_and_hashes_logs() -> None:
         bootstrap = root / "bootstrap"
         ansible_sha = init_fake_repo(
             ansible,
-            "review/m9-postrestore-v1",
+            "main",
             "https://github.com/importriri/privatestack-ansible.git",
             "ansible verification pass",
         )
         bootstrap_sha = init_fake_repo(
             bootstrap,
-            "review/nitro-release-candidate-v1",
+            "main",
             "git@github.com:importriri/arch-bootstrap.git",
             "bootstrap verification pass",
         )
@@ -452,7 +452,9 @@ def test_complete_sanitized_evidence_seals_to_stable_hashes() -> None:
 
 def test_tampered_plan_is_refused_before_evidence_is_read() -> None:
     release_plan = plan()
-    release_plan["repositories"]["arch_bootstrap"]["required_branch"] = "main"
+    release_plan["repositories"]["arch_bootstrap"]["required_branch"] = (
+        "review/old-release-line"
+    )
     result = seal(release_plan, evidence_for(plan()))
     assert result.returncode == 2
     assert "canonical manifest projection" in result.stderr
@@ -527,11 +529,11 @@ def test_manifest_covers_every_required_final_boundary() -> None:
     )
     assert (
         manifest["repositories"]["arch_bootstrap"]["required_branch"]
-        == "review/nitro-release-candidate-v1"
+        == "main"
     )
     assert (
         manifest["repositories"]["privatestack_ansible"]["required_branch"]
-        == "review/m9-postrestore-v1"
+        == "main"
     )
 
 

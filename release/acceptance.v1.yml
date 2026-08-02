@@ -11,10 +11,10 @@ profiles:
 repositories:
   privatestack_ansible:
     remote: importriri/privatestack-ansible
-    required_branch: review/m9-postrestore-v1
+    required_branch: main
   arch_bootstrap:
     remote: importriri/arch-bootstrap
-    required_branch: review/nitro-release-candidate-v1
+    required_branch: main
 
 # Ordered release gates. `execution` states whether the gate is intrinsically
 # read-only or needs an explicit hardware/destructive operator transaction.
