@@ -28,7 +28,7 @@ virtual_size_gib: 24
 minimum_size_gib: 10
 min_memory_mb: 2048
 
-supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
+supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: false, tpm2: false}
 defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
 network_allowlist: [dev, lab]

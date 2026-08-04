@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Linux virtual-terminal OSC palette. Ly runs this before taking control of the
+# TTY, so the outer screen, animation and login box share one HyperLab palette.
+printf '\033]P0{{ desktop_ly_palettes[desktop_palette].bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P1{{ desktop_ly_palettes[desktop_palette].error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P2{{ desktop_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P3{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P4{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P5{{ desktop_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P6{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P7{{ desktop_ly_palettes[desktop_palette].fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P8{{ desktop_ly_palettes[desktop_palette].error_bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P9{{ desktop_ly_palettes[desktop_palette].error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PA{{ desktop_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PB{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PC{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PD{{ desktop_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PE{{ desktop_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PF{{ desktop_ly_palettes[desktop_palette].fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033[2J\033[H'

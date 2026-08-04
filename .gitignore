@@ -2,3 +2,9 @@
 .ansible/
 .cache/
 __pycache__/
+vm-specs/.generated/
+
+# Personal wallpaper assets are user-owned and must never be published.
+roles/desktop/files/wallpapers/personal/
+.private-wallpapers/
+personal-wallpapers/

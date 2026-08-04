@@ -6,7 +6,7 @@
 ## Context
 
 `arch-bootstrap` owns destructive disk selection, encryption, filesystems and
-mounts. `privatestack-ansible` owns the Hyperlab directory and VM lifecycle.
+mounts. `privatestack-ansible` owns the HyperLab directory and VM lifecycle.
 Without an explicit hand-off, stage 2 could create valid VM paths on the wrong
 physical disk while both repositories independently report success.
 
@@ -39,7 +39,7 @@ stay local and known sensitive patterns are refused.
 
 ## Consequences
 
-- Hyperlab cannot silently land on root when a dedicated VM disk was declared.
+- HyperLab cannot silently land on root when a dedicated VM disk was declared.
 - Stage 2 fails before directory, image or VM-state creation on storage drift.
 - Existing Nitro data can be brought under the contract without remounting or
   moving it.

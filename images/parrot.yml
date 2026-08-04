@@ -27,7 +27,7 @@ virtual_size_gib: 40
 minimum_size_gib: 20
 min_memory_mb: 3072
 
-supports: {standard: true, vfio: false, cloud_init: false, qemu_guest_agent: true}
+supports: {standard: true, vfio: true, cloud_init: false, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: false, tpm2: false}
 defaults: {lifecycle: disposable, device_profile: standard, network_profile: lab}
 # The allowlist is the enforcement, not the default: lab is the only domain

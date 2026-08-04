@@ -321,6 +321,21 @@
         - roles/desktop/files/privatestack-hyperlab-palette.sh
         - roles/desktop/files/hyperlabctl-wrapper.sh
         - roles/desktop/files/waybar.css
+        - roles/desktop/files/foot.ini
+        - roles/desktop/files/superfile-config.toml
+        - roles/desktop/files/superfile-theme.toml
+        - roles/desktop/files/hyperlab-control-center.svg
+        - roles/desktop/files/hyperlab-wallpaper.svg
+        - roles/desktop/files/hyperlab-gtk.css
+        - roles/desktop/files/privatestack-waybar.sh
+        - roles/desktop/files/privatestack-fullscreen.sh
+        - roles/desktop/files/privatestack-superfile.sh
+        - roles/desktop/files/privatestack-opacity-toggle.sh
+        - roles/desktop/files/privatestack-theme.sh
+        - roles/desktop/files/privatestack-keyboard.sh
+        - roles/desktop/files/privatestack-controls.sh
+        - roles/desktop/files/privatestack-swaylock.sh
+        - roles/desktop/files/privatestack-swaybar-status.py
 
     - name: Cockpit invariants (final lab, Wayland-pure, guests-only IDE)
       ansible.builtin.assert:
@@ -331,6 +346,9 @@
           - "'rofi-wayland' not in render_desk_pkgs"
           - "'fuzzel' not in render_desk_pkgs"
           - "'cava' in render_desk_pkgs"
+          - "'superfile' in render_desk_pkgs"
+          - "'yazi' not in render_desk_pkgs"
+          - "render_desk_removed_pkgs == ['yazi']"
           - "'papirus-icon-theme' in render_desk_pkgs"
           - "'sddm' not in render_desk_pkgs"
           - "'gdm' not in render_desk_pkgs"
@@ -347,6 +365,8 @@
         quiet: true
       vars:
         render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_packages }}"
+        render_desk_removed_pkgs: >-
+          {{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_removed_packages }}
         render_desk_units: >-
           {{ (render_cockpit.results[1].content | b64decode | from_yaml)
              | map('dict2items') | flatten
@@ -363,15 +383,92 @@
           - "render_desk_bin_modes == ['0755']"
           - "'privatestack-cava' in render_desk_dests"
           - "'privatestack-powermenu' in render_desk_dests"
+          - "'privatestack-waybar' in render_desk_dests"
+          - "'privatestack-fullscreen' in render_desk_dests"
+          - "'privatestack-superfile' in render_desk_dests"
+          - "'privatestack-opacity-toggle' in render_desk_dests"
+          - "'privatestack-theme' in render_desk_dests"
+          - "'privatestack-keyboard' in render_desk_dests"
+          - "'privatestack-controls' in render_desk_dests"
+          - "'privatestack-swaylock' in render_desk_dests"
+          - "'privatestack-swaybar-status' in render_desk_dests"
+          - "render_waybar['layer'] == 'top'"
+          - "render_waybar['mode'] == 'dock'"
+          - "render_waybar['height'] == 37"
+          - "'temperature' in render_waybar['modules-right']"
+          - "'custom/keyboard-layout' in render_waybar['modules-right']"
+          - "'custom/controls' in render_waybar['modules-right']"
+          - "render_waybar['exclusive'] == true"
+          - "render_waybar['ipc'] == false"
           - "render_waybar['custom/cava']['exec'] == '/usr/local/bin/privatestack-cava'"
           - "render_waybar['custom/logo']['on-click'] == '/usr/local/bin/privatestack-powermenu'"
-          - "'custom/cava' in render_waybar['modules-left']"
+          - "'custom/cava' not in render_waybar['modules-left']"
           - "'/usr/local/bin/privatestack-powermenu' in render_sway"
+          - "'set $filemanager /usr/local/bin/privatestack-superfile' in render_sway"
+          - "'bindsym $mod+Shift+f exec $filemanager' in render_sway"
+          - "'bindsym $mod+Shift+Left move left' in render_sway"
+          - "'bindsym $mod+Shift+Down move down' in render_sway"
+          - "'bindsym $mod+Shift+Up move up' in render_sway"
+          - "'bindsym $mod+Shift+Right move right' in render_sway"
+          - "'for_window [app_id=\"^superfile$\"]            floating enable, resize set 1200 800, move position center' in render_sway"
+          - "'for_window [app_id=\"^superfile$\"] opacity 0.88' in render_sway"
+          - "'bindsym $mod+f fullscreen toggle' in render_sway"
+          - "'bindsym $mod+Shift+b exec /usr/local/bin/privatestack-waybar toggle' in render_sway"
+          - "'bindsym $mod+Shift+t exec /usr/local/bin/privatestack-theme cycle' in render_sway"
+          - "'bindsym $mod+Shift+w exec /usr/local/bin/privatestack-theme mode-toggle' in render_sway"
+          - "'bindsym $mod+Ctrl+space exec /usr/local/bin/privatestack-keyboard cycle' in render_sway"
+          - "'bindsym $mod+Shift+k exec /usr/local/bin/privatestack-keyboard cycle' not in render_sway"
+          - "'bindsym $mod+Shift+p exec $controls' in render_sway"
+          - "'status_command /usr/local/bin/privatestack-swaybar-status' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-waybar' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-hyperlab-domains --warm' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-theme session-start' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-keyboard session-start' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-theme daemon' in render_sway"
+          - "'waybar -l info -c' in render_waybar_launcher"
+          - "'--toggle-mode' in render_fullscreen_helper"
+          - "'hyperlab-transparent-fullscreen' in render_fullscreen_helper"
+          - "'opacity set ${opacity}' in render_fullscreen_helper"
+          - "'opacity set 1.0' in render_fullscreen_helper"
+          - "'--session' in render_superfile_launcher"
+          - "'stty size' in render_superfile_launcher"
+          - "'opacity-${con_id}.state' in render_opacity_helper"
+          - "'superfile/config.toml' in render_desk_dests"
+          - "'superfile/theme/hyperlab.toml' in render_desk_dests"
+          - "'include=~/.config/hyperlab/palette-foot.ini' in render_foot"
+          - "'[colors]' not in render_foot"
+          - "'[cursor]' not in render_foot"
+          - "'[colors-dark]' in render_foot_palette"
+          - "'alpha=0.72' in render_foot_palette"
+          - "render_foot_palette is search('(?m)^cursor=\\S+\\s+\\S+$')"
+          - "'transparent_background = true' in render_superfile_config"
+          - "'show_image_preview = false' in render_superfile_config"
+          - "'theme = \"hyperlab\"' in render_superfile_config"
+          - "'gradient_color = [\"#7ee787\", \"#35e4dd\"]' in render_superfile_theme"
+          - "'<svg' in render_hyperlab_logo"
+          - "'<svg' in render_hyperlab_wallpaper"
+          - "'gtk-3.0/gtk.css' in render_desk_dests"
+          - "'gtk-4.0/gtk.css' in render_desk_dests"
+          - "'background-color: alpha(@hl_base, 0.48);' in render_hyperlab_gtk"
           - "render_rofi_imports | length > 0"
           - "render_rofi_missing == []"
-          - "render_wall_dest | length == 1"
-          - "render_wall_dest[0] in render_sway"
-          - "render_wall_dest[0] in render_swaylock"
+          - "render_desktop_wall_dest == ['/usr/share/backgrounds/privatestack/default.png']"
+          - "render_lockscreen_wall_dest == ['/usr/share/backgrounds/privatestack/lockscreen.png']"
+          - "'/usr/share/backgrounds/privatestack/public/green/01.png' in render_sway"
+          - "'image=' not in render_swaylock"
+          - "'Deploy every public nature-only wallpaper pool' in (render_cockpit.results[1].content | b64decode)"
+          - "'Deploy the HyperLab Ly terminal-palette hook' in (render_cockpit.results[1].content | b64decode)"
+          - "'animation, value: \"colormix\"' in (render_cockpit.results[1].content | b64decode)"
+          - "'start_cmd, value: \"/etc/ly/hyperlab-startup.sh\"' in (render_cockpit.results[1].content | b64decode)"
+          - "'src: \"wallpapers/' in (render_cockpit.results[1].content | b64decode)"
+          - "'dest: \"/usr/share/backgrounds/privatestack/public/' in (render_cockpit.results[1].content | b64decode)"
+          - "render_public_green_wallpapers | length == 20"
+          - "render_public_violet_wallpapers | length == 20"
+          - "render_public_blue_wallpapers | length == 20"
+          - "render_public_red_wallpapers | length == 20"
+          - "'lock_index=$(( (desktop_index + 3) % wallpaper_count ))' in render_theme_helper"
+          - "'privatestack-theme lock-image' in render_swaylock_helper"
+          - "'click_events\": True' in render_swaybar_status"
           - "render_cava_glyphs == render_cava_max | int + 1"
           - "'fuzzel' not in render_sway"
           - render_sway_window_types | difference(render_sway_types_valid) == []
@@ -392,11 +489,24 @@
              | selectattr('key', 'equalto', 'loop')
              | map(attribute='value') | flatten
              | selectattr('dest', 'defined') | map(attribute='dest') | list }}
-        render_wall_dest: >-
+        render_desktop_wall_dest: >-
           {{ render_desk_copy_mods
              | selectattr('src', 'defined')
-             | selectattr('src', 'equalto', 'wallpaper.png')
+             | selectattr('src', 'equalto', 'wallpaper-desktop.png')
              | map(attribute='dest') | list }}
+        render_lockscreen_wall_dest: >-
+          {{ render_desk_copy_mods
+             | selectattr('src', 'defined')
+             | selectattr('src', 'equalto', 'wallpaper-lockscreen.png')
+             | map(attribute='dest') | list }}
+        render_public_green_wallpapers: >-
+          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/green/*.png') }}
+        render_public_violet_wallpapers: >-
+          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/violet/*.png') }}
+        render_public_blue_wallpapers: >-
+          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/blue/*.png') }}
+        render_public_red_wallpapers: >-
+          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/red/*.png') }}
         render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
         render_waybar: >-
           {{ render_cockpit.results[7].content | b64decode
@@ -415,6 +525,22 @@
         render_cava_max: >-
           {{ (render_cockpit.results[12].content | b64decode)
              | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}
+        render_foot: "{{ render_cockpit.results[17].content | b64decode }}"
+        render_foot_palette: >-
+          {{ lookup('file', repo_root ~
+             '/roles/desktop/files/palette/green/hyperlab-palette-foot.ini') }}
+        render_superfile_config: "{{ render_cockpit.results[18].content | b64decode }}"
+        render_superfile_theme: "{{ render_cockpit.results[19].content | b64decode }}"
+        render_hyperlab_logo: "{{ render_cockpit.results[20].content | b64decode }}"
+        render_hyperlab_wallpaper: "{{ render_cockpit.results[21].content | b64decode }}"
+        render_hyperlab_gtk: "{{ render_cockpit.results[22].content | b64decode }}"
+        render_waybar_launcher: "{{ render_cockpit.results[23].content | b64decode }}"
+        render_fullscreen_helper: "{{ render_cockpit.results[24].content | b64decode }}"
+        render_superfile_launcher: "{{ render_cockpit.results[25].content | b64decode }}"
+        render_opacity_helper: "{{ render_cockpit.results[26].content | b64decode }}"
+        render_theme_helper: "{{ render_cockpit.results[27].content | b64decode }}"
+        render_swaylock_helper: "{{ render_cockpit.results[30].content | b64decode }}"
+        render_swaybar_status: "{{ render_cockpit.results[31].content | b64decode }}"
         render_sway_window_types: >-
           {{ render_sway | regex_findall('window_type="([^"]*)"') }}
         render_sway_types_valid:
@@ -432,12 +558,25 @@
     - name: Cockpit control invariants (the bar may only offer what the CLI has)
       ansible.builtin.assert:
         that:
-          - "'group/hyperlab' in render_waybar['modules-right']"
-          - "render_waybar['group/hyperlab']['modules'][0] == 'custom/hyperlab'"
+          - "render_waybar['modules-left'][:2] == ['custom/brand', 'group/hyperlab']"
+          - "render_waybar['group/hyperlab']['modules'] == ['custom/hyperlab', 'custom/hyperlab-ram', 'custom/hyperlab-gpu', 'custom/hyperlab-vms']"
+          - "render_waybar['custom/brand']['format'] == '  HyperLab'"
+          - "render_waybar['custom/brand']['on-click'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms'"
+          - "render_waybar['custom/brand']['on-click-right'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics'"
+          - "render_waybar['custom/brand']['on-click-middle'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms'"
+          - "render_waybar['custom/hyperlab']['format'] == 'TRUST {}'"
+          - "render_waybar['group/hyperlab']['drawer']['reveal-delay'] == 40"
+          - >-
+            render_waybar['modules-right'] ==
+            ['temperature', 'custom/keyboard-layout', 'custom/controls',
+            'custom/wallpaper-mode', 'network', 'pulseaudio', 'battery', 'clock']
+          - "'custom/hyperlab-vms' not in render_waybar['modules-right']"
+          - "'custom/hyperlab-gpu' not in render_waybar['modules-right']"
           - "render_hyper_modules | length == 4"
           - "render_hyper_execs | length == 1"
           - "render_hyper_execs | difference(render_desk_bin_paths) == []"
           - "render_hyper_clicks | difference(render_hyper_allowed_clicks) == []"
+          - "render_hyper_allowed_clicks | difference(render_hyper_clicks) == []"
           - "render_hyper_collapsed.interval is not defined"
           - "'watch' in render_hyper_collapsed.exec"
           - "render_hyper_collapsed['restart-interval'] | int > 0"
@@ -450,17 +589,17 @@
           - "'hyperlabctl' in render_desk_dests"
           - "render_pointer_mode == '0644'"
           - "render_desk_bin_modes | unique == ['0755']"
-          - "'hyperlab-panel' in render_sway"
+          - "'/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms' in render_sway"
+          - "'/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics' in render_sway"
           - "render_sway_hyper_binds | length == 3"
           - "render_palette_never_runs_privileged"
           - "'destroy' not in render_waybar | to_json"
         fail_msg: >-
-          A cockpit control invariant broke. The bar may only exec helpers the
-          role actually deploys, may only click through the palette or the
-          panel, must never poll faster than 15 seconds, must agree with the
-          CLI about the refresh signal, and must never reach a destructive
-          action. The palette hands privileged commands over instead of running
-          them; that branch is what keeps a password prompt off the bar.
+          A Hyperlab Shell invariant broke. The first Waybar module must be the
+          HyperLab launcher followed by the hover trust drawer; direct UI routes
+          must reuse the resident Layer Shell manager. Operations inside the
+          manager must never bypass hyperlabctl or poll
+          faster than the recorded contract permits.
         quiet: true
       vars:
         render_waybar: >-
@@ -488,9 +627,9 @@
           {{ render_hyper_modules | map(attribute='exec')
              | map('regex_replace', '^.* ', '') | unique | list }}
         render_hyper_collapsed: >-
-          {{ render_waybar[render_waybar['group/hyperlab']['modules'][0]] }}
+          {{ render_waybar['custom/hyperlab'] }}
         render_hyper_drawer: >-
-          {{ render_waybar['group/hyperlab']['modules'][1:]
+          {{ ['custom/hyperlab-ram', 'custom/hyperlab-gpu', 'custom/hyperlab-vms']
              | map('extract', render_waybar) | list }}
         render_hyper_intervals: >-
           {{ render_hyper_drawer | map(attribute='interval') | list }}
@@ -502,8 +641,9 @@
              | selectattr('key', 'search', '^on-click')
              | map(attribute='value') | unique | list }}
         render_hyper_allowed_clicks:
-          - /usr/local/bin/privatestack-hyperlab-palette
-          - foot --app-id=hyperlab-panel hyperlabctl panel
+          - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms
+          - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics
+          - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics
         render_hyper_states:
           - ok
           - warn
@@ -665,13 +805,13 @@
     - name: Per-machine input invariants (values, not mentions)
       ansible.builtin.assert:
         that:
-          - "'xkb_layout it' in render_input_fallback"
+          - "'xkb_layout it,us,ara' in render_input_fallback"
           - render_input_fallback | select('match', 'xkb_variant') | list | length == 0
           - render_input_fallback | select('match', 'xkb_options') | list | length == 0
-          - "'xkb_variant us' in render_input_optional"
+          - "'xkb_variant us,,' in render_input_optional"
           - "'xkb_options ctrl:nocaps' in render_input_optional"
           - render_input_touchpad == render_input_touchpad_expected
-          - "'xkb_layout ' ~ render_hw_profiles['nitro-3060'].desktop.keyboard_layout in render_input_nitro"
+          - "'xkb_layout it,us,ara' in render_input_nitro"
           - render_hw_profiles | dict2items | rejectattr('value.desktop', 'defined') | list | length == 0
         quiet: true
       vars:

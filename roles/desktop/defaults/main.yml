@@ -33,6 +33,10 @@ desktop_hyperlab_checkout: "/home/{{ admin_user }}/privatestack-ansible"
 
 desktop_input_defaults:
   keyboard_layout: it
+  keyboard_layout_cycle:
+    - it
+    - us
+    - ara
   keyboard_variant: ""
   keyboard_options: ""
   touchpad:
@@ -40,6 +44,9 @@ desktop_input_defaults:
     middle_emulation: enabled
     natural_scroll: enabled
     tap: enabled
+
+desktop_removed_packages:
+  - yazi
 
 desktop_packages:
   - sway
@@ -49,6 +56,10 @@ desktop_packages:
   - waybar
   - rofi
   - foot
+  - gtk4
+  - gtk4-layer-shell
+  - python-gobject
+  - virt-viewer
   - mako
   - grim
   - slurp
@@ -73,5 +84,53 @@ desktop_packages:
   - bat
   - ripgrep
   - fd
-  - yazi
+  - superfile
   - btop
+
+# Files copied into both read-only runtime palette pools. The active theme is a
+# user-owned copy selected by privatestack-theme.
+desktop_palette_runtime_fragments:
+  - hyperlab-palette-gtk.css
+  - hyperlab-palette-waybar.css
+  - hyperlab-palette.sway
+  - hyperlab-palette.rasi
+  - hyperlab-palette-foot.ini
+  - hyperlab-palette-superfile.toml
+  - hyperlab-palette-swaylock.conf
+
+
+# Ly 1.x accepts 24-bit 0xSSRRGGBB values. Only these documented keys are
+# changed in the package-managed config; every other package default survives.
+desktop_ly_palettes:
+  green:
+    bg: "0x000C1512"
+    fg: "0x00DCF3E4"
+    border_fg: "0x017EE787"
+    error_bg: "0x00111D18"
+    error_fg: "0x01FF668F"
+    accent2: "0x0035E4DD"
+    box_title: "HyperLab Green"
+  violet:
+    bg: "0x000A0A16"
+    fg: "0x00E2E0FF"
+    border_fg: "0x019D6CFF"
+    error_bg: "0x0012122A"
+    error_fg: "0x01FF668F"
+    accent2: "0x0043D8FF"
+    box_title: "HyperLab Violet"
+  blue:
+    bg: "0x0008131F"
+    fg: "0x00DEEFFF"
+    border_fg: "0x014DA3FF"
+    error_bg: "0x000D1C2B"
+    error_fg: "0x01FF6B7A"
+    accent2: "0x0055D6FF"
+    box_title: "HyperLab Blue"
+  red:
+    bg: "0x00180B0D"
+    fg: "0x00FFE7E9"
+    border_fg: "0x01FF5D6C"
+    error_bg: "0x00241013"
+    error_fg: "0x01FF3D5A"
+    accent2: "0x00FF9F43"
+    box_title: "HyperLab Red"

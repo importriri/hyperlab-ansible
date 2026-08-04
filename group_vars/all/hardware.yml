@@ -24,8 +24,8 @@ host_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
-    # Memory budget, not a total: the machine's RAM is detected at run time,
-    # so the 8/16 -> 32 GB upgrade needs no edit here. See ADR 0007.
+    # Memory budget, not a total: installed RAM is detected at run time, so a
+    # future memory upgrade needs no profile edit. See ADR 0007.
     memory:
       host_reserved_mb: 2048
       qemu_overhead_per_domain_mb: 512
@@ -54,8 +54,8 @@ host_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
-    # Memory budget, not a total: the machine's RAM is detected at run time,
-    # so the 8/16 -> 32 GB upgrade needs no edit here. See ADR 0007.
+    # Memory budget, not a total: installed RAM is detected at run time, so a
+    # future memory upgrade needs no profile edit. See ADR 0007.
     memory:
       host_reserved_mb: 2560
       qemu_overhead_per_domain_mb: 512

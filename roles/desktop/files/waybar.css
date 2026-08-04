@@ -1,177 +1,199 @@
-/* privatestack cockpit - Catppuccin Mocha, floating bar */
-@define-color base     #1e1e2e;
-@define-color mantle   #181825;
-@define-color crust    #11111b;
-@define-color surface0 #313244;
-@define-color surface1 #45475a;
-@define-color text     #cdd6f4;
-@define-color subtext0 #a6adc8;
-@define-color overlay0 #6c7086;
-@define-color lavender #b4befe;
-@define-color mauve    #cba6f7;
-@define-color blue     #89b4fa;
-@define-color sapphire #74c7ec;
-@define-color teal     #94e2d5;
-@define-color green    #a6e3a1;
-@define-color yellow   #f9e2af;
-@define-color peach    #fab387;
-@define-color pink     #f5c2e7;
-@define-color red      #f38ba8;
-
+@import url("palette.css");
+/* Hyperlab Shell visual lock: transparent neon/Qubes-style Waybar. */
 * {
     font-family: "JetBrainsMono Nerd Font";
-    font-size: 13px;
-    font-weight: bold;
+    font-size: 12px;
+    font-weight: 700;
     min-height: 0;
     border: none;
     border-radius: 0;
 }
 
-/* the window itself stays invisible: the bar is the box inside it */
 window#waybar {
-    background: transparent;
+    min-height: 36px;
+    background-color: alpha(@hl_base, 0.99);
+    color: @hl_text;
+    opacity: 1;
 }
 window#waybar > box {
-    margin: 6px 8px 0 8px;
-    padding: 0 6px;
-    background: alpha(@base, 0.88);
-    border: 1px solid @surface0;
-    border-radius: 12px;
-    color: @text;
+    min-height: 36px;
+    margin: 0;
+    padding: 0 7px;
+    background-color: alpha(@hl_mantle, 0.985);
+    border-bottom: 1px solid alpha(@hl_accent, 0.13);
+    color: @hl_text;
+    box-shadow: 0 5px 18px alpha(#000000, 0.20);
 }
-window#waybar.hidden {
-    opacity: 0.0;
+
+#custom-brand {
+    color: @hl_base;
+    background: linear-gradient(90deg, @hl_accent, @hl_accent2);
+    margin: 3px 5px 3px 0;
+    padding: 0 11px;
+    border: 1px solid alpha(@hl_accent2, 0.62);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+}
+#custom-brand:hover {
+    color: @hl_base;
+    background: @hl_accent;
+    border-color: @hl_text;
+}
+#hyperlab {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+#hyperlab .trust-detail {
+    margin: 0;
+}
+
+#custom-hyperlab {
+    margin: 3px 8px 3px 0;
+    padding: 0 10px;
+    border-radius: 7px;
+    color: @hl_ok;
+    background: alpha(@hl_ok, 0.065);
+    border: 1px solid alpha(@hl_ok, 0.30);
+}
+#custom-hyperlab:hover {
+    color: @hl_text;
+    background: alpha(@hl_ok, 0.12);
+    border-color: alpha(@hl_ok, 0.52);
+}
+#custom-hyperlab.ok { color: @hl_ok; }
+#custom-hyperlab.warn {
+    color: @hl_warn;
+    background: alpha(@hl_warn, 0.08);
+    border-color: alpha(@hl_warn, 0.40);
+}
+#custom-hyperlab.error {
+    color: @hl_text;
+    background: alpha(@hl_bad, 0.22);
+    border-color: alpha(@hl_bad, 0.60);
 }
 
 #workspaces {
-    margin: 4px 6px;
+    margin: 2px 5px;
     padding: 0 2px;
-    background: alpha(@mantle, 0.85);
-    border-radius: 10px;
+    background: transparent;
 }
 #workspaces button {
-    padding: 0 9px;
+    min-width: 25px;
     margin: 2px 1px;
-    color: @subtext0;
-    background: transparent;
-    border-radius: 8px;
+    padding: 0 7px;
+    border-radius: 7px;
+    color: @hl_subtext;
+    background: alpha(@hl_mantle, 0.08);
 }
 #workspaces button:hover {
-    background: @surface0;
-    color: @text;
+    color: @hl_text;
+    background: alpha(@hl_accent, 0.10);
 }
 #workspaces button.focused,
 #workspaces button.visible {
-    color: @crust;
-    background: @mauve;
+    color: @hl_text;
+    background: alpha(@hl_dom_lab, 0.22);
+    border: 1px solid alpha(@hl_dom_lab, 0.42);
 }
 #workspaces button.urgent {
-    color: @crust;
-    background: @red;
+    color: @hl_text;
+    background: alpha(@hl_bad, 0.28);
+    border: 1px solid alpha(@hl_bad, 0.58);
 }
 
-#custom-logo {
-    color: @blue;
-    padding: 0 12px 0 10px;
-    font-size: 16px;
-}
 #mode {
-    color: @crust;
-    background: @yellow;
-    border-radius: 8px;
-    padding: 0 10px;
-    margin: 4px 2px;
-}
-#custom-cava {
-    color: @teal;
-    padding: 0 10px;
-    font-size: 15px;
+    margin: 3px 3px;
+    padding: 0 8px;
+    border-radius: 7px;
+    color: @hl_base;
+    background: @hl_warn;
 }
 
-/* the cockpit group: one pill visible, three revealed on hover. Colour is
-   state, never decoration - green quiet, yellow needs a decision, red is
-   already wrong. */
-#custom-hyperlab,
-#custom-hyperlab-ram,
+#custom-hyperlab-vms,
 #custom-hyperlab-gpu,
-#custom-hyperlab-vms {
-    padding: 0 9px;
-    margin: 4px 1px;
-    border-radius: 8px;
-    background: alpha(@mantle, 0.85);
-    color: @subtext0;
-}
-#custom-hyperlab.ok,
-#custom-hyperlab-ram.ok,
-#custom-hyperlab-gpu.ok,
-#custom-hyperlab-vms.ok { color: @green; }
-#custom-hyperlab.warn,
-#custom-hyperlab-ram.warn,
-#custom-hyperlab-gpu.warn,
-#custom-hyperlab-vms.warn { color: @yellow; }
-#custom-hyperlab.error,
-#custom-hyperlab-ram.error,
-#custom-hyperlab-gpu.error,
-#custom-hyperlab-vms.error {
-    color: @crust;
-    background: @red;
-}
-#custom-hyperlab {
-    color: @mauve;
-    border: 1px solid @surface1;
-}
-#custom-hyperlab.ok    { color: @green;  border-color: @green; }
-#custom-hyperlab.warn  { color: @yellow; border-color: @yellow; }
-#custom-hyperlab.error { color: @crust;  border-color: @red; }
-
-#clock {
-    color: @lavender;
-    padding: 0 14px;
-}
-
-#idle_inhibitor,
-#pulseaudio,
-#backlight,
+#custom-hyperlab-ram,
+#custom-wallpaper-mode,
+#custom-keyboard-layout,
+#custom-controls,
 #network,
+#pulseaudio,
+#battery,
+#clock,
+#tray,
+#idle_inhibitor,
+#backlight,
 #cpu,
 #memory,
-#temperature,
-#battery {
-    padding: 0 9px;
+#temperature {
+    margin: 2px 1px;
+    padding: 0 7px;
+    border-radius: 7px;
+    background: alpha(@hl_mantle, 0.08);
+    color: @hl_subtext;
 }
-#idle_inhibitor { color: @subtext0; }
-#idle_inhibitor.activated { color: @yellow; }
-#pulseaudio { color: @pink; }
-#pulseaudio.muted { color: @overlay0; }
-#backlight { color: @peach; }
-#network { color: @teal; }
-#network.disconnected { color: @red; }
-#cpu { color: @blue; }
-#memory { color: @mauve; }
-#temperature { color: @sapphire; }
-#temperature.critical { color: @red; }
-#battery { color: @green; }
-#battery.warning:not(.charging) { color: @yellow; }
-#battery.critical:not(.charging) {
-    color: @red;
-    animation: blink 1s linear infinite alternate;
+#custom-hyperlab-vms { color: @hl_accent; }
+#custom-hyperlab-gpu { color: @hl_dom_lab; }
+#custom-hyperlab-vms.ok,
+#custom-hyperlab-gpu.ok { color: @hl_ok; }
+#custom-hyperlab-vms.warn,
+#custom-hyperlab-gpu.warn { color: @hl_warn; }
+#custom-hyperlab-vms.error,
+#custom-hyperlab-gpu.error {
+    color: @hl_text;
+    background: alpha(@hl_bad, 0.22);
 }
-@keyframes blink {
-    to { color: @crust; background: @red; }
-}
-#tray {
-    padding: 0 8px 0 6px;
-}
+#network { color: @hl_accent2; }
+#network.disconnected { color: @hl_bad; }
+#pulseaudio { color: @hl_accent; }
+#pulseaudio.muted { color: alpha(@hl_subtext, 0.55); }
+#battery { color: @hl_ok; }
+#battery.warning:not(.charging) { color: @hl_warn; }
+#battery.critical:not(.charging) { color: @hl_bad; }
+#clock { color: @hl_text; padding-left: 10px; padding-right: 9px; }
+#tray { padding-left: 6px; padding-right: 5px; }
 #tray > .needs-attention {
-    background: @red;
+    background: alpha(@hl_bad, 0.24);
+    border-radius: 7px;
+}
+
+#custom-logo,
+#custom-cava {
+    color: alpha(@hl_subtext, 0.55);
+    padding: 0 5px;
+}
+
+tooltip {
+    background: alpha(@hl_base, 0.94);
+    border: 1px solid alpha(@hl_accent, 0.24);
     border-radius: 8px;
 }
-tooltip {
-    background: @mantle;
-    border: 1px solid @surface1;
-    border-radius: 10px;
-}
 tooltip label {
-    color: @text;
+    color: @hl_text;
     padding: 4px;
 }
+
+#custom-wallpaper-mode.public { color: @hl_ok; }
+#custom-wallpaper-mode.personal { color: @hl_accent2; }
+#custom-wallpaper-mode.fallback { color: @hl_warn; }
+
+#custom-keyboard-layout { color: @hl_accent2; }
+#custom-keyboard-layout.ara { color: @hl_warn; }
+#custom-keyboard-layout,
+#custom-controls,
+#custom-wallpaper-mode {
+    min-width: 34px;
+    margin-left: 3px;
+    margin-right: 3px;
+    padding-left: 9px;
+    padding-right: 9px;
+}
+#custom-controls {
+    color: @hl_accent;
+    min-width: 52px;
+    border: 1px solid alpha(@hl_accent, 0.22);
+}
+#custom-controls:hover { color: @hl_text; background: alpha(@hl_accent, 0.14); }
+#temperature { color: @hl_warn; }
+#temperature.critical { color: @hl_bad; background: alpha(@hl_bad, 0.18); }

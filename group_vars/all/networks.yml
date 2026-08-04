@@ -40,6 +40,3 @@ gpu_trust_levels:
 gpu_domain_profiles:
   win11clean-valley: clean
   win11dirty-disposable: dirty
-
-# Deliberate DNAT holes for service VMs. Empty by default.
-services_exposed: []

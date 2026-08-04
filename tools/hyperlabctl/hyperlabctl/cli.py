@@ -42,7 +42,7 @@ def _normalize_global_options(argv):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="hyperlabctl",
-        description="Control surface for the Hyperlab. Reads the repository "
+        description="Control surface for the HyperLab. Reads the repository "
                     "contract and libvirt; owns no policy of its own.",
     )
     parser.add_argument("--version", action="version", version="hyperlabctl %s" % __version__)

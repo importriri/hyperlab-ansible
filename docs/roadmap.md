@@ -1,121 +1,130 @@
-# Hyperlab software-first roadmap
+# HyperLab roadmap
 
-The repository is developed as ordered milestones. Software contracts and CI
-land first; each milestone merges only after its exact head passes the hardware
-gate that exercises its ownership boundary.
+Work is divided into milestones so software checks, hardware validation and
+publication stay separate. A green test suite proves repository behavior. A
+hardware claim exists only after the matching gate runs on the named laptop.
 
-This avoids two bad extremes: merging untested automation, or keeping already
-verified foundations trapped behind unrelated later workload work.
-
-## Milestone state
+## Current state
 
 ```text
-M0  cockpit and audit                         published foundation
-M1  image, VM and brick contracts            published foundation
-M2  Hyperlab image store                     published foundation
-M3  standard guest lifecycle                 Nitro VM gate passed
-M4  VFIO guest ownership                     software green; hardware gate pending
-M5  image acquisition and sealing            Arch path passed; private paths pending
-M6  Windows workshop                         software green; guest evidence pending
-M7  service registration and recovery        software green; hardware gate pending
-M8  reference Jellyfin appliance             software green; appliance gate pending
-M9  release and evidence runner              software green; full campaign pending
+M0   cockpit and audit                         complete
+M1   image, VM and brick contracts             complete
+M2   HyperLab image store                      complete
+M3   standard guest lifecycle                  Nitro VM gate passed
+M4   VFIO guest ownership                      software green; VM gate pending
+M5   image acquisition and sealing             Arch path passed; private images pending
+M6   Windows workshop                          software green; guest evidence pending
+M7   service registration and recovery         software green; hardware gate pending
+M8   Jellyfin reference appliance              software green; appliance gate pending
+M9   release and evidence runner               software green; full campaign pending
+M10  domain manager and VM composition         software green; live workload gate pending
+M11  desktop shell and Control Center          Nitro visual/idempotence gate passed
+M12  snapshots, backups and golden images      planned
+M13  seamless guest applications               planned
 ```
 
-“Software green” means the discovery-based repository battery passed. It is not
-a hardware claim. The disposable Arch guest and two-loop storage path completed
-on the Nitro; VFIO, private Windows images, service recovery, Jellyfin and the
-full Predator campaign keep their own pending evidence boundaries.
+“Software green” means the discovery-based verifier passed. It is not a
+hardware claim. The exact commits used for Nitro and Predator evidence are
+recorded by the M9 release runner.
+
+## Host and lifecycle foundation
 
 ### M0 — cockpit and audit
 
-Sway, Foot and input cleanup plus the first architecture decisions.
+Established the first Sway, Foot and input conventions and recorded the initial
+architecture decisions.
 
 ### M1 — contracts
 
-Host/device profile separation, image manifests, VM specs, memory budgets and
-the enforced brick dependency graph. Merged after Nitro preflight,
-Looking Glass identity and second-run idempotence passed on the exact head.
+Separated hardware profiles from VM policy, added image manifests, VM specs,
+memory budgets and the enforced brick dependency graph.
 
 ### M2 — image store
 
-Canonical, permissioned, NOCOW-aware directory layout. Merged after Nitro proved
-runtime QEMU/swtpm identities, traversal, `+C` inheritance and `changed=0` on the
-second apply.
+Defined the permissioned, NOCOW-aware storage layout below the stage-1 storage
+contract. The Nitro gate proved QEMU/swtpm identities, directory traversal,
+`+C` inheritance and second-run idempotence.
 
 ### M3 — standard guest lifecycle
 
-Deterministic plan, sealed-base checks, clone/overlay creation, cloud-init,
-UEFI/TPM state, libvirt definition, capacity locking, reset and destruction.
-The Nitro gate proved the `not-built` refusal, deterministic create/validate/
-start flow, QEMU Guest Agent readiness, runtime SSH identity and the complete
-two-loop Arch storage test without changing the sealed base.
+Added deterministic planning, sealed-base checks, clone and overlay creation,
+cloud-init, UEFI/TPM state, libvirt definition, capacity locking, reset and
+destruction. The Nitro gate completed the disposable Arch two-loop storage test
+without modifying the sealed base.
 
 ### M4 — VFIO guest ownership
 
-Host-local PCI planning, exclusive GPU starts, Looking Glass/kvmfr, fixed
-recovery SPICE and trust-ranked handoff.
+Owns host-local PCI planning, exclusive GPU starts, Looking Glass/kvmfr,
+recovery SPICE and trust-ranked handoff. The software contract is green; the
+full guest lifecycle still needs its named hardware gate.
 
 ### M5 — image acquisition and sealing
 
-Pinned official-cloud acquisition, private local import, qcow2 inspection and
-provenance receipts.
+Handles pinned public cloud images, private local imports, qcow2 inspection and
+provenance receipts. The public Arch path has passed; private Windows and ISO
+workshop outputs keep separate evidence.
 
 ### M6 — Windows workshop
 
-Privacy-safe guest evidence, clean/dirty identity policies and Windows-workshop
-hashes bound into image and guest provenance.
+Defines privacy-safe clean/dirty image preparation and binds workshop evidence
+to image and guest provenance without committing Windows media or account data.
 
-### M7 — service VM contract
+### M7 — service ownership and recovery
 
-Registration before VM creation, static DHCP identity, inactive-memory
-reservations and offline backup/restore recovery.
+Registers service identity before VM creation, reserves inactive memory, owns
+static DHCP identity and provides offline backup/restore transactions.
 
-### M8 — reference Jellyfin appliance
+### M8 — Jellyfin reference appliance
 
-Guest-only package installation, lifecycle-bound TCP/8096 exposure and inert
-future-service slots.
+Installs Jellyfin inside `svc-jellyfin`, exposes only the reviewed TCP/8096 path
+while the VM is active and leaves future service slots inert.
 
-### M9 — release and evidence gates
+### M9 — release evidence
 
-Cross-repository storage hand-off, canonical Nitro/Predator plans, mode-`0600`
-evidence scaffolds, ordered immutable gate recording, semantic storage and
-Ansible-recap probes, sensitive-data refusal and deterministic final receipts.
+Provides canonical Nitro/Predator plans, mode-`0600` evidence scaffolds,
+ordered immutable gate records, storage and Ansible-recap probes, sensitive-data
+refusal and deterministic final receipts. Raw logs remain local.
 
-## M9 implementation boundary
+## Desktop and workstation phase
 
-M9 completes software orchestration without pretending to complete hardware
-validation:
+### M10 — domain manager and VM composition
 
-- `bootstrap_storage` observes `/var/lib/libvirt/images` and validates the
-  stage-1 contract before image-store writes;
-- supported shapes are fixed to `cryptroot:/@vm` and `cryptvm:/`;
-- the already validated legacy Nitro host may adopt one observed shape by exact
-  confirmation without changing mounts, filesystems or VM data;
-- fresh installs receive the contract from the complete `arch-bootstrap`
-  entrypoint;
-- `release/acceptance.v1.yml` owns gate order and evidence fields;
-- `release_acceptance.py` owns plan, scaffold, checkout proof, ordered record,
-  status and seal operations;
-- `release_probe.py` owns file hashing, typed scalar payloads, live storage proof
-  and Ansible recap interpretation;
-- raw logs remain local and no tool pushes, publishes, merges or authorizes a
-  destructive command.
+Adds the `hyperlabctl` action registry, VM composer and GTK domain manager. The
+manager resolves checked-in specs and lifecycle commands; it does not bypass
+Ansible or execute destructive operations without the existing confirmations.
 
-The complete operator protocol is
-[`release-evidence.md`](release-evidence.md). The storage and freeze decision is
-recorded in ADR 0013.
+### M11 — desktop shell and Control Center
 
-## Remaining campaign
+Unifies Waybar, the compact resident drawer, the full Control Center, Green /
+Violet / Blue / Red palettes, public/personal wallpapers, keyboard switching,
+Ly theming and native Swaybar fallback. The Nitro gate passed the real visual
+checks and a second desktop apply with `changed=0`.
+
+### M12 — snapshots, backups and golden images
+
+Will add the missing snapshot/backup backend and the first reusable workstation
+bases. Planned families are Arch, Fedora, Debian, CachyOS and the clean/dirty
+Windows masters. Each base must support a clear permanent or disposable
+lifecycle without changing the sealed golden image.
+
+### M13 — seamless guest applications
+
+Will add a Qubes-style application mode in which one program runs in a guest
+but appears as an individual host window. Full desktop access remains available
+through SPICE, SSH stays the management path, and VFIO/Looking Glass remain
+separate display profiles. This milestone must not claim Qubes OS security
+properties; it provides a similar workflow on the existing KVM architecture.
+
+## Remaining release campaign
 
 1. publish the exact green stage-1 and stage-2 trees on `main`;
-2. keep the completed Nitro disposable-VM and two-loop evidence bound to those
-   code trees;
-3. run the remaining ordered Nitro gates without broadening their claims;
-4. fix only observed bugs and repeat every affected gate when executable code
-   changes;
-5. run Predator with the same stage-1/stage-2 code trees that completed Nitro;
+2. bind the completed Nitro storage and desktop evidence to those commits;
+3. run the remaining Nitro gates without broadening their claims;
+4. repeat every affected gate after executable changes;
+5. run Predator with the same stage-1/stage-2 commits that completed Nitro;
 6. publish only sanitized evidence and final receipts in
-   `arch-hypervisor-lab`.
+   `arch-hypervisor-lab`;
+7. build M12 workstation images only after the host repositories are coherent
+   and published.
 
-CI proves repository contracts. Hardware evidence authorizes merges.
+CI proves repository contracts. Hardware evidence proves physical compatibility.

@@ -2,7 +2,7 @@
 
 The Windows workshop is the one deliberate manual boundary in the managed VM
 pipeline. `virt-manager` is used only to install and prepare a temporary source
-VM. It is **not** the lifecycle manager for the final Hyperlab domains.
+VM. It is **not** the lifecycle manager for the final HyperLab domains.
 
 Run this procedure only after the same frozen `arch-bootstrap` and
 `privatestack-ansible` candidates have completed:
@@ -24,7 +24,7 @@ must exist before Looking Glass can carry real frames. `virt-manager` provides
 that temporary console and device editor.
 
 After `image-prepare.yml` seals the workshop qcow2, final domains are created by
-`vm-create.yml`. Never edit a domain carrying Hyperlab metadata in virt-manager;
+`vm-create.yml`. Never edit a domain carrying HyperLab metadata in virt-manager;
 use the lifecycle playbooks so its receipt, overlay, TPM, NVRAM and trust state
 remain one transaction.
 
@@ -42,7 +42,7 @@ outside the managed image store. Use:
   final spec;
 - memory that fits the physical host budget.
 
-Do not add Hyperlab metadata to the workshop domain. It is disposable and is
+Do not add HyperLab metadata to the workshop domain. It is disposable and is
 removed after the source qcow2 has been sealed.
 
 ## `win11clean`: personal singleton
@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass `
   -IdentityMode personal-singleton `
   -LookingGlassBuild B7-263-g0140a3f6fb `
   -LookingGlassLog 'C:\ProgramData\Looking Glass (host)\looking-glass-host.txt' `
-  -OutputPath 'C:\Hyperlab\win11clean-evidence.json' `
+  -OutputPath 'C:\HyperLab\win11clean-evidence.json' `
   -MicrosoftAccountPresent `
   -NoCredentialReuse
 ```
@@ -100,7 +100,7 @@ powershell -ExecutionPolicy Bypass `
   -IdentityMode generalized-local-template `
   -LookingGlassBuild B7-263-g0140a3f6fb `
   -LookingGlassLog 'C:\ProgramData\Looking Glass (host)\looking-glass-host.txt' `
-  -OutputPath 'C:\Hyperlab\win11dirty-evidence.json' `
+  -OutputPath 'C:\HyperLab\win11dirty-evidence.json' `
   -Generalized `
   -LocalLabAccountPresent `
   -NoCredentialReuse
@@ -132,7 +132,7 @@ sha256sum /private/workshop/win11dirty.qcow2
 Validate the workshop receipt first:
 
 ```bash
-ansible-playbook playbooks/windows-workshop.yml --check --diff \
+ansible-playbook -K playbooks/windows-workshop.yml --check --diff \
   -e windows_workshop_policy=windows-workshops/win11clean.yml \
   -e windows_workshop_evidence=/private/workshop/win11clean-evidence.json \
   -e windows_workshop_manifest=images/win11clean.yml \
@@ -143,7 +143,7 @@ ansible-playbook playbooks/windows-workshop.yml --check --diff \
 Repeat without `--check`, then import the exact same file and checksum:
 
 ```bash
-ansible-playbook playbooks/image-prepare.yml --check --diff \
+ansible-playbook -K playbooks/image-prepare.yml --check --diff \
   -e image_factory_manifest=images/win11clean.yml \
   -e image_factory_local_source=/private/workshop/win11clean.qcow2 \
   -e image_factory_source_sha256=<source-sha256> \
@@ -157,9 +157,9 @@ be committed to the manifest before the frozen release campaign.
 Only after sealing create the managed VM:
 
 ```bash
-ansible-playbook playbooks/vm-create.yml --check --diff \
+ansible-playbook -K playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/win11dirty-disposable.yml
-ansible-playbook playbooks/vm-create.yml \
+ansible-playbook -K playbooks/vm-create.yml \
   -e guest_spec=vm-specs/win11dirty-disposable.yml
 ```
 

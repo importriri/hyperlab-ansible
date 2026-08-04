@@ -8,7 +8,7 @@
 
 window {
     transparency:     "real";
-    background-color: #1e1e2ef2;
+    background-color: @base;
     text-color:       @text;
     border:           2px;
     border-color:     @surface1;
@@ -26,7 +26,7 @@ mainbox {
 }
 
 inputbar {
-    background-color: #181825f2;
+    background-color: @mantle;
     text-color:       @text;
     border:           1px;
     border-color:     @surface1;
@@ -39,13 +39,13 @@ inputbar {
 
 prompt {
     background-color: @transparent;
-    text-color:       @mauve;
+    text-color:       @accent;
 }
 
 entry {
     background-color:  @transparent;
     text-color:        @text;
-    placeholder:       "cerca applicazione";
+    placeholder:       "search applications";
     placeholder-color: @overlay0;
     cursor:            text;
 }
@@ -97,7 +97,7 @@ element alternate.normal {
 
 element normal.active {
     background-color: @transparent;
-    text-color:       @blue;
+    text-color:       @accent2;
     border-color:     @transparent;
 }
 
@@ -110,19 +110,19 @@ element normal.urgent {
 element selected.normal {
     background-color: @surface0;
     text-color:       @text;
-    border-color:     @mauve;
+    border-color:     @accent;
 }
 
 element selected.active {
     background-color: @surface0;
     text-color:       @text;
-    border-color:     @mauve;
+    border-color:     @accent;
 }
 
 element selected.urgent {
     background-color: @surface0;
     text-color:       @text;
-    border-color:     @mauve;
+    border-color:     @accent;
 }
 
 element-icon {

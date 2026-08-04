@@ -1,12 +1,28 @@
 {
     "layer": "top",
     "position": "top",
-    "height": 34,
+    "mode": "dock",
+    "start_hidden": false,
+    "ipc": false,
+    "exclusive": true,
+    "passthrough": false,
+    "fixed-center": true,
+    "height": 37,
+    "on-sigusr1": "toggle",
+    "on-sigusr2": "reload",
     "spacing": 0,
-    "modules-left": ["custom/logo", "sway/workspaces", "sway/mode", "custom/cava"],
-    "modules-center": ["clock"],
-    "modules-right": ["group/hyperlab", "idle_inhibitor", "pulseaudio", "backlight", "network", "cpu", "memory", "temperature", "battery", "tray"],
+    "modules-left": ["custom/brand", "group/hyperlab", "sway/workspaces", "sway/mode"],
+    "modules-center": [],
+    "modules-right": ["temperature", "custom/keyboard-layout", "custom/controls", "custom/wallpaper-mode", "network", "pulseaudio", "battery", "clock"],
 
+    "custom/brand": {
+        "format": "  HyperLab",
+        "tooltip": true,
+        "tooltip-format": "Open the compact HyperLab drawer",
+        "on-click": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms",
+        "on-click-right": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics",
+        "on-click-middle": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms"
+    },
     "custom/logo": {
         "format": "  ",
         "tooltip": false,
@@ -30,7 +46,12 @@
     // set of CSS rules covers all of them.
     "group/hyperlab": {
         "orientation": "horizontal",
-        "drawer": { "transition-duration": 300, "transition-left-to-right": false },
+        "drawer": {
+            "transition-duration": 70,
+            "transition-left-to-right": true,
+            "children-class": "trust-detail",
+            "reveal-delay": 40
+        },
         "modules": ["custom/hyperlab", "custom/hyperlab-ram", "custom/hyperlab-gpu", "custom/hyperlab-vms"]
     },
     // The collapsed pill is a STREAM, not a poll: hyperlabctl blocks on
@@ -42,31 +63,66 @@
         "exec": "/usr/local/bin/privatestack-hyperlab watch trust",
         "return-type": "json",
         "restart-interval": 10,
-        "format": "  {}",
-        "on-click": "/usr/local/bin/privatestack-hyperlab-palette",
-        "on-click-right": "foot --app-id=hyperlab-panel hyperlabctl panel"
+        "format": "TRUST {}",
+        "max-length": 20,
+        "tooltip": true,
+        "on-click": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics",
+        "on-click-right": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics",
+        "on-click-middle": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics"
     },
     "custom/hyperlab-ram": {
         "exec": "/usr/local/bin/privatestack-hyperlab ram",
         "return-type": "json",
         "interval": 30,
         "signal": 8,
-        "format": "  {}"
+        "format": " RAM {}"
     },
     "custom/hyperlab-gpu": {
         "exec": "/usr/local/bin/privatestack-hyperlab gpu",
         "return-type": "json",
         "interval": 30,
         "signal": 8,
-        "format": "  {}"
+        "format": " GPU {}"
     },
     "custom/hyperlab-vms": {
         "exec": "/usr/local/bin/privatestack-hyperlab vms",
         "return-type": "json",
         "interval": 30,
         "signal": 8,
-        "format": "  {}",
-        "on-click": "foot --app-id=hyperlab-panel hyperlabctl panel"
+        "format": " VM {}",
+        "on-click": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms",
+        "on-click-right": "/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics"
+    },
+
+
+    "custom/keyboard-layout": {
+        "exec": "/usr/local/bin/privatestack-keyboard status-json",
+        "return-type": "json",
+        "interval": 5,
+        "signal": 10,
+        "format": "{}",
+        "tooltip": true,
+        "on-click": "/usr/local/bin/privatestack-keyboard cycle",
+        "on-click-right": "/usr/local/bin/privatestack-controls keyboard"
+    },
+    "custom/controls": {
+        "exec": "/usr/local/bin/privatestack-controls status-json",
+        "return-type": "json",
+        "interval": 5,
+        "signal": 11,
+        "format": "{}",
+        "tooltip": true,
+        "on-click": "/usr/local/bin/privatestack-controls menu"
+    },
+
+    "custom/wallpaper-mode": {
+        "exec": "/usr/local/bin/privatestack-theme mode-json",
+        "return-type": "json",
+        "interval": 5,
+        "signal": 9,
+        "format": "{}",
+        "tooltip": true,
+        "on-click": "/usr/local/bin/privatestack-theme mode-toggle"
     },
     "clock": {
         "format": "  {:%a %d %b   %H:%M}",
@@ -83,7 +139,8 @@
     // that one reads the wrong die on your board.
     "temperature": {
         "critical-threshold": 82,
-        "format": "  {temperatureC}°C"
+        "format": " {temperatureC}°C",
+        "tooltip-format": "CPU temperature: {temperatureC}°C"
     },
     "backlight": {
         "format": "{icon}  {percent}%",

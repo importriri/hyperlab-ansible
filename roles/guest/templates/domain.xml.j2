@@ -1,4 +1,4 @@
-<domain type="kvm"{% if guest_plan.device_profile == 'vfio' %} xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0"{% endif %}>
+<domain type="kvm"{% if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass %} xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0"{% endif %}>
   <name>{{ guest_plan.name }}</name>
   <uuid>{{ guest_plan.uuid }}</uuid>
   <metadata>
@@ -29,7 +29,7 @@
     <acpi/>
     <apic/>
     <vmport state="off"/>
-{% if guest_plan.device_profile == 'vfio' %}
+{% if guest_plan.device_profile == 'vfio' and guest_plan.os_family == 'windows' %}
     <hyperv mode="custom">
       <relaxed state="on"/>
       <vapic state="on"/>
@@ -118,7 +118,7 @@
 {% endif %}
     <memballoon model="{{ 'none' if guest_plan.device_profile == 'vfio' else 'virtio' }}"/>
   </devices>
-{% if guest_plan.device_profile == 'vfio' %}
+{% if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass %}
   <qemu:commandline>
     <qemu:arg value="-device"/>
     <qemu:arg value="{'driver':'ivshmem-plain','id':'shmem0','memdev':'looking-glass'}"/>

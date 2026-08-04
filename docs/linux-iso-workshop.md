@@ -25,7 +25,7 @@ Example:
 qemu-img info --output=json /private/workshop/parrot.qcow2
 sha256sum /private/workshop/parrot.qcow2
 
-ansible-playbook playbooks/image-prepare.yml --check --diff \
+ansible-playbook -K playbooks/image-prepare.yml --check --diff \
   -e image_factory_manifest=images/parrot.yml \
   -e image_factory_local_source=/private/workshop/parrot.qcow2 \
   -e image_factory_source_sha256=<source-sha256>

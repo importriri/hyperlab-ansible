@@ -88,7 +88,8 @@ def build_vfio_plan(
     spice_port: int,
 ) -> dict[str, Any]:
     require(plan.get("device_profile") == "vfio", "VFIO plan requires device_profile=vfio")
-    require(plan.get("looking_glass") is True, "VFIO plan requires Looking Glass")
+    require(isinstance(plan.get("looking_glass"), bool),
+            "VFIO plan needs a boolean looking_glass field")
     require(plan.get("memory_overcommit") is False, "VFIO memory overcommit must be disabled")
     require(plan.get("autostart") is False, "VFIO autostart must be disabled")
 
@@ -131,14 +132,30 @@ def build_vfio_plan(
     require(isinstance(trust_level, int) and not isinstance(trust_level, bool) and trust_level >= 0,
             "GPU trust level must be a non-negative integer")
 
+    require(spice_host == "127.0.0.1", "VFIO SPICE recovery must stay loopback-only")
+    require(spice_port == 5900, "VFIO recovery console requires fixed SPICE port 5900")
+
+    looking_glass = plan["looking_glass"]
     required_build = plan.get("looking_glass_host_build_required")
-    require(isinstance(required_build, str) and required_build == lg_build,
-            "image Looking Glass host build differs from the pinned host client build")
-    require(lg_device == "/dev/kvmfr0", "M4 supports the reviewed /dev/kvmfr0 transport only")
-    require(power_of_two(lg_shm_mb) and 32 <= lg_shm_mb <= 512,
-            "Looking Glass shared memory must be a reviewed power of two from 32 to 512 MiB")
-    require(spice_host == "127.0.0.1", "Looking Glass SPICE input must stay loopback-only")
-    require(spice_port == 5900, "Looking Glass client contract requires fixed SPICE port 5900")
+    if looking_glass:
+        require(plan.get("os_family") == "windows",
+                "Looking Glass is supported only by reviewed Windows images")
+        require(isinstance(required_build, str) and required_build == lg_build,
+                "image Looking Glass host build differs from the pinned host client build")
+        require(lg_device == "/dev/kvmfr0",
+                "M4 supports the reviewed /dev/kvmfr0 transport only")
+        require(power_of_two(lg_shm_mb) and 32 <= lg_shm_mb <= 512,
+                "Looking Glass shared memory must be a reviewed power of two from 32 to 512 MiB")
+        lg_bytes = lg_shm_mb * 1024 * 1024
+    else:
+        require(plan.get("os_family") == "linux",
+                "Windows VFIO guests require Looking Glass; only Linux may use SPICE-only VFIO")
+        require(required_build in (None, ""),
+                "SPICE-only Linux VFIO must not carry a Looking Glass build pin")
+        lg_build = None
+        lg_device = None
+        lg_shm_mb = None
+        lg_bytes = None
 
     return {
         "schema_version": 1,
@@ -148,10 +165,11 @@ def build_vfio_plan(
         "devices": [gpu, audio],
         "network_profile": network,
         "trust_level": trust_level,
+        "looking_glass_enabled": looking_glass,
         "looking_glass_build": lg_build,
         "looking_glass_device": lg_device,
         "looking_glass_shm_mb": lg_shm_mb,
-        "looking_glass_shm_bytes": lg_shm_mb * 1024 * 1024,
+        "looking_glass_shm_bytes": lg_bytes,
         "spice_host": spice_host,
         "spice_port": spice_port,
     }

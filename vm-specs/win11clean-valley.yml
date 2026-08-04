@@ -1,8 +1,7 @@
 ---
-# The benchmark instance: the personal Windows master with the GPU.
-# On the 8 GB laptop this spec fails the runtime fit check with the
-# shortfall in the message, and starts passing by itself when the RAM
-# arrives. That is the intended behaviour, not a limitation - see ADR 0007.
+# Personal Windows workstation and VFIO benchmark instance.
+# `memory_mb: auto` is resolved from the live host budget; the spec does not
+# encode a laptop RAM total. See ADR 0007.
 schema_version: 1
 name: win11clean-valley
 image: win11clean

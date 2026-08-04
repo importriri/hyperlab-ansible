@@ -1,0 +1,53 @@
+@import url("hyperlab-palette.css");
+/* Hyperlab global GTK3/GTK4 glass theme. */
+window,
+dialog,
+.background {
+    background-color: alpha(@hl_base, 0.48);
+    color: @hl_text;
+}
+headerbar,
+titlebar,
+.toolbar {
+    background-color: alpha(@hl_mantle, 0.54);
+    color: @hl_text;
+    border-color: @hl_overlay;
+    box-shadow: none;
+}
+button {
+    background-color: alpha(@hl_surface, 0.36);
+    color: @hl_text;
+    border: 1px solid @hl_overlay;
+    border-radius: 8px;
+    box-shadow: none;
+}
+button:hover {
+    background-color: alpha(@hl_surface, 0.52);
+    border-color: alpha(@hl_accent, 0.50);
+}
+button:disabled {
+    background-color: alpha(@hl_mantle, 0.18);
+    color: alpha(@hl_subtext, 0.62);
+    border-color: alpha(@hl_accent, 0.09);
+}
+entry,
+textview,
+list,
+row,
+scrolledwindow,
+.sidebar,
+.navigation-sidebar,
+popover contents,
+menu {
+    background-color: alpha(@hl_base, 0.42);
+    color: @hl_text;
+    border-color: @hl_overlay;
+}
+selection,
+*:selected {
+    background-color: alpha(@hl_accent, 0.40);
+    color: @hl_text;
+}
+label.dim-label {
+    color: @hl_subtext;
+}

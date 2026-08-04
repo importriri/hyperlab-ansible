@@ -1,6 +1,6 @@
 # hyperlabctl
 
-The control surface for the Hyperlab. It reads the repository contract and
+The control surface for the HyperLab. It reads the repository contract and
 libvirt, renders one document three ways, and owns no policy of its own.
 
 Per ADR 0004: standard library plus PyYAML, `virsh` rather than
@@ -22,7 +22,7 @@ operator-facing purpose:
 | `tools/hyperlabctl/bin/hyperlabctl net list` | List the five network domains and live state. |
 | `tools/hyperlabctl/bin/hyperlabctl image list` | List image manifests and sealed-base state. |
 | `tools/hyperlabctl/bin/hyperlabctl trust` | Show current GPU trust ownership and permitted transitions. |
-| `tools/hyperlabctl/bin/hyperlabctl logs --level warn` | Show warning-or-higher Hyperlab journal events. |
+| `tools/hyperlabctl/bin/hyperlabctl logs --level warn` | Show warning-or-higher HyperLab journal events. |
 | `tools/hyperlabctl/bin/hyperlabctl schema` | Describe every discovered status provider and field. |
 | `tools/hyperlabctl/bin/hyperlabctl actions --all` | Show available and currently blocked reviewed actions. |
 | `tools/hyperlabctl/bin/hyperlabctl completion` | Emit shell-completion candidates without changing the host. |
@@ -54,7 +54,7 @@ tests at all.
 ## Two paths, one boundary
 
 Reads need no password. Direct `vm start` / `vm stop` are deliberately limited
-to unmanaged libvirt domains. A domain carrying M3's Hyperlab metadata must go
+to unmanaged libvirt domains. A domain carrying M3's HyperLab metadata must go
 through its checked-in VM spec and lifecycle playbook, so the cockpit cannot
 skip state validation, sealed-base checks, locks or destructive confirmations.
 Those managed actions are marked `privileged` and the palette prepares their

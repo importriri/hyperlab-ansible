@@ -119,7 +119,7 @@ gate is immutable.
 ## 5. Storage hand-off
 
 A fresh installation must run the complete `arch-bootstrap/bootstrap` entrypoint.
-Before the Hyperlab tree exists, stage 2 accepts only:
+Before the HyperLab tree exists, stage 2 accepts only:
 
 ```text
 single disk      cryptroot   fsroot /@vm
@@ -132,9 +132,9 @@ The existing Nitro installation predates the contract. Its one permitted bridge
 is non-destructive adoption of an already mounted supported shape:
 
 ```bash
-ansible-playbook playbooks/bootstrap-storage-adopt.yml --check --diff
+ansible-playbook -K playbooks/bootstrap-storage-adopt.yml --check --diff
 
-ansible-playbook playbooks/bootstrap-storage-adopt.yml --diff \
+ansible-playbook -K playbooks/bootstrap-storage-adopt.yml --diff \
   -e bootstrap_storage_confirm_adopt='adopt:/var/lib/libvirt/images:<observed-mapper>'
 ```
 
@@ -148,7 +148,7 @@ results from the image-store run as the hardware proof; do not replace the
 shared blocking sentinels or infer identities from commented `qemu.conf`
 examples.
 
-After `foundation.yml` creates the empty Hyperlab tree, record the live identity:
+After `foundation.yml` creates the empty HyperLab tree, record the live identity:
 
 ```bash
 python tools/release_probe.py \
@@ -161,11 +161,11 @@ python tools/release_probe.py \
     --evidence "$RELEASE_DIR/nitro-evidence.json" \
     --gate storage-handoff \
     --status pass \
-    --summary 'The declared bootstrap topology matches the mounted Hyperlab store.'
+    --summary 'The declared bootstrap topology matches the mounted HyperLab store.'
 ```
 
 The probe compares the root-owned contract, live mapper, Btrfs filesystem root,
-`lsattr +C`, contract hash and the device backing the Hyperlab directory. When
+`lsattr +C`, contract hash and the device backing the HyperLab directory. When
 the gate passes, the runner derives the top-level storage identity; later gates
 cannot substitute another mapper or topology.
 
@@ -174,11 +174,11 @@ cannot substitute another mapper or topology.
 Retain the complete check, first apply and second apply logs:
 
 ```bash
-ansible-playbook playbooks/lab.yml --check --diff \
+ansible-playbook -K playbooks/lab.yml --check --diff \
   |& tee "$RELEASE_DIR/lab-check.log"
-ansible-playbook playbooks/lab.yml \
+ansible-playbook -K playbooks/lab.yml \
   |& tee "$RELEASE_DIR/lab-first.log"
-ansible-playbook playbooks/lab.yml \
+ansible-playbook -K playbooks/lab.yml \
   |& tee "$RELEASE_DIR/lab-second.log"
 ```
 
@@ -281,7 +281,7 @@ performs no network publication.
 
 Create the Predator plan only after the Nitro receipt exists. Use the same two
 commit values and `--profile predator-3070`. Predator additionally proves the
-dedicated-disk unlock/mount sequence and that all Hyperlab state is physically
+dedicated-disk unlock/mount sequence and that all HyperLab state is physically
 on `cryptvm`.
 
 A milestone is merged only after its documented hardware gate passes on its exact

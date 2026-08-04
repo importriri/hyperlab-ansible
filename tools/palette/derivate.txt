@@ -1,0 +1,16 @@
+# Accepted hand-written colours and their reasons. Any unlisted colour fails
+# verify_surfaces.py; exceptions are explicit rather than silent.
+#
+#   <hexadecimal>  <reason>
+#
+# Derived colours lighten text toward a pill colour. They are not source palette
+# tokens, and flattening them would remove an intentional effect.
+#000000  box-shadow colour, not a theme token
+#071422  dark text on a bright pill
+#a8efff  text lightened toward cyan
+#d2edfa  clock text lightened toward cyan
+#dfffea  text lightened toward green
+#effcff  text lightened toward light cyan
+#ffe9ef  text lightened toward red
+#fff0f4  text lightened toward pink
+#fff1f4  text lightened toward light red

@@ -1,0 +1,93 @@
+version: 1
+choices:
+  desktop_palette:
+    question: Which HyperLab palette should be the default?
+    value: green
+    decided_by: sid
+    affects:
+      - tools/palette/palette.yml
+      - roles/desktop/files/palette/
+      - roles/desktop/defaults/main.yml
+    options:
+      green: Green as the primary focus, teal as the secondary accent, and violet reserved for the Lab domain.
+      violet: Violet ambience with cyan accents; the Lab domain moves to magenta and keeps a shape marker.
+      blue: Deep blue with electric-blue and cyan accents; a cool, high-contrast variant.
+      red: Deep red with coral and amber accents while keeping every trust domain distinguishable.
+  lab_marking:
+    question: Should the Lab domain use colour only or colour plus shape?
+    value: colour_and_shape
+    decided_by: sid
+    affects:
+      - roles/desktop/files/hyperlab-cube-lab.svg
+      - roles/desktop/files/privatestack-hyperlab-domains.py
+    options:
+      colour_only: Colour only. This is acceptable in Green, where violet is unique.
+      colour_and_shape: Colour plus a distinct cube border. This remains robust in every palette and for colour-vision differences.
+  waybar_launcher_shape:
+    question: How should HyperLab and trust status be arranged in the bar?
+    value: brand_and_trust_drawer
+    decided_by: sid
+    affects:
+      - roles/desktop/files/waybar.jsonc
+      - roles/desktop/files/waybar.css
+      - tests/render.yml
+    options:
+      brand_and_trust_drawer: HyperLab stays first on the left. TRUST follows it and reveals RAM, GPU and VM status on hover.
+      single_combined_launcher: One button contains both launcher and status. It uses less space but obscures the trust model.
+  waybar_height:
+    question: What should the bar height be?
+    value: 37
+    decided_by: sid
+    affects:
+      - roles/desktop/files/waybar.jsonc
+    options:
+      31: Compact, but too short for the current modules.
+      37: The minimum height requested by Waybar 0.15.0 on the Nitro.
+  drawer_domains_section_tab:
+    question: Which tab should --section domains open?
+    value: system
+    decided_by: sid
+    affects:
+      - roles/desktop/files/privatestack-hyperlab-domains.py
+    options:
+      system: Open the compact System tab with trust, network, and GPU status.
+      apps: Open VMs because the domain selector is already available in the drawer.
+  drawer_app_enumeration:
+    question: Should the drawer list VMs or applications inside VMs, as Qubes does?
+    value: vm_only
+    decided_by: deferred
+    affects:
+      - images/
+      - roles/guest/
+    options:
+      vm_only: Show a Qubes-style VM selector with per-VM actions.
+      guest_agent: Enumerate guest desktop entries through a host/guest channel; this is a separate post-M13 milestone.
+  accent_secondary_scope:
+    question: Which cyan-family details should use accent2 instead of accent?
+    value: none
+    decided_by: sid
+    affects:
+      - roles/desktop/files/privatestack-hyperlab-domains.py
+    options:
+      none: Keep every current accent token on accent.
+      hover_and_borders: Use accent2 for hover states and secondary borders.
+  snapshot_actions:
+    question: Should Snapshot and Backup quick actions be enabled?
+    value: disabled_until_m12
+    decided_by: deferred
+    affects:
+      - roles/desktop/files/privatestack-hyperlab-domains.py
+    options:
+      disabled_until_m12: Keep them disabled until the backend exists.
+      enabled: Enable them immediately, even though the current backend cannot execute them.
+  ly_theming:
+    question: Should Ly be themed as part of the desktop chapter?
+    value: now
+    decided_by: sid
+    affects:
+      - roles/desktop/defaults/main.yml
+      - roles/desktop/tasks/main.yml
+      - /etc/ly/config.ini
+    options:
+      postponed: Keep the package defaults.
+      now: Preserve the package-managed file and edit only documented 24-bit colour and presentation keys with structural checks.

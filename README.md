@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/importriri/privatestack-ansible/actions/workflows/ci.yml)
 
-Stage 2 of the Hyperlab pipeline. `arch-bootstrap` creates the encrypted Arch
+Stage 2 of the HyperLab pipeline. `arch-bootstrap` creates the encrypted Arch
 host; this repository turns it into the VFIO hypervisor, local cockpit and
 private-service platform; `arch-hypervisor-lab` records the architecture and
 hardware evidence.
@@ -15,7 +15,7 @@ specs own intent, playbooks define the safe order**.
 The intended laptop result is:
 
 - systemd-boot defaults to the managed **VFIO** entry;
-- the dGPU belongs to reviewed VFIO guests, not the host desktop;
+- the dGPU belongs to declared VFIO guests, not the host desktop;
 - the host uses its integrated GPU for Sway and Looking Glass;
 - five libvirt domains separate clean, development, dirty, isolated-lab and
   service traffic;
@@ -46,7 +46,7 @@ maintenance.
 
 ### Local cockpit
 
-The desktop role points `/usr/local/bin/hyperlabctl` at the reviewed checkout
+The desktop role points `/usr/local/bin/hyperlabctl` at the local checkout
 instead of copying repository code into the host. The same command drives the
 Waybar status group, the Rofi action palette and the terminal panel:
 
@@ -59,7 +59,7 @@ Mod+F3  diagnostic report
 `hyperlabctl status --json`, `hyperlabctl doctor` and `hyperlabctl actions`
 remain usable without the graphical session. Unmanaged libvirt domains may use
 the narrow direct start and shutdown helpers. A domain carrying the managed
-Hyperlab metadata must go through its lifecycle playbook; privileged or
+HyperLab metadata must go through its lifecycle playbook; privileged or
 destructive actions are displayed for review and are never executed directly
 from Waybar or Rofi.
 
@@ -73,13 +73,34 @@ commit on `main` and its public `bash bootstrap` entrypoint. Stage 1 writes
 `/etc/privatestack/bootstrap-storage.yml` only after the mounted VM store passes
 its mapper, Btrfs root and `+C` checks.
 
+### Fast path after the first boot
+
+Use this path on a supported Nitro or Predator after `arch-bootstrap` completes.
+Every Ansible playbook uses privilege escalation, so the manual commands include
+`-K` and ask for the sudo password once per run.
+
+```bash
+git clone https://github.com/importriri/privatestack-ansible.git
+cd privatestack-ansible
+ansible-galaxy collection install -r collections/requirements.yml
+ansible-playbook -K playbooks/preflight.yml
+ansible-playbook -K playbooks/lab.yml --check --diff
+ansible-playbook -K playbooks/lab.yml
+ansible-playbook -K playbooks/lab.yml   # must end with changed=0
+./verify.sh
+```
+
+This builds the complete host target only. Image imports and VM lifecycle actions
+remain separate because they can create, reset or destroy private workload state.
+The detailed steps below explain each command and the supported recovery paths.
+
 ### 1. Clone stage 2
 
 ```bash
 # Fetch the published stage-2 repository.
 git clone https://github.com/importriri/privatestack-ansible.git
 
-# Enter the repository so every relative path resolves against the reviewed tree.
+# Enter the repository so every relative path resolves against the checked-out tree.
 cd privatestack-ansible
 
 # Install the Ansible collections pinned by the repository contract.
@@ -90,37 +111,37 @@ ansible-galaxy collection install -r collections/requirements.yml
 
 ```bash
 # Detect and validate the Nitro or Predator profile without changing the host.
-ansible-playbook playbooks/preflight.yml
+ansible-playbook -K playbooks/preflight.yml
 ```
 
-PCI IDs come from the reviewed Nitro or Predator profile. They are not copied
+PCI IDs come from the matching Nitro or Predator profile. They are not copied
 into commands or public VM manifests.
 
 ### 3. Build the headless foundation
 
 ```bash
 # Preview the headless foundation and display the managed diff.
-ansible-playbook playbooks/foundation.yml --check --diff
+ansible-playbook -K playbooks/foundation.yml --check --diff
 
-# Apply the reviewed headless foundation.
-ansible-playbook playbooks/foundation.yml
+# Apply the complete headless foundation.
+ansible-playbook -K playbooks/foundation.yml
 
 # Prove idempotence; this pass must report changed=0.
-ansible-playbook playbooks/foundation.yml
+ansible-playbook -K playbooks/foundation.yml
 ```
 
 The third command must report `changed=0`. A missing or mismatched bootstrap
-storage contract stops the run before the Hyperlab image tree is created.
+storage contract stops the run before the HyperLab image tree is created.
 
 An already validated legacy Nitro host may adopt its observed mount once,
 without repartitioning or remounting:
 
 ```bash
 # Inspect the existing mount and print the exact one-time confirmation.
-ansible-playbook playbooks/bootstrap-storage-adopt.yml --check --diff
+ansible-playbook -K playbooks/bootstrap-storage-adopt.yml --check --diff
 
-# Write only the reviewed contract; replace the placeholder with check-mode output.
-ansible-playbook playbooks/bootstrap-storage-adopt.yml --diff \
+# Write only the storage contract; replace the placeholder with check-mode output.
+ansible-playbook -K playbooks/bootstrap-storage-adopt.yml --diff \
   -e bootstrap_storage_confirm_adopt='adopt:/var/lib/libvirt/images:<observed-mapper>'
 ```
 
@@ -134,15 +155,15 @@ are private, while public cloud images require independently pinned checksums.
 
 ```bash
 # Preview import of the pinned official Arch cloud image.
-ansible-playbook playbooks/image-prepare.yml --check --diff \
+ansible-playbook -K playbooks/image-prepare.yml --check --diff \
   -e image_factory_manifest=images/arch.yml
 
 # Acquire, inspect and commit the image transaction.
-ansible-playbook playbooks/image-prepare.yml \
+ansible-playbook -K playbooks/image-prepare.yml \
   -e image_factory_manifest=images/arch.yml
 
 # Revalidate the sealed base without replacing it.
-ansible-playbook playbooks/image-validate.yml \
+ansible-playbook -K playbooks/image-validate.yml \
   -e image_factory_manifest=images/arch.yml
 ```
 
@@ -152,13 +173,13 @@ Windows first follows [`docs/windows-image-workshop.md`](docs/windows-image-work
 
 ```bash
 # Preview the complete laptop target: foundation, Sway and Looking Glass host side.
-ansible-playbook playbooks/lab.yml --check --diff
+ansible-playbook -K playbooks/lab.yml --check --diff
 
 # Apply the complete laptop target.
-ansible-playbook playbooks/lab.yml
+ansible-playbook -K playbooks/lab.yml
 
 # Prove idempotence; this pass must report changed=0.
-ansible-playbook playbooks/lab.yml
+ansible-playbook -K playbooks/lab.yml
 ```
 
 The last pass must report `changed=0`. `lab.yml` includes the desktop and
@@ -176,19 +197,19 @@ reset, stop or destroy decisions for private workloads.
 
 ```bash
 # Preview a cloud-init Linux transaction with a host-local public key.
-ansible-playbook playbooks/vm-create.yml --check --diff \
+ansible-playbook -K playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/debian-dev.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 
-# Create the reviewed Windows workload from its sealed private base.
-ansible-playbook playbooks/vm-create.yml \
+# Create the declared Windows workload from its sealed private base.
+ansible-playbook -K playbooks/vm-create.yml \
   -e guest_spec=vm-specs/win11clean-valley.yml
 ```
 
 The disposable Arch release-gate guest uses the same lifecycle boundary:
 
 ```bash
-# Resolve the reviewed Arch image import to a quoted Ansible command.
+# Resolve the declared Arch image import to a quoted Ansible command.
 hyperlabctl actions --resolve image.import --manifest images/arch.yml
 
 # Resolve creation of the disposable storage-gate guest.
@@ -198,7 +219,7 @@ hyperlabctl actions --resolve vm.create --spec vm-specs/arch-bootstrap-gate.yml
 hyperlabctl actions --resolve vm.managed-start --spec vm-specs/arch-bootstrap-gate.yml
 ```
 
-`hyperlabctl` resolves reviewed targets to quoted commands; Ansible performs the
+`hyperlabctl` resolves checked-in targets to quoted commands; Ansible performs the
 privileged image and VM transactions. The Arch base is the versioned official
 arch-boxes cloud image, while the instance disk is grown to 20 GiB for the
 storage gate.
@@ -211,20 +232,20 @@ confirmations.
 
 ```bash
 # Preview registration and its identity, lease and memory reservations.
-ansible-playbook playbooks/service-register.yml --check --diff \
+ansible-playbook -K playbooks/service-register.yml --check --diff \
   -e service_spec=service-specs/svc-jellyfin.yml
 
-# Commit the reviewed service registration.
-ansible-playbook playbooks/service-register.yml \
+# Commit the service registration.
+ansible-playbook -K playbooks/service-register.yml \
   -e service_spec=service-specs/svc-jellyfin.yml
 
 # Create the registered service VM with a host-local public key.
-ansible-playbook playbooks/vm-create.yml \
+ansible-playbook -K playbooks/vm-create.yml \
   -e guest_spec=vm-specs/svc-jellyfin.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 
 # Configure Jellyfin inside the service guest, never on the hypervisor.
-ansible-playbook playbooks/jellyfin.yml
+ansible-playbook -K playbooks/jellyfin.yml
 ```
 
 Registration owns the service identity, static lease, inactive RAM reservation
@@ -271,7 +292,7 @@ reuse rule and the milestone merge boundary.
 A single all-powerful playbook looks convenient but creates the wrong safety
 boundary:
 
-- image sealing may need private local input and operator-reviewed hashes;
+- image sealing may need private local input and operator-confirmed hashes;
 - VFIO start depends on current GPU ownership and available memory;
 - reset and destruction are lifecycle decisions, not host configuration;
 - service VMs must be registered before their disks and domains exist.
@@ -286,6 +307,8 @@ turning every host reconciliation into a workload event.
   and the commands that belong together.
 - [`docs/brick-catalog.md`](docs/brick-catalog.md) — roles grouped by the
   responsibility they protect, without a flat status table.
+- [`docs/desktop.md`](docs/desktop.md) — Sway controls, resident HyperLab
+  surfaces, themes, wallpapers and fallback behavior.
 - [`docs/adr/README.md`](docs/adr/README.md) — ordered architecture decisions
   and their current supersession state.
 - [`docs/historical-audit-m0.md`](docs/historical-audit-m0.md) — the linked,

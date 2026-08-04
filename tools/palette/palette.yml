@@ -1,0 +1,81 @@
+# Single source of truth for every desktop palette surface.
+# Every variant must declare the same tokens; audit_palette.py enforces this.
+
+default: green
+variants:
+  green:
+    label: Green
+    note: Green primary accent, teal secondary accent, violet reserved for the Lab domain.
+    base: '#0c1512'
+    mantle: '#111d18'
+    surface: '#1a2b23'
+    overlay: '#2b453a'
+    text: '#dcf3e4'
+    subtext: '#93b3a3'
+    accent: '#7ee787'
+    accent2: '#35e4dd'
+    ok: '#72f2a5'
+    warn: '#ffd275'
+    bad: '#ff668f'
+    dom_clean: '#72f2a5'
+    dom_dev: '#5b8cff'
+    dom_lab: '#b184ff'
+    dom_dirty: '#ff9d45'
+    dom_services: '#35e4dd'
+  violet:
+    label: Violet
+    note: Violet ambience with cyan accents and magenta reserved for the Lab domain.
+    base: '#0a0a16'
+    mantle: '#12122a'
+    surface: '#1b1b3a'
+    overlay: '#2f2f5c'
+    text: '#e2e0ff'
+    subtext: '#9d9dc4'
+    accent: '#9d6cff'
+    accent2: '#43d8ff'
+    ok: '#72f2a5'
+    warn: '#ffd275'
+    bad: '#ff668f'
+    dom_clean: '#72f2a5'
+    dom_dev: '#5b8cff'
+    dom_lab: '#ff7ce5'
+    dom_dirty: '#ff9d45'
+    dom_services: '#35e4dd'
+  blue:
+    label: Blue
+    note: Deep blue with electric-blue and cyan accents; a cool high-contrast variant.
+    base: '#08131f'
+    mantle: '#0d1c2b'
+    surface: '#142a3e'
+    overlay: '#254866'
+    text: '#deefff'
+    subtext: '#8eacc4'
+    accent: '#4da3ff'
+    accent2: '#55d6ff'
+    ok: '#62d9a6'
+    warn: '#ffd166'
+    bad: '#ff6b7a'
+    dom_clean: '#72f2a5'
+    dom_dev: '#ffd166'
+    dom_lab: '#c58cff'
+    dom_dirty: '#ff7a59'
+    dom_services: '#35d6d0'
+  red:
+    label: Red
+    note: Deep red with coral and amber accents while preserving trust-domain contrast.
+    base: '#180b0d'
+    mantle: '#241013'
+    surface: '#35171b'
+    overlay: '#5a2a31'
+    text: '#ffe7e9'
+    subtext: '#c49a9f'
+    accent: '#ff5d6c'
+    accent2: '#ff9f43'
+    ok: '#72f2a5'
+    warn: '#ffd166'
+    bad: '#ff3d5a'
+    dom_clean: '#72f2a5'
+    dom_dev: '#5b8cff'
+    dom_lab: '#c58cff'
+    dom_dirty: '#ff9f43'
+    dom_services: '#35d6d0'

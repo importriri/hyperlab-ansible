@@ -62,6 +62,33 @@ ACTIONS = [
         "requires": None,
     },
     {
+        "id": "domain.manager",
+        "label": "Open the domain manager",
+        "command": ["hyperlabctl", "open", "manager"],
+        "privileged": False,
+        "destructive": False,
+        "target": None,
+        "requires": None,
+    },
+    {
+        "id": "vm.console",
+        "label": "Open the graphical console",
+        "command": ["hyperlabctl", "open", "console", "{domain}"],
+        "privileged": False,
+        "destructive": False,
+        "target": "domain",
+        "requires": None,
+    },
+    {
+        "id": "vm.looking-glass",
+        "label": "Open Looking Glass for the active VFIO guest",
+        "command": ["hyperlabctl", "open", "looking-glass"],
+        "privileged": False,
+        "destructive": False,
+        "target": None,
+        "requires": None,
+    },
+    {
         "id": "panel.open",
         "label": "Open the cockpit panel",
         "command": ["hyperlabctl", "panel"],
@@ -199,6 +226,16 @@ ACTIONS = [
         "requires": "playbooks/image-prepare.yml",
     },
     {
+        "id": "image.validate",
+        "label": "Validate a sealed image",
+        "command": ["ansible-playbook", "playbooks/image-validate.yml", "-K",
+                    "-e", "image_factory_manifest={manifest}"],
+        "privileged": True,
+        "destructive": False,
+        "target": "manifest",
+        "requires": "playbooks/image-validate.yml",
+    },
+    {
         "id": "store.layout",
         "label": "Lay out and verify the image store",
         "command": ["ansible-playbook", "playbooks/image-store.yml", "-K"],
@@ -243,7 +280,7 @@ def by_id(action_id):
 
 
 def target_choices(kind, repo_root):
-    """Return only real, in-repository target files in deterministic order."""
+    """Return checked-in targets plus host-local generated VM specs."""
     layout = {"spec": ("vm-specs", "*.yml"), "manifest": ("images", "*.yml")}
     if kind not in layout:
         raise ContractError("unsupported action target %r" % kind)
@@ -261,8 +298,16 @@ def target_choices(kind, repo_root):
         raise ContractError("%s escaped the repository" % declared) from exc
     if not directory.is_dir():
         raise Unavailable("%s is missing under %s" % (subdir, root))
+    candidates = list(directory.glob(pattern))
+    if kind == "spec":
+        generated = directory / ".generated"
+        if generated.exists():
+            if generated.is_symlink() or not generated.is_dir():
+                raise ContractError("vm-specs/.generated must be a real directory")
+            candidates.extend(generated.glob(pattern))
+
     choices = []
-    for item in sorted(directory.glob(pattern)):
+    for item in sorted(candidates):
         if item.is_symlink() or not item.is_file():
             continue
         resolved = item.resolve()
@@ -286,7 +331,7 @@ def _repo_target(value, kind, repo_root):
     value = _safe_scalar(value, kind)
     choices = target_choices(kind, repo_root)
     if value not in choices:
-        raise ContractError("%s is not a checked-in %s target" % (value, kind))
+        raise ContractError("%s is not a checked-in or generated %s target" % (value, kind))
     return value
 
 

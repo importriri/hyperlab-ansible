@@ -14,6 +14,8 @@ def require(condition: bool, message: str) -> None:
 config = (FILES / "rofi-config.rasi").read_text(encoding="utf-8")
 launcher = (FILES / "rofi-launcher.rasi").read_text(encoding="utf-8")
 hyperlab = (FILES / "rofi-hyperlab.rasi").read_text(encoding="utf-8")
+mocha = (FILES / "rofi-mocha.rasi").read_text(encoding="utf-8")
+green = (FILES / "palette/green/hyperlab-palette.rasi").read_text(encoding="utf-8")
 sway = (FILES / "sway.config").read_text(encoding="utf-8")
 
 require('set $menu rofi -show drun' in sway, "Mod+D launcher command drifted")
@@ -27,11 +29,20 @@ require('me-accept-entry:' not in config, "Rofi mouse accept override returned")
 require(config.count('@theme "rofi-launcher.rasi"') == 1, "launcher must replace the default theme")
 require('@import "rofi-launcher.rasi"' not in config, "launcher import fallback regression returned")
 require('@import "rofi-mocha.rasi"' in launcher, "launcher palette import is missing")
+require("accent:      @hl-accent;" in mocha, "launcher accent alias is not palette-primary")
+require("accent2:     @hl-accent2;" in mocha, "secondary accent alias is not palette-driven")
+require("hl-accent: #7ee787;" in green, "Green primary accent is not green")
+require("border-color:     @accent;" in launcher, "Mod+D selection does not use the primary accent")
+require("text-color:       @accent;" in launcher, "Mod+D prompt does not use the primary accent")
 
 for name, theme in (("launcher", launcher), ("hyperlab", hyperlab)):
     require('transparency:     "real";' in theme, f"{name} lost real transparency")
-    require('background-color: #1e1e2ef2;' in theme, f"{name} lost terminal-matched alpha")
-    require('background-color: transparent;' not in theme, f"{name} uses an unresolved bare transparent value")
+    require('background-color: @base;' in theme,
+            f"{name} window is disconnected from the selected palette base")
+    require('#1e1e2e' not in theme and '#181825' not in theme,
+            f"{name} reintroduced a hard-coded Violet/Catppuccin surface")
+    require('background-color: transparent;' not in theme,
+            f"{name} uses an unresolved bare transparent value")
     require('@transparent' in theme, f"{name} must use the declared transparent colour")
 
 require('@import "rofi-mocha.rasi"' in hyperlab, "Hyperlab palette import is missing")
@@ -41,5 +52,9 @@ require('element selected.normal {' in launcher, "launcher selection state is no
 require('element normal.normal {' in hyperlab, "Hyperlab normal state is not explicit")
 require('element alternate.normal {' in hyperlab, "Hyperlab alternate state is not explicit")
 require('element selected.normal {' in hyperlab, "Hyperlab selection state is not explicit")
+
+for variant in ("blue", "red"):
+    require((FILES / f"palette/{variant}/hyperlab-palette.rasi").is_file(),
+            f"{variant} Rofi palette missing")
 
 print("rofi theme contract: OK")

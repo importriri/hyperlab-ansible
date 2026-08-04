@@ -9,7 +9,7 @@ Changing an active bridge is disruptive. The role therefore fails closed and
 prints the maintenance-window command:
 
 ```bash
-ansible-playbook playbooks/lab.yml -e network_domains_restart_changed=true
+ansible-playbook -K playbooks/lab.yml -e network_domains_restart_changed=true
 ```
 
 That opt-in stops only changed active networks, redefines them, starts them and

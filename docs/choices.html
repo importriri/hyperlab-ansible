@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>HyperLab · choices</title>
+<style>
+:root { --base:#0c1512; --mantle:#111d18; --surface:#1a2b23; --overlay:#2b453a;
+         --text:#dcf3e4; --subtext:#93b3a3; --accent:#7ee787; }
+* { box-sizing:border-box }
+body { margin:0; padding:2rem 1.25rem; background:var(--base); color:var(--text);
+        font:15px/1.55 ui-monospace,"JetBrains Mono",monospace; }
+main { max-width:60rem; margin:0 auto }
+h1 { font-size:1.5rem; margin:0 0 .25rem }
+.lede { color:var(--subtext); margin:0 0 2rem }
+section { background:var(--mantle); border:1px solid var(--overlay);
+           border-radius:12px; padding:1rem 1.25rem; margin-bottom:1rem }
+h2 { font-size:1.05rem; margin:0 0 .5rem; display:flex; gap:.75rem;
+      align-items:baseline; flex-wrap:wrap }
+.badge { font-size:.7rem; border:1px solid; border-radius:999px;
+          padding:.1rem .55rem; white-space:nowrap }
+.key { color:var(--subtext); margin:0 0 .75rem; font-size:.85rem }
+.key b { color:var(--accent) }
+ul { list-style:none; margin:0; padding:0 }
+.opts li { background:var(--surface); border-left:3px solid var(--overlay);
+            border-radius:6px; padding:.6rem .8rem; margin-bottom:.5rem }
+.opts li.on { border-left-color:var(--accent) }
+.opts p { margin:.35rem 0 0; color:var(--subtext); font-size:.85rem }
+.opts b { color:var(--accent) }
+code { color:var(--text) }
+details { margin-top:.5rem; font-size:.8rem; color:var(--subtext) }
+summary { cursor:pointer }
+.files li { padding:.15rem 0 }
+footer { color:var(--subtext); font-size:.8rem; margin-top:2rem;
+          border-top:1px solid var(--overlay); padding-top:1rem }
+</style></head><body><main>
+<h1>HyperLab · choices</h1>
+<p class="lede">9 decisions: 7 selected, 2 deferred.
+This page is generated from <code>choices.yml</code>; editing the HTML changes nothing.</p>
+
+  <section>
+    <h2>Which HyperLab palette should be the default?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>desktop_palette</code> = <b>green</b></p>
+    <ul class="opts"><li class="on"><code>green</code> <b>· active</b><p>Green as the primary focus, teal as the secondary accent, and violet reserved for the Lab domain.</p></li><li class="off"><code>violet</code><p>Violet ambience with cyan accents; the Lab domain moves to magenta and keeps a shape marker.</p></li><li class="off"><code>blue</code><p>Deep blue with electric-blue and cyan accents; a cool, high-contrast variant.</p></li><li class="off"><code>red</code><p>Deep red with coral and amber accents while keeping every trust domain distinguishable.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>tools/palette/palette.yml</code></li><li><code>roles/desktop/files/palette/</code></li><li><code>roles/desktop/defaults/main.yml</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Should the Lab domain use colour only or colour plus shape?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>lab_marking</code> = <b>colour_and_shape</b></p>
+    <ul class="opts"><li class="off"><code>colour_only</code><p>Colour only. This is acceptable in Green, where violet is unique.</p></li><li class="on"><code>colour_and_shape</code> <b>· active</b><p>Colour plus a distinct cube border. This remains robust in every palette and for colour-vision differences.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/hyperlab-cube-lab.svg</code></li><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+  </section>
+  <section>
+    <h2>How should HyperLab and trust status be arranged in the bar?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>waybar_launcher_shape</code> = <b>brand_and_trust_drawer</b></p>
+    <ul class="opts"><li class="on"><code>brand_and_trust_drawer</code> <b>· active</b><p>HyperLab stays first on the left. TRUST follows it and reveals RAM, GPU and VM status on hover.</p></li><li class="off"><code>single_combined_launcher</code><p>One button contains both launcher and status. It uses less space but obscures the trust model.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/waybar.jsonc</code></li><li><code>roles/desktop/files/waybar.css</code></li><li><code>tests/render.yml</code></li></ul></details>
+  </section>
+  <section>
+    <h2>What should the bar height be?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>waybar_height</code> = <b>37</b></p>
+    <ul class="opts"><li class="off"><code>31</code><p>Compact, but too short for the current modules.</p></li><li class="on"><code>37</code> <b>· active</b><p>The minimum height requested by Waybar 0.15.0 on the Nitro.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/waybar.jsonc</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Which tab should --section domains open?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>drawer_domains_section_tab</code> = <b>system</b></p>
+    <ul class="opts"><li class="on"><code>system</code> <b>· active</b><p>Open the compact System tab with trust, network, and GPU status.</p></li><li class="off"><code>apps</code><p>Open VMs because the domain selector is already available in the drawer.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Should the drawer list VMs or applications inside VMs, as Qubes does?
+      <span class="badge" style="border-color:#9d9dc4;color:#9d9dc4">Deferred</span>
+    </h2>
+    <p class="key"><code>drawer_app_enumeration</code> = <b>vm_only</b></p>
+    <ul class="opts"><li class="on"><code>vm_only</code> <b>· active</b><p>Show a Qubes-style VM selector with per-VM actions.</p></li><li class="off"><code>guest_agent</code><p>Enumerate guest desktop entries through a host/guest channel; this is a separate post-M13 milestone.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>images/</code></li><li><code>roles/guest/</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Which cyan-family details should use accent2 instead of accent?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>accent_secondary_scope</code> = <b>none</b></p>
+    <ul class="opts"><li class="on"><code>none</code> <b>· active</b><p>Keep every current accent token on accent.</p></li><li class="off"><code>hover_and_borders</code><p>Use accent2 for hover states and secondary borders.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Should Snapshot and Backup quick actions be enabled?
+      <span class="badge" style="border-color:#9d9dc4;color:#9d9dc4">Deferred</span>
+    </h2>
+    <p class="key"><code>snapshot_actions</code> = <b>disabled_until_m12</b></p>
+    <ul class="opts"><li class="on"><code>disabled_until_m12</code> <b>· active</b><p>Keep them disabled until the backend exists.</p></li><li class="off"><code>enabled</code><p>Enable them immediately, even though the current backend cannot execute them.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+  </section>
+  <section>
+    <h2>Should Ly be themed as part of the desktop chapter?
+      <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
+    </h2>
+    <p class="key"><code>ly_theming</code> = <b>now</b></p>
+    <ul class="opts"><li class="off"><code>postponed</code><p>Keep the package defaults.</p></li><li class="on"><code>now</code> <b>· active</b><p>Preserve the package-managed file and edit only documented 24-bit colour and presentation keys with structural checks.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/defaults/main.yml</code></li><li><code>roles/desktop/tasks/main.yml</code></li><li><code>/etc/ly/config.ini</code></li></ul></details>
+  </section>
+<footer>To change a choice:
+<code>python3 choices.py set desktop_palette blue</code> &mdash;
+then <code>python3 choices.py vars &gt; group_vars/all/choices.yml</code>.</footer>
+</main></body></html>

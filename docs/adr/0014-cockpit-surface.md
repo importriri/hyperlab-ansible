@@ -27,7 +27,7 @@ registry, the panel draws it. A surface holds no rule of its own.
 **Privilege is a field, not a convention.** Every action declares `privileged`
 and `destructive`. The palette never executes a privileged action: it opens a
 terminal with the command prepared. Direct `start`/`stop` remain available only
-for unmanaged libvirt domains. A domain carrying M3's Hyperlab metadata must be
+for unmanaged libvirt domains. A domain carrying M3's HyperLab metadata must be
 operated through its checked-in spec and lifecycle playbook, so the cockpit
 cannot bypass the transaction state, sealed-base verification, locks or exact
 confirmation variables.

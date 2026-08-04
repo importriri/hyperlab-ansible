@@ -65,8 +65,14 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
     images_root = (root / "images").resolve()
     store = store.resolve()
 
-    spec_path = Path(spec_arg)
-    spec_path = (root / spec_path).resolve() if not spec_path.is_absolute() else spec_path.resolve()
+    declared_spec_path = Path(spec_arg)
+    declared_spec_path = (
+        root / declared_spec_path
+        if not declared_spec_path.is_absolute()
+        else declared_spec_path
+    )
+    require(not declared_spec_path.is_symlink(), "guest_spec must not be a symlink")
+    spec_path = declared_spec_path.resolve()
     require(within(spec_path, specs_root), "guest_spec must resolve below vm-specs/")
 
     spec = load_mapping(spec_path, "VM spec")
@@ -110,15 +116,13 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
     allowlist = manifest.get("network_allowlist", [])
     require(isinstance(network, str) and network in allowlist,
             f"network {network!r} is outside image {image_id} allowlist")
+    if device_profile == "vfio":
+        require(network != "services", "services domains can never own the GPU")
 
     clipboard = strict_bool(spec, "clipboard", "spec")
     shared_folders = strict_bool(spec, "shared_folders", "spec")
     looking_glass = strict_bool(spec, "looking_glass", "spec")
     require(not shared_folders, "guest lifecycle does not implement shared folders")
-    if device_profile == "standard":
-        require(not looking_glass, "standard guests cannot request Looking Glass")
-    else:
-        require(looking_glass, "VFIO guests require Looking Glass in M4")
     usb_allowlist = spec.get("usb_allowlist")
     require(isinstance(usb_allowlist, list) and not usb_allowlist,
             "M4 requires an empty usb_allowlist; reviewed USB passthrough is a later stage")
@@ -149,10 +153,11 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
     os_family = manifest.get("os_family")
     require(os_family in {"linux", "windows"}, "unsupported os_family")
     cloud_init = supports.get("cloud_init") is True
-    if os_family == "linux":
-        require(cloud_init, "Linux guests require a cloud-init capable image")
-    else:
+    if os_family == "windows":
         require(not cloud_init, "Windows manifests must not request cloud-init")
+    elif not cloud_init:
+        require(manifest.get("generalized") is True,
+                "Linux images without cloud-init must be explicitly generalized")
 
     instance_policy = manifest.get("instance_policy")
     require(instance_policy in {"multiple", "singleton"}, "unsupported instance_policy")
@@ -170,12 +175,18 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
     autostart = strict_bool(spec, "autostart", "spec")
     lg_required = manifest.get("looking_glass_host_build_required")
     if device_profile == "vfio":
-        require(os_family == "windows", "M4 VFIO lifecycle supports reviewed Windows images only")
         require(not memory_overcommit, "VFIO guests cannot request memory overcommit")
         require(not autostart, "VFIO guests cannot autostart; GPU trust state starts at an operator action")
-        require(isinstance(lg_required, str) and LG_BUILD_RE.fullmatch(lg_required) is not None,
-                "VFIO image needs a pinned looking_glass_host_build_required")
+        if os_family == "windows":
+            require(looking_glass, "Windows VFIO guests require Looking Glass")
+            require(isinstance(lg_required, str) and LG_BUILD_RE.fullmatch(lg_required) is not None,
+                    "Windows VFIO image needs a pinned looking_glass_host_build_required")
+        else:
+            require(not looking_glass,
+                    "Linux VFIO uses loopback SPICE, not Looking Glass")
+            lg_required = None
     else:
+        require(not looking_glass, "standard guests cannot request Looking Glass")
         lg_required = None
 
     owner = spec.get("owner")

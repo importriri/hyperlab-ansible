@@ -1,0 +1,73 @@
+---
+# All palettes are installed read-only. The session controller copies the
+# selected fragments into user-owned active files, so the Swaybar theme button
+# never needs sudo and Ansible remains the source of truth.
+
+- name: Refuse a palette that is not one of the declared variants
+  ansible.builtin.assert:
+    that:
+      - desktop_palette in desktop_palette_options
+    fail_msg: >-
+      desktop_palette is '{{ desktop_palette }}';
+      the declared variants are {{ desktop_palette_options | join(', ') }}.
+      Change it with tools/choices/choices.py, not by hand.
+    quiet: true
+
+- name: Create the shared palette directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ desktop_palette_install_root }}"
+    - "{{ desktop_palette_install_root }}/palettes"
+    - "{{ desktop_palette_install_root }}/palettes/green"
+    - "{{ desktop_palette_install_root }}/palettes/violet"
+    - "{{ desktop_palette_install_root }}/palettes/blue"
+    - "{{ desktop_palette_install_root }}/palettes/red"
+
+- name: Install every runtime palette fragment
+  ansible.builtin.copy:
+    src: "{{ desktop_palette_fragments }}/{{ item.0 }}/{{ item.1 }}"
+    dest: "{{ desktop_palette_install_root }}/palettes/{{ item.0 }}/{{ item.1 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ['green', 'violet', 'blue', 'red'] | product(desktop_palette_runtime_fragments) | list }}"
+
+- name: Keep the selected root palette aliases for diagnostic Waybar assets
+  ansible.builtin.copy:
+    src: "{{ desktop_palette_fragments }}/{{ desktop_palette }}/{{ item }}"
+    dest: "{{ desktop_palette_install_root }}/{{ item | regex_replace('^hyperlab-palette', 'palette') }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ desktop_palette_runtime_fragments }}"
+
+- name: Seed the persisted runtime theme without overwriting a user toggle
+  ansible.builtin.copy:
+    content: "{{ desktop_palette }}\n"
+    dest: "/home/{{ admin_user }}/.config/hyperlab/theme"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+    force: false
+
+- name: Install the selected palette into user-owned active files
+  ansible.builtin.copy:
+    src: "{{ desktop_palette_fragments }}/{{ desktop_palette }}/{{ item.src }}"
+    dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+  loop:
+    - { src: hyperlab-palette.sway, dest: hyperlab/palette.sway }
+    - { src: hyperlab-palette.rasi, dest: hyperlab/palette.rasi }
+    - { src: hyperlab-palette-foot.ini, dest: hyperlab/palette-foot.ini }
+    - { src: hyperlab-palette-gtk.css, dest: gtk-3.0/hyperlab-palette.css }
+    - { src: hyperlab-palette-gtk.css, dest: gtk-4.0/hyperlab-palette.css }
+    - { src: hyperlab-palette-waybar.css, dest: waybar/palette.css }
+    - { src: hyperlab-palette-superfile.toml, dest: superfile/theme/hyperlab.toml }
+    - { src: hyperlab-palette-swaylock.conf, dest: swaylock/config }

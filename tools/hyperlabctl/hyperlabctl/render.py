@@ -126,9 +126,6 @@ def as_waybar(document):
     }
 
 
-FIELD_ICONS = {"trust": "\uf023", "ram": "\uf1c0", "gpu": "\uf2db", "vms": "\uf233"}
-
-
 def waybar_field(document, field):
     """One pill of the drawer. Same four keys, so the CSS rules are shared."""
     trust = document.get("trust") or {}

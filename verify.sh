@@ -28,18 +28,29 @@ run() {
 }
 
 run_render() {
-    if [ -t 0 ]; then
-        local -a become_args=()
-        if [ -n "${PRIVATESTACK_BECOME_PASSWORD_FILE:-}" ]; then
-            if [ ! -r "${PRIVATESTACK_BECOME_PASSWORD_FILE}" ]; then
-                echo "Configured become password file is not readable." >&2
-                fail=1
-                return
-            fi
-            become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")
-        elif ! sudo -n true 2>/dev/null; then
-            become_args=(-K)
+    local -a become_args=()
+
+    # A supplied password file is authoritative even when verify.sh runs in the
+    # background or with redirected stdin. TTY detection is only a fallback for
+    # interactive runs that did not provide a password file.
+    if [ -n "${PRIVATESTACK_BECOME_PASSWORD_FILE:-}" ]; then
+        if [ ! -r "${PRIVATESTACK_BECOME_PASSWORD_FILE}" ]; then
+            echo "Configured become password file is not readable." >&2
+            fail=1
+            return
         fi
+        become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")
+    elif sudo -n true 2>/dev/null; then
+        become_args=()
+    elif [ -t 0 ]; then
+        become_args=(-K)
+    else
+        echo "Render tests require sudo credentials. Set PRIVATESTACK_BECOME_PASSWORD_FILE or run interactively." >&2
+        fail=1
+        return
+    fi
+
+    if [ -t 1 ]; then
         if ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'; then
             echo "   OK"
@@ -48,7 +59,7 @@ run_render() {
             fail=1
         fi
     else
-        run ansible-playbook -i inventory.ini tests/render.yml \
+        run ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
     fi
 }
@@ -70,6 +81,16 @@ if [ -e "${contracts[0]}" ]; then
         run python "${contract}"
     done
 fi
+
+step "level 0g - shell structure (no display required)"
+run sh tools/shell-tests/run.sh
+
+step "level 0f - palette and open choices"
+run python3 tools/palette/audit_palette.py tools/palette/palette.yml
+run python3 tools/palette/verify_surfaces.py roles/desktop/files/palette
+run python3 tools/choices/choices.py check
+run python3 tools/choices/test_choices.py
+run python3 tools/choices/test_consistency.py
 
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint

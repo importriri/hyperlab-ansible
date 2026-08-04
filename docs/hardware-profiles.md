@@ -15,7 +15,7 @@ Known component profiles:
 - `nitro-3060`: `10de:2520` + `10de:228e`
 - `predator-3070`: `10de:249d` + `10de:228b`
 
-Run `ansible-playbook playbooks/preflight.yml` first. The local report records,
+Run `ansible-playbook -K playbooks/preflight.yml` first. The local report records,
 without DMI serial numbers:
 
 - selected `host_profile` and label;

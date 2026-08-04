@@ -55,14 +55,14 @@ field_by_id() {
 show_message() {
     local title="$1" message="$2"
     "${term}" --app-id=floatterm --title="${title}" \
-        bash -lc "printf '%s\\n' \"\$1\"; printf '\\n[invio per chiudere] '; read -r _" \
+        bash -lc "printf '%s\\n' \"\$1\"; printf '\\n[press Enter to close] '; read -r _" \
         _ "${message}" || return 1
 }
 
 show_prepared() {
     local title="$1" command="$2"
     "${term}" --app-id=floatterm --title="${title}" \
-        bash -lc "printf '%s\\n\\n%s\\n' 'privileged - review it, then run it yourself:' \"\$1\"; printf '\\n[invio per chiudere] '; read -r _" \
+        bash -lc "printf '%s\\n\\n%s\\n' 'privileged - review it, then run it yourself:' \"\$1\"; printf '\\n[press Enter to close] '; read -r _" \
         _ "${command}" || return 1
 }
 
@@ -73,7 +73,7 @@ run_argv() {
 import json, subprocess, sys
 argv = json.loads(sys.argv[1])
 rc = subprocess.call(argv)
-input("\n[exit %d - invio per chiudere] " % rc)
+input("\n[exit %d - press Enter to close] " % rc)
 raise SystemExit(rc)
 ' "${argv_json}" || return 1
 }
@@ -92,7 +92,7 @@ main() {
     local table choice id target privileged command argv_json domain spec manifest
     local -a resolve_args
     if ! table="$(actions_table)"; then
-        show_message "hyperlab" "hyperlabctl non risponde; esegui: ${cli} doctor"
+        show_message "hyperlab" "hyperlabctl is not responding; run: ${cli} doctor"
         return 0
     fi
 

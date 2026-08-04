@@ -19,8 +19,8 @@ Before running the application playbook:
 The application orchestration is:
 
 ```bash
-ansible-playbook playbooks/jellyfin.yml --check --diff
-ansible-playbook playbooks/jellyfin.yml
+ansible-playbook -K playbooks/jellyfin.yml --check --diff
+ansible-playbook -K playbooks/jellyfin.yml
 ```
 
 The first play validates the M7 receipt, installs the host exposure hook and

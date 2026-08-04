@@ -1,4 +1,4 @@
-# ADR 0001: Hyperlab image-store layout
+# ADR 0001: HyperLab image-store layout
 
 - Status: accepted for M2 static integration
 - Scope: directory layout and validation only

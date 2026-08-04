@@ -25,7 +25,9 @@ virtual_size_gib: 2
 minimum_size_gib: 2
 min_memory_mb: 2048
 
-supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
+# Linux VFIO uses the loopback SPICE recovery console. Looking Glass
+# remains a reviewed Windows-only transport.
+supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: false, tpm2: false}
 defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
 network_allowlist: [dev, lab]

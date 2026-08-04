@@ -245,6 +245,18 @@ def collect_errors(root: Path = ROOT) -> list[str]:
           "image-store.yml must validate bootstrap storage before the image-store brick")
 
     verify_text = (root / "verify.sh").read_text()
+    password_file_position = verify_text.find('PRIVATESTACK_BECOME_PASSWORD_FILE')
+    tty_fallback_position = verify_text.find('elif [ -t 0 ]')
+    check(
+        password_file_position != -1
+        and tty_fallback_position != -1
+        and password_file_position < tty_fallback_position,
+        "verify.sh must honor an explicit become password file before TTY fallback",
+    )
+    check(
+        '--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}"' in verify_text,
+        "verify.sh must pass the configured become password file to render tests",
+    )
     ci_text = (root / ".github/workflows/ci.yml").read_text()
     for text, where in ((verify_text, "verify.sh"), (ci_text, "CI")):
         check("tests/*_contract.py" in text, f"{where} must discover structural contracts")

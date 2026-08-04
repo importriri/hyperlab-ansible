@@ -1,4 +1,4 @@
-"""hyperlabctl - the thin control surface for the Hyperlab.
+"""hyperlabctl - the thin control surface for the HyperLab.
 
 Contract (ADR 0004): standard library plus PyYAML, nothing else in the core
 path. virsh is the libvirt interface, not libvirt-python. --json and --no-color

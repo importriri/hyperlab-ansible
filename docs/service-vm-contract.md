@@ -24,16 +24,16 @@ Reconcile the persistent and active `services` network first, then register the
 service before creating its VM:
 
 ```bash
-ansible-playbook playbooks/network-domains.yml --check --diff
-ansible-playbook playbooks/network-domains.yml \
+ansible-playbook -K playbooks/network-domains.yml --check --diff
+ansible-playbook -K playbooks/network-domains.yml \
   -e network_domains_restart_changed=true
 
-ansible-playbook playbooks/service-register.yml --check --diff \
+ansible-playbook -K playbooks/service-register.yml --check --diff \
   -e service_spec=service-specs/svc-jellyfin.yml
-ansible-playbook playbooks/service-register.yml \
+ansible-playbook -K playbooks/service-register.yml \
   -e service_spec=service-specs/svc-jellyfin.yml
 
-ansible-playbook playbooks/vm-create.yml --check --diff \
+ansible-playbook -K playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/svc-jellyfin.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA... workstation"]}'
 ```
@@ -67,7 +67,7 @@ Backups require an explicit UTC identifier such as `20260728T050000Z` and a
 libvirt domain state of `shut off`:
 
 ```bash
-ansible-playbook playbooks/service-backup.yml --check --diff \
+ansible-playbook -K playbooks/service-backup.yml --check --diff \
   -e service_spec=service-specs/svc-jellyfin.yml \
   -e service_backup_id=20260728T050000Z
 ```
@@ -83,7 +83,7 @@ Restore is offline-only and requires the exact `<service>:<backup-id>`
 confirmation:
 
 ```bash
-ansible-playbook playbooks/service-restore.yml --check --diff \
+ansible-playbook -K playbooks/service-restore.yml --check --diff \
   -e service_spec=service-specs/svc-jellyfin.yml \
   -e service_backup_id=20260728T050000Z \
   -e service_confirm_restore=svc-jellyfin:20260728T050000Z

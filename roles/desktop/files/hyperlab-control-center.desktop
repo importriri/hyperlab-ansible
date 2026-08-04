@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=HyperLab Control Center
+Comment=Manage the complete isolated virtualization laboratory
+Exec=/usr/local/bin/hyperlabctl open manager --surface overlay --section vms
+Icon=hyperlab-control-center
+Terminal=false
+Categories=System;Emulator;Security;
+Keywords=HyperLab;KVM;VFIO;Looking Glass;Qubes;Virtual Machine;
+StartupNotify=false

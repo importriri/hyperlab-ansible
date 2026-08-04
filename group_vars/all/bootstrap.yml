@@ -1,6 +1,5 @@
 ---
 # Contract inherited from arch-bootstrap.
-luks_partlabel: ARCH_ROOT
 luks_root_device: /dev/disk/by-partlabel/ARCH_ROOT
 luks_mapper_name: cryptroot
 root_subvol: "@"

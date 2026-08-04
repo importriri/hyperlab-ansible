@@ -12,7 +12,7 @@ rendered.
 
 ```bash
 # Detect and validate one reviewed hardware profile without changing the host.
-ansible-playbook playbooks/preflight.yml
+ansible-playbook -K playbooks/preflight.yml
 ```
 
 ### `playbooks/foundation.yml`
@@ -26,17 +26,17 @@ Builds the complete headless host target:
 5. network domains and isolation;
 6. GPU handoff policy;
 7. stage-1 storage validation;
-8. Hyperlab image-store layout.
+8. HyperLab image-store layout.
 
 ```bash
 # Preview the complete headless foundation and display the managed diff.
-ansible-playbook playbooks/foundation.yml --check --diff
+ansible-playbook -K playbooks/foundation.yml --check --diff
 
 # Apply the complete headless foundation.
-ansible-playbook playbooks/foundation.yml
+ansible-playbook -K playbooks/foundation.yml
 
 # Prove immediate idempotence; this pass must report changed=0.
-ansible-playbook playbooks/foundation.yml
+ansible-playbook -K playbooks/foundation.yml
 ```
 
 Use this target for a blind host, storage validation or early recovery.
@@ -48,13 +48,13 @@ local desktop and Looking Glass host transport.
 
 ```bash
 # Preview foundation, Sway and Looking Glass host transport.
-ansible-playbook playbooks/lab.yml --check --diff
+ansible-playbook -K playbooks/lab.yml --check --diff
 
 # Apply the complete laptop target.
-ansible-playbook playbooks/lab.yml
+ansible-playbook -K playbooks/lab.yml
 
 # Prove immediate idempotence; this pass must report changed=0.
-ansible-playbook playbooks/lab.yml
+ansible-playbook -K playbooks/lab.yml
 ```
 
 `lab.yml` deliberately does not create, reset or destroy VMs. Those operations
@@ -99,7 +99,7 @@ Pass exactly one checked-in spec:
 
 ```bash
 # Preview one standard guest transaction with a host-local SSH public key.
-ansible-playbook playbooks/vm-create.yml --check --diff \
+ansible-playbook -K playbooks/vm-create.yml --check --diff \
   -e guest_spec=vm-specs/debian-dev.yml \
   -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
 ```

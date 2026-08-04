@@ -9,9 +9,9 @@
 # the base install): a correct sway layout does not fix a TTY, nor the
 # other way round.
 input type:keyboard {
-    xkb_layout {{ desktop_input.keyboard_layout }}
+    xkb_layout {{ desktop_input.keyboard_layout_cycle | join(',') }}
 {% if desktop_input.keyboard_variant %}
-    xkb_variant {{ desktop_input.keyboard_variant }}
+    xkb_variant {{ desktop_input.keyboard_variant }},,
 {% endif %}
 {% if desktop_input.keyboard_options %}
     xkb_options {{ desktop_input.keyboard_options }}

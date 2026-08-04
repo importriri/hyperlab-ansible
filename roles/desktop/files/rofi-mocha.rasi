@@ -1,16 +1,20 @@
-/* Catppuccin Mocha palette - imported by every theme in this brick */
+/* Hyperlab compatibility aliases backed by the selected shared palette. */
+@import "~/.config/hyperlab/palette.rasi"
+
 * {
-    base:     #1e1e2eff;
-    mantle:   #181825ff;
-    crust:    #11111bff;
-    surface0: #313244ff;
-    surface1: #45475aff;
-    overlay0: #6c7086ff;
-    text:     #cdd6f4ff;
-    subtext0: #a6adc8ff;
-    lavender: #b4befeff;
-    mauve:    #cba6f7ff;
-    blue:     #89b4faff;
-    red:      #f38ba8ff;
+    base:        @hl-base;
+    mantle:      @hl-mantle;
+    crust:       @hl-base;
+    surface0:    @hl-surface;
+    surface1:    @hl-overlay;
+    overlay0:    @hl-subtext;
+    text:        @hl-text;
+    subtext0:    @hl-subtext;
+    accent:      @hl-accent;
+    accent2:     @hl-accent2;
+    lavender:    @hl-accent2;
+    mauve:       @hl-dom-lab;
+    blue:        @hl-accent2;
+    red:         @hl-bad;
     transparent: #00000000;
 }
