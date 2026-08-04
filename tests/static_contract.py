@@ -93,6 +93,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("device_profile" in spec_schema_text and "host_profile" not in spec_schema_text, "VM specs must use device_profile only")
     check("min_items" in spec_schema_text and "unique_items" in spec_schema_text, "schema vocabulary must constrain lists")
     check("instance_policy" in image_schema.get("fields", {}), "image schema must make instance policy explicit")
+    spec_fields = spec_schema.get("fields", {})
+    check(spec_fields.get("lifecycle", {}).get("enum") == ["disposable", "permanent"], "VM spec schema must enumerate exactly the two lifecycles")
+    check(spec_fields.get("device_profile", {}).get("enum") == ["standard", "vfio"], "VM spec schema must enumerate exactly the two device profiles")
+    resources = spec_fields.get("resources", {}).get("fields", {})
+    check(resources.get("memory_mb", {}).get("type") == "int_or_auto", "VM spec memory must stay resolvable from the live host budget")
 
     domains = networks.get("network_domains", [])
     check([d.get("name") for d in domains] == ["clean", "dirty", "dev", "lab", "services"], "domain order/coverage drift")

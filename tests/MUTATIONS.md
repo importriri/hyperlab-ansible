@@ -507,3 +507,36 @@ red check.
   change the sealed backing image from `root:<qemu-group>` to the QEMU user and
   leave it that way after shutdown.
 - Restore: `git checkout -- roles/guest/templates/domain.xml.j2`
+
+## Schema and asset contracts
+
+### A domain cube SVG is renamed or deleted
+- Break: `mv roles/desktop/files/domain-lab.svg /tmp/`
+- Red: `tools/shell-tests/test_design.py`, "every domain icon has its source
+  asset", reporting `no source SVG for: lab`. The five-domain block used to
+  build a path and discard it, so a missing cube stayed green here and showed
+  up only as a broken icon in the running Control Center.
+- Restore: `mv /tmp/domain-lab.svg roles/desktop/files/`
+
+### A domain icon path drifts from the deployed location
+- Break: change any `icon` value in `DOMAIN_META` inside
+  `roles/desktop/files/privatestack-hyperlab-domains.py`.
+- Red: `tools/shell-tests/test_design.py`, "every domain icon points at the
+  deployed cube path". The desktop role copies to
+  `/usr/share/icons/hyperlab/domains/<id>.svg`; the manager must agree.
+- Restore: `git checkout -- roles/desktop/files/privatestack-hyperlab-domains.py`
+
+### The VM spec schema stops accepting `auto` memory
+- Break: change `memory_mb` from `int_or_auto` to `int` in
+  `schemas/vm-spec.v1.yml`.
+- Red: `tests/static_contract.py`, "VM spec memory must stay resolvable from
+  the live host budget". Every spec ships `memory_mb: auto` so that the host
+  budget of ADR 0007 decides; a plain `int` would silently retire that policy.
+- Restore: `git checkout -- schemas/vm-spec.v1.yml`
+
+### The VM spec schema gains a third lifecycle or device profile
+- Break: add `golden` to the `lifecycle` enum in `schemas/vm-spec.v1.yml`.
+- Red: `tests/static_contract.py`, "VM spec schema must enumerate exactly the
+  two lifecycles". ADR 0002 and ADR 0009 both depend on the pairs staying
+  closed; the schema file was previously parsed but never inspected.
+- Restore: `git checkout -- schemas/vm-spec.v1.yml`
