@@ -79,8 +79,7 @@ personal_wallpaper_count() {
         [[ -r ${image} ]] || break
         (( count += 1 ))
     done
-    printf '%s
-' "${count}"
+    printf '%s\n' "${count}"
 }
 
 active_wallpaper_count() {
@@ -88,13 +87,11 @@ active_wallpaper_count() {
     if [[ $(current_mode) == personal ]]; then
         count=$(personal_wallpaper_count "${theme}")
         if (( count > 0 )); then
-            printf '%s
-' "${count}"
+            printf '%s\n' "${count}"
             return 0
         fi
     fi
-    printf '%s
-' "${public_wallpaper_count}"
+    printf '%s\n' "${public_wallpaper_count}"
 }
 
 read_index() {
@@ -104,14 +101,11 @@ read_index() {
     fi
     [[ ${value} =~ ^[0-9]+$ ]] || value=0
     count=$(active_wallpaper_count "${theme}")
-    printf '%s
-' "$(( value % count ))"
+    printf '%s\n' "$(( value % count ))"
 }
 
-public_wallpaper_path() { printf '%s/%s/%02d.png
-' "${public_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
-personal_wallpaper_path() { printf '%s/%s/%02d.png
-' "${personal_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
+public_wallpaper_path() { printf '%s/%s/%02d.png\n' "${public_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
+personal_wallpaper_path() { printf '%s/%s/%02d.png\n' "${personal_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
 
 wallpaper_path() {
     local theme=$1 index=$2 mode image
