@@ -112,7 +112,7 @@ def contract():
 
 def component_suite():
     result = subprocess.run([sys.executable, str(TOOL / "tests" / "run.py")],
-                            capture_output=True, text=True,
+                            capture_output=True, text=True, check=False,
                             env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
                                  "HOME": "/nonexistent"})
     tail = (result.stdout or result.stderr).strip().splitlines()

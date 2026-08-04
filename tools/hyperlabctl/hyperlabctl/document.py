@@ -32,7 +32,7 @@ def build(ctx, only=None):
                 "message": str(exc),
             })
             continue
-        except Exception as exc:  # a provider bug must not blank the panel
+        except Exception as exc:  # noqa: BLE001 - a provider bug must not blank the panel
             document[provider.key] = None
             problems.append({
                 "id": "provider.crashed",

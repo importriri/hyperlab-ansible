@@ -4,6 +4,7 @@ The CLI and the panel must refuse identically, so neither of them owns this:
 a behaviour that exists in both is a bug in one of them (ADR 0004).
 """
 
+from .errors import HyperlabError
 from .inventory import domain_detail
 from .providers.memory import budget
 
@@ -52,7 +53,7 @@ def start(ctx, name):
                            acted=False)
     try:
         available = budget(ctx)["assignable_mb"]
-    except Exception as exc:
+    except HyperlabError as exc:
         return Outcome(False,
                        "refusing %s: memory budget is unavailable (%s)"
                        % (name, exc), acted=False)

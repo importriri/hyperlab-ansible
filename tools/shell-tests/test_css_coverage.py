@@ -57,7 +57,7 @@ def classes_used(src: str) -> set[str]:
     # values declared as classes in metadata tables
     for node in ast.walk(tree):
         if isinstance(node, ast.Dict):
-            for key, value in zip(node.keys, node.values):
+            for key, value in zip(node.keys, node.values, strict=True):
                 if (isinstance(key, ast.Constant) and key.value == "css"
                         and isinstance(value, ast.Constant)):
                     found.add(value.value)

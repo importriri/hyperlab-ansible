@@ -111,7 +111,7 @@ def main() -> int:
             widgets = len(list(result.walk())) if hasattr(result, "walk") else 0
             passed.append(section)
             print("  ok   %-13s %3d widget" % (section, widgets))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one failing section must not stop the sweep
             line = traceback.extract_tb(sys.exc_info()[2])[-1].lineno
             failed.append((section, "%s: %s (riga %s)" % (type(exc).__name__, exc, line)))
             print("  FAIL %-13s %s: %s  (riga %s)" % (section, type(exc).__name__, exc, line))

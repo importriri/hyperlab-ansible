@@ -348,7 +348,7 @@ def scaffold(plan: dict[str, Any]) -> dict[str, Any]:
                 "id": gate["id"],
                 "status": "pending",
                 "summary": "",
-                "evidence": {field: None for field in gate["required_evidence"]},
+                "evidence": dict.fromkeys(gate["required_evidence"]),
             }
             for gate in plan["gates"]
         ],

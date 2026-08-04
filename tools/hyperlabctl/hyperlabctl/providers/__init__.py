@@ -40,7 +40,7 @@ def load_external(directories):
                 spec = importlib.util.spec_from_file_location(name, source)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - third-party contrib code fails any way it likes
                 FAILED_EXTERNAL.append({"path": str(source), "error": "%s: %s"
                                         % (type(exc).__name__, exc)})
                 continue

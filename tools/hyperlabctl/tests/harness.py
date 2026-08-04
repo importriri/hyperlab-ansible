@@ -28,7 +28,7 @@ def run_module(module):
         function = getattr(module, attribute)
         try:
             function()
-        except Exception:
+        except Exception:  # noqa: BLE001 - one failing test must not end the run
             check(attribute, False, "raised:\n%s" % traceback.format_exc())
 
 
