@@ -20,8 +20,7 @@ spec = importlib.util.spec_from_file_location(
 manager = importlib.util.module_from_spec(spec)
 sys.modules["manager"] = manager
 spec.loader.exec_module(manager)
-from gi.repository import Gtk  # noqa: E402
-from test_sections import FakeModel, window  # noqa: E402
+from test_sections import window  # noqa: E402
 
 PASSED: list[str] = []
 FAILED: list[str] = []

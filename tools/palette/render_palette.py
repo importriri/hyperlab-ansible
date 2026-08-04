@@ -42,10 +42,10 @@ def sway_config(name: str, c: dict[str, str]) -> str:
     lines += [
         "",
         "# focused / unfocused / urgent borders derived from the tokens",
-        f"client.focused          $hl_accent  $hl_mantle  $hl_text    $hl_accent  $hl_accent",
-        f"client.unfocused        $hl_overlay $hl_base    $hl_subtext $hl_overlay $hl_overlay",
-        f"client.focused_inactive $hl_overlay $hl_base    $hl_subtext $hl_overlay $hl_overlay",
-        f"client.urgent           $hl_bad     $hl_mantle  $hl_text    $hl_bad     $hl_bad",
+        "client.focused          $hl_accent  $hl_mantle  $hl_text    $hl_accent  $hl_accent",
+        "client.unfocused        $hl_overlay $hl_base    $hl_subtext $hl_overlay $hl_overlay",
+        "client.focused_inactive $hl_overlay $hl_base    $hl_subtext $hl_overlay $hl_overlay",
+        "client.urgent           $hl_bad     $hl_mantle  $hl_text    $hl_bad     $hl_bad",
     ]
     return "\n".join(lines) + "\n"
 
