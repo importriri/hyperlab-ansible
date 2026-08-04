@@ -7,7 +7,9 @@ mode_file=${state_dir}/fullscreen-transparency.mode
 mkdir -p "${state_dir}"
 
 notify() {
-  command -v notify-send >/dev/null 2>&1 && notify-send "HyperLab" "$1" || true
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "HyperLab" "$1" || true
+  fi
 }
 
 readarray -t focused < <(

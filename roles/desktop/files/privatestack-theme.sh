@@ -25,21 +25,29 @@ readonly themes=(green violet blue red)
 
 mkdir -p "${config_dir}" "${state_dir}" "${personal_wallpaper_root}"
 
-notify() { command -v notify-send >/dev/null 2>&1 && notify-send "HyperLab" "$1" || true; }
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "HyperLab" "$1" || true
+    fi
+}
 
 valid_theme() { case ${1:-} in green|violet|blue|red) return 0 ;; *) return 1 ;; esac; }
 valid_mode() { case ${1:-} in public|personal) return 0 ;; *) return 1 ;; esac; }
 
 current_theme() {
     local value=green
-    [[ -r ${theme_file} ]] && IFS= read -r value <"${theme_file}" || true
+    if [[ -r ${theme_file} ]]; then
+        IFS= read -r value <"${theme_file}" || true
+    fi
     valid_theme "${value}" || value=green
     printf '%s\n' "${value}"
 }
 
 current_mode() {
     local value=public
-    [[ -r ${wallpaper_mode_file} ]] && IFS= read -r value <"${wallpaper_mode_file}" || true
+    if [[ -r ${wallpaper_mode_file} ]]; then
+        IFS= read -r value <"${wallpaper_mode_file}" || true
+    fi
     valid_mode "${value}" || value=public
     printf '%s\n' "${value}"
 }
@@ -65,7 +73,9 @@ copy_atomic() {
 
 read_index() {
     local value=0
-    [[ -r ${desktop_index_file} ]] && IFS= read -r value <"${desktop_index_file}" || true
+    if [[ -r ${desktop_index_file} ]]; then
+        IFS= read -r value <"${desktop_index_file}" || true
+    fi
     [[ ${value} =~ ^[0-9]+$ ]] || value=0
     printf '%s\n' "$(( value % wallpaper_count ))"
 }

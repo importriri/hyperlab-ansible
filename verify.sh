@@ -40,10 +40,13 @@ run_render() {
             return
         fi
         become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")
-    elif sudo -n true 2>/dev/null; then
-        become_args=()
     elif [ -t 0 ]; then
+        # Interactive runs always pass the password explicitly to Ansible.
+        # Do not rely on a sudo timestamp that may expire during earlier tests.
         become_args=(-K)
+    elif sudo -n true 2>/dev/null; then
+        # Non-interactive CI may use passwordless sudo.
+        become_args=()
     else
         echo "Render tests require sudo credentials. Set PRIVATESTACK_BECOME_PASSWORD_FILE or run interactively." >&2
         fail=1

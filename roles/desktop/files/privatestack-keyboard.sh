@@ -47,7 +47,9 @@ layout_index() {
 
 current_layout() {
     local value=it
-    [[ -r ${state_file} ]] && IFS= read -r value <"${state_file}" || true
+    if [[ -r ${state_file} ]]; then
+        IFS= read -r value <"${state_file}" || true
+    fi
     valid_layout "${value}" || value=it
     printf '%s\n' "${value}"
 }
