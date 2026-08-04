@@ -181,8 +181,8 @@ The contract test is discovered by `verify.sh` and by CI through
 `tests/*_contract.py`, so the CLI is gated without an edit to the workflow -
 which is the rule that file states about itself.
 
-Lint with `ruff check tools/hyperlabctl`. `ruff.toml` records which rules are
-on and why the rest are off.
+Lint with `ruff check .` from the repository root. The repository `ruff.toml`
+records which rules are on and why the rest are off.
 
 [`MUTATIONS.md`](MUTATIONS.md) lists what was deliberately broken to confirm the suite notices,
 including the five mutations that survived their first run and what each one

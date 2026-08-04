@@ -95,6 +95,14 @@ run python3 tools/choices/choices.py check
 run python3 tools/choices/test_choices.py
 run python3 tools/choices/test_consistency.py
 
+step "level 0h - ruff (every Python file, repo ruleset)"
+if command -v ruff >/dev/null 2>&1; then
+    run ruff check .
+else
+    echo "   FAIL: ruff is not installed. pacman -S ruff"
+    fail=1
+fi
+
 step "level 0 - ansible-lint (production profile)"
 run ansible-lint
 

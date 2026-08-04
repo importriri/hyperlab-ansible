@@ -1,0 +1,31 @@
+# The ruleset every Python file in this repo is verified against.
+#
+# It started as tools/hyperlabctl/ruff.toml, which was written down and then
+# run on one package out of ten. Promoting it found dead imports in two
+# contract tests, a schema loaded and never inspected, and a catch-all that
+# reported programming bugs as memory refusals.
+#
+# Selected: pyflakes and bugbear (real defects), comprehensions, the return
+# rules, and two single rules that caught defects here:
+#
+#   BLE001 blind except - four of the five catch-alls in this repo are real
+#          boundaries and carry a noqa with the reason. The fifth was not.
+#   PLW1510 subprocess.run without check - a test that reads returncode
+#          itself has to say so.
+#
+# Not selected, and why:
+#
+#   UP031  printf formatting - this repo formats with % throughout, on
+#          purpose: it reads the same on Python 3.9 as on 3.13 and runs on
+#          whatever the host happens to ship.
+#   E501   line length - the tables and the Jinja-adjacent strings read worse
+#          wrapped than long.
+#   ARG002 unused method arguments - `ctx` and `args` are the Provider and
+#          Command interfaces. An implementation that does not need one still
+#          has to accept it.
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = ["F", "B", "C4", "RET", "SIM", "BLE001", "PLW1510"]
+ignore = ["SIM105", "SIM102", "RET504"]
