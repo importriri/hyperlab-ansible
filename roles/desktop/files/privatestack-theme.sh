@@ -19,7 +19,7 @@ readonly desktop_path_file=${state_dir}/desktop-wallpaper
 readonly sway_socket=${SWAYSOCK:-}
 readonly daemon_key=${sway_socket##*/}
 readonly daemon_lock=${XDG_RUNTIME_DIR:-${state_dir}}/hyperlab-wallpaper-${daemon_key:-sway}.lock
-readonly wallpaper_count=20
+readonly public_wallpaper_count=20
 readonly rotation_seconds=${HYPERLAB_WALLPAPER_INTERVAL:-60}
 readonly themes=(green violet blue red)
 
@@ -71,17 +71,47 @@ copy_atomic() {
     mv -f "${temporary}" "${destination}"
 }
 
+personal_wallpaper_count() {
+    local theme=$1 count=0 image
+    while (( count < 99 )); do
+        printf -v image '%s/%s/%02d.png' \
+            "${personal_wallpaper_root}" "${theme}" "$(( count + 1 ))"
+        [[ -r ${image} ]] || break
+        (( count += 1 ))
+    done
+    printf '%s
+' "${count}"
+}
+
+active_wallpaper_count() {
+    local theme=$1 count
+    if [[ $(current_mode) == personal ]]; then
+        count=$(personal_wallpaper_count "${theme}")
+        if (( count > 0 )); then
+            printf '%s
+' "${count}"
+            return 0
+        fi
+    fi
+    printf '%s
+' "${public_wallpaper_count}"
+}
+
 read_index() {
-    local value=0
+    local theme=${1:-$(current_theme)} value=0 count
     if [[ -r ${desktop_index_file} ]]; then
         IFS= read -r value <"${desktop_index_file}" || true
     fi
     [[ ${value} =~ ^[0-9]+$ ]] || value=0
-    printf '%s\n' "$(( value % wallpaper_count ))"
+    count=$(active_wallpaper_count "${theme}")
+    printf '%s
+' "$(( value % count ))"
 }
 
-public_wallpaper_path() { printf '%s/%s/%02d.png\n' "${public_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
-personal_wallpaper_path() { printf '%s/%s/%02d.png\n' "${personal_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
+public_wallpaper_path() { printf '%s/%s/%02d.png
+' "${public_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
+personal_wallpaper_path() { printf '%s/%s/%02d.png
+' "${personal_wallpaper_root}" "$1" "$(( $2 + 1 ))"; }
 
 wallpaper_path() {
     local theme=$1 index=$2 mode image
@@ -125,7 +155,7 @@ signal_controls() { pkill -SIGRTMIN+11 -x waybar 2>/dev/null || true; }
 
 session_start() {
     local theme index
-    theme=$(current_theme); index=$(read_index)
+    theme=$(current_theme); index=$(read_index "${theme}")
     install_active_palette "${theme}"
     set_desktop_wallpaper "${theme}" "${index}"
     reload_palette_consumers
@@ -160,7 +190,7 @@ set_mode() {
     local mode=$1 theme index
     valid_mode "${mode}" || { printf 'usage: %s mode-set public|personal\n' "$0" >&2; return 2; }
     write_atomic "${wallpaper_mode_file}" "${mode}"
-    theme=$(current_theme); index=$(read_index)
+    theme=$(current_theme); index=$(read_index "${theme}")
     set_desktop_wallpaper "${theme}" "${index}"
     signal_wallpaper_mode
     signal_controls
@@ -182,7 +212,7 @@ toggle_mode() {
 mode_json() {
     local mode theme sample available=true
     mode=$(current_mode); theme=$(current_theme)
-    sample=$(personal_wallpaper_path "${theme}" "$(read_index)")
+    sample=$(personal_wallpaper_path "${theme}" "$(read_index "${theme}")")
     [[ ${mode} == personal && ! -r ${sample} ]] && available=false
     if [[ ${mode} == public ]]; then
         printf '{"text":" PUB","tooltip":"Public / chill wallpaper · click: personal","class":"public"}\n'
@@ -194,16 +224,21 @@ mode_json() {
 }
 
 next_wallpaper() {
-    local quiet=${1:-} theme index
-    theme=$(current_theme); index=$(( ($(read_index) + 1) % wallpaper_count ))
+    local quiet=${1:-} theme index count
+    theme=$(current_theme)
+    count=$(active_wallpaper_count "${theme}")
+    index=$(( ($(read_index "${theme}") + 1) % count ))
     set_desktop_wallpaper "${theme}" "${index}"
-    [[ ${quiet} == --quiet ]] || notify "Wallpaper ${theme^^}/$(current_mode) $(( index + 1 ))/${wallpaper_count}"
+    [[ ${quiet} == --quiet ]] ||
+        notify "Wallpaper ${theme^^}/$(current_mode) $(( index + 1 ))/${count}"
 }
 
 lock_image() {
-    local theme desktop_index lock_index
-    theme=$(current_theme); desktop_index=$(read_index)
-    lock_index=$(( (desktop_index + 3) % wallpaper_count ))
+    local theme desktop_index lock_index count
+    theme=$(current_theme)
+    count=$(active_wallpaper_count "${theme}")
+    desktop_index=$(read_index "${theme}")
+    lock_index=$(( (desktop_index + 3) % count ))
     wallpaper_path "${theme}" "${lock_index}"
 }
 

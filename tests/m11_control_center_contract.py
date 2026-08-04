@@ -216,10 +216,12 @@ def main():
             '["/usr/local/bin/privatestack-theme", "cycle"]' in swaybar_status,
             "native Swaybar status lacks the clickable theme control")
     theme_helper = text("roles/desktop/files/privatestack-theme.sh")
-    require("wallpaper_count=20" in theme_helper and
+    require("public_wallpaper_count=20" in theme_helper and
+            "personal_wallpaper_count" in theme_helper and
+            "active_wallpaper_count" in theme_helper and
             "readonly themes=(green violet blue red)" in theme_helper and
             "wallpaper_mode_file" in theme_helper and
-            "lock_index=$(( (desktop_index + 3) % wallpaper_count ))" in theme_helper and
+            "lock_index=$(( (desktop_index + 3) % count ))" in theme_helper and
             "HYPERLAB_WALLPAPER_INTERVAL" in theme_helper,
             "theme helper lacks four themes, source mode, rotation or lock separation")
     swaylock_helper = text("roles/desktop/files/privatestack-swaylock.sh")

@@ -17,10 +17,11 @@ def main() -> int:
     ): require(marker in sway, f"Sway integration missing: {marker}")
     theme = text("roles/desktop/files/privatestack-theme.sh")
     for marker in (
-        "readonly themes=(green violet blue red)", "wallpaper_count=20",
+        "readonly themes=(green violet blue red)", "public_wallpaper_count=20",
+        "personal_wallpaper_count", "active_wallpaper_count",
         "public_wallpaper_root", "personal_wallpaper_root", "wallpaper_mode_file",
         "mode-toggle", "mode-json", "hyperlab-palette-swaylock.conf",
-        "lock_index=$(( (desktop_index + 3) % wallpaper_count ))",
+        "lock_index=$(( (desktop_index + 3) % count ))",
     ): require(marker in theme, f"theme controller missing: {marker}")
     status = text("roles/desktop/files/privatestack-swaybar-status.py")
     for variant in ("green", "violet", "blue", "red"):

@@ -86,11 +86,12 @@ Personal wallpapers are host-local and never enter Git. The expected layout is:
 ```text
 ~/.local/share/hyperlab/wallpapers/personal/<theme>/01.png
 ...
-~/.local/share/hyperlab/wallpapers/personal/<theme>/20.png
+~/.local/share/hyperlab/wallpapers/personal/<theme>/NN.png
 ```
 
-When personal mode is selected and the requested local file is missing, the
-session uses the matching public wallpaper and marks the Waybar state as a
+Each personal theme may contain a different number of consecutively numbered
+images. Numbering must start at `01.png` and contain no gaps. An empty personal
+theme falls back to the matching public pool and marks the Waybar state as a
 fallback. Swaylock uses the same source and palette but chooses an image three
 positions after the current desktop image. The wallpaper daemon rotates every
 60 seconds by default.
