@@ -36,8 +36,12 @@ Each physical `host_profile` declares:
 - `standard_overcommit_ratio`: commitment ceiling for standard VMs, normally
   `1.0` and never applied to VFIO.
 
-No profile declares total RAM. `memtotal_mb` is a run-time fact, so a RAM
-upgrade needs no repository edit.
+No profile declares total RAM: `memtotal_mb` is a run-time fact, so the
+pool grows on its own after an upgrade. The six values above are policy and
+do not. `max_auto_memory_mb` in particular is a static ceiling, so a machine
+that gains RAM keeps handing out the old maximum to one `auto` candidate
+until the profile says otherwise. An upgrade is a profile review, not a
+no-op.
 
 ### Values read from libvirt
 
@@ -111,7 +115,8 @@ remaining capacity and the image floor.
 
 ## Consequences
 
-- RAM upgrades require no edits.
+- The pool follows MemTotal without an edit; `max_auto_memory_mb` does not,
+  so a RAM upgrade is a profile review.
 - Service VMs are never counted twice.
 - QEMU overhead scales with the number of active domains and includes the
   candidate.

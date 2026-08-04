@@ -24,14 +24,19 @@ host_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
-    # Memory budget, not a total: installed RAM is detected at run time, so a
-    # future memory upgrade needs no profile edit. See ADR 0007.
+    # Memory budget, not a total. MemTotal, running domains and service
+    # reservations are read at run time; the four values below are policy and
+    # do move when the machine does. max_auto_memory_mb is a hard ceiling for
+    # one `memory_mb: auto` candidate, so it caps a guest even when the host
+    # has room to spare. See ADR 0007.
+    # 16 GiB leaves roughly 13 GiB for the rest of the lab: the three-VM
+    # workloads have to fit next to a running VFIO guest.
     memory:
       host_reserved_mb: 2048
       qemu_overhead_per_domain_mb: 512
       services_reserved_mb: 0
       vfio_fixed_overhead_mb: 256
-      max_auto_memory_mb: 6144
+      max_auto_memory_mb: 16384
       standard_overcommit_ratio: 1.0
     # Evidence fields stay null in the public profile until reviewed from a real
     # preflight report. hardware_probe now records them locally without
@@ -54,8 +59,11 @@ host_profiles:
         middle_emulation: enabled
         natural_scroll: enabled
         tap: enabled
-    # Memory budget, not a total: installed RAM is detected at run time, so a
-    # future memory upgrade needs no profile edit. See ADR 0007.
+    # Memory budget, not a total. MemTotal, running domains and service
+    # reservations are read at run time; the four values below are policy and
+    # do move when the machine does. max_auto_memory_mb is a hard ceiling for
+    # one `memory_mb: auto` candidate, so it caps a guest even when the host
+    # has room to spare. See ADR 0007.
     memory:
       host_reserved_mb: 2560
       qemu_overhead_per_domain_mb: 512
