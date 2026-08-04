@@ -117,3 +117,27 @@ jobs:
           else
             echo "no shell scripts yet"
           fi
+
+  cross-repo:
+    name: cross-repository hardware contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          path: privatestack-ansible
+
+      - name: Check out the compatibility record
+        uses: actions/checkout@v4
+        with:
+          repository: importriri/arch-hypervisor-lab
+          path: arch-hypervisor-lab
+
+      - name: Install the parser
+        run: pip install pyyaml
+
+      - name: Compare the configured profiles against the recorded evidence
+        working-directory: privatestack-ansible
+        env:
+          CROSS_REPO_REQUIRED: "1"
+        run: python tests/cross_repo_contract.py ../arch-hypervisor-lab

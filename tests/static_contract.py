@@ -84,6 +84,7 @@ def collect_errors(root: Path = ROOT) -> list[str]:
         if isinstance(ratio, (int, float)) and not isinstance(ratio, bool):
             check(1.0 <= float(ratio) <= 2.0, f"{name} overcommit ratio must stay between 1.0 and 2.0")
         check("memory_total_mb" not in profile, f"{name} must not hardcode a RAM total")
+        check("status" not in profile, f"{name} must not carry an evidence status: arch-hypervisor-lab owns it (ADR 0006)")
 
     image_schema = load_mapping(ROOT / "schemas/image-manifest.v1.yml", errors)
     spec_schema = load_mapping(ROOT / "schemas/vm-spec.v1.yml", errors)

@@ -540,3 +540,26 @@ red check.
   two lifecycles". ADR 0002 and ADR 0009 both depend on the pairs staying
   closed; the schema file was previously parsed but never inspected.
 - Restore: `git checkout -- schemas/vm-spec.v1.yml`
+
+## Cross-repository ownership
+
+### The evidence status comes back into the ansible profile
+- Break: add `status: component-verified` under any entry of `host_profiles`
+  in `group_vars/all/hardware.yml`.
+- Red: `tests/static_contract.py`, "must not carry an evidence status", and
+  `tests/cross_repo_contract.py` when a sibling checkout is present. ADR 0006
+  says a repository cannot certify itself; the field sat there for weeks
+  because nothing enforced the decision the ADR had already taken.
+- Restore: `git checkout -- group_vars/all/hardware.yml`
+
+### The two repositories disagree on a VFIO ID
+- Break: change one ID in `arch-hypervisor-lab/hardware/compatibility.yml`.
+- Red: `tests/cross_repo_contract.py`, "VFIO IDs disagree", listing both
+  sides. Without a sibling checkout this check skips loudly and says so
+  instead of reporting a pass.
+- Restore: `git checkout -- hardware/compatibility.yml` in the other repo.
+
+### The dedicated cross-repo job loses its sibling
+- Break: run `CROSS_REPO_REQUIRED=1 python tests/cross_repo_contract.py /tmp/absent`.
+- Red: the check fails instead of skipping. A single-repo clone may skip; the
+  job that exists to compare the pair may not.

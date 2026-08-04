@@ -11,7 +11,6 @@ host_profile_report_path: /etc/privatestack/hardware-profile.yml
 host_profiles:
   nitro-3060:
     label: Acer Nitro 5 / RTX 3060 Mobile
-    status: component-verified
     vfio_ids:
       - "10de:2520"
       - "10de:228e"
@@ -46,7 +45,6 @@ host_profiles:
     cpu_threads: null
   predator-3070:
     label: Acer Predator Helios 300 / RTX 3070 Mobile
-    status: component-verified
     vfio_ids:
       - "10de:249d"
       - "10de:228b"
