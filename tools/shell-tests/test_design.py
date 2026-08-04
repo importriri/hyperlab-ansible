@@ -93,7 +93,13 @@ def main() -> int:
     check("each domain has a title, subtitle, detail, and class",
           all(all(k in manager.DOMAIN_META[d] for k in
                   ("title", "subtitle", "detail", "css")) for d in ids))
-    cubes = Path(__file__).parent.parent.parent / "repo"
+    cubes = Path(__file__).resolve().parent.parent.parent / "roles/desktop/files"
+    check("every domain icon points at the deployed cube path",
+          all(manager.DOMAIN_META[d]["icon"] ==
+              "/usr/share/icons/hyperlab/domains/%s.svg" % d for d in ids))
+    missing = [d for d in ids if not (cubes / ("domain-%s.svg" % d)).is_file()]
+    check("every domain icon has its source asset", not missing,
+          "no source SVG for: %s" % ", ".join(missing))
     check("no typographic glyph is used as a domain icon",
           "◆" not in src and "text_label(\"■\"" not in src,
           "font-dependent glyphs remain")
