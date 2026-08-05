@@ -65,6 +65,10 @@ remain explicit transactions.
 
 - `kvm-host.yml` — base plus headless KVM only.
 - `image-store.yml` — validate stage-1 storage and reconcile the empty layout.
+- `bootstrap-storage-adopt.yml` — take over a VM store that was already
+  validated by hand, without touching the storage itself. It exists so that
+  a machine set up before this pipeline does not have to be rebuilt to join
+  it.
 - `network-domains.yml` — reconcile only the five libvirt networks.
 - `desktop.yml` — reconcile the cockpit on the host and listed workstation VMs.
 - `looking-glass.yml` — reconcile only the host-side Looking Glass transport.
