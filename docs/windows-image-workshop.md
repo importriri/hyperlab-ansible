@@ -38,7 +38,7 @@ outside the managed image store. Use:
 - Windows 11 ISO plus the reviewed virtio-win ISO;
 - SPICE as the recovery display and input path;
 - the reviewed workload network (`clean` or `dirty`);
-- the dGPU functions and the same 32 MiB ivshmem/kvmfr contract used by the
+- the dGPU functions and the same 64 MiB ivshmem/kvmfr contract used by the
   final spec;
 - memory that fits the physical host budget.
 

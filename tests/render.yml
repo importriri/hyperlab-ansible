@@ -718,8 +718,8 @@
     - name: Looking Glass invariants (sized shm, two openers, Wayland-pure, final lab)
       ansible.builtin.assert:
         that:
-          - looking_glass_shm_mb | int == 32
-          - render_lg_modprobe is search('static_size_mb=32')
+          - looking_glass_shm_mb | int == 64
+          - render_lg_modprobe is search('static_size_mb=64')
           - render_lg_rule is search('OWNER="' ~ looking_glass_qemu_user ~ '"')
           - render_lg_rule is search('TAG\+="uaccess"')
           - render_lg_handlers is search('--action=change')

@@ -6,7 +6,7 @@ hyperlab_looking_glass_build: B7-263-g0140a3f6fb
 hyperlab_looking_glass_width: 1920
 hyperlab_looking_glass_height: 1080
 hyperlab_looking_glass_shm_mb: >-
-  {{ [32, 64, 128, 256, 512]
+  {{ [64, 128, 256, 512]
      | select('ge', ((hyperlab_looking_glass_width * hyperlab_looking_glass_height * 8 / 1048576) + 10)
                     | round(0, 'ceil') | int)
      | first }}

@@ -197,7 +197,7 @@ def build_vfio_plan(plan: dict[str, Any], report: Path, profiles: dict[str, Any]
         "--trust-levels-json", json.dumps(trust),
         "--looking-glass-build", build,
         "--looking-glass-device", "/dev/kvmfr0",
-        "--looking-glass-shm-mb", "32",
+        "--looking-glass-shm-mb", "64",
         "--spice-host", "127.0.0.1",
         "--spice-port", "5900",
         stdin=json.dumps(plan),
@@ -256,7 +256,7 @@ def test_vfio_plan() -> None:
         assert vfio["gpu"]["bdf"] == "0000:01:00.0"
         assert vfio["audio"]["bdf"] == "0000:01:00.1"
         assert vfio["trust_level"] == 3
-        assert vfio["looking_glass_shm_bytes"] == 32 * 1024 * 1024
+        assert vfio["looking_glass_shm_bytes"] == 64 * 1024 * 1024
         assert vfio["spice_port"] == 5900
 
         mismatch = build_vfio_plan(plan, report, profiles, trust, build="B7-999-g0123456789")
@@ -343,7 +343,7 @@ def test_domain_templates() -> None:
             "{http://libvirt.org/schemas/domain/qemu/1.0}arg"
         )]
         assert any("/dev/kvmfr0" in value for value in qemu_args if value)
-        assert any("33554432" in value for value in qemu_args if value)
+        assert any("67108864" in value for value in qemu_args if value)
 
 
 def test_state_guard() -> None:
