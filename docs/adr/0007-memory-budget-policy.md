@@ -2,9 +2,12 @@
 
 ## Context
 
-The two target laptops have different RAM today and both may be upgraded.
-A literal guest allocation is therefore either unsafe on the smaller host or
-wasteful on the larger one. VFIO makes the failure sharper: hostdev memory is
+The two target laptops had different RAM when this was written and both were
+expected to be upgraded. One of them since was, from 8 GB to 32 GB, without a
+line of guest configuration changing: that upgrade is the evidence for this
+decision rather than a footnote to it. A literal guest allocation would have
+been either unsafe on the smaller host or wasteful on the larger one, and
+would have needed an edit on the day the RAM arrived. VFIO makes the failure sharper: hostdev memory is
 pinned, kvmfr is a fixed allocation, and ballooning is not a recovery plan.
 
 A correct decision must account for running domains, per-domain QEMU cost,
