@@ -254,13 +254,23 @@ and offline recovery policy before the VM exists.
 ### 8. Verify the repository contract
 
 ```bash
-# Run the complete discovery-based software verification battery.
+sudo pacman -S ansible-lint ruff shellcheck bats
+ansible-galaxy collection install -r collections/requirements.yml
 ./verify.sh
 ```
 
+`verify.sh` names every missing tool at once and refuses to start rather than
+reporting a green run with steps that never executed.
+
 CI and `verify.sh` discover every playbook, structural contract, refusal suite,
-schema mutation, render test, Bats protocol and shell script. CI proves the
-software contract; Nitro and Predator prove frozen commits on real hardware.
+schema mutation, render test, Bats protocol, shell script and Python file. CI
+proves the software contract; Nitro and Predator prove frozen commits on real
+hardware.
+
+One discovered contract can legitimately do nothing:
+`tests/cross_repo_contract.py` needs an `arch-hypervisor-lab` checkout and
+skips loudly when it cannot find one. It is the CI job of the same name, which
+checks out both repositories, that is not allowed to skip.
 
 The focused Nitro boundary for the integrated desktop surface is automated by:
 

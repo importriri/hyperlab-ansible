@@ -12,6 +12,16 @@ if ! ansible-galaxy collection list community.general >/dev/null 2>&1 \
     exit 1
 fi
 
+missing=""
+for tool in ansible-lint ruff shellcheck bats python; do
+    command -v "${tool}" >/dev/null 2>&1 || missing="${missing} ${tool}"
+done
+if [ -n "${missing}" ]; then
+    echo "Missing tools:${missing}" >&2
+    echo "On Arch: sudo pacman -S ansible-lint ruff shellcheck bats python" >&2
+    exit 1
+fi
+
 step() { printf '\n== %s\n' "$1"; }
 
 run() {
@@ -107,12 +117,7 @@ run python3 tools/choices/test_choices.py
 run python3 tools/choices/test_consistency.py
 
 step "level 0h - ruff (every Python file, repo ruleset)"
-if command -v ruff >/dev/null 2>&1; then
-    run ruff check .
-else
-    echo "   FAIL: ruff is not installed. pacman -S ruff"
-    fail=1
-fi
+run ruff check .
 
 step "level 0i - ansible-lint (production profile)"
 run ansible-lint
