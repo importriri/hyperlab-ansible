@@ -46,6 +46,8 @@ def main() -> int:
         "- name: Check UUID, MAC and host-device ownership across libvirt"
     )
     dispatch_create = main_text.index("- name: Dispatch guest creation")
+    dispatch_resize = main_text.index("- name: Dispatch managed disk expansion")
+    dispatch_destroy = main_text.index("- name: Dispatch guest destruction")
     release_registry = main_text.index(
         "- name: Release the global guest registry lock owned by this operation"
     )
@@ -55,13 +57,17 @@ def main() -> int:
     assert transaction_preflight < reset_preflight < vfio < verify_base
     assert verify_base < packages < roots < post_roots < per_vm
     assert per_vm < registry < libvirt_registry < dispatch_create
-    assert dispatch_create < release_registry < release_per_vm
+    assert dispatch_create < dispatch_resize < dispatch_destroy
+    assert dispatch_destroy < release_registry < release_per_vm
 
     assert "ansible.builtin.package:" not in main_text[:verify_base]
     verify_block = main_text[verify_base:packages]
     assert "guest_operation == 'create' and guest_transaction_clean" in verify_block
     assert "guest_plan.lifecycle == 'disposable'" in verify_block
-    assert "guest_operation in ['create', 'reset', 'start', 'validate']" in verify_block
+    assert (
+        "guest_operation in ['create', 'reset', 'start', 'validate', 'resize']"
+        in verify_block
+    )
     assert "guest_confirm_reset == guest_plan.name" in main_text[reset_preflight:vfio]
     assert "guest_network_defined" in main_text[network:transaction_preflight]
     assert "guest_network_active" in main_text[network:transaction_preflight]
@@ -172,9 +178,35 @@ def main() -> int:
     assert "guest_operation == 'create'" in refusal_text
     assert "guest_domain_state == 'shut off'" in refusal_text
 
+    resize_text = (TASKS / "resize.yml").read_text(encoding="utf-8")
+    pending_commit = resize_text.index(
+        "- name: Commit the pending resize marker before touching qcow2"
+    )
+    qcow2_resize = resize_text.index(
+        "- name: Expand the qcow2 only when it still has the committed old size"
+    )
+    expanded_verify = resize_text.index(
+        "- name: Verify the expanded virtual size and lifecycle chain"
+    )
+    state_commit = resize_text.index(
+        "- name: Atomically commit the new managed disk size"
+    )
+    final_validation = resize_text.index(
+        "- name: Validate the complete resized transaction"
+    )
+
+    assert pending_commit < qcow2_resize < expanded_verify
+    assert expanded_verify < state_commit < final_validation
+    assert "guest_domain_state == 'shut off'" in resize_text
+    assert "guest_confirm_resize == guest_plan.name" in resize_text
+    assert "resize_pending" in resize_text
+    assert "guest_resize_needs_qcow2_growth | bool" in resize_text
+    assert "'backing-filename-format'" in resize_text
+
     defaults = yaml.safe_load(
         (ROOT / "roles/guest/defaults/main.yml").read_text(encoding="utf-8")
     )
+    assert "resize" in defaults["guest_supported_operations"]
     key_pattern = re.compile(defaults["guest_ssh_public_key_pattern"])
     assert key_pattern.fullmatch("ssh-ed25519 AAAA workstation")
     assert key_pattern.fullmatch("sk-ssh-ed25519@openssh.com AAAA token")
