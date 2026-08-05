@@ -1,0 +1,315 @@
+---
+- name: Require a complete shut-off managed guest before disk expansion
+  ansible.builtin.assert:
+    that:
+      - guest_transaction_complete
+      - guest_domain_state == 'shut off'
+      - guest_confirm_resize == guest_plan.name
+      - guest_existing_state is mapping
+      - guest_existing_state.disk_gib is defined
+    fail_msg: >-
+      Disk expansion requires a complete shut-off managed guest and exact
+      confirmation guest_confirm_resize={{ guest_plan.name }}.
+
+- name: Preserve resize inputs
+  ansible.builtin.set_fact:
+    guest_resize_target_plan: "{{ guest_plan }}"
+    guest_resize_original_state: "{{ guest_existing_state }}"
+    guest_resize_old_gib: "{{ guest_existing_state.disk_gib | int }}"
+    guest_resize_target_gib: "{{ guest_plan.disk_gib | int }}"
+    guest_resize_pending: "{{ guest_existing_state.resize_pending | default({}) }}"
+
+- name: Derive resize byte counts
+  ansible.builtin.set_fact:
+    guest_resize_old_bytes: "{{ (guest_resize_old_gib | int) * 1073741824 }}"
+    guest_resize_target_bytes: "{{ (guest_resize_target_gib | int) * 1073741824 }}"
+    guest_resize_delta_bytes: >-
+      {{ ((guest_resize_target_gib | int) -
+          (guest_resize_old_gib | int)) * 1073741824 }}
+
+- name: Refuse disk shrink or malformed pending resize state
+  ansible.builtin.assert:
+    that:
+      - (guest_resize_target_gib | int) >= (guest_resize_old_gib | int)
+      - guest_resize_pending is mapping
+      - >-
+        (guest_resize_pending | length == 0) or
+        ((guest_resize_target_gib | int)
+          > (guest_resize_old_gib | int) and
+         (guest_resize_pending.from_gib | default(-1) | int)
+          == (guest_resize_old_gib | int) and
+         (guest_resize_pending.to_gib | default(-1) | int)
+          == (guest_resize_target_gib | int))
+    fail_msg: >-
+      Managed disks can only grow. Any existing resize_pending transaction
+      must exactly match the committed and requested sizes.
+
+- name: Inspect the offline managed qcow2 chain before expansion
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_qemu_img_bin }}"
+      - info
+      - --output=json
+      - --backing-chain
+      - "{{ guest_plan.disk_path }}"
+  register: guest_resize_disk_info
+  changed_when: false
+  check_mode: false
+
+- name: Parse the offline managed qcow2 chain
+  ansible.builtin.set_fact:
+    guest_resize_disk_chain: "{{ guest_resize_disk_info.stdout | from_json }}"
+
+- name: Record the current virtual disk size
+  ansible.builtin.set_fact:
+    guest_resize_actual_bytes: >-
+      {{ guest_resize_disk_chain[0]['virtual-size'] | int }}
+
+- name: Refuse an unsafe disk chain or unexplained partial expansion
+  ansible.builtin.assert:
+    that:
+      - guest_resize_disk_chain | length >= 1
+      - guest_resize_disk_chain[0].format == 'qcow2'
+      - >-
+        (guest_resize_actual_bytes | int) in
+        [(guest_resize_old_bytes | int),
+         (guest_resize_target_bytes | int)]
+      - >-
+        (guest_plan.lifecycle == 'disposable' and
+         guest_resize_disk_chain | length == 2 and
+         guest_resize_disk_chain[0]['backing-filename']
+           == guest_plan.base_path and
+         guest_resize_disk_chain[0]['backing-filename-format'] == 'qcow2') or
+        (guest_plan.lifecycle == 'permanent' and
+         guest_resize_disk_chain | length == 1 and
+         'backing-filename' not in guest_resize_disk_chain[0])
+      - >-
+        (guest_resize_actual_bytes | int)
+          == (guest_resize_old_bytes | int) or
+        (guest_resize_pending | length > 0 and
+         (guest_resize_actual_bytes | int)
+           == (guest_resize_target_bytes | int))
+    fail_msg: >-
+      The managed qcow2 does not match either the committed size or an exact
+      resumable resize_pending transaction.
+
+- name: Classify the independently inspected disk state
+  ansible.builtin.set_fact:
+    guest_resize_actual_gib: >-
+      {{ (guest_resize_actual_bytes | int) // 1073741824 }}
+    guest_resize_needs_qcow2_growth: >-
+      {{ (guest_resize_target_gib | int) >
+           (guest_resize_old_gib | int) and
+         (guest_resize_actual_bytes | int) ==
+           (guest_resize_old_bytes | int) }}
+
+- name: Validate the independently classified pre-resize transaction
+  block:
+    - name: Bind full validation to the classified qcow2 size
+      ansible.builtin.set_fact:
+        guest_plan: >-
+          {{ guest_resize_target_plan |
+             combine({'disk_gib': guest_resize_actual_gib | int}) }}
+        guest_existing_state: >-
+          {{ guest_resize_original_state |
+             combine({'disk_gib': guest_resize_actual_gib | int}) }}
+
+    - name: Validate the complete lifecycle chain and managed contract
+      ansible.builtin.include_tasks: validate.yml
+
+  always:
+    - name: Restore the requested plan and committed state
+      ansible.builtin.set_fact:
+        guest_plan: "{{ guest_resize_target_plan }}"
+        guest_existing_state: "{{ guest_resize_original_state }}"
+
+- name: Report an already-satisfied disk size
+  when:
+    - (guest_resize_target_gib | int) == (guest_resize_old_gib | int)
+  ansible.builtin.debug:
+    msg: >-
+      {{ guest_plan.name }} already has the committed requested size of
+      {{ guest_resize_target_gib }} GiB.
+  changed_when: false
+
+- name: Validate an already-satisfied resize request normally
+  when:
+    - (guest_resize_target_gib | int) == (guest_resize_old_gib | int)
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Read conservative host capacity for the requested expansion
+  when:
+    - guest_resize_needs_qcow2_growth | bool
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/df
+      - --output=avail
+      - -B1
+      - "{{ guest_plan.disk_path }}"
+  register: guest_resize_df
+  changed_when: false
+  check_mode: false
+
+- name: Publish conservative host capacity
+  when:
+    - guest_resize_needs_qcow2_growth | bool
+  ansible.builtin.set_fact:
+    guest_resize_available_bytes: >-
+      {{ guest_resize_df.stdout_lines[-1] | trim | int }}
+
+- name: Refuse virtual-disk overcommit during expansion
+  when:
+    - guest_resize_needs_qcow2_growth | bool
+  ansible.builtin.assert:
+    that:
+      - >-
+        (guest_resize_available_bytes | int)
+          >= (guest_resize_delta_bytes | int)
+    fail_msg: >-
+      Expanding {{ guest_plan.name }} by {{ guest_resize_delta_bytes }} bytes
+      would exceed conservative free capacity on the image-store filesystem.
+
+- name: Predict the managed disk expansion in check mode
+  when:
+    - ansible_check_mode
+    - guest_resize_needs_qcow2_growth | bool
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would expand {{ guest_plan.name }} from
+      {{ guest_resize_old_gib }} GiB to {{ guest_resize_target_gib }} GiB,
+      preserve its lifecycle chain, and atomically commit the new disk_gib
+      state. No qcow2 or state write ran.
+  changed_when: true
+
+- name: Predict completion of an already-expanded pending transaction
+  when:
+    - ansible_check_mode
+    - (guest_resize_target_gib | int) > (guest_resize_old_gib | int)
+    - not (guest_resize_needs_qcow2_growth | bool)
+    - guest_resize_pending | length > 0
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: qcow2 already has the exact requested size for
+      {{ guest_plan.name }}. Would remove the matching resize_pending marker
+      and atomically commit disk_gib={{ guest_resize_target_gib }} without
+      another qcow2 resize or capacity reservation.
+  changed_when: true
+
+- name: Expand and commit the managed disk transaction
+  when:
+    - not ansible_check_mode
+    - (guest_resize_target_gib | int) > (guest_resize_old_gib | int)
+  block:
+    - name: Build the resumable pending resize state
+      ansible.builtin.set_fact:
+        guest_resize_pending_state: >-
+          {{ guest_existing_state |
+             combine({
+               'resize_pending': {
+                 'from_gib': guest_resize_old_gib | int,
+                 'to_gib': guest_resize_target_gib | int
+               }
+             }) }}
+
+    - name: Commit the pending resize marker before touching qcow2
+      when:
+        - guest_resize_pending | length == 0
+      ansible.builtin.copy:
+        content: >-
+          {{ guest_resize_pending_state |
+             to_nice_yaml(indent=2, sort_keys=false) }}
+        dest: "{{ guest_plan.state_path }}"
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Expand the qcow2 only when it still has the committed old size
+      when:
+        - guest_resize_needs_qcow2_growth | bool
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_qemu_img_bin }}"
+          - resize
+          - "{{ guest_plan.disk_path }}"
+          - "{{ guest_resize_target_gib }}G"
+      changed_when: true
+
+    - name: Inspect the expanded managed qcow2 chain
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_qemu_img_bin }}"
+          - info
+          - --output=json
+          - --backing-chain
+          - "{{ guest_plan.disk_path }}"
+      register: guest_resize_expanded_info
+      changed_when: false
+
+    - name: Parse the expanded managed qcow2 chain
+      ansible.builtin.set_fact:
+        guest_resize_expanded_chain: >-
+          {{ guest_resize_expanded_info.stdout | from_json }}
+
+    - name: Verify the expanded virtual size and lifecycle chain
+      ansible.builtin.assert:
+        that:
+          - >-
+            guest_resize_expanded_chain[0]['virtual-size'] | int
+              == guest_resize_target_bytes | int
+          - >-
+            (guest_plan.lifecycle == 'disposable' and
+             guest_resize_expanded_chain | length == 2 and
+             guest_resize_expanded_chain[0]['backing-filename']
+               == guest_plan.base_path and
+             guest_resize_expanded_chain[0]['backing-filename-format']
+               == 'qcow2') or
+            (guest_plan.lifecycle == 'permanent' and
+             guest_resize_expanded_chain | length == 1 and
+             'backing-filename'
+               not in guest_resize_expanded_chain[0])
+        fail_msg: >-
+          qemu-img returned without producing the exact requested managed
+          lifecycle shape.
+
+    - name: Remove pending metadata from the committed state mapping
+      ansible.builtin.set_fact:
+        guest_resize_state_without_pending: >-
+          {{ guest_existing_state |
+             dict2items |
+             rejectattr('key', 'equalto', 'resize_pending') |
+             list |
+             items2dict }}
+
+    - name: Build the final committed resize state
+      ansible.builtin.set_fact:
+        guest_resize_committed_state: >-
+          {{ guest_resize_state_without_pending |
+             combine({'disk_gib': guest_resize_target_gib | int}) }}
+
+    - name: Atomically commit the new managed disk size
+      ansible.builtin.copy:
+        content: >-
+          {{ guest_resize_committed_state |
+             to_nice_yaml(indent=2, sort_keys=false) }}
+        dest: "{{ guest_plan.state_path }}"
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Refresh observations after disk expansion
+      ansible.builtin.include_tasks: inspect.yml
+
+    - name: Read the committed resized state
+      ansible.builtin.slurp:
+        src: "{{ guest_plan.state_path }}"
+      register: guest_resize_committed_state_slurp
+
+    - name: Publish the committed resized state
+      ansible.builtin.set_fact:
+        guest_existing_state: >-
+          {{ guest_resize_committed_state_slurp.content |
+             b64decode |
+             from_yaml }}
+
+    - name: Validate the complete resized transaction
+      ansible.builtin.include_tasks: validate.yml

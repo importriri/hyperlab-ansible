@@ -1,0 +1,13 @@
+---
+- name: Expand one managed Hyperlab VM disk
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    guest_operation: resize
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest
+    - guest

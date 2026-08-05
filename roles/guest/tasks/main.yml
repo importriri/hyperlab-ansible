@@ -164,10 +164,10 @@
     - guest_operation in ['create', 'reset', 'start', 'validate']
   ansible.builtin.include_tasks: vfio.yml
 
-- name: Load the committed VFIO contract for offline destructive operations
+- name: Load the committed VFIO contract for offline state-bound operations
   when:
     - guest_plan.device_profile == 'vfio'
-    - guest_operation in ['shutdown', 'stop', 'destroy']
+    - guest_operation in ['shutdown', 'stop', 'resize', 'destroy']
   block:
     - name: Require committed VFIO state before an offline operation
       ansible.builtin.assert:
@@ -187,7 +187,7 @@
     - >-
       (guest_operation == 'create' and guest_transaction_clean) or
       (guest_plan.lifecycle == 'disposable' and
-       guest_operation in ['create', 'reset', 'start', 'validate'])
+       guest_operation in ['create', 'reset', 'start', 'validate', 'resize'])
   ansible.builtin.include_tasks: verify-base.yml
 
 - name: Install lifecycle dependencies after every read-only gate
@@ -290,6 +290,10 @@
     - name: Dispatch disposable guest reset
       when: guest_operation == 'reset'
       ansible.builtin.include_tasks: reset.yml
+
+    - name: Dispatch managed disk expansion
+      when: guest_operation == 'resize'
+      ansible.builtin.include_tasks: resize.yml
 
     - name: Dispatch guest destruction
       when: guest_operation == 'destroy'
