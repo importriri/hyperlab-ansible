@@ -67,7 +67,18 @@ run_render() {
     fi
 }
 
-step "level 0a - static pipeline contract"
+scripts="$(grep -rlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)"
+if [ -n "${scripts}" ]; then
+    step "level 0a - shellcheck (every shell script, discovered - this file included)"
+    if echo "${scripts}" | xargs shellcheck; then
+        echo "   OK"
+    else
+        echo "   FAIL"
+        fail=1
+    fi
+fi
+
+step "level 0b - static pipeline contract"
 run python tests/static_contract.py
 
 step "level 0c - image manifest and VM spec schemas"
@@ -85,10 +96,10 @@ if [ -e "${contracts[0]}" ]; then
     done
 fi
 
-step "level 0g - shell structure (no display required)"
+step "level 0f - shell structure (no display required)"
 run sh tools/shell-tests/run.sh
 
-step "level 0f - palette and open choices"
+step "level 0g - palette and open choices"
 run python3 tools/palette/audit_palette.py tools/palette/palette.yml
 run python3 tools/palette/verify_surfaces.py roles/desktop/files/palette
 run python3 tools/choices/choices.py check
@@ -103,7 +114,7 @@ else
     fail=1
 fi
 
-step "level 0 - ansible-lint (production profile)"
+step "level 0i - ansible-lint (production profile)"
 run ansible-lint
 
 step "level 1 - syntax-check (every playbook, discovered)"
@@ -118,29 +129,18 @@ if [ "${ok}" -eq 1 ]; then echo "   OK"; else fail=1; fi
 
 refusal_suites=(tests/*-refusals.yml)
 if [ -e "${refusal_suites[0]}" ]; then
-    step "level 2b - refusal suites (discovered)"
+    step "level 2a - refusal suites (discovered)"
     for suite in "${refusal_suites[@]}"; do
         run ansible-playbook -i inventory.ini "${suite}"
     done
 fi
 
-step "level 2 - render / invariant tests"
+step "level 2b - render / invariant tests"
 run_render
 
 if ls tests/*.bats >/dev/null 2>&1; then
     step "level 3 - protocol tests (bats, discovered)"
     run bats tests/*.bats
-fi
-
-scripts="$(grep -rlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)"
-if [ -n "${scripts}" ]; then
-    step "level 0b - shellcheck (every shell script, discovered - this file included)"
-    if echo "${scripts}" | xargs shellcheck; then
-        echo "   OK"
-    else
-        echo "   FAIL"
-        fail=1
-    fi
 fi
 
 printf '\n'
