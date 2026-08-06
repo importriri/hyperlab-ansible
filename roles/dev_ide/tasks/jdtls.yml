@@ -1,0 +1,202 @@
+---
+- name: Validate the pinned Eclipse JDT LS coordinates
+  ansible.builtin.assert:
+    that:
+      - dev_ide_jdtls_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+      - dev_ide_jdtls_build is match('^[0-9]{12}$')
+      - >-
+        dev_ide_jdtls_url is match(
+        '^https://download\.eclipse\.org/jdtls/milestones/')
+      - dev_ide_jdtls_release_dir is match('^/opt/eclipse-jdtls/')
+      - dev_ide_jdtls_launcher == '/usr/local/bin/jdtls'
+    fail_msg: >-
+      Refusing unsafe or unpinned Eclipse JDT LS release coordinates.
+
+- name: Create the JDT LS managed roots
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ dev_ide_jdtls_cache_dir }}"
+      mode: "0755"
+    - path: "{{ dev_ide_jdtls_install_root }}"
+      mode: "0755"
+
+- name: Inspect the pinned JDT LS release
+  ansible.builtin.stat:
+    path: "{{ dev_ide_jdtls_release_dir }}/bin/jdtls"
+  register: dev_ide_jdtls_existing
+  changed_when: false
+
+- name: Download the pinned official JDT LS milestone
+  ansible.builtin.get_url:
+    url: "{{ dev_ide_jdtls_url }}"
+    dest: "{{ dev_ide_jdtls_cache_dir }}/{{ dev_ide_jdtls_archive }}"
+    checksum: "sha256:{{ dev_ide_jdtls_checksum_url }}"
+    owner: root
+    group: root
+    mode: "0644"
+    timeout: 120
+  when: not ansible_check_mode
+
+- name: Install the pinned JDT LS milestone transactionally
+  when:
+    - not ansible_check_mode
+    - not dev_ide_jdtls_existing.stat.exists
+  block:
+    - name: Create a private JDT LS staging directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ dev_ide_jdtls_install_root }}"
+        prefix: ".jdtls-{{ dev_ide_jdtls_version }}-"
+        suffix: .staging
+      register: dev_ide_jdtls_staging
+
+    - name: Extract the verified JDT LS archive
+      ansible.builtin.unarchive:
+        src: "{{ dev_ide_jdtls_cache_dir }}/{{ dev_ide_jdtls_archive }}"
+        dest: "{{ dev_ide_jdtls_staging.path }}"
+        remote_src: true
+        extra_opts:
+          - --no-same-owner
+
+    - name: Inspect the staged JDT LS wrapper
+      ansible.builtin.stat:
+        path: "{{ dev_ide_jdtls_staging.path }}/bin/jdtls"
+      register: dev_ide_jdtls_staged_wrapper
+      changed_when: false
+
+    - name: Locate the staged Equinox launcher
+      ansible.builtin.find:
+        paths: "{{ dev_ide_jdtls_staging.path }}/plugins"
+        patterns: org.eclipse.equinox.launcher_*.jar
+        file_type: file
+        recurse: false
+      register: dev_ide_jdtls_staged_launchers
+      changed_when: false
+
+    - name: Refuse an incomplete staged JDT LS release
+      ansible.builtin.assert:
+        that:
+          - dev_ide_jdtls_staged_wrapper.stat.exists
+          - dev_ide_jdtls_staged_wrapper.stat.isreg
+          - dev_ide_jdtls_staged_wrapper.stat.executable
+          - dev_ide_jdtls_staged_launchers.matched == 1
+        fail_msg: >-
+          The verified archive does not contain the expected JDT LS wrapper
+          and exactly one Equinox launcher.
+
+    - name: Commit the verified JDT LS release
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/mv
+          - "{{ dev_ide_jdtls_staging.path }}"
+          - "{{ dev_ide_jdtls_release_dir }}"
+      changed_when: true
+
+  always:
+    - name: Remove an uncommitted JDT LS staging directory
+      ansible.builtin.file:
+        path: >-
+          {{ dev_ide_jdtls_staging.path |
+          default('/nonexistent/privatestack-jdtls-staging') }}
+        state: absent
+      changed_when: false
+
+- name: Explain a fresh JDT LS install during check mode
+  ansible.builtin.debug:
+    msg: >-
+      JDT LS {{ dev_ide_jdtls_version }}-{{ dev_ide_jdtls_build }} would be
+      downloaded, checksum-verified and installed.
+  when:
+    - ansible_check_mode
+    - not dev_ide_jdtls_existing.stat.exists
+
+- name: Reinspect the committed JDT LS release
+  ansible.builtin.stat:
+    path: "{{ dev_ide_jdtls_release_dir }}/bin/jdtls"
+  register: dev_ide_jdtls_committed
+  changed_when: false
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists
+
+- name: Require the committed JDT LS wrapper
+  ansible.builtin.assert:
+    that:
+      - dev_ide_jdtls_committed.stat.exists
+      - dev_ide_jdtls_committed.stat.isreg
+      - dev_ide_jdtls_committed.stat.executable
+    fail_msg: >-
+      The pinned JDT LS release is not complete after reconciliation.
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists
+
+- name: Point the managed current release at the pinned JDT LS build
+  ansible.builtin.file:
+    src: "{{ dev_ide_jdtls_release_dir }}"
+    dest: "{{ dev_ide_jdtls_current_link }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists
+
+- name: Publish the JDT LS launcher
+  ansible.builtin.file:
+    src: "{{ dev_ide_jdtls_current_link }}/bin/jdtls"
+    dest: "{{ dev_ide_jdtls_launcher }}"
+    state: link
+    owner: root
+    group: root
+    force: true
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists
+
+- name: Read the installed Java specification version
+  ansible.builtin.shell: |
+    /usr/bin/java -XshowSettings:properties -version 2>&1 |
+      awk -F= '
+        /^[[:space:]]*java\.specification\.version[[:space:]]*=/ {
+          value = $2
+          gsub(/[[:space:]]/, "", value)
+          print value
+        }
+      ' |
+      head -n 1
+  args:
+    executable: /usr/bin/bash
+  register: dev_ide_java_specification
+  changed_when: false
+
+- name: Require a JDT LS compatible Java runtime
+  ansible.builtin.assert:
+    that:
+      - dev_ide_java_specification.stdout is match('^[0-9]+$')
+      - dev_ide_java_specification.stdout | int >= 21
+    fail_msg: >-
+      Eclipse JDT LS requires Java 21 or newer; detected Java specification
+      version {{ dev_ide_java_specification.stdout | default('unknown') }}.
+
+- name: Inspect the published JDT LS launcher
+  ansible.builtin.stat:
+    path: "{{ dev_ide_jdtls_launcher }}"
+    follow: true
+  register: dev_ide_jdtls_published
+  changed_when: false
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists
+
+- name: Verify the published JDT LS contract
+  ansible.builtin.assert:
+    that:
+      - dev_ide_jdtls_published.stat.exists
+      - dev_ide_jdtls_published.stat.isreg
+      - dev_ide_jdtls_published.stat.executable
+    fail_msg: >-
+      /usr/local/bin/jdtls does not resolve to the pinned managed release.
+  when:
+    - not ansible_check_mode or dev_ide_jdtls_existing.stat.exists

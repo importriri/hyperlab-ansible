@@ -98,6 +98,15 @@ def main() -> int:
     )
     assert desktop_pool in guest_tasks
 
+    ide_defaults = mapping("roles/dev_ide/defaults/main.yml")
+    assert "jdtls" not in ide_defaults["dev_ide_packages"]
+    assert ide_defaults["dev_ide_jdtls_version"] == "1.60.0"
+    assert ide_defaults["dev_ide_jdtls_build"] == "202606262232"
+    jdtls = text("roles/dev_ide/tasks/jdtls.yml")
+    assert 'checksum: "sha256:{{ dev_ide_jdtls_checksum_url }}"' in jdtls
+    assert "dev_ide_java_specification.stdout | int >= 21" in jdtls
+    assert "/usr/local/bin/jdtls" in jdtls
+
     print("workstation guest contract: OK")
     return 0
 

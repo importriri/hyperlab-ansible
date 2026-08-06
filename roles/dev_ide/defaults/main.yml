@@ -2,18 +2,18 @@
 # Guests only: the hypervisor never becomes a dev box (playbook-enforced,
 # invariant-pinned). emacs-wayland, NOT emacs: the cockpit is X11-free.
 #
-# LSP coverage, one server per stack, official repos where they exist:
-#   java  -> jdtls            js/ts -> typescript-language-server
+# LSP coverage, one server per stack:
+#   java  -> Eclipse JDT LS milestone
+#   js/ts -> typescript-language-server
 #   bash  -> bash-language-server (+ shellcheck for flymake)
-# html/css/json and ansible ship via npm below - they have no pacman
-# package, and the bricks do not touch the AUR.
+# html/css/json and ansible ship via npm below. The brick does not use the AUR.
 dev_ide_packages:
   - emacs-wayland
   - git
   - nodejs
   - npm
   - jdk-openjdk
-  - jdtls
+  - python
   - bash-language-server
   - typescript-language-server
   - shellcheck
@@ -21,3 +21,28 @@ dev_ide_packages:
 dev_ide_npm_globals:
   - vscode-langservers-extracted
   - "@ansible/ansible-language-server"
+
+# Eclipse JDT LS is not packaged in the official Arch repositories. Pin one
+# upstream milestone and verify its upstream SHA-256 manifest before extraction.
+dev_ide_jdtls_version: "1.60.0"
+dev_ide_jdtls_build: "202606262232"
+
+dev_ide_jdtls_archive: >-
+  jdt-language-server-{{ dev_ide_jdtls_version }}-{{
+  dev_ide_jdtls_build }}.tar.gz
+
+dev_ide_jdtls_url: >-
+  https://download.eclipse.org/jdtls/milestones/{{
+  dev_ide_jdtls_version }}/{{ dev_ide_jdtls_archive }}
+
+dev_ide_jdtls_checksum_url: "{{ dev_ide_jdtls_url }}.sha256"
+
+dev_ide_jdtls_cache_dir: /var/cache/privatestack/jdtls
+dev_ide_jdtls_install_root: /opt/eclipse-jdtls
+
+dev_ide_jdtls_release_dir: >-
+  {{ dev_ide_jdtls_install_root }}/{{ dev_ide_jdtls_version }}-{{
+  dev_ide_jdtls_build }}
+
+dev_ide_jdtls_current_link: "{{ dev_ide_jdtls_install_root }}/current"
+dev_ide_jdtls_launcher: /usr/local/bin/jdtls

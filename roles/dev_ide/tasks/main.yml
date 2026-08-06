@@ -1,10 +1,13 @@
 ---
-- name: Install the IDE stack
+- name: Install the IDE stack from official Arch repositories
   community.general.pacman:
     name: "{{ dev_ide_packages }}"
     state: present
 
-- name: Install the language servers (npm, global)
+- name: Install the pinned Eclipse JDT language server
+  ansible.builtin.include_tasks: jdtls.yml
+
+- name: Install the language servers from npm
   community.general.npm:
     name: "{{ item }}"
     global: true
