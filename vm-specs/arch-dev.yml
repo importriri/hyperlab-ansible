@@ -5,8 +5,9 @@ image: arch
 lifecycle: permanent
 device_profile: standard
 network_profile: dev
+resource_profile: balanced
 resources:
-  memory_mb: auto
+  memory_mb: 8192
   vcpus: 4
   disk_gib: 24
 memory_overcommit: false

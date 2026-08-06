@@ -31,6 +31,7 @@ fields:
   tags: {type: list, of: str, min_items: 1, unique_items: true}
 
 optional:
+  resource_profile: {type: str, enum: [balanced, heavy]}
   snapshot_policy: {type: str, enum: [none, manual, daily]}
   backup_policy: {type: str, enum: [none, manual, weekly]}
   benchmark: {type: str, nullable: true, min_length: 1}

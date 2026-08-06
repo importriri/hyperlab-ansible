@@ -1,0 +1,11 @@
+---
+# Named runtime profiles alter only RAM and vCPU count. Disk, lifecycle,
+# devices and trust remain properties of the checked-in VM spec.
+vm_resource_profiles:
+  arch-dev:
+    balanced:
+      memory_mb: 8192
+      vcpus: 4
+    heavy:
+      memory_mb: 16384
+      vcpus: 4

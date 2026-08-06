@@ -28,6 +28,7 @@
       - guest_existing_state.lifecycle == guest_plan.lifecycle
       - guest_existing_state.device_profile == guest_plan.device_profile
       - guest_existing_state.network_profile == guest_plan.network_profile
+      - guest_existing_state.resource_profile | default(none) == guest_plan.resource_profile
       - guest_existing_state.disk_path == guest_plan.disk_path
       - guest_existing_state.xml_path == guest_plan.xml_path
       - guest_existing_state.vcpus | int == guest_plan.vcpus | int

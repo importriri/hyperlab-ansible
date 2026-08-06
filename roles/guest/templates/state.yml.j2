@@ -9,6 +9,7 @@ instance_policy: {{ guest_plan.instance_policy }}
 lifecycle: {{ guest_plan.lifecycle }}
 device_profile: {{ guest_plan.device_profile }}
 network_profile: {{ guest_plan.network_profile }}
+resource_profile: {{ guest_plan.resource_profile | to_json }}
 memory_mb: {{ guest_resolved_memory_mb }}
 vcpus: {{ guest_plan.vcpus }}
 disk_gib: {{ guest_plan.disk_gib }}

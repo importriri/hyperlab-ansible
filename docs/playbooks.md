@@ -115,6 +115,22 @@ engine as every other guest.
 Creation remains separate from `lab.yml` because a rerun of the host target must
 never imply a workload lifecycle decision.
 
+### Arch development resource profiles
+
+`arch-dev` defaults to the reviewed `balanced` profile: 8 GiB and four vCPUs.
+The same checked-in spec can select the `heavy` profile, 16 GiB and four vCPUs,
+without changing disk, lifecycle, network or device trust:
+
+```bash
+ansible-playbook -K playbooks/vm-create.yml \
+  -e guest_spec=vm-specs/arch-dev.yml \
+  -e guest_resource_profile=heavy \
+  -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
+```
+
+The selected profile is written into managed VM state. Validation therefore
+refuses a later run that silently selects different resources.
+
 ## Service lifecycle
 
 1. `network-domains.yml` reconciles the five network identities.

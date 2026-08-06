@@ -72,15 +72,26 @@
 
 - name: Build the deterministic guest plan without side effects
   ansible.builtin.command:
-    argv:
-      - "{{ guest_python_bin }}"
-      - "{{ guest_plan_tool }}"
-      - --root
-      - "{{ guest_repository_root }}"
-      - --spec
-      - "{{ guest_spec }}"
-      - --store
-      - "{{ hyperlab_root }}"
+    argv: >-
+      {{
+        [
+          guest_python_bin,
+          guest_plan_tool,
+          '--root',
+          guest_repository_root,
+          '--spec',
+          guest_spec,
+          '--store',
+          hyperlab_root,
+          '--resource-profiles',
+          guest_resource_profiles_file
+        ]
+        + (
+          ['--resource-profile', guest_resource_profile]
+          if guest_resource_profile | length > 0
+          else []
+        )
+      }}
   register: guest_plan_command
   changed_when: false
   check_mode: false

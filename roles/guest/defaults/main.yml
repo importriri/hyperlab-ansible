@@ -17,6 +17,12 @@ guest_windows_workshop: {}
 guest_service_reservations: {reserved_mb: 0, reservations: {}}
 guest_confirm_resize: ""
 
+# Empty uses the checked-in spec default. A named override is resolved only
+# through the reviewed profile map and is committed into managed VM state.
+guest_resource_profile: ""
+guest_resource_profiles_file: >-
+  {{ guest_repository_root }}/group_vars/all/vm-resource-profiles.yml
+
 guest_plan_tool: "{{ guest_repository_root }}/tools/guest_plan.py"
 guest_vfio_plan_tool: "{{ guest_repository_root }}/tools/vfio_plan.py"
 guest_vfio_registry_tool: "{{ guest_repository_root }}/tools/vfio_registry.py"

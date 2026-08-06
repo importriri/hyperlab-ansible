@@ -59,7 +59,13 @@ def strict_bool(mapping: dict[str, Any], key: str, label: str) -> bool:
     return value
 
 
-def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
+def build_plan(
+    root: Path,
+    spec_arg: str,
+    store: Path,
+    resource_profile_override: str | None = None,
+    resource_profiles_path: Path | None = None,
+) -> dict[str, Any]:
     root = root.resolve()
     specs_root = (root / "vm-specs").resolve()
     images_root = (root / "images").resolve()
@@ -133,6 +139,58 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
 
     resources = spec.get("resources")
     require(isinstance(resources, dict), "spec.resources must be a mapping")
+
+    declared_resource_profile = spec.get("resource_profile")
+    require(
+        declared_resource_profile is None
+        or declared_resource_profile in {"balanced", "heavy"},
+        "spec.resource_profile must be balanced or heavy",
+    )
+    selected_resource_profile = (
+        resource_profile_override or declared_resource_profile
+    )
+    if selected_resource_profile is not None:
+        require(
+            selected_resource_profile in {"balanced", "heavy"},
+            "resource profile override must be balanced or heavy",
+        )
+        profile_path = resource_profiles_path or (
+            root / "group_vars/all/vm-resource-profiles.yml"
+        )
+        profile_root = load_mapping(profile_path, "VM resource profiles")
+        profile_map = profile_root.get("vm_resource_profiles")
+        require(
+            isinstance(profile_map, dict),
+            "VM resource profiles need a vm_resource_profiles mapping",
+        )
+        instance_profiles = profile_map.get(name)
+        require(
+            isinstance(instance_profiles, dict),
+            f"VM {name} has no reviewed resource profiles",
+        )
+        selected_resources = instance_profiles.get(selected_resource_profile)
+        require(
+            isinstance(selected_resources, dict),
+            f"VM {name} has no {selected_resource_profile} resource profile",
+        )
+        profile_memory = selected_resources.get("memory_mb")
+        profile_vcpus = selected_resources.get("vcpus")
+        require(
+            isinstance(profile_memory, int)
+            and not isinstance(profile_memory, bool)
+            and profile_memory >= 512,
+            "resource profile memory_mb must be an integer >= 512",
+        )
+        require(
+            isinstance(profile_vcpus, int)
+            and not isinstance(profile_vcpus, bool)
+            and 1 <= profile_vcpus <= 256,
+            "resource profile vcpus must be between 1 and 256",
+        )
+        resources = dict(resources)
+        resources["memory_mb"] = profile_memory
+        resources["vcpus"] = profile_vcpus
+
     vcpus = resources.get("vcpus")
     require(isinstance(vcpus, int) and not isinstance(vcpus, bool) and 1 <= vcpus <= 256,
             "resources.vcpus must be between 1 and 256")
@@ -219,6 +277,7 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
         "lifecycle": lifecycle,
         "device_profile": device_profile,
         "network_profile": network,
+        "resource_profile": selected_resource_profile,
         "memory_request": memory_request,
         "image_min_memory_mb": manifest.get("min_memory_mb"),
         "vcpus": vcpus,
@@ -265,13 +324,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", required=True)
     parser.add_argument("--spec", required=True)
     parser.add_argument("--store", required=True)
+    parser.add_argument("--resource-profiles")
+    parser.add_argument("--resource-profile")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        plan = build_plan(Path(args.root), args.spec, Path(args.store))
+        plan = build_plan(
+            Path(args.root),
+            args.spec,
+            Path(args.store),
+            resource_profile_override=args.resource_profile,
+            resource_profiles_path=(
+                Path(args.resource_profiles)
+                if args.resource_profiles
+                else None
+            ),
+        )
     except PlanError as exc:
         print(f"guest plan refused: {exc}", file=sys.stderr)
         return 2
