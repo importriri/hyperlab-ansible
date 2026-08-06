@@ -55,3 +55,25 @@ No static test can prove GPU reset, IOMMU isolation, NVIDIA DRM node selection,
 portal capture, zero-copy behaviour, frame pacing or input return. Those claims
 remain blocked until `arch-dev-vfio` passes the Nitro campaign with SPICE
 recovery available throughout.
+
+## Nitro acceptance tools
+
+After the VFIO candidate is defined and running, the physical host runs
+`tools/nitro/arch_dev_vfio_host_gate.py`. It is read-only and checks the active
+`qemu:///system` XML, reviewed PCI addresses, 8/16 GiB profile, exact CPU and I/O
+pins, loopback SPICE, virtual recovery video, kvmfr and the shared 64 MiB
+IVSHMEM object. It then verifies both host PCI functions remain bound to
+`vfio-pci`, every referenced VFIO group device exists and no peer in either
+IOMMU group remains attached to a host driver.
+
+Inside the guest, run `tools/nitro/arch_dev_vfio_guest_gate.py` as `sid` from
+the checked-out repository. It checks the NVIDIA display and audio functions,
+the loaded open NVIDIA module set and DRM parameters, `nvidia-smi`, QEMU's
+`1af4:1110` IVSHMEM PCI device, the exact shared Looking Glass source pin and
+its manual-only runtime stamp.
+
+Only after both markers are green does the operator start
+`looking-glass-host` from the active Hyprland session. The first portal choice,
+frame production, input path, lock/unlock, reboot and SPICE recovery remain
+manual observations and must be recorded before enabling any persistent sender
+unit or starting a fork.
