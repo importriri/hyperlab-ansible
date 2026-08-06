@@ -114,8 +114,9 @@ def main():
             "Yazi removal policy missing")
 
     tasks = text("roles/host_desktop_sway/tasks/main.yml")
+    palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
     for deployed in (
-        "superfile-config.toml", "superfile-theme.toml", "hyperlab-gtk.css",
+        "superfile-config.toml", "hyperlab-gtk.css",
         "hyperlab-wallpaper.svg", "hyperlab-control-center.svg",
         "privatestack-hyperlab-domains.py", "privatestack-waybar.sh",
         "privatestack-fullscreen.sh", "privatestack-theme.sh",
@@ -123,9 +124,10 @@ def main():
         "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
     ):
         require(deployed in tasks, "visual-lock asset not deployed: %s" % deployed)
-    require("superfile/theme/hyperlab.toml" in tasks,
-            "custom Superfile theme destination missing")
-    palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
+    require("superfile-theme.toml" not in tasks,
+            "main desktop tasks still own the active Superfile theme")
+    require("superfile/theme/hyperlab.toml" in palette_tasks,
+            "runtime palette does not own the Superfile theme destination")
     require("Install every runtime palette fragment" in palette_tasks and
             "Install the selected palette into user-owned active files" in palette_tasks and
             "hyperlab-palette-superfile.toml" in palette_tasks,

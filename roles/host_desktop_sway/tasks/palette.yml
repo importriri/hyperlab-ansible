@@ -46,6 +46,38 @@
     mode: "0644"
   loop: "{{ host_desktop_sway_palette_runtime_fragments }}"
 
+- name: Inspect the persisted runtime theme
+  ansible.builtin.stat:
+    path: "/home/{{ admin_user }}/.config/hyperlab/theme"
+  register: host_desktop_sway_runtime_theme_stat
+  changed_when: false
+
+- name: Read the persisted runtime theme
+  ansible.builtin.slurp:
+    src: "/home/{{ admin_user }}/.config/hyperlab/theme"
+  register: host_desktop_sway_runtime_theme_read
+  changed_when: false
+  when: host_desktop_sway_runtime_theme_stat.stat.exists
+
+- name: Resolve the active runtime palette
+  ansible.builtin.set_fact:
+    host_desktop_sway_active_palette: >-
+      {{
+        (host_desktop_sway_runtime_theme_read.content | b64decode | trim)
+        if host_desktop_sway_runtime_theme_stat.stat.exists
+        else desktop_palette
+      }}
+  changed_when: false
+
+- name: Refuse an invalid persisted runtime palette
+  ansible.builtin.assert:
+    that:
+      - host_desktop_sway_active_palette in desktop_palette_options
+    fail_msg: >-
+      The persisted HyperLab theme is invalid:
+      {{ host_desktop_sway_active_palette }}.
+    quiet: true
+
 - name: Seed the persisted runtime theme without overwriting a user toggle
   ansible.builtin.copy:
     content: "{{ desktop_palette }}\n"
@@ -57,7 +89,8 @@
 
 - name: Install the selected palette into user-owned active files
   ansible.builtin.copy:
-    src: "{{ desktop_palette_fragments }}/{{ desktop_palette }}/{{ item.src }}"
+    src: >-
+      {{ desktop_palette_fragments }}/{{ host_desktop_sway_active_palette }}/{{ item.src }}
     dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
     owner: "{{ admin_user }}"
     group: "{{ admin_user }}"

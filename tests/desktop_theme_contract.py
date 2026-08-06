@@ -23,6 +23,25 @@ def main() -> int:
         "mode-toggle", "mode-json", "hyperlab-palette-swaylock.conf",
         "lock_index=$(( (desktop_index + 3) % count ))",
     ): require(marker in theme, f"theme controller missing: {marker}")
+    palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
+    host_tasks = text("roles/host_desktop_sway/tasks/main.yml")
+    for marker in (
+        "Inspect the persisted runtime theme",
+        "Resolve the active runtime palette",
+        "host_desktop_sway_active_palette",
+        "Refuse an invalid persisted runtime palette",
+    ):
+        require(marker in palette_tasks, f"runtime theme preservation missing: {marker}")
+    require(
+        'desktop_palette_fragments }}/{{ desktop_palette }}/{{ item.src }}'
+        not in palette_tasks,
+        "active palette copies must not force the repository default",
+    )
+    require(
+        "superfile-theme.toml" not in host_tasks,
+        "superfile active theme must have only the palette task as owner",
+    )
+
     status = text("roles/host_desktop_sway/files/privatestack-swaybar-status.py")
     for variant in ("green", "violet", "blue", "red"):
         require(f'"{variant}"' in status, f"fallback Swaybar palette missing: {variant}")

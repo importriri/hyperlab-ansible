@@ -106,7 +106,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     trust_levels = networks.get("gpu_trust_levels", {})
     domain_profiles = networks.get("gpu_domain_profiles", {})
     check("services" not in trust_levels, "services must never receive the GPU")
-    check(set(domain_profiles) == {"win11clean-valley", "win11dirty-disposable"}, "reviewed VFIO domain map drift")
+    check(
+        set(domain_profiles)
+        == {"win11clean-valley", "arch-dev-vfio", "win11dirty-disposable"},
+        "reviewed VFIO domain map drift",
+    )
     check(set(domain_profiles.values()) <= set(trust_levels), "every VFIO domain must map to a reviewed GPU trust level")
     check("services" not in domain_profiles.values(), "no VFIO domain may map to services")
     for vm_name, network_name in domain_profiles.items():
@@ -222,9 +226,16 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check(requires.get("looking_glass") == ["host_desktop_sway", "kvm_host"], "Looking Glass needs desktop and kvm_host")
 
     guard_tasks = (ROOT / "roles/brick_guard/tasks/main.yml").read_text()
+    stamp_tasks = (ROOT / "roles/brick_guard/tasks/stamp.yml").read_text()
     check("brick_guard_brick in brick_requires" in guard_tasks, "brick_guard must reject an unknown brick name")
     check("brick_guard_brick in brick_playbooks" in guard_tasks, "brick_guard must reject a brick without a playbook mapping")
     check("default([])" not in guard_tasks, "brick_guard must not turn an unknown brick into an empty prerequisite list")
+    check(bricks.get("brick_guard_planned") == [], "planned brick state must begin empty")
+    check("brick_guard_planned" in stamp_tasks, "brick stamps must publish same-play state")
+    check(
+        "difference(brick_guard_planned)" in guard_tasks,
+        "brick guards must accept prerequisites predicted earlier in the play",
+    )
 
     resolved: set[str] = set()
     for _ in range(len(requires) + 1):

@@ -59,8 +59,9 @@ same or a lower trust level until reboot clears `/run/gpu-handoff`.
 - Standard and VFIO guests share disk, state, locking, rollback and destructive
   confirmation semantics.
 - No public repository file hard-codes laptop PCI addresses.
-- `win11clean-valley` and `win11dirty-disposable` are the only reviewed VFIO
-  domain names in M4.
+- The reviewed VFIO allowlist contains `win11clean-valley`,
+  `arch-dev-vfio` and `win11dirty-disposable`. The Linux candidate is bound to
+  the `dev` trust profile for the Nitro hardware campaign.
 - Services can never receive the GPU because no services trust level exists.
 - The two Windows images must contain the pinned Looking Glass host application
   before they can be sealed and used. Linux uses no image-host evidence: an

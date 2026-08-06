@@ -317,7 +317,6 @@
     - { src: waybar.css, dest: waybar/style.css }
     - { src: foot.ini, dest: foot/foot.ini }
     - { src: superfile-config.toml, dest: superfile/config.toml }
-    - { src: superfile-theme.toml, dest: superfile/theme/hyperlab.toml }
     - { src: mako.conf, dest: mako/config }
     - { src: rofi-config.rasi, dest: rofi/config.rasi }
     - { src: rofi-mocha.rasi, dest: rofi/rofi-mocha.rasi }

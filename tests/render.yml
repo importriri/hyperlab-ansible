@@ -336,6 +336,7 @@
         - roles/host_desktop_sway/files/privatestack-controls.sh
         - roles/host_desktop_sway/files/privatestack-swaylock.sh
         - roles/host_desktop_sway/files/privatestack-swaybar-status.py
+        - roles/host_desktop_sway/tasks/palette.yml
 
     - name: Cockpit invariants (final lab, Wayland-pure, guests-only IDE)
       ansible.builtin.assert:
@@ -487,11 +488,36 @@
              | selectattr('dest', 'search', '/usr/local/bin/')
              | map(attribute='mode') | list }}
         render_desk_dests: >-
-          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
-             | map('dict2items') | flatten
-             | selectattr('key', 'equalto', 'loop')
-             | map(attribute='value') | flatten
-             | selectattr('dest', 'defined') | map(attribute='dest') | list }}
+          {{
+            (
+              (render_cockpit.results[1].content | b64decode | from_yaml)
+              | map('dict2items') | flatten
+              | selectattr('key', 'equalto', 'loop')
+              | map(attribute='value') | flatten
+              | selectattr('dest', 'defined')
+              | map(attribute='dest') | list
+            )
+            +
+            (
+              (
+                render_cockpit.results
+                | selectattr(
+                    'item',
+                    'equalto',
+                    'roles/host_desktop_sway/tasks/palette.yml'
+                  )
+                | map(attribute='content')
+                | first
+                | b64decode
+                | from_yaml
+              )
+              | map('dict2items') | flatten
+              | selectattr('key', 'equalto', 'loop')
+              | map(attribute='value') | flatten
+              | selectattr('dest', 'defined')
+              | map(attribute='dest') | list
+            )
+          }}
         render_desktop_wall_dest: >-
           {{ render_desk_copy_mods
              | selectattr('src', 'defined')
@@ -610,11 +636,36 @@
              | regex_replace('(?m)^\s*//.*$', '') | from_json }}
         render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
         render_desk_dests: >-
-          {{ (render_cockpit.results[1].content | b64decode | from_yaml)
-             | map('dict2items') | flatten
-             | selectattr('key', 'equalto', 'loop')
-             | map(attribute='value') | flatten
-             | selectattr('dest', 'defined') | map(attribute='dest') | list }}
+          {{
+            (
+              (render_cockpit.results[1].content | b64decode | from_yaml)
+              | map('dict2items') | flatten
+              | selectattr('key', 'equalto', 'loop')
+              | map(attribute='value') | flatten
+              | selectattr('dest', 'defined')
+              | map(attribute='dest') | list
+            )
+            +
+            (
+              (
+                render_cockpit.results
+                | selectattr(
+                    'item',
+                    'equalto',
+                    'roles/host_desktop_sway/tasks/palette.yml'
+                  )
+                | map(attribute='content')
+                | first
+                | b64decode
+                | from_yaml
+              )
+              | map('dict2items') | flatten
+              | selectattr('key', 'equalto', 'loop')
+              | map(attribute='value') | flatten
+              | selectattr('dest', 'defined')
+              | map(attribute='dest') | list
+            )
+          }}
         render_hyper_modules: >-
           {{ render_waybar | dict2items
              | selectattr('key', 'search', '^custom/hyperlab')

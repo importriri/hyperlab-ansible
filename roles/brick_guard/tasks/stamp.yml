@@ -14,3 +14,9 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Publish the brick for later guards in this play
+  ansible.builtin.set_fact:
+    brick_guard_planned: >-
+      {{ (brick_guard_planned + [brick_guard_brick]) | unique }}
+  changed_when: false

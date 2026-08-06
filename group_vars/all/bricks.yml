@@ -3,6 +3,10 @@
 # must fail instead of behaving like an empty list.
 brick_stamp_dir: /etc/privatestack/bricks
 
+# Host-scoped facts predicted earlier in the same play. This list never
+# replaces persistent stamps across separate playbook invocations.
+brick_guard_planned: []
+
 brick_requires:
   base: []
   hardware_probe: []

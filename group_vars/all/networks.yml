@@ -39,4 +39,5 @@ gpu_trust_levels:
 # unguarded. Services is structurally impossible because it has no trust level.
 gpu_domain_profiles:
   win11clean-valley: clean
+  arch-dev-vfio: dev
   win11dirty-disposable: dirty

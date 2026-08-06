@@ -18,7 +18,7 @@ EOF
     cat > "${GPU_HANDOFF_DOMAINS}" <<EOF
 # exact-libvirt-domain network-profile
 win11clean-valley clean
-win11dev-test dev
+arch-dev-vfio dev
 win11dirty-disposable dirty
 win11lab-test lab
 EOF
@@ -40,6 +40,12 @@ state() {
     run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 0 ]
     [ "$(state)" = "3" ]
+}
+
+@test "the reviewed Linux VFIO candidate records dev trust" {
+    run "${HOOK}" arch-dev-vfio prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "2" ]
 }
 
 @test "downgrade is allowed across exact domains (clean -> dirty)" {

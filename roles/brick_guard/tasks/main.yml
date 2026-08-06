@@ -32,5 +32,6 @@
     success_msg: "{{ brick_guard_brick }}: prerequisites present."
   vars:
     brick_guard_missing: >-
-      {{ brick_guard_found.results | rejectattr('stat.exists')
-         | map(attribute='item') | list }}
+      {{ (brick_guard_found.results | rejectattr('stat.exists')
+          | map(attribute='item') | list)
+         | difference(brick_guard_planned) }}
