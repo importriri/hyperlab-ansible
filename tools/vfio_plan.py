@@ -242,18 +242,28 @@ def build_vfio_plan(
     looking_glass = plan["looking_glass"]
     required_build = plan.get("looking_glass_host_build_required")
     if looking_glass:
-        require(plan.get("os_family") == "windows",
-                "Looking Glass is supported only by reviewed Windows images")
-        require(isinstance(required_build, str) and required_build == lg_build,
-                "image Looking Glass host build differs from the pinned host client build")
+        os_family = plan.get("os_family")
+        if os_family == "windows":
+            require(plan.get("looking_glass_mode") == "windows",
+                    "Windows VFIO requires the reviewed Looking Glass mode")
+            require(isinstance(required_build, str) and required_build == lg_build,
+                    "image Looking Glass host build differs from the pinned host client build")
+        else:
+            require(os_family == "linux", "unsupported Looking Glass guest family")
+            require(plan.get("looking_glass_mode") == "linux-experimental",
+                    "Linux Looking Glass requires explicit experimental mode")
+            require(required_build in (None, ""),
+                    "Linux experimental Looking Glass uses the shared source pin")
         require(lg_device == "/dev/kvmfr0",
-                "M4 supports the reviewed /dev/kvmfr0 transport only")
+                "the reviewed transport supports /dev/kvmfr0 only")
         require(power_of_two(lg_shm_mb) and 32 <= lg_shm_mb <= 512,
                 "Looking Glass shared memory must be a reviewed power of two from 32 to 512 MiB")
         lg_bytes = lg_shm_mb * 1024 * 1024
     else:
         require(plan.get("os_family") == "linux",
                 "Windows VFIO guests require Looking Glass; only Linux may use SPICE-only VFIO")
+        require(plan.get("looking_glass_mode") is None,
+                "SPICE-only Linux VFIO must not carry a Looking Glass mode")
         require(required_build in (None, ""),
                 "SPICE-only Linux VFIO must not carry a Looking Glass build pin")
         lg_build = None
@@ -271,6 +281,7 @@ def build_vfio_plan(
         "trust_level": trust_level,
         "cpu_pinning": cpu_pinning,
         "looking_glass_enabled": looking_glass,
+        "looking_glass_mode": plan.get("looking_glass_mode"),
         "looking_glass_build": lg_build,
         "looking_glass_device": lg_device,
         "looking_glass_shm_mb": lg_shm_mb,

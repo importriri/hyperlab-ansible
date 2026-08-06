@@ -39,7 +39,8 @@ The rendered libvirt domain owns both reviewed PCI functions through managed
 `hostdev` elements. Looking Glass uses the kvmfr character device through a
 pinned QEMU command line; SPICE remains loopback-only on port 5900 for input and
 recovery. A VGA device remains until hardware acceptance proves the complete
-Looking Glass path. VFIO domains use virtio keyboard and mouse and disable the
+Looking Glass path. Linux guests may request the same IVSHMEM transport only
+through the explicit experimental mode; SPICE remains available throughout. VFIO domains use virtio keyboard and mouse and disable the
 balloon because IOMMU-pinned memory is not reclaimable.
 
 Before definition, every libvirt domain is checked for UUID, MAC and PCI
@@ -62,7 +63,9 @@ same or a lower trust level until reboot clears `/run/gpu-handoff`.
   domain names in M4.
 - Services can never receive the GPU because no services trust level exists.
 - The two Windows images must contain the pinned Looking Glass host application
-  before they can be sealed and used.
+  before they can be sealed and used. Linux uses no image-host evidence: an
+  explicit `linux-experimental` mode builds the sender from the same shared
+  source pin and remains disabled pending hardware acceptance.
 - USB passthrough and real-time scheduling remain later stages. CPU pinning is
   rendered only when the selected host profile contains a reviewed plan for the
   exact guest vCPU count and preflight confirms the expected host thread count.

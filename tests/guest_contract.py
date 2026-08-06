@@ -235,6 +235,7 @@ def test_standard_plan() -> None:
         assert second["mac"] == plan["mac"]
         assert plan["device_profile"] == "standard"
         assert plan["looking_glass"] is False
+        assert plan["looking_glass_mode"] is None
         assert plan["gpu_lock_path"].endswith("/state/locks/gpu.lock")
 
         manifest_path = root / "images/debian.yml"
@@ -278,6 +279,7 @@ def test_vfio_plan() -> None:
         assert vfio["audio"]["bdf"] == "0000:01:00.1"
         assert vfio["trust_level"] == 3
         assert vfio["looking_glass_shm_bytes"] == 64 * 1024 * 1024
+        assert vfio["looking_glass_mode"] == "windows"
         assert vfio["spice_port"] == 5900
         assert vfio["cpu_pinning"]["enabled"] is True
         assert [item["cpuset"] for item in vfio["cpu_pinning"]["vcpu_pins"]] == [

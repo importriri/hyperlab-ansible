@@ -1,0 +1,200 @@
+---
+- name: Keep the Linux Looking Glass sender behind an explicit experiment gate
+  ansible.builtin.assert:
+    that:
+      - guest_looking_glass_linux_experimental | bool
+      - "'workstations' in group_names"
+      - "'hypervisor' not in group_names"
+      - ansible_facts['virtualization_role'] == 'guest'
+      - ansible_facts['os_family'] == 'Archlinux'
+      - guest_looking_glass_linux_commit is match('^[0-9a-f]{40}$')
+      - guest_looking_glass_linux_build | length > 0
+    fail_msg: >-
+      The Linux Looking Glass sender is an opt-in hardware experiment. Set
+      guest_looking_glass_linux_experimental=true only inside a reviewed
+      workstation guest; the role never starts the sender automatically.
+
+- name: Install the upstream Linux sender build dependencies
+  community.general.pacman:
+    name: "{{ guest_looking_glass_linux_packages }}"
+    state: present
+
+- name: Clone Looking Glass recursively at the shared source pin
+  ansible.builtin.git:
+    repo: "{{ guest_looking_glass_linux_repo }}"
+    dest: "{{ guest_looking_glass_linux_source }}"
+    version: "{{ guest_looking_glass_linux_commit }}"
+    recursive: true
+
+- name: Resolve the Linux sender checkout identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ guest_looking_glass_linux_source }}"
+      - rev-parse
+      - HEAD
+  register: guest_looking_glass_linux_resolved_commit
+  changed_when: false
+  check_mode: false
+
+- name: Resolve the sender-visible build identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ guest_looking_glass_linux_source }}"
+      - describe
+      - --always
+      - --long
+      - --abbrev=10
+  register: guest_looking_glass_linux_resolved_build
+  changed_when: false
+  check_mode: false
+
+- name: Require the sender checkout to match the host client pin
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_looking_glass_linux_resolved_commit.stdout | trim ==
+        guest_looking_glass_linux_commit
+      - >-
+        guest_looking_glass_linux_resolved_build.stdout | trim ==
+        guest_looking_glass_linux_build
+    fail_msg: >-
+      The experimental Linux sender must use the exact source and build identity
+      already reviewed for the physical-host client.
+
+- name: Inspect any previously installed experimental sender
+  ansible.builtin.stat:
+    path: "{{ guest_looking_glass_linux_binary }}"
+    follow: false
+  register: guest_looking_glass_linux_existing_binary
+
+- name: Read the experimental sender build stamp
+  ansible.builtin.slurp:
+    src: "{{ guest_looking_glass_linux_stamp }}"
+  register: guest_looking_glass_linux_stamp_read
+  failed_when: false
+  changed_when: false
+
+- name: Parse the experimental sender build stamp
+  ansible.builtin.set_fact:
+    guest_looking_glass_linux_stamp_data: >-
+      {{ (guest_looking_glass_linux_stamp_read.content | b64decode | from_yaml)
+         if guest_looking_glass_linux_stamp_read.content is defined else {} }}
+
+- name: Decide whether the pinned Linux sender needs rebuilding
+  ansible.builtin.set_fact:
+    guest_looking_glass_linux_build_needed: >-
+      {{ guest_looking_glass_linux_stamp_data.commit | default('') !=
+         guest_looking_glass_linux_commit or
+         guest_looking_glass_linux_stamp_data.build | default('') !=
+         guest_looking_glass_linux_build or
+         not (guest_looking_glass_linux_existing_binary.stat.exists | default(false)) or
+         not (guest_looking_glass_linux_existing_binary.stat.isreg | default(false)) or
+         (guest_looking_glass_linux_existing_binary.stat.islnk | default(false)) or
+         not (guest_looking_glass_linux_existing_binary.stat.executable | default(false)) }}
+
+- name: Build the pinned PipeWire-only Linux sender
+  when: guest_looking_glass_linux_build_needed | bool
+  block:
+    - name: Configure the upstream Linux host with PipeWire capture
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/cmake
+          - -S
+          - "{{ guest_looking_glass_linux_source }}/host"
+          - -B
+          - "{{ guest_looking_glass_linux_build_dir }}"
+          - -DCMAKE_BUILD_TYPE=Release
+          - -DCMAKE_INSTALL_PREFIX=/usr/local
+          - -DOPTIMIZE_FOR_NATIVE=OFF
+          - -DUSE_XCB=OFF
+          - -DUSE_PIPEWIRE=ON
+      changed_when: true
+
+    - name: Compile the experimental Linux sender
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/cmake
+          - --build
+          - "{{ guest_looking_glass_linux_build_dir }}"
+          - --parallel
+          - "{{ ansible_facts['processor_vcpus'] | default(2) | string }}"
+      changed_when: true
+
+    - name: Install the experimental Linux sender
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/cmake
+          - --install
+          - "{{ guest_looking_glass_linux_build_dir }}"
+      changed_when: true
+
+    - name: Create the experimental sender stamp directory
+      ansible.builtin.file:
+        path: "{{ guest_looking_glass_linux_stamp | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Record the source identity and disabled runtime state
+      ansible.builtin.copy:
+        content: |-
+          commit: {{ guest_looking_glass_linux_commit }}
+          build: {{ guest_looking_glass_linux_build }}
+          capture: pipewire
+          runtime_enabled: false
+        dest: "{{ guest_looking_glass_linux_stamp }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+- name: Inspect the installed experimental sender
+  ansible.builtin.stat:
+    path: "{{ guest_looking_glass_linux_binary }}"
+    follow: false
+  register: guest_looking_glass_linux_binary_stat
+
+- name: Require an executable sender without enabling it
+  ansible.builtin.assert:
+    that:
+      - guest_looking_glass_linux_binary_stat.stat.exists | default(false)
+      - guest_looking_glass_linux_binary_stat.stat.isreg | default(false)
+      - not (guest_looking_glass_linux_binary_stat.stat.islnk | default(false))
+      - guest_looking_glass_linux_binary_stat.stat.executable | default(false)
+    fail_msg: >-
+      The pinned upstream Linux sender did not install as an executable binary.
+
+- name: Inspect the configured capture backend cache
+  ansible.builtin.slurp:
+    src: "{{ guest_looking_glass_linux_build_dir }}/CMakeCache.txt"
+  register: guest_looking_glass_linux_cmake_cache
+  changed_when: false
+
+- name: Require PipeWire capture and refuse the XCB fallback
+  ansible.builtin.assert:
+    that:
+      - >-
+        'USE_PIPEWIRE:BOOL=ON' in
+        (guest_looking_glass_linux_cmake_cache.content | b64decode)
+      - >-
+        'USE_XCB:BOOL=OFF' in
+        (guest_looking_glass_linux_cmake_cache.content | b64decode)
+
+- name: Deploy the disabled-by-default PipeWire sender configuration
+  ansible.builtin.template:
+    src: looking-glass-host.ini.j2
+    dest: "/home/{{ admin_user }}/looking-glass-host.ini"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+
+- name: Record that the guest_looking_glass_linux brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_looking_glass_linux

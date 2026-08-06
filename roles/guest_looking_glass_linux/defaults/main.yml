@@ -1,0 +1,17 @@
+---
+guest_looking_glass_linux_experimental: false
+guest_looking_glass_linux_repo: https://github.com/gnif/LookingGlass.git
+guest_looking_glass_linux_commit: "{{ hyperlab_looking_glass_commit }}"
+guest_looking_glass_linux_build: "{{ hyperlab_looking_glass_build }}"
+guest_looking_glass_linux_source: /usr/local/src/looking-glass-linux-host
+guest_looking_glass_linux_build_dir: /usr/local/src/looking-glass-linux-host/host/build
+guest_looking_glass_linux_stamp: /usr/local/share/looking-glass-linux-host/built-from.yml
+guest_looking_glass_linux_binary: /usr/local/bin/looking-glass-host
+guest_looking_glass_linux_packages:
+  - git
+  - cmake
+  - gcc
+  - make
+  - pkgconf
+  - glib2
+  - libpipewire

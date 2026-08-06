@@ -9,3 +9,10 @@ vm_resource_profiles:
     heavy:
       memory_mb: 16384
       vcpus: 4
+  arch-dev-vfio:
+    balanced:
+      memory_mb: 8192
+      vcpus: 4
+    heavy:
+      memory_mb: 16384
+      vcpus: 4

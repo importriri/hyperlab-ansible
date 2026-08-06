@@ -249,23 +249,40 @@ class RepositoryValidator:
             self.fail(where, "overcommit on vfio is forbidden")
         if device == "vfio" and spec.get("autostart"):
             self.fail(where, "autostart on vfio is forbidden")
-        if device == "vfio" and not spec.get("looking_glass"):
-            self.fail(where, "M4 VFIO guests require Looking Glass")
+        os_family = image.get("os_family")
+        looking_glass = spec.get("looking_glass") is True
+        looking_glass_mode = spec.get("looking_glass_mode")
+        if device == "vfio":
+            if os_family == "windows":
+                if not looking_glass:
+                    self.fail(where, "Windows VFIO guests require Looking Glass")
+                if looking_glass_mode not in (None, "windows"):
+                    self.fail(where, "Windows VFIO requires looking_glass_mode: windows")
+            elif looking_glass:
+                if looking_glass_mode != "linux-experimental":
+                    self.fail(where, "Linux Looking Glass requires linux-experimental mode")
+            elif looking_glass_mode is not None:
+                self.fail(where, "SPICE-only Linux VFIO cannot carry a Looking Glass mode")
+        elif looking_glass or looking_glass_mode is not None:
+            self.fail(where, "standard guests cannot request Looking Glass")
         if spec.get("qemu_guest_agent") and not supports.get("qemu_guest_agent"):
             self.fail(where, "QEMU Guest Agent requested but the image does not support it")
-        if spec.get("looking_glass"):
+        if looking_glass:
             if device != "vfio":
                 self.fail(where, "Looking Glass requires device_profile: vfio")
             if not supports.get("vfio"):
                 self.fail(where, "Looking Glass requires an image with VFIO support")
             required_build = image.get("looking_glass_host_build_required")
             observed_build = image.get("looking_glass_host_build_observed")
-            if not required_build:
-                self.fail(where, "Looking Glass requires a non-null host build pin in the image manifest")
-            elif required_build != client_build:
-                self.fail(where, f"image host build {required_build} != client {client_build}")
-            if image.get("status") == "sealed" and observed_build != required_build:
-                self.fail(where, "sealed Looking Glass image lacks matching observed host-build evidence")
+            if os_family == "windows":
+                if not required_build:
+                    self.fail(where, "Looking Glass requires a non-null host build pin in the image manifest")
+                elif required_build != client_build:
+                    self.fail(where, f"image host build {required_build} != client {client_build}")
+                if image.get("status") == "sealed" and observed_build != required_build:
+                    self.fail(where, "sealed Looking Glass image lacks matching observed host-build evidence")
+            elif required_build is not None or observed_build is not None:
+                self.fail(where, "Linux experimental Looking Glass uses the shared source pin, not image host evidence")
         lifecycle = spec.get("lifecycle")
         if lifecycle == "disposable" and image.get("contains_personal_data"):
             self.fail(where, "a personal master cannot back a disposable VM")

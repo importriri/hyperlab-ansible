@@ -38,6 +38,9 @@
       - guest_existing_state.qemu_guest_agent | bool == guest_plan.qemu_guest_agent | bool
       - guest_existing_state.looking_glass | bool == guest_plan.looking_glass | bool
       - >-
+        guest_existing_state.looking_glass_mode | default(none) ==
+        guest_plan.looking_glass_mode
+      - >-
         (guest_plan.device_profile == 'vfio' and guest_existing_state.vfio == guest_vfio) or
         (guest_plan.device_profile == 'standard' and guest_existing_state.vfio is none)
       - guest_existing_state.owner == guest_plan.owner

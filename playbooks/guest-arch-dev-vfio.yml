@@ -8,3 +8,6 @@
     - guest_desktop_hyprland
     - dev_ide
     - guest_gpu_nvidia
+    - role: guest_looking_glass_linux
+      vars:
+        guest_looking_glass_linux_experimental: true

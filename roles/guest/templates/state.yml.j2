@@ -23,6 +23,7 @@ tpm_path: {{ guest_plan.tpm_path | to_json if guest_plan.requires_tpm2 else 'nul
 autostart: {{ guest_plan.autostart | bool | lower }}
 qemu_guest_agent: {{ guest_plan.qemu_guest_agent | bool | lower }}
 looking_glass: {{ guest_plan.looking_glass | bool | lower }}
+looking_glass_mode: {{ guest_plan.looking_glass_mode | to_json }}
 vfio: {{ guest_vfio | to_json if guest_plan.device_profile == 'vfio' else 'null' }}
 owner: {{ guest_plan.owner | to_json }}
 purpose: {{ guest_plan.purpose | to_json }}

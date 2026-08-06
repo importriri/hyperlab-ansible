@@ -66,6 +66,16 @@ class SchemaMutationTests(unittest.TestCase):
             "Looking Glass requires a non-null host build pin",
         )
 
+    def test_linux_looking_glass_needs_explicit_experimental_mode(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(
+                root,
+                "vm-specs/arch-dev-vfio.yml",
+                lambda data: data.pop("looking_glass_mode"),
+            ),
+            "Linux Looking Glass requires linux-experimental mode",
+        )
+
     def test_secure_boot_without_uefi_is_rejected(self) -> None:
         self.assert_mutation_fails(
             lambda root: self.mutate_yaml(root, "images/win11dirty.yml", lambda d: d["requires"].update(uefi=False)),

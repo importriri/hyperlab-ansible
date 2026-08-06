@@ -62,13 +62,17 @@ def main() -> int:
     vfio_roles = yaml.safe_load(
         (ROOT / "playbooks/guest-arch-dev-vfio.yml").read_text()
     )[0]["roles"]
-    assert vfio_roles == [
+    assert vfio_roles[:5] == [
         "workstation_kernel",
         "workstation_access",
         "guest_desktop_hyprland",
         "dev_ide",
         "guest_gpu_nvidia",
     ]
+    assert vfio_roles[5] == {
+        "role": "guest_looking_glass_linux",
+        "vars": {"guest_looking_glass_linux_experimental": True},
+    }
 
     print("guest NVIDIA contract: OK")
     return 0

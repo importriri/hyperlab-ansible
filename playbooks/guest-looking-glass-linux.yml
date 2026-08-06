@@ -1,0 +1,11 @@
+---
+- name: Build the experimental Looking Glass Linux sender without starting it
+  hosts: workstations
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest_looking_glass_linux
+    - role: guest_looking_glass_linux
+      vars:
+        guest_looking_glass_linux_experimental: true

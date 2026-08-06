@@ -128,6 +128,15 @@ def build_plan(
     clipboard = strict_bool(spec, "clipboard", "spec")
     shared_folders = strict_bool(spec, "shared_folders", "spec")
     looking_glass = strict_bool(spec, "looking_glass", "spec")
+    looking_glass_mode = spec.get("looking_glass_mode")
+    require(
+        looking_glass_mode in (None, "windows", "linux-experimental"),
+        "looking_glass_mode must be windows or linux-experimental",
+    )
+    require(
+        looking_glass or looking_glass_mode is None,
+        "looking_glass_mode requires looking_glass=true",
+    )
     require(not shared_folders, "guest lifecycle does not implement shared folders")
     usb_allowlist = spec.get("usb_allowlist")
     require(isinstance(usb_allowlist, list) and not usb_allowlist,
@@ -237,14 +246,23 @@ def build_plan(
         require(not autostart, "VFIO guests cannot autostart; GPU trust state starts at an operator action")
         if os_family == "windows":
             require(looking_glass, "Windows VFIO guests require Looking Glass")
+            require(looking_glass_mode in (None, "windows"),
+                    "Windows VFIO requires looking_glass_mode=windows")
+            looking_glass_mode = "windows"
             require(isinstance(lg_required, str) and LG_BUILD_RE.fullmatch(lg_required) is not None,
                     "Windows VFIO image needs a pinned looking_glass_host_build_required")
         else:
-            require(not looking_glass,
-                    "Linux VFIO uses loopback SPICE, not Looking Glass")
+            if looking_glass:
+                require(looking_glass_mode == "linux-experimental",
+                        "Linux Looking Glass requires explicit linux-experimental mode")
+            else:
+                require(looking_glass_mode is None,
+                        "SPICE-only Linux VFIO cannot carry a Looking Glass mode")
             lg_required = None
     else:
         require(not looking_glass, "standard guests cannot request Looking Glass")
+        require(looking_glass_mode is None,
+                "standard guests cannot carry a Looking Glass mode")
         lg_required = None
 
     owner = spec.get("owner")
@@ -287,6 +305,7 @@ def build_plan(
         "autostart": autostart,
         "qemu_guest_agent": qemu_guest_agent,
         "looking_glass": looking_glass,
+        "looking_glass_mode": looking_glass_mode,
         "looking_glass_host_build_required": lg_required,
         "clipboard": clipboard,
         "shared_folders": shared_folders,

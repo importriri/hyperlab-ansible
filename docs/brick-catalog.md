@@ -55,6 +55,9 @@ brick exists; task files remain the source for implementation details.
   ephemeral controller and guest staging; no asset remains on the host.
 - **`guest_gpu_nvidia`** installs the official open NVIDIA DKMS and Wayland stack
   only after a passed NVIDIA PCI function is visible inside the guest.
+- **`guest_looking_glass_linux`** builds the pinned upstream PipeWire sender as
+  an explicit, disabled-by-default Linux experiment; hardware decides whether a
+  fork is needed.
 - **`dev_ide`** adds the pinned editor and language-server stack after the guest
   desktop is present; it is never a host dependency.
 

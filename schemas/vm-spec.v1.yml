@@ -31,6 +31,9 @@ fields:
   tags: {type: list, of: str, min_items: 1, unique_items: true}
 
 optional:
+  looking_glass_mode:
+    type: str
+    enum: [windows, linux-experimental]
   resource_profile: {type: str, enum: [balanced, heavy]}
   snapshot_policy: {type: str, enum: [none, manual, daily]}
   backup_policy: {type: str, enum: [none, manual, weekly]}

@@ -37,10 +37,12 @@ def plan(profile: str | None = None) -> subprocess.CompletedProcess[str]:
 def main() -> int:
     profile_root = yaml.safe_load(PROFILES.read_text(encoding="utf-8"))
     profiles = profile_root["vm_resource_profiles"]["arch-dev"]
+    vfio_profiles = profile_root["vm_resource_profiles"]["arch-dev-vfio"]
     assert profiles == {
         "balanced": {"memory_mb": 8192, "vcpus": 4},
         "heavy": {"memory_mb": 16384, "vcpus": 4},
     }
+    assert vfio_profiles == profiles
 
     spec = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
     assert spec["resource_profile"] == "balanced"

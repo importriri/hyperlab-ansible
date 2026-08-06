@@ -1,0 +1,26 @@
+---
+schema_version: 1
+name: arch-dev-vfio
+image: arch
+lifecycle: permanent
+device_profile: vfio
+network_profile: dev
+looking_glass_mode: linux-experimental
+resource_profile: balanced
+resources:
+  memory_mb: 8192
+  vcpus: 4
+  disk_gib: 24
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: true
+clipboard: true
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Accelerated Arch development workstation and Linux Looking Glass gate
+tags: [linux, dev, vfio, looking-glass-experimental]
+snapshot_policy: manual
+backup_policy: manual
+benchmark: glmark2
