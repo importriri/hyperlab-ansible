@@ -1,0 +1,9 @@
+---
+- name: Inject verified private wallpaper assets into workstation guests
+  hosts: workstations
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest_visual_assets
+    - guest_visual_assets

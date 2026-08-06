@@ -1,0 +1,122 @@
+---
+- name: Keep private visual assets inside workstation guests
+  ansible.builtin.assert:
+    that:
+      - "'workstations' in group_names"
+      - "'hypervisor' not in group_names"
+      - admin_user is string
+      - admin_user | length > 0
+      - guest_visual_assets_bundle_url is match('^https://')
+      - guest_visual_assets_bundle_sha256 is match('^[0-9a-f]{64}$')
+      - guest_visual_assets_manifest_name == 'guest-wallpapers.v1.yml'
+    fail_msg: >-
+      guest_visual_assets requires a workstation guest, one HTTPS bundle URL
+      and its exact lowercase SHA-256 digest.
+
+- name: Inject verified private wallpaper assets without retaining host copies
+  block:
+    - name: Create private ephemeral controller staging
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ lookup('env', 'XDG_RUNTIME_DIR') | default('/tmp', true) }}"
+        prefix: privatestack-guest-assets-
+      delegate_to: localhost
+      become: false
+      register: guest_visual_assets_controller_stage
+
+    - name: Download the private asset bundle into controller runtime storage
+      ansible.builtin.get_url:
+        url: "{{ guest_visual_assets_bundle_url }}"
+        dest: "{{ guest_visual_assets_controller_stage.path }}/guest-wallpapers.tar.zst"
+        checksum: "sha256:{{ guest_visual_assets_bundle_sha256 }}"
+        mode: "0600"
+        timeout: 180
+      delegate_to: localhost
+      become: false
+
+    - name: Create private remote asset staging
+      ansible.builtin.tempfile:
+        state: directory
+        path: /var/tmp
+        prefix: privatestack-guest-assets-
+      register: guest_visual_assets_remote_stage
+
+    - name: Copy the verified bundle into the guest staging directory
+      ansible.builtin.copy:
+        src: "{{ guest_visual_assets_controller_stage.path }}/guest-wallpapers.tar.zst"
+        dest: "{{ guest_visual_assets_remote_stage.path }}/guest-wallpapers.tar.zst"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Extract the private bundle inside the guest staging directory
+      ansible.builtin.unarchive:
+        src: "{{ guest_visual_assets_remote_stage.path }}/guest-wallpapers.tar.zst"
+        dest: "{{ guest_visual_assets_remote_stage.path }}"
+        remote_src: true
+        extra_opts:
+          - --no-same-owner
+          - --no-same-permissions
+
+    - name: Copy the asset validator into private remote staging
+      ansible.builtin.copy:
+        src: "{{ guest_visual_assets_tool }}"
+        dest: "{{ guest_visual_assets_remote_stage.path }}/guest_assets.py"
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install the verified private asset set transactionally
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ guest_visual_assets_remote_stage.path }}/guest_assets.py"
+          - install
+          - --source
+          - "{{ guest_visual_assets_remote_stage.path }}"
+          - --manifest
+          - "{{ guest_visual_assets_remote_stage.path }}/{{ guest_visual_assets_manifest_name }}"
+          - --target
+          - "{{ guest_visual_assets_target_root }}"
+      register: guest_visual_assets_install
+      changed_when: >-
+        (guest_visual_assets_install.stdout | from_json).changed | bool
+
+    - name: Reconcile the active guest theme after asset installation
+      become: true
+      become_user: "{{ admin_user }}"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/privatestack-guest-theme
+          - prepare
+      environment:
+        HOME: "/home/{{ admin_user }}"
+      register: guest_visual_assets_theme_prepare
+      changed_when: >-
+        'GUEST_THEME_CHANGED' in guest_visual_assets_theme_prepare.stdout
+
+  always:
+    - name: Remove private remote asset staging
+      ansible.builtin.file:
+        path: >-
+          {{ guest_visual_assets_remote_stage.path |
+          default('/nonexistent/privatestack-guest-assets') }}
+        state: absent
+      changed_when: false
+
+    - name: Remove private controller asset staging
+      ansible.builtin.file:
+        path: >-
+          {{ guest_visual_assets_controller_stage.path |
+          default('/nonexistent/privatestack-guest-assets') }}
+        state: absent
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+- name: Record that the guest_visual_assets brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_visual_assets

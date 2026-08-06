@@ -156,3 +156,31 @@ identity is unambiguous.
 
 The release campaign uses the frozen exact commits documented in
 [`roadmap.md`](roadmap.md).
+
+## Private guest wallpaper injection
+
+`guest-visual-assets.yml` is an explicit guest-only transaction. It accepts one
+HTTPS bundle URL and its reviewed SHA-256 digest. The controller downloads the
+bundle below its runtime directory, copies it into private guest staging,
+validates every manifest path and image digest, installs the four theme pools,
+and removes both temporary copies even when installation fails.
+
+No wallpaper binary is committed to this repository or retained on the physical
+host. The installed guest keeps between one and twenty sequential PNG files per
+surface (`01.png` through `20.png`). Every theme must provide separate desktop
+and lockscreen content; the generated bootstrap images remain offline fallbacks.
+
+The bundle root contains `guest-wallpapers.v1.yml` and this layout:
+
+```text
+wallpapers/<theme>/desktop/NN.png
+wallpapers/<theme>/lockscreen/NN.png
+```
+
+Apply only after `guest-arch-hyprland.yml` has landed:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/guest-visual-assets.yml \
+  -e guest_visual_assets_bundle_url=https://assets.example/private.tar.zst \
+  -e guest_visual_assets_bundle_sha256=<reviewed-lowercase-sha256>
+```

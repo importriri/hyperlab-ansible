@@ -1,0 +1,6 @@
+---
+guest_visual_assets_bundle_url: ""
+guest_visual_assets_bundle_sha256: ""
+guest_visual_assets_manifest_name: guest-wallpapers.v1.yml
+guest_visual_assets_target_root: /usr/share/backgrounds/privatestack-guest
+guest_visual_assets_tool: "{{ guest_repository_root }}/tools/guest_assets.py"
