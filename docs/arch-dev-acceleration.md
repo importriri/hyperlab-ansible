@@ -1,5 +1,7 @@
 # Arch development workstation acceleration
 
+The exact physical-host sequence is documented in [`nitro-arch-dev-vfio-campaign.md`](nitro-arch-dev-vfio-campaign.md).
+
 `arch-dev` remains the recovery-friendly standard VM. `arch-dev-vfio` is a
 separate candidate built from the same sealed Arch image so VFIO experiments do
 not reinterpret or overwrite the proven standard workstation disk.

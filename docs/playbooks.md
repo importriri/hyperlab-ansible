@@ -156,7 +156,8 @@ identity is unambiguous.
 - `guest-arch-dev-vfio.yml` assembles the full accelerated development guest,
   but refuses to install the driver until an NVIDIA PCI function is visible.
   Its boundary and remaining hardware gates are documented in
-  [`arch-dev-acceleration.md`](arch-dev-acceleration.md).
+  [`arch-dev-acceleration.md`](arch-dev-acceleration.md); the ordered Nitro campaign is in
+  [`nitro-arch-dev-vfio-campaign.md`](nitro-arch-dev-vfio-campaign.md).
 - `dev.yml` remains a compatibility entrypoint for `guest-arch-dev.yml`.
 - `./verify.sh` mirrors the full CI discovery locally.
 - `tests/render.yml` verifies generated configuration without touching the host.
