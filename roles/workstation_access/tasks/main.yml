@@ -1,0 +1,107 @@
+---
+- name: Refuse root as the workstation account
+  ansible.builtin.assert:
+    that:
+      - admin_user is string
+      - admin_user | length > 0
+      - admin_user != 'root'
+    fail_msg: >-
+      The graphical workstation account must be an unprivileged named user.
+
+- name: Read the workstation account password state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/passwd
+      - --status
+      - "{{ admin_user }}"
+  environment:
+    LC_ALL: C
+  register: workstation_access_user_status_before
+  changed_when: false
+
+- name: Validate the workstation account status response
+  ansible.builtin.assert:
+    that:
+      - >-
+        workstation_access_user_status_before.stdout is match(
+        '^' ~ admin_user ~ ' (P|L|NP)( |$)')
+    fail_msg: >-
+      The workstation account did not return a supported password state.
+
+- name: Publish the workstation account password state
+  ansible.builtin.set_fact:
+    workstation_access_user_state_before: >-
+      {{ workstation_access_user_status_before.stdout.split()[1] }}
+  changed_when: false
+
+- name: Read the root account password state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/passwd
+      - --status
+      - root
+  environment:
+    LC_ALL: C
+  register: workstation_access_root_status
+  changed_when: false
+
+- name: Keep direct root authentication disabled
+  ansible.builtin.assert:
+    that:
+      - >-
+        workstation_access_root_status.stdout is match(
+        '^root (L|NP)( |$)')
+    fail_msg: >-
+      The root account unexpectedly has a usable password.
+
+- name: Require a protected operator password hash for a locked account
+  ansible.builtin.assert:
+    that:
+      - workstation_access_password_hash is string
+      - >-
+        workstation_access_password_hash is match(
+        workstation_access_password_hash_pattern)
+    fail_msg: >-
+      Supply a SHA-512 crypt hash through a protected runtime vars file.
+  when: >-
+    workstation_access_user_state_before != 'P' or
+    (workstation_access_rotate_password | bool)
+
+- name: Install the operator-managed workstation password
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    password: "{{ workstation_access_password_hash }}"
+    update_password: always
+    password_lock: false
+    state: present
+  no_log: true
+  when: >-
+    workstation_access_user_state_before != 'P' or
+    (workstation_access_rotate_password | bool)
+
+- name: Read the reconciled workstation account password state
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/passwd
+      - --status
+      - "{{ admin_user }}"
+  environment:
+    LC_ALL: C
+  register: workstation_access_user_status_after
+  changed_when: false
+
+- name: Require a usable graphical workstation account
+  ansible.builtin.assert:
+    that:
+      - >-
+        workstation_access_user_status_after.stdout is match(
+        '^' ~ admin_user ~ ' P( |$)')
+    fail_msg: >-
+      The workstation account is still unavailable for graphical login.
+
+- name: Record that the workstation_access brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: workstation_access

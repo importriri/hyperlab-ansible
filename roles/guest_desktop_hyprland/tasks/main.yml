@@ -1,0 +1,385 @@
+---
+- name: Keep the Hyprland desktop inside workstation guests
+  ansible.builtin.assert:
+    that:
+      - "'workstations' in group_names"
+      - "'hypervisor' not in group_names"
+      - admin_user is string
+      - admin_user | length > 0
+      - admin_user != 'root'
+    fail_msg: >-
+      guest_desktop_hyprland is guest-only and requires an unprivileged
+      workstation account.
+
+- name: Validate the selected guest theme
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_desktop_hyprland_theme_default in
+        guest_desktop_hyprland_theme_order
+      - >-
+        guest_desktop_hyprland_theme_order | unique | length ==
+        guest_desktop_hyprland_theme_order | length
+      - >-
+        guest_desktop_hyprland_palettes.keys() | sort ==
+        guest_desktop_hyprland_theme_order | sort
+    fail_msg: >-
+      The guest theme order and palette map must describe the same unique
+      themes.
+
+- name: Install the official Hyprland guest stack
+  community.general.pacman:
+    name: "{{ guest_desktop_hyprland_packages }}"
+    state: present
+
+- name: Inspect official guest desktop entrypoints
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+  loop:
+    - /usr/bin/Hyprland
+    - /usr/bin/hyprctl
+    - /usr/bin/hyprlauncher
+    - /usr/bin/awww
+    - /usr/bin/awww-daemon
+    - /usr/bin/waybar
+    - /usr/bin/kitty
+    - /usr/bin/kitten
+    - /usr/bin/lua
+    - /usr/bin/luac
+    - /usr/bin/thunar
+    - /usr/lib/hyprpolkitagent/hyprpolkitagent
+  register: guest_desktop_hyprland_entrypoints
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require every official guest desktop entrypoint
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.executable
+    fail_msg: >-
+      The official package stack did not install {{ item.item }} as an
+      executable regular file.
+    quiet: true
+  loop: "{{ guest_desktop_hyprland_entrypoints.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Inspect guest desktop integration files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+  loop:
+    - /usr/share/wayland-sessions/hyprland.desktop
+    - /usr/lib/systemd/user/hyprpolkitagent.service
+  register: guest_desktop_hyprland_integration_files
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require guest desktop integration files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      The official package stack did not install {{ item.item }}.
+    quiet: true
+  loop: "{{ guest_desktop_hyprland_integration_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Remove legacy Sway and host-only guest packages
+  community.general.pacman:
+    name: "{{ guest_desktop_hyprland_legacy_packages }}"
+    state: absent
+
+- name: Remove legacy host-owned system artefacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ guest_desktop_hyprland_legacy_system_paths }}"
+
+- name: Remove legacy host-owned user artefacts
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/{{ item }}"
+    state: absent
+  loop: "{{ guest_desktop_hyprland_legacy_user_paths }}"
+
+- name: Inspect removed legacy packages
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pacman
+      - -Q
+      - "{{ item }}"
+  loop: "{{ guest_desktop_hyprland_legacy_packages }}"
+  register: guest_desktop_hyprland_removed_package_checks
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Require every legacy package to be absent
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0
+    fail_msg: >-
+      The legacy guest package {{ item.item }} is still installed.
+    quiet: true
+  loop: >-
+    {{
+      guest_desktop_hyprland_removed_package_checks.results
+      | default([])
+    }}
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Inspect removed legacy system artefacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ guest_desktop_hyprland_legacy_system_paths }}"
+  register: guest_desktop_hyprland_removed_system_checks
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require every legacy system artefact to be absent
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      The legacy host artefact {{ item.item }} is still present.
+    quiet: true
+  loop: >-
+    {{
+      guest_desktop_hyprland_removed_system_checks.results
+      | default([])
+    }}
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Inspect removed legacy user artefacts
+  ansible.builtin.stat:
+    path: "/home/{{ admin_user }}/{{ item }}"
+    follow: false
+  loop: "{{ guest_desktop_hyprland_legacy_user_paths }}"
+  register: guest_desktop_hyprland_removed_user_checks
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require every legacy user artefact to be absent
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      The legacy guest artefact {{ item.item }} is still present.
+    quiet: true
+  loop: >-
+    {{
+      guest_desktop_hyprland_removed_user_checks.results
+      | default([])
+    }}
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Create guest desktop system directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/privatestack
+    - /etc/privatestack/bricks
+    - /usr/share/privatestack-guest
+    - /usr/share/privatestack-guest/themes
+    - /usr/share/backgrounds/privatestack-guest
+
+- name: Create every guest theme wallpaper pool
+  ansible.builtin.file:
+    path: >-
+      /usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: >-
+    {{
+      guest_desktop_hyprland_theme_order
+      | product(['desktop', 'lockscreen'])
+      | list
+    }}
+
+- name: Render distinct bootstrap wallpaper sources
+  ansible.builtin.template:
+    src: bootstrap-wallpaper.svg.j2
+    dest: "/usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}/bootstrap.svg"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    guest_theme_name: "{{ item.0 }}"
+    guest_theme_surface: "{{ item.1 }}"
+    guest_theme_palette: "{{ guest_desktop_hyprland_palettes[item.0] }}"
+  loop: >-
+    {{
+      guest_desktop_hyprland_theme_order
+      | product(['desktop', 'lockscreen'])
+      | list
+    }}
+  register: guest_desktop_hyprland_bootstrap_sources
+
+- name: Inspect rendered bootstrap wallpapers
+  ansible.builtin.find:
+    paths:
+      - /usr/share/backgrounds/privatestack-guest
+    patterns:
+      - bootstrap.png
+    recurse: true
+    file_type: file
+  register: guest_desktop_hyprland_bootstrap_pngs
+  changed_when: false
+
+- name: Render bootstrap wallpapers as PNG
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/magick
+      - "/usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}/bootstrap.svg"
+      - "/usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}/bootstrap.png"
+  loop: >-
+    {{
+      guest_desktop_hyprland_theme_order
+      | product(['desktop', 'lockscreen'])
+      | list
+    }}
+  when:
+    - not ansible_check_mode
+    - >-
+      guest_desktop_hyprland_bootstrap_sources is changed or
+      guest_desktop_hyprland_bootstrap_pngs.matched | int !=
+      guest_desktop_hyprland_theme_order | length * 2
+
+- name: Normalize rendered bootstrap wallpaper ownership
+  ansible.builtin.file:
+    path: "/usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}/bootstrap.png"
+    state: file
+    owner: root
+    group: root
+    mode: "0644"
+  loop: >-
+    {{
+      guest_desktop_hyprland_theme_order
+      | product(['desktop', 'lockscreen'])
+      | list
+    }}
+  when: not ansible_check_mode
+
+- name: Create guest user configuration directories
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/{{ item }}"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+  loop:
+    - .config/hypr
+    - .config/waybar
+    - .config/kitty
+    - .config/rofi
+    - .config/mako
+    - .config/gtk-3.0
+    - .config/gtk-4.0
+    - .config/privatestack-guest
+    - .local/state/privatestack-guest-theme
+
+- name: Deploy the static Hyprland guest configuration
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+  loop:
+    - { src: hyprland.lua, dest: hypr/hyprland.lua }
+    - { src: hypridle.conf, dest: hypr/hypridle.conf }
+    - { src: hyprlock.conf, dest: hypr/hyprlock.conf }
+    - { src: waybar.jsonc, dest: waybar/config.jsonc }
+    - { src: waybar.css, dest: waybar/style.css }
+    - { src: kitty.conf, dest: kitty/kitty.conf }
+    - { src: rofi-config.rasi, dest: rofi/config.rasi }
+    - { src: gtk-settings.ini, dest: gtk-3.0/settings.ini }
+    - { src: gtk-settings.ini, dest: gtk-4.0/settings.ini }
+
+- name: Install the guest theme controller
+  ansible.builtin.copy:
+    src: privatestack-guest-theme.py
+    dest: /usr/local/bin/privatestack-guest-theme
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Prepare the selected theme without requiring a graphical session
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/privatestack-guest-theme
+      - prepare
+  environment:
+    HOME: "/home/{{ admin_user }}"
+  register: guest_desktop_hyprland_theme_prepare
+  changed_when: >-
+    'GUEST_THEME_CHANGED' in
+    guest_desktop_hyprland_theme_prepare.stdout
+  when: not ansible_check_mode
+
+- name: Validate deployed Hyprland Lua configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/luac
+      - -p
+      - "{{ item }}"
+  loop:
+    - "/home/{{ admin_user }}/.config/hypr/hyprland.lua"
+    - "/home/{{ admin_user }}/.config/hypr/theme.lua"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Deploy the guest Ly startup palette
+  ansible.builtin.template:
+    src: ly-guest-startup.sh.j2
+    dest: /etc/ly/guest-hyprland-startup.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Ly for the guest workstation
+  ansible.builtin.lineinfile:
+    path: /etc/ly/config.ini
+    regexp: "^{{ item.key | regex_escape }}\\s*="
+    line: "{{ item.key }} = {{ item.value }}"
+    backup: false
+  loop:
+    - { key: full_color, value: "true" }
+    - { key: hide_version_string, value: "true" }
+    - { key: initial_info_text, value: "Privatestack guest workstation" }
+    - { key: default_input, value: "login" }
+    - { key: start_cmd, value: "/etc/ly/guest-hyprland-startup.sh" }
+
+- name: Enable Ly on tty2
+  ansible.builtin.systemd_service:
+    name: ly@tty2.service
+    enabled: true
+
+- name: Record that the guest_desktop_hyprland brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_desktop_hyprland

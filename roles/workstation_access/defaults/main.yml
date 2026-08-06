@@ -1,0 +1,8 @@
+---
+# Empty after the workstation account has received its operator-managed secret.
+# A SHA-512 crypt hash is supplied through a temporary protected vars file.
+workstation_access_password_hash: ""
+workstation_access_rotate_password: false
+
+workstation_access_password_hash_pattern: >-
+  ^\$6\$[^$]{1,16}\$[./A-Za-z0-9]{86}$

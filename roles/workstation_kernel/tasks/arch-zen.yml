@@ -1,0 +1,227 @@
+---
+- name: Inspect the Arch guest marker
+  ansible.builtin.stat:
+    path: /etc/arch-release
+  register: workstation_kernel_arch_release
+  changed_when: false
+
+- name: Refuse a non-Arch workstation target
+  ansible.builtin.assert:
+    that:
+      - workstation_kernel_arch_release.stat.exists
+      - workstation_kernel_arch_release.stat.isreg
+    fail_msg: >-
+      workstation_kernel supports Arch guests only. Refusing to modify this
+      target's kernel or bootloader.
+
+- name: Inspect the required GRUB tools and configuration
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/grub-mkconfig
+    - /usr/bin/grub-editenv
+    - "{{ workstation_kernel_grub_config }}"
+    - "{{ workstation_kernel_grub_env }}"
+  register: workstation_kernel_grub_contract
+  changed_when: false
+
+- name: Refuse an unsupported workstation bootloader
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      The Arch workstation profile requires the existing managed GRUB
+      installation. Missing or invalid path: {{ item.item }}
+  loop: "{{ workstation_kernel_grub_contract.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Install the Zen kernel contract
+  community.general.pacman:
+    name:
+      - "{{ workstation_kernel_package }}"
+      - "{{ workstation_kernel_headers_package }}"
+    state: present
+  register: workstation_kernel_zen_install
+
+- name: Inspect the installed Zen boot artefacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /boot/vmlinuz-linux-zen
+    - /boot/initramfs-linux-zen.img
+  register: workstation_kernel_zen_artifacts
+  changed_when: false
+
+- name: Refuse an incomplete Zen kernel installation
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.size | int > 0
+    fail_msg: >-
+      The Zen package transaction did not produce a complete boot artefact:
+      {{ item.item }}
+  loop: "{{ workstation_kernel_zen_artifacts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Reconcile GRUB with the installed Zen kernel
+  ansible.builtin.include_tasks: reconcile-grub.yml
+
+- name: Read the GRUB configuration containing the Zen entry
+  ansible.builtin.slurp:
+    src: "{{ workstation_kernel_grub_config }}"
+  register: workstation_kernel_grub_with_zen
+  changed_when: false
+
+- name: Require a complete Zen GRUB entry before removing the fallback
+  ansible.builtin.assert:
+    that:
+      - >-
+        '/boot/vmlinuz-linux-zen' in
+        (workstation_kernel_grub_with_zen.content | b64decode)
+      - >-
+        '/boot/initramfs-linux-zen.img' in
+        (workstation_kernel_grub_with_zen.content | b64decode)
+      - >-
+        ((workstation_kernel_grub_with_zen.content | b64decode |
+        regex_findall('(?m)^\\s*linux\\s+(/boot/vmlinuz-[^ ]+)'))
+        | first) == '/boot/vmlinuz-linux-zen'
+    fail_msg: >-
+      GRUB does not contain a complete Zen contract or Zen is not its first
+      persistent kernel entry. The stock fallback will not be removed.
+
+- name: Refuse fallback removal before a proven Zen boot
+  ansible.builtin.assert:
+    that:
+      - "'-zen' in ansible_facts['kernel']"
+    fail_msg: >-
+      Zen is installed but the guest is still running {{ ansible_facts['kernel'] }}.
+      Perform a managed shutdown/start and rerun playbooks/dev.yml. The stock
+      kernel remains installed as the recovery path.
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Query installed stock-kernel fallback packages
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pacman
+      - -Qq
+      - "{{ item }}"
+  loop: "{{ workstation_kernel_fallback_packages }}"
+  register: workstation_kernel_installed_fallback_query
+  changed_when: false
+  failed_when: false
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Remove only installed stock-kernel fallback packages
+  community.general.pacman:
+    name: "{{ item.item }}"
+    state: absent
+  loop: >-
+    {{ workstation_kernel_installed_fallback_query.results | default([]) }}
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - workstation_kernel_remove_fallback | bool
+    - item.rc == 0
+  register: workstation_kernel_fallback_removal
+
+- name: Reconcile GRUB after fallback reconciliation
+  ansible.builtin.include_tasks: reconcile-grub.yml
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Read the current GRUB environment
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/grub-editenv
+      - "{{ workstation_kernel_grub_env }}"
+      - list
+  register: workstation_kernel_grub_environment
+  changed_when: false
+
+- name: Remove a stale one-shot GRUB selection
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/grub-editenv
+      - "{{ workstation_kernel_grub_env }}"
+      - unset
+      - next_entry
+  when: >-
+    workstation_kernel_grub_environment.stdout is
+    search('(?m)^next_entry=')
+  changed_when: true
+
+- name: Query stock kernel packages after reconciliation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pacman
+      - -Q
+      - "{{ item }}"
+  loop: "{{ workstation_kernel_fallback_packages }}"
+  register: workstation_kernel_fallback_query
+  changed_when: false
+  failed_when: false
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Require the stock kernel packages to be absent
+  ansible.builtin.assert:
+    that:
+      - item.rc != 0
+    fail_msg: >-
+      Stock kernel package {{ item.item }} remains installed after the Zen
+      workstation reconciliation.
+  loop: "{{ workstation_kernel_fallback_query.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Inspect obsolete stock-kernel boot artefacts
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /boot/vmlinuz-linux
+    - /boot/initramfs-linux.img
+  register: workstation_kernel_stock_artifacts
+  changed_when: false
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Require obsolete stock-kernel artefacts to be absent
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      Obsolete stock-kernel boot artefact remains after package removal:
+      {{ item.item }}
+  loop: "{{ workstation_kernel_stock_artifacts.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: workstation_kernel_remove_fallback | bool
+
+- name: Read the final Zen-only GRUB configuration
+  ansible.builtin.slurp:
+    src: "{{ workstation_kernel_grub_config }}"
+  register: workstation_kernel_final_grub
+  changed_when: false
+
+- name: Verify the final Zen-only boot contract
+  ansible.builtin.assert:
+    that:
+      - >-
+        '/boot/vmlinuz-linux-zen' in
+        (workstation_kernel_final_grub.content | b64decode)
+      - >-
+        '/boot/initramfs-linux-zen.img' in
+        (workstation_kernel_final_grub.content | b64decode)
+      - >-
+        '/boot/vmlinuz-linux ' not in
+        (workstation_kernel_final_grub.content | b64decode)
+      - >-
+        ((workstation_kernel_final_grub.content | b64decode |
+        regex_findall('(?m)^\\s*linux\\s+(/boot/vmlinuz-[^ ]+)'))
+        | first) == '/boot/vmlinuz-linux-zen'
+    fail_msg: >-
+      The final GRUB configuration is not Zen-only, still references the stock
+      kernel, or does not select Zen as its persistent first entry.
+  when: workstation_kernel_remove_fallback | bool

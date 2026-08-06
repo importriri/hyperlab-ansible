@@ -1,0 +1,14 @@
+configuration {
+    modi: "drun,run,window";
+    show-icons: true;
+    display-drun: "Apps";
+    display-run: "Run";
+    display-window: "Windows";
+    font: "JetBrainsMono Nerd Font 12";
+    drun-display-format: "{name}";
+    hover-select: true;
+    me-select-entry: "";
+    me-accept-entry: "MousePrimary";
+}
+
+@theme "theme.rasi"

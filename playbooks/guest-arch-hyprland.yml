@@ -1,0 +1,8 @@
+---
+- name: Assemble an Arch Hyprland guest workstation
+  hosts: workstations
+  become: true
+  roles:
+    - workstation_kernel
+    - workstation_access
+    - guest_desktop_hyprland

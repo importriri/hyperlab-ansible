@@ -1,0 +1,27 @@
+---
+# Generic workstation selector. Future non-Arch workstations keep `none` until
+# their own reviewed kernel profile exists.
+workstation_kernel_profile: none
+
+workstation_kernel_supported_profiles:
+  - none
+  - arch-zen
+
+# Development workstations use the Zen kernel. The generic sealed Arch image
+# keeps the stock kernel so it remains suitable for non-workstation guests.
+workstation_kernel_package: linux-zen
+workstation_kernel_headers_package: linux-zen-headers
+
+# Kept during the first Zen installation as a recovery path. It is removed only
+# after Ansible proves that the currently running guest has booted Zen.
+workstation_kernel_fallback_packages:
+  - linux
+  - linux-headers
+
+# The stock kernel is removed only after the role proves that the guest is
+# already running Zen. A fresh stock-kernel guest therefore stops safely before
+# removal, boots Zen, and completes this contract on the following run.
+workstation_kernel_remove_fallback: true
+
+workstation_kernel_grub_config: /boot/grub/grub.cfg
+workstation_kernel_grub_env: /boot/grub/grubenv

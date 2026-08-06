@@ -20,7 +20,10 @@ brick_requires:
   service_exposure: [service_registry]
   jellyfin: []
   desktop: []
-  dev_ide: [desktop]
+  workstation_kernel: []
+  workstation_access: []
+  guest_desktop_hyprland: [workstation_kernel, workstation_access]
+  dev_ide: [guest_desktop_hyprland]
   looking_glass: [desktop, kvm_host]
 
 # Point refusals at the narrowest playbook that can establish the prerequisite.
@@ -41,5 +44,8 @@ brick_playbooks:
   service_exposure: playbooks/jellyfin.yml
   jellyfin: playbooks/jellyfin.yml
   desktop: playbooks/desktop.yml
-  dev_ide: playbooks/dev.yml
+  workstation_kernel: playbooks/guest-arch-hyprland.yml
+  workstation_access: playbooks/guest-arch-hyprland.yml
+  guest_desktop_hyprland: playbooks/guest-arch-hyprland.yml
+  dev_ide: playbooks/guest-arch-dev.yml
   looking_glass: playbooks/looking-glass.yml

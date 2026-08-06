@@ -1,6 +1,4 @@
 ---
-# Compatibility entrypoint for the Arch development workstation.
-# Host cockpit configuration belongs only to host_desktop_sway.
 - name: Assemble an Arch Hyprland development workstation
   hosts: workstations
   become: true

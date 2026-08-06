@@ -1,0 +1,73 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 34,
+  "spacing": 6,
+
+  "modules-left": [
+    "hyprland/workspaces",
+    "hyprland/window"
+  ],
+
+  "modules-center": [
+    "clock"
+  ],
+
+  "modules-right": [
+    "custom/theme",
+    "pulseaudio",
+    "network",
+    "cpu",
+    "memory",
+    "tray"
+  ],
+
+  "hyprland/workspaces": {
+    "disable-scroll": false,
+    "all-outputs": true
+  },
+
+  "hyprland/window": {
+    "max-length": 48
+  },
+
+  "clock": {
+    "format": "{:%a %d %b  %H:%M}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>"
+  },
+
+  "custom/theme": {
+    "exec": "privatestack-guest-theme status",
+    "interval": 5,
+    "on-click": "privatestack-guest-theme next",
+    "on-click-right": "privatestack-guest-theme menu",
+    "format": "󰏘 {}"
+  },
+
+  "pulseaudio": {
+    "format": "{icon} {volume}%",
+    "format-muted": "󰝟 muted",
+    "format-icons": {
+      "default": ["󰕿", "󰖀", "󰕾"]
+    },
+    "on-click": "pamixer -t"
+  },
+
+  "network": {
+    "format-wifi": "󰤨 {essid}",
+    "format-ethernet": "󰈀 {ipaddr}",
+    "format-disconnected": "󰤭 offline"
+  },
+
+  "cpu": {
+    "format": " {usage}%"
+  },
+
+  "memory": {
+    "format": " {}%"
+  },
+
+  "tray": {
+    "spacing": 8
+  }
+}

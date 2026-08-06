@@ -1,0 +1,50 @@
+@import url("theme.css");
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "JetBrainsMono Nerd Font";
+    font-size: 12px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: alpha(@guest_background, 0.88);
+    color: @guest_foreground;
+    border-bottom: 2px solid @guest_accent;
+}
+
+#workspaces,
+#window,
+#clock,
+#custom-theme,
+#pulseaudio,
+#network,
+#cpu,
+#memory,
+#tray {
+    margin: 4px 3px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    background: alpha(@guest_surface, 0.92);
+}
+
+#workspaces button {
+    padding: 0 7px;
+    color: @guest_foreground;
+    border-radius: 8px;
+}
+
+#workspaces button.active {
+    background: @guest_accent;
+    color: @guest_background;
+}
+
+#workspaces button.urgent {
+    background: @guest_urgent;
+    color: @guest_background;
+}
+
+#custom-theme {
+    color: @guest_accent_alt;
+}

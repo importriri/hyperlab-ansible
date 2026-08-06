@@ -45,8 +45,14 @@ brick exists; task files remain the source for implementation details.
   target but remains separate from the headless foundation.
 - **`looking_glass`** installs only the host transport and client. The signed
   Windows application and virtual display remain private guest work.
-- **`dev_ide`** turns a selected workstation guest into the development cockpit;
-  it is not a host dependency.
+- **`workstation_kernel`** installs and proves the reviewed guest kernel profile
+  before removing a recovery kernel.
+- **`workstation_access`** makes the unprivileged graphical account usable while
+  keeping direct root authentication disabled.
+- **`guest_desktop_hyprland`** provides the guest-only Hyprland shell and removes
+  legacy host-cockpit artefacts from migrated workstations.
+- **`dev_ide`** adds the pinned editor and language-server stack after the guest
+  desktop is present; it is never a host dependency.
 
 ## Service ownership
 

@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+set -eu
+
+printf '\033]P0{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].background }}'
+printf '\033]P1{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].urgent }}'
+printf '\033]P2{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].accent_alt }}'
+printf '\033]P3{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].accent }}'
+printf '\033]P4{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].accent_alt }}'
+printf '\033]P5{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].accent }}'
+printf '\033]P6{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].accent_alt }}'
+printf '\033]P7{{ guest_desktop_hyprland_palettes[guest_desktop_hyprland_theme_default].foreground }}'
+printf '\033[2J\033[H'

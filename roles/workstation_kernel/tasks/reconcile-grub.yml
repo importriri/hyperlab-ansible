@@ -1,0 +1,38 @@
+---
+- name: Reconcile the generated GRUB configuration
+  block:
+    - name: Create a transient GRUB configuration path
+      ansible.builtin.tempfile:
+        state: file
+        suffix: .hyperlab-grub.cfg
+      register: workstation_kernel_grub_temporary
+      check_mode: false
+      changed_when: false
+
+    - name: Generate GRUB configuration into the transient path
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/grub-mkconfig
+          - -o
+          - "{{ workstation_kernel_grub_temporary.path }}"
+      check_mode: false
+      changed_when: false
+
+    - name: Reconcile the managed GRUB configuration
+      ansible.builtin.copy:
+        src: "{{ workstation_kernel_grub_temporary.path }}"
+        dest: "{{ workstation_kernel_grub_config }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+
+  always:
+    - name: Remove the transient GRUB configuration
+      ansible.builtin.file:
+        path: >-
+          {{ workstation_kernel_grub_temporary.path
+             | default('/nonexistent/hyperlab-grub-config') }}
+        state: absent
+      check_mode: false
+      changed_when: false

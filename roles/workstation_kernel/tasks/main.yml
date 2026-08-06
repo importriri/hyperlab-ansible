@@ -1,0 +1,20 @@
+---
+- name: Validate the selected workstation kernel profile
+  ansible.builtin.assert:
+    that:
+      - workstation_kernel_profile in workstation_kernel_supported_profiles
+    fail_msg: >-
+      Unknown workstation kernel profile: {{ workstation_kernel_profile }}.
+      Supported profiles are:
+      {{ workstation_kernel_supported_profiles | join(', ') }}.
+
+- name: Reconcile the Arch Zen workstation kernel
+  ansible.builtin.include_tasks: arch-zen.yml
+  when: workstation_kernel_profile == 'arch-zen'
+
+- name: Record that the workstation_kernel brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: workstation_kernel

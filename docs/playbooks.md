@@ -70,7 +70,7 @@ remain explicit transactions.
   a machine set up before this pipeline does not have to be rebuilt to join
   it.
 - `network-domains.yml` — reconcile only the five libvirt networks.
-- `desktop.yml` — reconcile the cockpit on the host and listed workstation VMs.
+- `desktop.yml` — reconcile the Sway cockpit on the physical host only.
 - `looking-glass.yml` — reconcile only the host-side Looking Glass transport.
 
 These playbooks are maintenance tools, not an alternative installation order.
@@ -109,8 +109,8 @@ ansible-playbook -K playbooks/vm-create.yml --check --diff \
 ```
 
 [`vm-specs/arch-dev.yml`](../vm-specs/arch-dev.yml) is the permanent Arch
-development-workstation example; `arch-bootstrap-gate.yml` is the disposable
-release-gate shape. Both consume the same standard lifecycle engine.
+development-workstation example. It consumes the same standard lifecycle
+engine as every other guest.
 
 Creation remains separate from `lab.yml` because a rerun of the host target must
 never imply a workload lifecycle decision.
@@ -132,7 +132,9 @@ identity is unambiguous.
 
 ## Developer and validation tools
 
-- `dev.yml` configures a listed workstation guest with the desktop and IDE.
+- `guest-arch-hyprland.yml` builds the reusable Arch Hyprland workstation.
+- `guest-arch-dev.yml` adds the development stack to that workstation.
+- `dev.yml` remains a compatibility entrypoint for `guest-arch-dev.yml`.
 - `./verify.sh` mirrors the full CI discovery locally.
 - `tests/render.yml` verifies generated configuration without touching the host.
 

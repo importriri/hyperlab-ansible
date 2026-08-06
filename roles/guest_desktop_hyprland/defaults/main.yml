@@ -1,0 +1,134 @@
+---
+guest_desktop_hyprland_packages:
+  - hyprland
+  - hypridle
+  - hyprlock
+  - hyprlauncher
+  - hyprpicker
+  - hyprpolkitagent
+  - hyprsunset
+  - awww
+  - waybar
+  - rofi
+  - rofi-calc
+  - kitty
+  - kitty-shell-integration
+  - kitty-terminfo
+  - imagemagick
+  - python-pygments
+  - thunar
+  - tumbler
+  - gvfs
+  - thunar-archive-plugin
+  - file-roller
+  - mako
+  - grim
+  - slurp
+  - wl-clipboard
+  - cliphist
+  - pipewire
+  - pipewire-pulse
+  - wireplumber
+  - pamixer
+  - playerctl
+  - xdg-desktop-portal
+  - xdg-desktop-portal-hyprland
+  - xdg-desktop-portal-gtk
+  - papirus-icon-theme
+  - ttf-jetbrains-mono-nerd
+  - noto-fonts
+  - lua
+  - ly
+
+guest_desktop_hyprland_theme_default: sakura-circuit
+
+guest_desktop_hyprland_theme_order:
+  - sakura-circuit
+  - neon-terminal
+  - moon-library
+  - glitch-lab
+
+guest_desktop_hyprland_palettes:
+  sakura-circuit:
+    background: "17111d"
+    foreground: "f7e8ff"
+    surface: "25192e"
+    accent: "ff70b7"
+    accent_alt: "59e1ff"
+    urgent: "ff557f"
+  neon-terminal:
+    background: "080b18"
+    foreground: "e8efff"
+    surface: "11172a"
+    accent: "886cff"
+    accent_alt: "24d9ff"
+    urgent: "ff4d8d"
+  moon-library:
+    background: "0d1224"
+    foreground: "e8eaff"
+    surface: "171d35"
+    accent: "b39cff"
+    accent_alt: "86c8ff"
+    urgent: "ff6f91"
+  glitch-lab:
+    background: "111315"
+    foreground: "f0fff4"
+    surface: "1b2021"
+    accent: "ff3cac"
+    accent_alt: "72ff72"
+    urgent: "ff5252"
+
+# Converge guests previously contaminated by the host Sway cockpit.
+# New golden images normally have none of these packages or paths.
+guest_desktop_hyprland_legacy_packages:
+  - sway
+  - swaybg
+  - swayidle
+  - swaylock
+  - foot
+  - xdg-desktop-portal-wlr
+  - virt-viewer
+  - brightnessctl
+
+guest_desktop_hyprland_legacy_system_paths:
+  - /etc/hyperlabctl
+  - /etc/ly/hyperlab-startup.sh
+  - /etc/privatestack/bricks/desktop
+  - /var/lib/privatestack/bricks/desktop
+  - /usr/local/bin/hyperlabctl
+  - /usr/local/bin/privatestack-cava
+  - /usr/local/bin/privatestack-powermenu
+  - /usr/local/bin/privatestack-hyperlab
+  - /usr/local/bin/privatestack-hyperlab-palette
+  - /usr/local/bin/privatestack-hyperlab-domains
+  - /usr/local/bin/privatestack-waybar
+  - /usr/local/bin/privatestack-fullscreen
+  - /usr/local/bin/privatestack-superfile
+  - /usr/local/bin/privatestack-opacity-toggle
+  - /usr/local/bin/privatestack-theme
+  - /usr/local/bin/privatestack-keyboard
+  - /usr/local/bin/privatestack-controls
+  - /usr/local/bin/privatestack-swaylock
+  - /usr/local/bin/privatestack-swaybar-status
+  - /usr/share/applications/hyperlab-control-center.desktop
+  - /usr/share/icons/hicolor/scalable/apps/hyperlab-control-center.svg
+  - /usr/share/icons/hyperlab
+  - /usr/share/backgrounds/privatestack
+  - /usr/share/hyperlab
+  - /usr/share/bash-completion/completions/hyperlabctl
+
+guest_desktop_hyprland_legacy_user_paths:
+  - .config/sway
+  - .config/foot
+  - .config/swaylock
+  - .config/hyperlab
+  - .config/hyperlabctl
+  - .config/cava
+  - .config/superfile
+  - .config/rofi/rofi-mocha.rasi
+  - .config/rofi/rofi-launcher.rasi
+  - .config/rofi/rofi-powermenu.rasi
+  - .config/rofi/rofi-hyperlab.rasi
+  - .local/state/hyperlab
+  - .local/share/hyperlab
+
