@@ -50,9 +50,9 @@ def main() -> int:
             "the Waybar brand still exposes the full center directly")
 
     defaults = yaml.safe_load(text("roles/host_desktop_sway/defaults/main.yml"))
-    cycle = defaults["desktop_input_defaults"]["keyboard_layout_cycle"]
+    cycle = defaults["host_desktop_sway_input_defaults"]["keyboard_layout_cycle"]
     require(cycle == ["it", "us", "ara"], "keyboard cycle must be Italian, English, Arabic")
-    require(defaults["desktop_input_defaults"]["keyboard_layout"] == "it",
+    require(defaults["host_desktop_sway_input_defaults"]["keyboard_layout"] == "it",
             "Italian must remain the default layout")
 
     template = text("roles/host_desktop_sway/templates/sway-input.conf.j2")

@@ -122,17 +122,17 @@ done
 
 step "Desktop cockpit dry run"
 run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --check --diff \
-  -e "desktop_hyperlab_checkout=${PWD}" \
+  -e "host_desktop_sway_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-check.log"
 
 step "Desktop cockpit real convergence"
 run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --diff \
-  -e "desktop_hyperlab_checkout=${PWD}" \
+  -e "host_desktop_sway_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-apply.log"
 
 step "Desktop cockpit changed=0 proof"
 run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --diff \
-  -e "desktop_hyperlab_checkout=${PWD}" \
+  -e "host_desktop_sway_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-idempotent.log"
 grep -Eq 'changed=0[[:space:]].*failed=0' "${LOG_DIR}/desktop-idempotent.log" \
   || fail "second desktop apply was not changed=0/failed=0"

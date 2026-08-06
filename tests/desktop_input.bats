@@ -52,7 +52,7 @@ import yaml
 from jinja2 import Environment, StrictUndefined
 
 root = Path(sys.argv[1])
-defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["desktop_input_defaults"]
+defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["host_desktop_sway_input_defaults"]
 hardware = yaml.safe_load((root / "group_vars/all/hardware.yml").read_text())["host_profiles"]
 template = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True).from_string(
     (root / "roles/host_desktop_sway/templates/sway-input.conf.j2").read_text()
@@ -68,7 +68,7 @@ def merge(base, overlay):
     return result
 
 def render(data):
-    return template.render(desktop_input=data)
+    return template.render(host_desktop_sway_input=data)
 
 fallback = render(defaults)
 assert "xkb_layout it,us,ara" in fallback
@@ -101,13 +101,13 @@ import yaml
 from jinja2 import Environment, StrictUndefined, UndefinedError
 
 root = Path(sys.argv[1])
-defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["desktop_input_defaults"]
+defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["host_desktop_sway_input_defaults"]
 text = (root / "roles/host_desktop_sway/templates/sway-input.conf.j2").read_text().replace(
-    "desktop_input.keyboard_layout", "desktop_input.keyboard_layot", 1
+    "host_desktop_sway_input.keyboard_layout", "host_desktop_sway_input.keyboard_layot", 1
 )
 template = Environment(undefined=StrictUndefined).from_string(text)
 try:
-    template.render(desktop_input=defaults)
+    template.render(host_desktop_sway_input=defaults)
 except UndefinedError:
     raise SystemExit(0)
 raise SystemExit("mutation unexpectedly rendered")

@@ -356,17 +356,17 @@
           - "render_desk_units == ['ly@tty2.service']"
           - "'emacs-wayland' in render_ide_pkgs"
           - "'emacs' not in render_ide_pkgs"
-          - "render_desktop_hosts == 'hypervisor:workstations'"
+          - "render_desktop_hosts == 'hypervisor'"
           - "render_dev_hosts == 'workstations'"
           - "render_lab[0].import_playbook == 'foundation.yml'"
-          - "'desktop' in render_lab[1].roles"
+          - "'host_desktop_sway' in render_lab[1].roles"
           - "'looking_glass' in render_lab[1].roles"
           - "'dev_ide' not in render_lab[1].roles"
         quiet: true
       vars:
-        render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_packages }}"
+        render_desk_pkgs: "{{ (render_cockpit.results[0].content | b64decode | from_yaml).host_desktop_sway_packages }}"
         render_desk_removed_pkgs: >-
-          {{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_removed_packages }}
+          {{ (render_cockpit.results[0].content | b64decode | from_yaml).host_desktop_sway_removed_packages }}
         render_desk_units: >-
           {{ (render_cockpit.results[1].content | b64decode | from_yaml)
              | map('dict2items') | flatten
@@ -778,9 +778,9 @@
         dest: "{{ render_input_ws.path }}/{{ item.name }}.conf"
         mode: "0644"
       vars:
-        desktop_input: "{{ item.input }}"
+        host_desktop_sway_input: "{{ item.input }}"
         render_input_fallback_map: >-
-          {{ (render_cockpit.results[0].content | b64decode | from_yaml).desktop_input_defaults }}
+          {{ (render_cockpit.results[0].content | b64decode | from_yaml).host_desktop_sway_input_defaults }}
         render_hw_profiles: >-
           {{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}
       loop:

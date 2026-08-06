@@ -110,7 +110,7 @@ def main():
     for package in ("gtk4", "gtk4-layer-shell", "python-gobject", "virt-viewer", "superfile"):
         require("  - %s\n" % package in defaults,
                 "desktop package missing: %s" % package)
-    require("desktop_removed_packages:\n  - yazi\n" in defaults,
+    require("host_desktop_sway_removed_packages:\n  - yazi\n" in defaults,
             "Yazi removal policy missing")
 
     tasks = text("roles/host_desktop_sway/tasks/main.yml")

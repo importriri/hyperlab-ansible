@@ -9,17 +9,17 @@
 # the base install): a correct sway layout does not fix a TTY, nor the
 # other way round.
 input type:keyboard {
-    xkb_layout {{ desktop_input.keyboard_layout_cycle | join(',') }}
-{% if desktop_input.keyboard_variant %}
-    xkb_variant {{ desktop_input.keyboard_variant }},,
+    xkb_layout {{ host_desktop_sway_input.keyboard_layout_cycle | join(',') }}
+{% if host_desktop_sway_input.keyboard_variant %}
+    xkb_variant {{ host_desktop_sway_input.keyboard_variant }},,
 {% endif %}
-{% if desktop_input.keyboard_options %}
-    xkb_options {{ desktop_input.keyboard_options }}
+{% if host_desktop_sway_input.keyboard_options %}
+    xkb_options {{ host_desktop_sway_input.keyboard_options }}
 {% endif %}
 }
 
 input type:touchpad {
-{% for setting, value in desktop_input.touchpad | dictsort %}
+{% for setting, value in host_desktop_sway_input.touchpad | dictsort %}
     {{ setting }} {{ value }}
 {% endfor %}
 }

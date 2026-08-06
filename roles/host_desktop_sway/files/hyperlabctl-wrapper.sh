@@ -24,7 +24,7 @@ checkout="$(head -n 1 "${pointer}")"
 
 if [[ -z ${checkout} || ! -x ${checkout}/tools/hyperlabctl/bin/hyperlabctl ]]; then
     printf 'hyperlabctl: no checkout at %s\n' "${checkout:-<empty>}" >&2
-    printf 'set desktop_hyperlab_checkout and re-run playbooks/host-desktop-sway.yml\n' >&2
+    printf 'set host_desktop_sway_hyperlab_checkout and re-run playbooks/host-desktop-sway.yml\n' >&2
     exit 127
 fi
 

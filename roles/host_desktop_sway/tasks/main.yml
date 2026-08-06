@@ -1,46 +1,46 @@
 ---
 - name: Inspect the configured Hyperlab checkout before host writes
   ansible.builtin.stat:
-    path: "{{ desktop_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
-  register: desktop_hyperlab_checkout_stat
+    path: "{{ host_desktop_sway_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
+  register: host_desktop_sway_hyperlab_checkout_stat
   changed_when: false
 
 - name: Refuse a checkout that cannot supply the cockpit CLI
   ansible.builtin.assert:
     that:
-      - desktop_hyperlab_checkout is string
-      - desktop_hyperlab_checkout is match('^/')
-      - desktop_hyperlab_checkout_stat.stat.exists | default(false)
-      - desktop_hyperlab_checkout_stat.stat.isreg | default(false)
-      - not (desktop_hyperlab_checkout_stat.stat.islnk | default(false))
-      - desktop_hyperlab_checkout_stat.stat.executable | default(false)
+      - host_desktop_sway_hyperlab_checkout is string
+      - host_desktop_sway_hyperlab_checkout is match('^/')
+      - host_desktop_sway_hyperlab_checkout_stat.stat.exists | default(false)
+      - host_desktop_sway_hyperlab_checkout_stat.stat.isreg | default(false)
+      - not (host_desktop_sway_hyperlab_checkout_stat.stat.islnk | default(false))
+      - host_desktop_sway_hyperlab_checkout_stat.stat.executable | default(false)
     fail_msg: >-
-      desktop_hyperlab_checkout must be an absolute checkout containing an
+      host_desktop_sway_hyperlab_checkout must be an absolute checkout containing an
       executable tools/hyperlabctl/bin/hyperlabctl. Correct the variable before
       installing or repointing the desktop cockpit.
 
 - name: Install the desktop stack
   community.general.pacman:
-    name: "{{ desktop_packages }}"
+    name: "{{ host_desktop_sway_packages }}"
     state: present
 
 - name: Remove superseded desktop tools
   community.general.pacman:
-    name: "{{ desktop_removed_packages }}"
+    name: "{{ host_desktop_sway_removed_packages }}"
     state: absent
 
 - name: Validate the selected Ly palette
   ansible.builtin.assert:
     that:
-      - desktop_palette in desktop_ly_palettes
+      - desktop_palette in host_desktop_sway_ly_palettes
       - ly_theming == 'now'
-      - desktop_ly_palettes[desktop_palette].bg is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].fg is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].border_fg is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].error_bg is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].error_fg is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].accent2 is match('^0x[0-9A-F]{8}$')
-      - desktop_ly_palettes[desktop_palette].box_title is match('^[A-Za-z0-9 _-]{1,64}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].bg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].border_fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].error_bg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].error_fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].accent2 is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_palettes[desktop_palette].box_title is match('^[A-Za-z0-9 _-]{1,64}$')
     fail_msg: >-
       Ly theming requires a declared palette with strict 24-bit colour values,
       a safe title, and the explicit `now` choice in tools/choices/choices.yml.
@@ -48,14 +48,14 @@
 
 - name: Assemble the selected Ly palette entries
   ansible.builtin.set_fact:
-    desktop_ly_managed_entries:
+    host_desktop_sway_ly_managed_entries:
       - { key: full_color, value: "true" }
-      - { key: bg, value: "{{ desktop_ly_palettes[desktop_palette].bg }}" }
-      - { key: fg, value: "{{ desktop_ly_palettes[desktop_palette].fg }}" }
-      - { key: border_fg, value: "{{ desktop_ly_palettes[desktop_palette].border_fg }}" }
-      - { key: error_bg, value: "{{ desktop_ly_palettes[desktop_palette].error_bg }}" }
-      - { key: error_fg, value: "{{ desktop_ly_palettes[desktop_palette].error_fg }}" }
-      - { key: box_title, value: "{{ desktop_ly_palettes[desktop_palette].box_title }}" }
+      - { key: bg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].bg }}" }
+      - { key: fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].fg }}" }
+      - { key: border_fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg }}" }
+      - { key: error_bg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].error_bg }}" }
+      - { key: error_fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].error_fg }}" }
+      - { key: box_title, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].box_title }}" }
       - { key: animation, value: "colormix" }
       - { key: animation_frame_delay, value: "24" }
       - { key: animation_timeout_sec, value: "0" }
@@ -75,9 +75,9 @@
       - { key: text_in_center, value: "true" }
       - { key: asterisk, value: "0x2022" }
       - { key: clock, value: "%a %d %b %H:%M" }
-      - { key: colormix_col1, value: "{{ desktop_ly_palettes[desktop_palette].border_fg }}" }
-      - { key: colormix_col2, value: "{{ desktop_ly_palettes[desktop_palette].accent2 }}" }
-      - { key: colormix_col3, value: "{{ desktop_ly_palettes[desktop_palette].bg }}" }
+      - { key: colormix_col1, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg }}" }
+      - { key: colormix_col2, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 }}" }
+      - { key: colormix_col3, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].bg }}" }
   changed_when: false
 
 - name: Deploy the HyperLab Ly terminal-palette hook
@@ -91,21 +91,21 @@
 - name: Read the package-managed Ly configuration before targeted edits
   ansible.builtin.slurp:
     src: /etc/ly/config.ini
-  register: desktop_ly_config_before
+  register: host_desktop_sway_ly_config_before
   changed_when: false
 
 - name: Refuse an unexpected package-managed Ly configuration
   ansible.builtin.assert:
     that:
       - >-
-        (desktop_ly_config_before.content | b64decode |
+        (host_desktop_sway_ly_config_before.content | b64decode |
         regex_findall('(?m)^' ~ (item.key | regex_escape) ~ '\s*=') |
         length) == 1
     fail_msg: >-
       /etc/ly/config.ini must contain exactly one {{ item.key }} assignment
       before HyperLab applies a targeted palette edit.
     quiet: true
-  loop: "{{ desktop_ly_managed_entries }}"
+  loop: "{{ host_desktop_sway_ly_managed_entries }}"
   loop_control:
     label: "{{ item.key }}"
 
@@ -115,28 +115,28 @@
     regexp: '^{{ item.key | regex_escape }}\s*='
     line: "{{ item.key }} = {{ item.value }}"
     backup: false
-  loop: "{{ desktop_ly_managed_entries }}"
+  loop: "{{ host_desktop_sway_ly_managed_entries }}"
   loop_control:
     label: "{{ item.key }}"
 
 - name: Read the package-managed Ly configuration after targeted edits
   ansible.builtin.slurp:
     src: /etc/ly/config.ini
-  register: desktop_ly_config_after
+  register: host_desktop_sway_ly_config_after
   changed_when: false
 
 - name: Verify every Ly palette edit landed exactly once
   ansible.builtin.assert:
     that:
       - >-
-        (desktop_ly_config_after.content | b64decode |
+        (host_desktop_sway_ly_config_after.content | b64decode |
         regex_findall('(?m)^' ~ (item.key | regex_escape) ~ '\s*=\s*' ~
         (item.value | regex_escape) ~ '\s*$') | length) == 1
     fail_msg: >-
       The targeted {{ item.key }} edit did not land exactly once in
       /etc/ly/config.ini.
     quiet: true
-  loop: "{{ desktop_ly_managed_entries }}"
+  loop: "{{ host_desktop_sway_ly_managed_entries }}"
   loop_control:
     label: "{{ item.key }}"
 
@@ -341,7 +341,7 @@
 
 - name: Point the cockpit at the checkout the CLI must read
   ansible.builtin.copy:
-    content: "{{ desktop_hyperlab_checkout }}\n"
+    content: "{{ host_desktop_sway_hyperlab_checkout }}\n"
     dest: /etc/hyperlabctl/checkout
     owner: root
     group: root
@@ -360,41 +360,41 @@
   become_user: "{{ admin_user }}"
   ansible.builtin.command:
     argv:
-      - "{{ desktop_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
+      - "{{ host_desktop_sway_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
       - completion
-  register: desktop_hyperlab_completion
+  register: host_desktop_sway_hyperlab_completion
   changed_when: false
   failed_when: false
   check_mode: false
 
 - name: Install the completion, when the CLI could produce one
   ansible.builtin.copy:
-    content: "{{ desktop_hyperlab_completion.stdout }}\n"
+    content: "{{ host_desktop_sway_hyperlab_completion.stdout }}\n"
     dest: /usr/share/bash-completion/completions/hyperlabctl
     owner: root
     group: root
     mode: "0644"
-  when: desktop_hyperlab_completion.rc == 0
+  when: host_desktop_sway_hyperlab_completion.rc == 0
 
 - name: Read the recorded hardware profile, when this host has one
   ansible.builtin.slurp:
     src: "{{ host_profile_report_path }}"
-  register: desktop_hardware_report
+  register: host_desktop_sway_hardware_report
   failed_when: false
   changed_when: false
 
 - name: Resolve the per-machine input settings
   ansible.builtin.set_fact:
-    desktop_input: >-
-      {{ desktop_input_defaults | combine(
-           host_profiles[desktop_profile_name].desktop | default({}, true),
+    host_desktop_sway_input: >-
+      {{ host_desktop_sway_input_defaults | combine(
+           host_profiles[host_desktop_sway_profile_name].desktop | default({}, true),
            recursive=true)
-         if desktop_profile_name in host_profiles
-         else desktop_input_defaults }}
+         if host_desktop_sway_profile_name in host_profiles
+         else host_desktop_sway_input_defaults }}
   vars:
-    desktop_profile_name: >-
-      {{ (desktop_hardware_report.content | b64decode | from_yaml).host_profile
-         if desktop_hardware_report.content is defined else '' }}
+    host_desktop_sway_profile_name: >-
+      {{ (host_desktop_sway_hardware_report.content | b64decode | from_yaml).host_profile
+         if host_desktop_sway_hardware_report.content is defined else '' }}
 
 - name: Render the per-machine input configuration
   ansible.builtin.template:

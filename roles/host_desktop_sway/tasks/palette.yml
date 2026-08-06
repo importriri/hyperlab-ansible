@@ -35,7 +35,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ ['green', 'violet', 'blue', 'red'] | product(desktop_palette_runtime_fragments) | list }}"
+  loop: "{{ ['green', 'violet', 'blue', 'red'] | product(host_desktop_sway_palette_runtime_fragments) | list }}"
 
 - name: Keep the selected root palette aliases for diagnostic Waybar assets
   ansible.builtin.copy:
@@ -44,7 +44,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ desktop_palette_runtime_fragments }}"
+  loop: "{{ host_desktop_sway_palette_runtime_fragments }}"
 
 - name: Seed the persisted runtime theme without overwriting a user toggle
   ansible.builtin.copy:

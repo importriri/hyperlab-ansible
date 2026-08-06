@@ -102,7 +102,7 @@ def contract():
     check("the checkout is refused before package writes", inspect_checkout < install_desktop)
     check("completion runs as the admin user", 'become_user: "{{ admin_user }}"' in completion_block)
     check("completion uses argv rather than a shell command", "argv:" in completion_block and "cmd:" not in completion_block)
-    check("the checkout path must be absolute", "desktop_hyperlab_checkout is match('^/')" in tasks)
+    check("the checkout path must be absolute", "host_desktop_sway_hyperlab_checkout is match('^/')" in tasks)
 
     palette = (REPO / "roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh").read_text()
     check("the palette never evals a resolved command", 'eval "$1"' not in palette)

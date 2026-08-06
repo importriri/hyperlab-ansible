@@ -29,9 +29,9 @@
 # Where this host keeps the checkout. The CLI reads group_vars, so it runs FROM
 # the repository: /usr/local/bin/hyperlabctl is a wrapper that points here, not
 # a copy. A host that clones somewhere else overrides this and nothing else.
-desktop_hyperlab_checkout: "/home/{{ admin_user }}/privatestack-ansible"
+host_desktop_sway_hyperlab_checkout: "/home/{{ admin_user }}/privatestack-ansible"
 
-desktop_input_defaults:
+host_desktop_sway_input_defaults:
   keyboard_layout: it
   keyboard_layout_cycle:
     - it
@@ -45,10 +45,10 @@ desktop_input_defaults:
     natural_scroll: enabled
     tap: enabled
 
-desktop_removed_packages:
+host_desktop_sway_removed_packages:
   - yazi
 
-desktop_packages:
+host_desktop_sway_packages:
   - sway
   - swaybg
   - swayidle
@@ -89,7 +89,7 @@ desktop_packages:
 
 # Files copied into both read-only runtime palette pools. The active theme is a
 # user-owned copy selected by privatestack-theme.
-desktop_palette_runtime_fragments:
+host_desktop_sway_palette_runtime_fragments:
   - hyperlab-palette-gtk.css
   - hyperlab-palette-waybar.css
   - hyperlab-palette.sway
@@ -101,7 +101,7 @@ desktop_palette_runtime_fragments:
 
 # Ly 1.x accepts 24-bit 0xSSRRGGBB values. Only these documented keys are
 # changed in the package-managed config; every other package default survives.
-desktop_ly_palettes:
+host_desktop_sway_ly_palettes:
   green:
     bg: "0x000C1512"
     fg: "0x00DCF3E4"

@@ -258,6 +258,7 @@
       | product(['desktop', 'lockscreen'])
       | list
     }}
+  changed_when: true
   when:
     - not ansible_check_mode
     - >-
