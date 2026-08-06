@@ -6,10 +6,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNBOOK = ROOT / "docs/nitro-arch-dev-vfio-campaign.md"
+ACCELERATION = ROOT / "docs/arch-dev-acceleration.md"
 
 
 def main() -> int:
     text = RUNBOOK.read_text(encoding="utf-8")
+    acceleration = ACCELERATION.read_text(encoding="utf-8")
+    acceleration_flat = " ".join(acceleration.split())
+
     for fragment in (
         "`qemu:///system`",
         "`arch-dev-vfio`",
@@ -40,6 +44,23 @@ def main() -> int:
 
     assert "playbooks/vm-destroy.yml" not in text
     assert "systemctl enable looking-glass-host" not in text
+
+    for fragment in (
+        "share one IOMMU group",
+        "viable VFIO group",
+        "class `0604`",
+        "`pcieport`",
+        "any other peer using a host driver",
+    ):
+        assert fragment in acceleration_flat, (
+            f"Acceleration document omits VFIO policy: {fragment}"
+        )
+
+    assert "no peer in either" not in acceleration_flat
+    assert (
+        "IOMMU group remains attached to a host driver"
+        not in acceleration_flat
+    )
 
     print("Nitro acceleration campaign contract: OK")
     return 0

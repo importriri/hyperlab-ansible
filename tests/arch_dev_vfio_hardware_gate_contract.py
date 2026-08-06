@@ -122,17 +122,35 @@ def main() -> int:
         devices_root = sysfs / "bus/pci/devices"
         drivers.mkdir(parents=True)
         vfio_root.mkdir()
-        (drivers / "vfio-pci").mkdir()
-        for bdf, group_name in (("0000:01:00.0", "17"), ("0000:01:00.1", "18")):
+
+        vfio_driver = drivers / "vfio-pci"
+        pcieport_driver = drivers / "pcieport"
+        vfio_driver.mkdir()
+        pcieport_driver.mkdir()
+
+        group_name = "17"
+        group = iommu_root / group_name
+        (group / "devices").mkdir(parents=True)
+        os.symlink("/dev/null", vfio_root / group_name)
+
+        for bdf in ("0000:01:00.0", "0000:01:00.1"):
             device = devices_root / bdf
             device.mkdir(parents=True)
-            os.symlink(drivers / "vfio-pci", device / "driver")
-            group = iommu_root / group_name
-            (group / "devices").mkdir(parents=True)
+            os.symlink(vfio_driver, device / "driver")
             os.symlink(group, device / "iommu_group")
             os.symlink(device, group / "devices" / bdf)
-            os.symlink("/dev/null", vfio_root / group_name)
 
+        bridge = devices_root / "0000:00:01.0"
+        bridge.mkdir()
+        (bridge / "class").write_text("0x060400\n", encoding="utf-8")
+        os.symlink(pcieport_driver, bridge / "driver")
+        os.symlink(group, bridge / "iommu_group")
+        os.symlink(bridge, group / "devices" / bridge.name)
+
+        def viable(_path: Path) -> bool:
+            return True
+
+        host_gate.vfio_group_is_viable = viable
         host_gate.validate_runtime(
             report,
             sysfs,
@@ -140,12 +158,13 @@ def main() -> int:
             vfio_root,
         )
 
-        unsafe_driver = drivers / "nvidia"
-        unsafe_driver.mkdir()
-        peer = devices_root / "0000:01:00.2"
-        peer.mkdir()
-        os.symlink(unsafe_driver, peer / "driver")
-        os.symlink(peer, iommu_root / "17/devices/0000:01:00.2")
+        audio_group = devices_root / "0000:01:00.1" / "iommu_group"
+        audio_group.unlink()
+        other_group = iommu_root / "18"
+        (other_group / "devices").mkdir(parents=True)
+        os.symlink(other_group, audio_group)
+        os.symlink("/dev/null", vfio_root / "18")
+
         try:
             host_gate.validate_runtime(
                 report,
@@ -154,7 +173,49 @@ def main() -> int:
                 vfio_root,
             )
         except host_gate.GateError as error:
-            assert "IOMMU peer" in str(error)
+            assert "share one IOMMU group" in str(error)
+        else:
+            raise AssertionError("split GPU functions were accepted")
+
+        audio_group.unlink()
+        os.symlink(group, audio_group)
+
+        def blocked(_path: Path) -> bool:
+            return False
+
+        host_gate.vfio_group_is_viable = blocked
+        try:
+            host_gate.validate_runtime(
+                report,
+                sysfs,
+                Path("/dev/null"),
+                vfio_root,
+            )
+        except host_gate.GateError as error:
+            assert "not viable" in str(error)
+        else:
+            raise AssertionError("non-viable VFIO group was accepted")
+
+        host_gate.vfio_group_is_viable = viable
+
+        unsafe_driver = drivers / "nvidia"
+        unsafe_driver.mkdir()
+        peer = devices_root / "0000:01:00.2"
+        peer.mkdir()
+        (peer / "class").write_text("0x030000\n", encoding="utf-8")
+        os.symlink(unsafe_driver, peer / "driver")
+        os.symlink(group, peer / "iommu_group")
+        os.symlink(peer, group / "devices" / peer.name)
+
+        try:
+            host_gate.validate_runtime(
+                report,
+                sysfs,
+                Path("/dev/null"),
+                vfio_root,
+            )
+        except host_gate.GateError as error:
+            assert "unsupported host driver" in str(error)
         else:
             raise AssertionError("unsafe IOMMU peer was accepted")
 

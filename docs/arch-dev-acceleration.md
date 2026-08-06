@@ -64,9 +64,10 @@ After the VFIO candidate is defined and running, the physical host runs
 `tools/nitro/arch_dev_vfio_host_gate.py`. It is read-only and checks the active
 `qemu:///system` XML, reviewed PCI addresses, 8/16 GiB profile, exact CPU and I/O
 pins, loopback SPICE, virtual recovery video, kvmfr and the shared 64 MiB
-IVSHMEM object. It then verifies both host PCI functions remain bound to
-`vfio-pci`, every referenced VFIO group device exists and no peer in either
-IOMMU group remains attached to a host driver.
+IVSHMEM object. It then verifies that both host PCI functions remain
+bound to `vfio-pci`, share one IOMMU group and expose a viable VFIO group
+device. A PCIe root-port peer of class `0604` may remain on `pcieport`; any
+other peer using a host driver causes the gate to refuse.
 
 Inside the guest, run `tools/nitro/arch_dev_vfio_guest_gate.py` as `sid` from
 the checked-out repository. It checks the NVIDIA display and audio functions,

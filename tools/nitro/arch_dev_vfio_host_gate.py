@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import stat
+import struct
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -15,6 +17,8 @@ import yaml
 
 QEMU_NS = "http://libvirt.org/schemas/domain/qemu/1.0"
 EXPECTED_PINS = [("0", "2"), ("1", "6"), ("2", "3"), ("3", "7")]
+VFIO_GROUP_GET_STATUS = (ord(";") << 8) | 103
+VFIO_GROUP_FLAGS_VIABLE = 1
 
 
 class GateError(ValueError):
@@ -30,6 +34,20 @@ def command(*argv: str) -> str:
     result = subprocess.run(argv, text=True, capture_output=True, check=False)
     require(result.returncode == 0, result.stderr.strip() or "command failed")
     return result.stdout
+
+
+def vfio_group_is_viable(path: Path) -> bool:
+    status = bytearray(struct.pack("II", 8, 0))
+    with path.open("rb+", buffering=0) as handle:
+        fcntl.ioctl(
+            handle,
+            VFIO_GROUP_GET_STATUS,
+            status,
+            True,
+        )
+    argsz, flags = struct.unpack("II", status)
+    require(argsz >= 8, f"VFIO group status is truncated: {path.name}")
+    return bool(flags & VFIO_GROUP_FLAGS_VIABLE)
 
 
 def load_report(path: Path) -> dict[str, Any]:
@@ -135,16 +153,51 @@ def validate_runtime(
         require(vfio_group.exists(), f"VFIO group device is missing: {group_name}")
         require(stat.S_ISCHR(vfio_group.stat().st_mode), f"VFIO group is not a character device: {group_name}")
 
-    for group_name in sorted(set(groups)):
+    unique_groups = sorted(set(groups))
+    require(
+        len(unique_groups) == 1,
+        "reviewed GPU functions must share one IOMMU group",
+    )
+
+    for group_name in unique_groups:
+        vfio_group = vfio_root / group_name
+        require(
+            vfio_group_is_viable(vfio_group),
+            f"VFIO group is not viable: {group_name}",
+        )
+
         group_devices = sysfs / "kernel/iommu_groups" / group_name / "devices"
-        require(group_devices.is_dir(), f"IOMMU group directory is missing: {group_name}")
+        require(
+            group_devices.is_dir(),
+            f"IOMMU group directory is missing: {group_name}",
+        )
+
         for member in group_devices.iterdir():
             driver = member / "driver"
-            if driver.is_symlink():
-                require(
-                    driver.resolve().name == "vfio-pci",
-                    f"IOMMU peer still uses a host driver: {member.name}",
-                )
+            require(
+                driver.is_symlink(),
+                f"IOMMU peer lacks a driver: {member.name}",
+            )
+            driver_name = driver.resolve().name
+
+            if driver_name == "vfio-pci":
+                continue
+
+            class_path = member / "class"
+            require(
+                class_path.is_file(),
+                f"IOMMU peer class is missing: {member.name}",
+            )
+            class_code = class_path.read_text(encoding="utf-8").strip().lower()
+
+            require(
+                class_code.startswith("0x0604")
+                and driver_name == "pcieport",
+                (
+                    "IOMMU peer still uses an unsupported host driver: "
+                    f"{member.name} ({driver_name}, {class_code})"
+                ),
+            )
 
 
 def parse_args() -> argparse.Namespace:
