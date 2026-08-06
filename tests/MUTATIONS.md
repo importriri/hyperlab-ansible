@@ -122,51 +122,51 @@ push.
   and the line count no longer matches the contract map).
 - Restore: `git checkout -- roles/gpu_handoff/templates/rotation.j2`
 
-## roles/desktop - the cockpit rice
+## roles/host_desktop_sway - the cockpit rice
 
 ### 16. Helper deployed 0644
-- Break: `sed -i '0,/mode: "0755"/s//mode: "0644"/' roles/desktop/tasks/main.yml`
+- Break: `sed -i '0,/mode: "0755"/s//mode: "0644"/' roles/host_desktop_sway/tasks/main.yml`
 - Red: render suite, "A rice invariant broke" - a config file copied 0644
   is inert, a SCRIPT copied 0644 is a silent no-op: waybar shows an empty
   module and nothing anywhere says why.
-- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+- Restore: `git checkout -- roles/host_desktop_sway/tasks/main.yml`
 
 ### 17. rofi launcher theme points at a name nobody deploys
-- Break: `sed -i 's/@theme "rofi-launcher.rasi"/@theme "launcher.rasi"/' roles/desktop/files/rofi-config.rasi`
+- Break: `sed -i 's/@theme "rofi-launcher.rasi"/@theme "launcher.rasi"/' roles/host_desktop_sway/files/rofi-config.rasi`
 - Red: `rofi_theme_contract.py` - the launcher must replace the stock theme
   with the exact file deployed by the desktop role. Replacing `@theme` with
   `@import` is also refused because it brought back the light fallback rows
   and broke Mod+D on the Nitro.
-- Restore: `git checkout -- roles/desktop/files/rofi-config.rasi`
+- Restore: `git checkout -- roles/host_desktop_sway/files/rofi-config.rasi`
 
 ### 17a. rofi selection follows the mouse again
-- Break: `sed -i 's/hover-select:        false/hover-select:        true/' roles/desktop/files/rofi-config.rasi`
+- Break: `sed -i 's/hover-select:        false/hover-select:        true/' roles/host_desktop_sway/files/rofi-config.rasi`
 - Red: `rofi_theme_contract.py` - keyboard selection must stay stable instead
   of jumping whenever the pointer crosses a row.
-- Restore: `git checkout -- roles/desktop/files/rofi-config.rasi`
+- Restore: `git checkout -- roles/host_desktop_sway/files/rofi-config.rasi`
 
 ### 18. Backdrop path drift
-- Break: `sed -i 's#backgrounds/privatestack/mocha#backgrounds/mocha#' roles/desktop/files/sway.config`
+- Break: `sed -i 's#backgrounds/privatestack/mocha#backgrounds/mocha#' roles/host_desktop_sway/files/sway.config`
 - Red: render suite, "A rice invariant broke" - one wallpaper, three
   files that name it (copy task, sway.config, swaylock.conf). Two out of
   three agreeing is a black desktop or a black lock screen.
-- Restore: `git checkout -- roles/desktop/files/sway.config`
+- Restore: `git checkout -- roles/host_desktop_sway/files/sway.config`
 
 ### 19. cava emits levels the bridge cannot map
-- Break: `sed -i 's/ascii_max_range = 7/ascii_max_range = 15/' roles/desktop/files/cava-waybar.conf`
+- Break: `sed -i 's/ascii_max_range = 7/ascii_max_range = 15/' roles/host_desktop_sway/files/cava-waybar.conf`
 - Red: render suite, "A rice invariant broke" - the bridge script maps
   0-7 onto the eighth-block glyphs; raise the range and the extra levels
   reach waybar as bare digits.
-- Restore: `git checkout -- roles/desktop/files/cava-waybar.conf`
+- Restore: `git checkout -- roles/host_desktop_sway/files/cava-waybar.conf`
 
 ### 20. The old launcher comes back
-- Break: `sed -i 's/^  - rofi$/  - rofi\n  - fuzzel/' roles/desktop/defaults/main.yml`
+- Break: `sed -i 's/^  - rofi$/  - rofi\n  - fuzzel/' roles/host_desktop_sway/defaults/main.yml`
 - Red: render suite, "A cockpit invariant broke" - one launcher, and it
   is the one the sway binding and the power menu actually call. The same
   assertion refuses `rofi-wayland`: rofi 2.0 Provides/Replaces it, pacman
   resolves that but `pacman -Q` does not, so the module would report
   changed on every run forever.
-- Restore: `git checkout -- roles/desktop/defaults/main.yml`
+- Restore: `git checkout -- roles/host_desktop_sway/defaults/main.yml`
 
 ## roles/looking_glass
 
@@ -194,14 +194,14 @@ push.
 - Restore: `git checkout -- roles/looking_glass/tasks/main.yml`
 
 ### 24. window_type goes back to being a regex
-- Break: `sed -i 's/^for_window \[window_type="dialog"\].*$/for_window [window_type="dialog|menu"]/; /^for_window \[window_type="menu"\]/d' roles/desktop/files/sway.config`
+- Break: `sed -i 's/^for_window \[window_type="dialog"\].*$/for_window [window_type="dialog|menu"]/; /^for_window \[window_type="menu"\]/d' roles/host_desktop_sway/files/sway.config`
 - Red: render suite, "A rice invariant broke" - the line above it takes a
   regex (`window_role`), this one does not: sway matches `window_type`
   with `strcasecmp` against a fixed list, an unknown value leaves the
   criteria empty, and sway refuses the whole line at startup with
   "Criteria is empty". Caught on hardware first; this is the check that
   keeps it caught.
-- Restore: `git checkout -- roles/desktop/files/sway.config`
+- Restore: `git checkout -- roles/host_desktop_sway/files/sway.config`
 
 ### 25. The stamp directory is never declared
 - Break: delete the `Own the stamp directory` task from
@@ -464,20 +464,20 @@ red check.
 ### Cockpit command strings regain shell execution
 - Break: replace `subprocess.call(argv)` with
   `subprocess.call(" ".join(argv), shell=True)` in
-  `roles/desktop/files/privatestack-hyperlab-palette.sh`.
+  `roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh`.
 - Red: `tests/hyperlabctl_contract.py`, "the palette executes validated JSON argv".
-- Restore: `git checkout -- roles/desktop/files/privatestack-hyperlab-palette.sh`
+- Restore: `git checkout -- roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh`
 
 ### Completion executes a mutable checkout as root
 - Break: delete `become_user: "{{ admin_user }}"` from the completion task in
-  `roles/desktop/tasks/main.yml`.
+  `roles/host_desktop_sway/tasks/main.yml`.
 - Red: `tests/hyperlabctl_contract.py`, "completion runs as the admin user".
-- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+- Restore: `git checkout -- roles/host_desktop_sway/tasks/main.yml`
 
 ### Completion becomes a shell command
 - Break: replace the completion task's `argv:` block with a `cmd:` string.
 - Red: `tests/hyperlabctl_contract.py`, "completion uses argv rather than a shell command".
-- Restore: `git checkout -- roles/desktop/tasks/main.yml`
+- Restore: `git checkout -- roles/host_desktop_sway/tasks/main.yml`
 
 ### Managed-domain metadata drifts from the cockpit parser
 - Break: change the `xmlns:hyperlab` URI in
@@ -511,20 +511,20 @@ red check.
 ## Schema and asset contracts
 
 ### A domain cube SVG is renamed or deleted
-- Break: `mv roles/desktop/files/domain-lab.svg /tmp/`
+- Break: `mv roles/host_desktop_sway/files/domain-lab.svg /tmp/`
 - Red: `tools/shell-tests/test_design.py`, "every domain icon has its source
   asset", reporting `no source SVG for: lab`. The five-domain block used to
   build a path and discard it, so a missing cube stayed green here and showed
   up only as a broken icon in the running Control Center.
-- Restore: `mv /tmp/domain-lab.svg roles/desktop/files/`
+- Restore: `mv /tmp/domain-lab.svg roles/host_desktop_sway/files/`
 
 ### A domain icon path drifts from the deployed location
 - Break: change any `icon` value in `DOMAIN_META` inside
-  `roles/desktop/files/privatestack-hyperlab-domains.py`.
+  `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
 - Red: `tools/shell-tests/test_design.py`, "every domain icon points at the
   deployed cube path". The desktop role copies to
   `/usr/share/icons/hyperlab/domains/<id>.svg`; the manager must agree.
-- Restore: `git checkout -- roles/desktop/files/privatestack-hyperlab-domains.py`
+- Restore: `git checkout -- roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`
 
 ### The VM spec schema stops accepting `auto` memory
 - Break: change `memory_mb` from `int_or_auto` to `int` in

@@ -11,12 +11,12 @@ import re
 import sys
 
 root = Path(sys.argv[1])
-main = (root / "roles/desktop/files/foot.ini").read_text()
+main = (root / "roles/host_desktop_sway/files/foot.ini").read_text()
 assert re.search(r"(?m)^include=~/.config/hyperlab/palette-foot\.ini$", main)
 assert "[colors]" not in main
 assert "[cursor]" not in main
 
-fragments = sorted((root / "roles/desktop/files/palette").glob("*/hyperlab-palette-foot.ini"))
+fragments = sorted((root / "roles/host_desktop_sway/files/palette").glob("*/hyperlab-palette-foot.ini"))
 assert len(fragments) >= 2
 for path in fragments:
     text = path.read_text()
@@ -31,7 +31,7 @@ PY
 }
 
 @test "Sway loads only the rendered per-machine input file" {
-  run python - "${REPO_ROOT}/roles/desktop/files/sway.config" <<'PY'
+  run python - "${REPO_ROOT}/roles/host_desktop_sway/files/sway.config" <<'PY'
 from pathlib import Path
 import sys
 
@@ -52,10 +52,10 @@ import yaml
 from jinja2 import Environment, StrictUndefined
 
 root = Path(sys.argv[1])
-defaults = yaml.safe_load((root / "roles/desktop/defaults/main.yml").read_text())["desktop_input_defaults"]
+defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["desktop_input_defaults"]
 hardware = yaml.safe_load((root / "group_vars/all/hardware.yml").read_text())["host_profiles"]
 template = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True).from_string(
-    (root / "roles/desktop/templates/sway-input.conf.j2").read_text()
+    (root / "roles/host_desktop_sway/templates/sway-input.conf.j2").read_text()
 )
 
 def merge(base, overlay):
@@ -101,8 +101,8 @@ import yaml
 from jinja2 import Environment, StrictUndefined, UndefinedError
 
 root = Path(sys.argv[1])
-defaults = yaml.safe_load((root / "roles/desktop/defaults/main.yml").read_text())["desktop_input_defaults"]
-text = (root / "roles/desktop/templates/sway-input.conf.j2").read_text().replace(
+defaults = yaml.safe_load((root / "roles/host_desktop_sway/defaults/main.yml").read_text())["desktop_input_defaults"]
+text = (root / "roles/host_desktop_sway/templates/sway-input.conf.j2").read_text().replace(
     "desktop_input.keyboard_layout", "desktop_input.keyboard_layot", 1
 )
 template = Environment(undefined=StrictUndefined).from_string(text)

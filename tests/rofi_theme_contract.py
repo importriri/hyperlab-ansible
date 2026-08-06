@@ -3,7 +3,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ROOT / "roles" / "desktop" / "files"
+FILES = ROOT / "roles" / "host_desktop_sway" / "files"
 
 
 def require(condition: bool, message: str) -> None:

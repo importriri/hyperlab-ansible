@@ -44,7 +44,7 @@ Use this target for a blind host, storage validation or early recovery.
 ### `playbooks/lab.yml`
 
 Builds the intended laptop laboratory. It imports `foundation.yml`, then adds the
-local desktop and Looking Glass host transport.
+local host Sway cockpit and Looking Glass host transport.
 
 ```bash
 # Preview foundation, Sway and Looking Glass host transport.
@@ -70,7 +70,7 @@ remain explicit transactions.
   a machine set up before this pipeline does not have to be rebuilt to join
   it.
 - `network-domains.yml` — reconcile only the five libvirt networks.
-- `desktop.yml` — reconcile the Sway cockpit on the physical host only.
+- `host-desktop-sway.yml` — reconcile the Sway cockpit on the physical host only.
 - `looking-glass.yml` — reconcile only the host-side Looking Glass transport.
 
 These playbooks are maintenance tools, not an alternative installation order.

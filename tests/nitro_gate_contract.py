@@ -30,9 +30,9 @@ def main() -> int:
     assert "ansible-playbook -K" not in GATE
 
     assert 'step "Rofi parser checks on the installed Nitro version"' in GATE
-    assert 'rofi -config roles/desktop/files/rofi-config.rasi -dump-config' in GATE
-    assert 'rofi -no-config -theme roles/desktop/files/rofi-launcher.rasi -dump-theme' in GATE
-    assert 'rofi -no-config -theme roles/desktop/files/rofi-hyperlab.rasi -dump-theme' in GATE
+    assert 'rofi -config roles/host_desktop_sway/files/rofi-config.rasi -dump-config' in GATE
+    assert 'rofi -no-config -theme roles/host_desktop_sway/files/rofi-launcher.rasi -dump-theme' in GATE
+    assert 'rofi -no-config -theme roles/host_desktop_sway/files/rofi-hyperlab.rasi -dump-theme' in GATE
 
     assert 'step "Resolve the expected managed-create refusal"' in GATE
     assert 'run_sudo test -f /etc/privatestack/bricks/image_factory' in GATE

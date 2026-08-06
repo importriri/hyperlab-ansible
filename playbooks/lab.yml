@@ -9,7 +9,7 @@
   become: true
   gather_facts: true
   roles:
-    - desktop
+    - host_desktop_sway
     - role: brick_guard
       vars:
         brick_guard_brick: looking_glass

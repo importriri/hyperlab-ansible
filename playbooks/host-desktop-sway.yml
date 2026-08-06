@@ -1,0 +1,8 @@
+---
+# Targeted reconciliation for the physical host cockpit. Guest desktops are
+# assembled only by the guest Hyprland playbooks.
+- name: Mount the host Sway cockpit
+  hosts: hypervisor
+  become: true
+  roles:
+    - host_desktop_sway

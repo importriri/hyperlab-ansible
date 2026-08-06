@@ -41,7 +41,7 @@ def test_foundation_is_the_complete_headless_host_target() -> None:
         "brick_guard",
         "image_store",
     ]
-    assert "desktop" not in roles and "looking_glass" not in roles
+    assert "host_desktop_sway" not in roles and "looking_glass" not in roles
     assert "guest" not in roles and "image_factory" not in roles
 
 
@@ -51,17 +51,17 @@ def test_lab_adds_only_the_interactive_host_layer() -> None:
     assert plays[0]["import_playbook"] == "foundation.yml"
     assert plays[1]["hosts"] == "hypervisor"
     roles = [role_name(entry) for entry in plays[1]["roles"]]
-    assert roles == ["desktop", "brick_guard", "looking_glass"]
-    assert roles.index("desktop") < roles.index("looking_glass")
+    assert roles == ["host_desktop_sway", "brick_guard", "looking_glass"]
+    assert roles.index("host_desktop_sway") < roles.index("looking_glass")
     text = (ROOT / "playbooks/lab.yml").read_text(encoding="utf-8")
     assert "guest" not in text and "image_factory" not in text
 
 
 def test_targeted_playbooks_remain_available() -> None:
-    desktop = load_yaml("playbooks/desktop.yml")[0]
+    host_desktop = load_yaml("playbooks/host-desktop-sway.yml")[0]
     looking_glass = load_yaml("playbooks/looking-glass.yml")[0]
-    assert desktop["hosts"] == "hypervisor:workstations"
-    assert desktop["roles"] == ["desktop"]
+    assert host_desktop["hosts"] == "hypervisor"
+    assert host_desktop["roles"] == ["host_desktop_sway"]
     assert looking_glass["hosts"] == "hypervisor"
     assert [role_name(entry) for entry in looking_glass["roles"]] == [
         "brick_guard",
@@ -72,9 +72,9 @@ def test_targeted_playbooks_remain_available() -> None:
 def test_operator_docs_match_the_playbook_topology() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     adr = (ROOT / "docs/adr/0014-cockpit-surface.md").read_text(encoding="utf-8")
-    desktop_defaults = (ROOT / "roles/desktop/defaults/main.yml").read_text(encoding="utf-8")
+    desktop_defaults = (ROOT / "roles/host_desktop_sway/defaults/main.yml").read_text(encoding="utf-8")
     assert "`playbooks/lab.yml` imports the complete foundation" in readme
-    assert "`desktop.yml` and `looking-glass.yml` playbooks remain available for focused" in readme
+    assert "`host-desktop-sway.yml` and `looking-glass.yml` playbooks remain available for focused" in readme
     assert "which `lab.yml` mounts before `looking_glass`" in adr
     assert "foundation.yml keeps a recovery host blind (TTY)" in desktop_defaults
     stale_claims = (

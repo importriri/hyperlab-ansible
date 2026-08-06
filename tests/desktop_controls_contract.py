@@ -21,7 +21,7 @@ def text(path: str) -> str:
 
 
 def waybar() -> dict:
-    source = re.sub(r"(?m)^\s*//.*$", "", text("roles/desktop/files/waybar.jsonc"))
+    source = re.sub(r"(?m)^\s*//.*$", "", text("roles/host_desktop_sway/files/waybar.jsonc"))
     return json.loads(source)
 
 
@@ -49,17 +49,17 @@ def main() -> int:
     require("--surface overlay" not in json.dumps(bar["custom/brand"]),
             "the Waybar brand still exposes the full center directly")
 
-    defaults = yaml.safe_load(text("roles/desktop/defaults/main.yml"))
+    defaults = yaml.safe_load(text("roles/host_desktop_sway/defaults/main.yml"))
     cycle = defaults["desktop_input_defaults"]["keyboard_layout_cycle"]
     require(cycle == ["it", "us", "ara"], "keyboard cycle must be Italian, English, Arabic")
     require(defaults["desktop_input_defaults"]["keyboard_layout"] == "it",
             "Italian must remain the default layout")
 
-    template = text("roles/desktop/templates/sway-input.conf.j2")
+    template = text("roles/host_desktop_sway/templates/sway-input.conf.j2")
     require("keyboard_layout_cycle | join(',')" in template,
             "Sway input template does not render the three-layout keymap")
 
-    keyboard = text("roles/desktop/files/privatestack-keyboard.sh")
+    keyboard = text("roles/host_desktop_sway/files/privatestack-keyboard.sh")
     for marker in (
         "readonly layouts=(it us ara)",
         'xkb_layout "${layout}"',
@@ -68,7 +68,7 @@ def main() -> int:
     ):
         require(marker in keyboard, f"keyboard controller missing: {marker}")
 
-    controls = text("roles/desktop/files/privatestack-controls.sh")
+    controls = text("roles/host_desktop_sway/files/privatestack-controls.sh")
     for marker in (
         "Theme ·",
         "Wallpaper ·",
@@ -82,7 +82,7 @@ def main() -> int:
     ):
         require(marker in controls, f"controls menu missing: {marker}")
 
-    sway = text("roles/desktop/files/sway.config")
+    sway = text("roles/host_desktop_sway/files/sway.config")
     for marker in (
         "bindsym $mod+Ctrl+space exec /usr/local/bin/privatestack-keyboard cycle",
         "bindsym $mod+Shift+p exec $controls",
@@ -105,16 +105,16 @@ def main() -> int:
     ):
         require(route in controls, f"controls menu route missing: {route}")
 
-    fallback = text("roles/desktop/files/privatestack-swaybar-status.py")
+    fallback = text("roles/host_desktop_sway/files/privatestack-swaybar-status.py")
     for marker in ('block("keyboard"', 'block("controls"', 'block("temperature"'):
         require(marker in fallback, f"native Swaybar fallback missing: {marker}")
 
     for variant in ("green", "violet", "blue", "red"):
-        lock = text(f"roles/desktop/files/palette/{variant}/hyperlab-palette-swaylock.conf")
+        lock = text(f"roles/host_desktop_sway/files/palette/{variant}/hyperlab-palette-swaylock.conf")
         require("\\n" not in lock, f"{variant} Swaylock theme contains literal newline escapes")
         require(lock.count("\n") > 20, f"{variant} Swaylock theme is not a real multi-line file")
 
-    manager = text("roles/desktop/files/privatestack-hyperlab-domains.py")
+    manager = text("roles/host_desktop_sway/files/privatestack-hyperlab-domains.py")
     require("Gtk.STYLE_PROVIDER_PRIORITY_USER + 1" in manager,
             "resident HyperLab surfaces cannot override the process-cached GTK user palette")
     for phrase in (

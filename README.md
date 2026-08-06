@@ -38,15 +38,15 @@ Use it for a blind host, first storage validation or recovery.
 
 `playbooks/lab.yml` imports the complete foundation, then adds:
 
-`desktop → Looking Glass host transport`
+`host_desktop_sway → Looking Glass host transport`
 
 This is the normal final target for Nitro and Predator. The narrow
-`desktop.yml` and `looking-glass.yml` playbooks remain available for focused
+`host-desktop-sway.yml` and `looking-glass.yml` playbooks remain available for focused
 maintenance.
 
 ### Local cockpit
 
-The desktop role points `/usr/local/bin/hyperlabctl` at the local checkout
+The `host_desktop_sway` role points `/usr/local/bin/hyperlabctl` at the local checkout
 instead of copying repository code into the host. The same command drives the
 Waybar status group, the Rofi action palette and the terminal panel:
 
@@ -182,7 +182,7 @@ ansible-playbook -K playbooks/lab.yml
 ansible-playbook -K playbooks/lab.yml
 ```
 
-The last pass must report `changed=0`. `lab.yml` includes the desktop and
+The last pass must report `changed=0`. `lab.yml` includes the host Sway cockpit and
 Looking Glass host side because they are part of the intended laptop workflow,
 not optional documentation examples.
 

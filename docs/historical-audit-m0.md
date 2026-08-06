@@ -68,7 +68,7 @@ the whole guest and makes ballooning ineffective. Nothing in the pipeline
 knows this. Resolved by [ADR 0007](adr/0007-memory-budget-policy.md).
 
 **4. Brick prerequisites are comments.** `playbooks/looking-glass.yml`
-says to run `playbooks/desktop.yml` first. Run in the wrong order it
+says to run `playbooks/host-desktop-sway.yml` first. Run in the wrong order it
 still reports success and fails later, at the point where the client
 cannot open `/dev/kvmfr0` because `TAG+="uaccess"` needs an active seat
 session that does not exist. Resolved by

@@ -41,11 +41,11 @@ PYTHONDONTWRITEBYTECODE=1 python tests/rofi_theme_contract.py \
   | tee "${LOG_DIR}/rofi-theme-contract.log"
 
 step "Rofi parser checks on the installed Nitro version"
-rofi -config roles/desktop/files/rofi-config.rasi -dump-config \
+rofi -config roles/host_desktop_sway/files/rofi-config.rasi -dump-config \
   >"${LOG_DIR}/rofi-config.dump"
-rofi -no-config -theme roles/desktop/files/rofi-launcher.rasi -dump-theme \
+rofi -no-config -theme roles/host_desktop_sway/files/rofi-launcher.rasi -dump-theme \
   >"${LOG_DIR}/rofi-launcher.dump"
-rofi -no-config -theme roles/desktop/files/rofi-hyperlab.rasi -dump-theme \
+rofi -no-config -theme roles/host_desktop_sway/files/rofi-hyperlab.rasi -dump-theme \
   >"${LOG_DIR}/rofi-hyperlab.dump"
 git diff --check | tee "${LOG_DIR}/diff-check.log"
 
@@ -121,17 +121,17 @@ done
   || fail "network_domains brick stamp is missing or invalid"
 
 step "Desktop cockpit dry run"
-run_ansible -i inventory.ini playbooks/desktop.yml --check --diff \
+run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --check --diff \
   -e "desktop_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-check.log"
 
 step "Desktop cockpit real convergence"
-run_ansible -i inventory.ini playbooks/desktop.yml --diff \
+run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --diff \
   -e "desktop_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-apply.log"
 
 step "Desktop cockpit changed=0 proof"
-run_ansible -i inventory.ini playbooks/desktop.yml --diff \
+run_ansible -i inventory.ini playbooks/host-desktop-sway.yml --diff \
   -e "desktop_hyperlab_checkout=${PWD}" \
   | tee "${LOG_DIR}/desktop-idempotent.log"
 grep -Eq 'changed=0[[:space:]].*failed=0' "${LOG_DIR}/desktop-idempotent.log" \

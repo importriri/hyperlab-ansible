@@ -34,7 +34,7 @@ def check(name, condition, detail=""):
 
 
 def waybar_config():
-    raw = (REPO / "roles/desktop/files/waybar.jsonc").read_text()
+    raw = (REPO / "roles/host_desktop_sway/files/waybar.jsonc").read_text()
     return json.loads(re.sub(r"(?m)^\s*//.*$", "", raw))
 
 
@@ -89,7 +89,7 @@ def contract():
     check("every problem id has a remedy", missing == [], "missing %s" % missing)
 
     # The helper the bar execs must be the one the role deploys.
-    tasks = (REPO / "roles/desktop/tasks/main.yml").read_text()
+    tasks = (REPO / "roles/host_desktop_sway/tasks/main.yml").read_text()
     for module in modules:
         binary = module["exec"].split()[0]
         check("the role deploys %s" % binary, Path(binary).name in tasks)
@@ -104,7 +104,7 @@ def contract():
     check("completion uses argv rather than a shell command", "argv:" in completion_block and "cmd:" not in completion_block)
     check("the checkout path must be absolute", "desktop_hyperlab_checkout is match('^/')" in tasks)
 
-    palette = (REPO / "roles/desktop/files/privatestack-hyperlab-palette.sh").read_text()
+    palette = (REPO / "roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh").read_text()
     check("the palette never evals a resolved command", 'eval "$1"' not in palette)
     check("the palette executes validated JSON argv", '--json "${resolve_args[@]}"' in palette
           and "subprocess.call(argv)" in palette)

@@ -425,9 +425,9 @@
 - name: Install the palette fragments for the selected variant
   ansible.builtin.import_tasks: palette.yml
 
-- name: Record that the desktop brick landed
+- name: Record that the host_desktop_sway brick landed
   ansible.builtin.include_role:
     name: brick_guard
     tasks_from: stamp
   vars:
-    brick_guard_brick: desktop
+    brick_guard_brick: host_desktop_sway

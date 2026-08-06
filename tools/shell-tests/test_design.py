@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import gtkstub
 gtkstub.install()
 spec = importlib.util.spec_from_file_location(
-    "manager", Path(__file__).resolve().parent.parent.parent / "roles/desktop/files/privatestack-hyperlab-domains.py")
+    "manager", Path(__file__).resolve().parent.parent.parent / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py")
 manager = importlib.util.module_from_spec(spec)
 sys.modules["manager"] = manager
 spec.loader.exec_module(manager)
@@ -41,7 +41,7 @@ def build_all():
 
 
 def main() -> int:
-    src = (Path(__file__).resolve().parent.parent.parent / "roles/desktop/files/privatestack-hyperlab-domains.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent.parent / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py").read_text(encoding="utf-8")
     trees = build_all()
     widgets = [w for tree in trees.values() for w in tree.walk()]
 
@@ -92,7 +92,7 @@ def main() -> int:
     check("each domain has a title, subtitle, detail, and class",
           all(all(k in manager.DOMAIN_META[d] for k in
                   ("title", "subtitle", "detail", "css")) for d in ids))
-    cubes = Path(__file__).resolve().parent.parent.parent / "roles/desktop/files"
+    cubes = Path(__file__).resolve().parent.parent.parent / "roles/host_desktop_sway/files"
     check("every domain icon points at the deployed cube path",
           all(manager.DOMAIN_META[d]["icon"] ==
               "/usr/share/icons/hyperlab/domains/%s.svg" % d for d in ids))

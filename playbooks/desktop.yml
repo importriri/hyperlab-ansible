@@ -1,9 +1,4 @@
 ---
-# Targeted cockpit reconciliation. lab.yml mounts it on the hypervisor; this
-# playbook also serves workstation guests without coupling their availability
-# to the host build.
-- name: Mount the desktop cockpit
-  hosts: hypervisor:workstations
-  become: true
-  roles:
-    - desktop
+# Compatibility entrypoint. The Sway cockpit is host-only.
+- name: Reconcile the host Sway cockpit through its explicit target
+  import_playbook: host-desktop-sway.yml

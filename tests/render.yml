@@ -304,38 +304,38 @@
         src: "{{ repo_root }}/{{ item }}"
       register: render_cockpit
       loop:
-        - roles/desktop/defaults/main.yml
-        - roles/desktop/tasks/main.yml
+        - roles/host_desktop_sway/defaults/main.yml
+        - roles/host_desktop_sway/tasks/main.yml
         - roles/dev_ide/defaults/main.yml
-        - playbooks/desktop.yml
+        - playbooks/host-desktop-sway.yml
         - playbooks/dev.yml
         - playbooks/lab.yml
-        - roles/desktop/files/sway.config
-        - roles/desktop/files/waybar.jsonc
-        - roles/desktop/files/swaylock.conf
-        - roles/desktop/files/rofi-config.rasi
-        - roles/desktop/files/rofi-powermenu.rasi
-        - roles/desktop/files/privatestack-cava.sh
-        - roles/desktop/files/cava-waybar.conf
-        - roles/desktop/files/privatestack-hyperlab.sh
-        - roles/desktop/files/privatestack-hyperlab-palette.sh
-        - roles/desktop/files/hyperlabctl-wrapper.sh
-        - roles/desktop/files/waybar.css
-        - roles/desktop/files/foot.ini
-        - roles/desktop/files/superfile-config.toml
-        - roles/desktop/files/superfile-theme.toml
-        - roles/desktop/files/hyperlab-control-center.svg
-        - roles/desktop/files/hyperlab-wallpaper.svg
-        - roles/desktop/files/hyperlab-gtk.css
-        - roles/desktop/files/privatestack-waybar.sh
-        - roles/desktop/files/privatestack-fullscreen.sh
-        - roles/desktop/files/privatestack-superfile.sh
-        - roles/desktop/files/privatestack-opacity-toggle.sh
-        - roles/desktop/files/privatestack-theme.sh
-        - roles/desktop/files/privatestack-keyboard.sh
-        - roles/desktop/files/privatestack-controls.sh
-        - roles/desktop/files/privatestack-swaylock.sh
-        - roles/desktop/files/privatestack-swaybar-status.py
+        - roles/host_desktop_sway/files/sway.config
+        - roles/host_desktop_sway/files/waybar.jsonc
+        - roles/host_desktop_sway/files/swaylock.conf
+        - roles/host_desktop_sway/files/rofi-config.rasi
+        - roles/host_desktop_sway/files/rofi-powermenu.rasi
+        - roles/host_desktop_sway/files/privatestack-cava.sh
+        - roles/host_desktop_sway/files/cava-waybar.conf
+        - roles/host_desktop_sway/files/privatestack-hyperlab.sh
+        - roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh
+        - roles/host_desktop_sway/files/hyperlabctl-wrapper.sh
+        - roles/host_desktop_sway/files/waybar.css
+        - roles/host_desktop_sway/files/foot.ini
+        - roles/host_desktop_sway/files/superfile-config.toml
+        - roles/host_desktop_sway/files/superfile-theme.toml
+        - roles/host_desktop_sway/files/hyperlab-control-center.svg
+        - roles/host_desktop_sway/files/hyperlab-wallpaper.svg
+        - roles/host_desktop_sway/files/hyperlab-gtk.css
+        - roles/host_desktop_sway/files/privatestack-waybar.sh
+        - roles/host_desktop_sway/files/privatestack-fullscreen.sh
+        - roles/host_desktop_sway/files/privatestack-superfile.sh
+        - roles/host_desktop_sway/files/privatestack-opacity-toggle.sh
+        - roles/host_desktop_sway/files/privatestack-theme.sh
+        - roles/host_desktop_sway/files/privatestack-keyboard.sh
+        - roles/host_desktop_sway/files/privatestack-controls.sh
+        - roles/host_desktop_sway/files/privatestack-swaylock.sh
+        - roles/host_desktop_sway/files/privatestack-swaybar-status.py
 
     - name: Cockpit invariants (final lab, Wayland-pure, guests-only IDE)
       ansible.builtin.assert:
@@ -503,13 +503,13 @@
              | selectattr('src', 'equalto', 'wallpaper-lockscreen.png')
              | map(attribute='dest') | list }}
         render_public_green_wallpapers: >-
-          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/green/*.png') }}
+          {{ query('fileglob', repo_root ~ '/roles/host_desktop_sway/files/wallpapers/green/*.png') }}
         render_public_violet_wallpapers: >-
-          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/violet/*.png') }}
+          {{ query('fileglob', repo_root ~ '/roles/host_desktop_sway/files/wallpapers/violet/*.png') }}
         render_public_blue_wallpapers: >-
-          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/blue/*.png') }}
+          {{ query('fileglob', repo_root ~ '/roles/host_desktop_sway/files/wallpapers/blue/*.png') }}
         render_public_red_wallpapers: >-
-          {{ query('fileglob', repo_root ~ '/roles/desktop/files/wallpapers/red/*.png') }}
+          {{ query('fileglob', repo_root ~ '/roles/host_desktop_sway/files/wallpapers/red/*.png') }}
         render_sway: "{{ render_cockpit.results[6].content | b64decode }}"
         render_waybar: >-
           {{ render_cockpit.results[7].content | b64decode
@@ -531,7 +531,7 @@
         render_foot: "{{ render_cockpit.results[17].content | b64decode }}"
         render_foot_palette: >-
           {{ lookup('file', repo_root ~
-             '/roles/desktop/files/palette/green/hyperlab-palette-foot.ini') }}
+             '/roles/host_desktop_sway/files/palette/green/hyperlab-palette-foot.ini') }}
         render_superfile_config: "{{ render_cockpit.results[18].content | b64decode }}"
         render_superfile_theme: "{{ render_cockpit.results[19].content | b64decode }}"
         render_hyperlab_logo: "{{ render_cockpit.results[20].content | b64decode }}"
@@ -774,7 +774,7 @@
 
     - name: Render the per-machine input template three ways
       ansible.builtin.template:
-        src: "{{ repo_root }}/roles/desktop/templates/sway-input.conf.j2"
+        src: "{{ repo_root }}/roles/host_desktop_sway/templates/sway-input.conf.j2"
         dest: "{{ render_input_ws.path }}/{{ item.name }}.conf"
         mode: "0644"
       vars:

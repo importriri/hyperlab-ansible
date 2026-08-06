@@ -78,7 +78,7 @@ rewrite the login manager.
 ## Wallpaper modes
 
 The repository contains twenty public 16:9 PNG files for each palette under
-`roles/desktop/files/wallpapers/<theme>/`. Ansible installs them below
+`roles/host_desktop_sway/files/wallpapers/<theme>/`. Ansible installs them below
 `/usr/share/backgrounds/privatestack/public/<theme>/`.
 
 Personal wallpapers are host-local and never enter Git. The expected layout is:

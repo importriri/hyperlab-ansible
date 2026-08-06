@@ -213,7 +213,7 @@ def main():
 
         manager = (
             ROOT
-            / "roles/desktop/files/privatestack-hyperlab-domains.py"
+            / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py"
         )
         source = manager.read_text(encoding="utf-8")
         assert_true("shell=True" not in source, "manager uses shell=True")
@@ -241,7 +241,7 @@ def main():
             assert_true(command in registry, "unprivileged action bypasses CLI")
 
         waybar = (
-            ROOT / "roles/desktop/files/waybar.jsonc"
+            ROOT / "roles/host_desktop_sway/files/waybar.jsonc"
         ).read_text(encoding="utf-8")
         render_contract = (ROOT / "tests/render.yml").read_text(encoding="utf-8")
         manager_click = (

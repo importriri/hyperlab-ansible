@@ -7,7 +7,7 @@ import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-POOL = ROOT / "roles/desktop/files/wallpapers"
+POOL = ROOT / "roles/host_desktop_sway/files/wallpapers"
 THEMES = ("green", "violet", "blue", "red")
 EXPECTED = tuple(f"{index:02d}.png" for index in range(1, 21))
 
@@ -38,7 +38,7 @@ def main() -> int:
     require(not (POOL / "personal").exists(),
             "personal wallpaper data must never exist in the repository tree")
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    require("roles/desktop/files/wallpapers/personal/" in ignored,
+    require("roles/host_desktop_sway/files/wallpapers/personal/" in ignored,
             "repository-local personal pool is not explicitly ignored")
     require("personal-wallpapers/" in ignored,
             "package-staging personal pool is not explicitly ignored")

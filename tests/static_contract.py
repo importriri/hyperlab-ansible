@@ -138,7 +138,7 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     lab = yaml.safe_load((ROOT / "playbooks/lab.yml").read_text())
     check(lab[0].get("import_playbook") == "foundation.yml", "lab must import the complete foundation first")
     lab_roles = [role_name(x) for x in lab[1]["roles"]]
-    check(lab_roles == ["desktop", "brick_guard", "looking_glass"], "lab cockpit role order drift")
+    check(lab_roles == ["host_desktop_sway", "brick_guard", "looking_glass"], "lab cockpit role order drift")
 
     vfio_defaults = (ROOT / "roles/vfio_boot/defaults/main.yml").read_text()
     vfio_tasks = (ROOT / "roles/vfio_boot/tasks/main.yml").read_text()
@@ -219,7 +219,7 @@ def collect_errors(root: Path = ROOT) -> list[str]:
         check(set(prerequisites) <= set(requires), f"{brick} requires an unknown brick")
         check(brick not in prerequisites, f"{brick} requires itself")
     check(set(bricks.get("brick_playbooks", {})) == set(requires), "every brick must name its mounting playbook")
-    check(requires.get("looking_glass") == ["desktop", "kvm_host"], "Looking Glass needs desktop and kvm_host")
+    check(requires.get("looking_glass") == ["host_desktop_sway", "kvm_host"], "Looking Glass needs desktop and kvm_host")
 
     guard_tasks = (ROOT / "roles/brick_guard/tasks/main.yml").read_text()
     check("brick_guard_brick in brick_requires" in guard_tasks, "brick_guard must reject an unknown brick name")

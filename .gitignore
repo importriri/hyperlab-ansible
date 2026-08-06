@@ -5,6 +5,6 @@ __pycache__/
 vm-specs/.generated/
 
 # Personal wallpaper assets are user-owned and must never be published.
-roles/desktop/files/wallpapers/personal/
+roles/host_desktop_sway/files/wallpapers/personal/
 .private-wallpapers/
 personal-wallpapers/

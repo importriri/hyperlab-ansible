@@ -10,8 +10,8 @@ import choices as mod
 
 HERE = Path(__file__).parent
 REPO = HERE.parent.parent
-MANAGER = REPO / "roles/desktop/files/privatestack-hyperlab-domains.py"
-WAYBAR = REPO / "roles/desktop/files/waybar.jsonc"
+MANAGER = REPO / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py"
+WAYBAR = REPO / "roles/host_desktop_sway/files/waybar.jsonc"
 
 PASSED: list[str] = []
 FAILED: list[str] = []

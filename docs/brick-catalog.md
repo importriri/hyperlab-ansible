@@ -41,7 +41,7 @@ brick exists; task files remain the source for implementation details.
 
 ## Interactive cockpit
 
-- **`desktop`** provides the local Sway cockpit. It is part of the final laptop
+- **`host_desktop_sway`** provides the local Sway cockpit. It is part of the final laptop
   target but remains separate from the headless foundation.
 - **`looking_glass`** installs only the host transport and client. The signed
   Windows application and virtual display remain private guest work.

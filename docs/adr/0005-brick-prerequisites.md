@@ -3,7 +3,7 @@
 ## Context
 
 `playbooks/looking-glass.yml` carries a comment saying to run
-`playbooks/desktop.yml` first. Run in the wrong order it still reports
+`playbooks/host-desktop-sway.yml` first. Run in the wrong order it still reports
 success: packages install, the module builds, the client lands. What is
 missing only shows up later, when the client cannot open the node,
 because `TAG+="uaccess"` grants access to an active seat session and

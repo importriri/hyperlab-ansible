@@ -41,7 +41,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>desktop_palette</code> = <b>green</b></p>
     <ul class="opts"><li class="on"><code>green</code> <b>· active</b><p>Green as the primary focus, teal as the secondary accent, and violet reserved for the Lab domain.</p></li><li class="off"><code>violet</code><p>Violet ambience with cyan accents; the Lab domain moves to magenta and keeps a shape marker.</p></li><li class="off"><code>blue</code><p>Deep blue with electric-blue and cyan accents; a cool, high-contrast variant.</p></li><li class="off"><code>red</code><p>Deep red with coral and amber accents while keeping every trust domain distinguishable.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>tools/palette/palette.yml</code></li><li><code>roles/desktop/files/palette/</code></li><li><code>roles/desktop/defaults/main.yml</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>tools/palette/palette.yml</code></li><li><code>roles/host_desktop_sway/files/palette/</code></li><li><code>roles/host_desktop_sway/defaults/main.yml</code></li></ul></details>
   </section>
   <section>
     <h2>Should the Lab domain use colour only or colour plus shape?
@@ -49,7 +49,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>lab_marking</code> = <b>colour_and_shape</b></p>
     <ul class="opts"><li class="off"><code>colour_only</code><p>Colour only. This is acceptable in Green, where violet is unique.</p></li><li class="on"><code>colour_and_shape</code> <b>· active</b><p>Colour plus a distinct cube border. This remains robust in every palette and for colour-vision differences.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/hyperlab-cube-lab.svg</code></li><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/hyperlab-cube-lab.svg</code></li><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li></ul></details>
   </section>
   <section>
     <h2>How should HyperLab and trust status be arranged in the bar?
@@ -57,7 +57,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>waybar_launcher_shape</code> = <b>brand_and_trust_drawer</b></p>
     <ul class="opts"><li class="on"><code>brand_and_trust_drawer</code> <b>· active</b><p>HyperLab stays first on the left. TRUST follows it and reveals RAM, GPU and VM status on hover.</p></li><li class="off"><code>single_combined_launcher</code><p>One button contains both launcher and status. It uses less space but obscures the trust model.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/waybar.jsonc</code></li><li><code>roles/desktop/files/waybar.css</code></li><li><code>tests/render.yml</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/waybar.jsonc</code></li><li><code>roles/host_desktop_sway/files/waybar.css</code></li><li><code>tests/render.yml</code></li></ul></details>
   </section>
   <section>
     <h2>What should the bar height be?
@@ -65,7 +65,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>waybar_height</code> = <b>37</b></p>
     <ul class="opts"><li class="off"><code>31</code><p>Compact, but too short for the current modules.</p></li><li class="on"><code>37</code> <b>· active</b><p>The minimum height requested by Waybar 0.15.0 on the Nitro.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/waybar.jsonc</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/waybar.jsonc</code></li></ul></details>
   </section>
   <section>
     <h2>Which tab should --section domains open?
@@ -73,7 +73,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>drawer_domains_section_tab</code> = <b>system</b></p>
     <ul class="opts"><li class="on"><code>system</code> <b>· active</b><p>Open the compact System tab with trust, network, and GPU status.</p></li><li class="off"><code>apps</code><p>Open VMs because the domain selector is already available in the drawer.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li></ul></details>
   </section>
   <section>
     <h2>Should the drawer list VMs or applications inside VMs, as Qubes does?
@@ -89,7 +89,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>accent_secondary_scope</code> = <b>none</b></p>
     <ul class="opts"><li class="on"><code>none</code> <b>· active</b><p>Keep every current accent token on accent.</p></li><li class="off"><code>hover_and_borders</code><p>Use accent2 for hover states and secondary borders.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li></ul></details>
   </section>
   <section>
     <h2>Should Snapshot and Backup quick actions be enabled?
@@ -97,7 +97,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>snapshot_actions</code> = <b>disabled_until_m12</b></p>
     <ul class="opts"><li class="on"><code>disabled_until_m12</code> <b>· active</b><p>Keep them disabled until the backend exists.</p></li><li class="off"><code>enabled</code><p>Enable them immediately, even though the current backend cannot execute them.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li></ul></details>
   </section>
   <section>
     <h2>Should Ly be themed as part of the desktop chapter?
@@ -105,7 +105,7 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     </h2>
     <p class="key"><code>ly_theming</code> = <b>now</b></p>
     <ul class="opts"><li class="off"><code>postponed</code><p>Keep the package defaults.</p></li><li class="on"><code>now</code> <b>· active</b><p>Preserve the package-managed file and edit only documented 24-bit colour and presentation keys with structural checks.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/desktop/defaults/main.yml</code></li><li><code>roles/desktop/tasks/main.yml</code></li><li><code>/etc/ly/config.ini</code></li></ul></details>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/defaults/main.yml</code></li><li><code>roles/host_desktop_sway/tasks/main.yml</code></li><li><code>/etc/ly/config.ini</code></li></ul></details>
   </section>
 <footer>To change a choice:
 <code>python3 choices.py set desktop_palette blue</code> &mdash;

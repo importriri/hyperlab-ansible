@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from render_palette import TOKENS  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent.parent
-SURFACES = REPO / "roles/desktop/files"
+SURFACES = REPO / "roles/host_desktop_sway/files"
 def allowed_literals() -> dict[str, str]:
     """Exceptions live in a file rather than a constant so every addition is visible in the diff and undeclared colours keep failing verification.
     """

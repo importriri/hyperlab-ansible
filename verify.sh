@@ -111,7 +111,7 @@ run sh tools/shell-tests/run.sh
 
 step "level 0g - palette and open choices"
 run python3 tools/palette/audit_palette.py tools/palette/palette.yml
-run python3 tools/palette/verify_surfaces.py roles/desktop/files/palette
+run python3 tools/palette/verify_surfaces.py roles/host_desktop_sway/files/palette
 run python3 tools/choices/choices.py check
 run python3 tools/choices/test_choices.py
 run python3 tools/choices/test_consistency.py

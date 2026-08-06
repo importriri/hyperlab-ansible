@@ -16,7 +16,7 @@ import gtkstub
 gtkstub.install()
 
 spec = importlib.util.spec_from_file_location(
-    "manager", Path(__file__).resolve().parent.parent.parent / "roles/desktop/files/privatestack-hyperlab-domains.py")
+    "manager", Path(__file__).resolve().parent.parent.parent / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py")
 manager = importlib.util.module_from_spec(spec)
 sys.modules["manager"] = manager
 spec.loader.exec_module(manager)

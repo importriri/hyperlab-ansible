@@ -55,7 +55,7 @@ valid payload even when the CLI is absent, because a waybar module that exits
 non-zero disappears from the bar.
 
 **The dependency runs one way.** The panel and the bar know `hyperlabctl`;
-`hyperlabctl` does not know they exist. The surfaces live in `roles/desktop`,
+`hyperlabctl` does not know they exist. The surfaces live in `roles/host_desktop_sway`,
 which `lab.yml` mounts before `looking_glass`; `foundation.yml` deliberately
 mounts neither. The desktop role verifies the configured checkout before
 package writes and generates completion as the administrator, not by executing

@@ -93,5 +93,5 @@ def main(path: Path) -> int:
 
 
 if __name__ == "__main__":
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent.parent / "roles/desktop/files/privatestack-hyperlab-domains.py"
+    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent.parent / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py"
     raise SystemExit(main(target))

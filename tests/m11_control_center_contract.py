@@ -22,7 +22,7 @@ def text(path):
 
 
 def main():
-    manager_path = "roles/desktop/files/privatestack-hyperlab-domains.py"
+    manager_path = "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py"
     manager = text(manager_path)
     compile(manager, manager_path, "exec")
     ast.parse(manager)
@@ -106,14 +106,14 @@ def main():
         require(stale_phrase not in manager,
                 "non-English runtime UI text remains: %s" % stale_phrase)
 
-    defaults = text("roles/desktop/defaults/main.yml")
+    defaults = text("roles/host_desktop_sway/defaults/main.yml")
     for package in ("gtk4", "gtk4-layer-shell", "python-gobject", "virt-viewer", "superfile"):
         require("  - %s\n" % package in defaults,
                 "desktop package missing: %s" % package)
     require("desktop_removed_packages:\n  - yazi\n" in defaults,
             "Yazi removal policy missing")
 
-    tasks = text("roles/desktop/tasks/main.yml")
+    tasks = text("roles/host_desktop_sway/tasks/main.yml")
     for deployed in (
         "superfile-config.toml", "superfile-theme.toml", "hyperlab-gtk.css",
         "hyperlab-wallpaper.svg", "hyperlab-control-center.svg",
@@ -125,7 +125,7 @@ def main():
         require(deployed in tasks, "visual-lock asset not deployed: %s" % deployed)
     require("superfile/theme/hyperlab.toml" in tasks,
             "custom Superfile theme destination missing")
-    palette_tasks = text("roles/desktop/tasks/palette.yml")
+    palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
     require("Install every runtime palette fragment" in palette_tasks and
             "Install the selected palette into user-owned active files" in palette_tasks and
             "hyperlab-palette-superfile.toml" in palette_tasks,
@@ -138,7 +138,7 @@ def main():
     require("gtk-3.0/gtk.css" in tasks and "gtk-4.0/gtk.css" in tasks,
             "global Hyperlab GTK theme is not deployed to GTK3 and GTK4")
 
-    gtk_theme = text("roles/desktop/files/hyperlab-gtk.css")
+    gtk_theme = text("roles/host_desktop_sway/files/hyperlab-gtk.css")
     # The GTK sheet imports the generated shared palette instead of carrying
     # a second private source of truth.
     for marker in ('@import url("hyperlab-palette.css")',
@@ -146,7 +146,7 @@ def main():
                    "background-color: alpha(@hl_mantle, 0.54)"):
         require(marker in gtk_theme, "global GTK visual token missing: %s" % marker)
 
-    sway = text("roles/desktop/files/sway.config")
+    sway = text("roles/host_desktop_sway/files/sway.config")
     require("output * bg /usr/share/backgrounds/privatestack/public/green/01.png fill" in sway,
             "Green wallpaper pool fallback path missing")
     require("rofi -show drun -theme ~/.config/rofi/rofi-launcher.rasi" in sway,
@@ -195,27 +195,27 @@ def main():
 
     # Native fullscreen remains the stable path. Waybar is supervised and
     # automatically falls back to native Swaybar after rapid failures.
-    fullscreen = text("roles/desktop/files/privatestack-fullscreen.sh")
+    fullscreen = text("roles/host_desktop_sway/files/privatestack-fullscreen.sh")
     require("hyperlab-transparent-fullscreen" in fullscreen,
             "historical fullscreen helper was deleted instead of deactivated")
-    superfile_launcher = text("roles/desktop/files/privatestack-superfile.sh")
+    superfile_launcher = text("roles/host_desktop_sway/files/privatestack-superfile.sh")
     require("--session" in superfile_launcher and
             "stty size" in superfile_launcher and
             "rows >= min_rows" in superfile_launcher and
             "columns >= min_columns" in superfile_launcher,
             "Superfile launcher does not wait for the real terminal geometry")
-    waybar_launcher = text("roles/desktop/files/privatestack-waybar.sh")
+    waybar_launcher = text("roles/host_desktop_sway/files/privatestack-waybar.sh")
     require("waybar -l info -c" in waybar_launcher and
             "waybar.log" in waybar_launcher and
             "failures >= 3" in waybar_launcher and
             "native_bar" in waybar_launcher,
             "supervised Waybar fallback contract missing")
-    swaybar_status = text("roles/desktop/files/privatestack-swaybar-status.py")
+    swaybar_status = text("roles/host_desktop_sway/files/privatestack-swaybar-status.py")
     require('"click_events": True' in swaybar_status and
             'block("theme", theme.upper()' in swaybar_status and
             '["/usr/local/bin/privatestack-theme", "cycle"]' in swaybar_status,
             "native Swaybar status lacks the clickable theme control")
-    theme_helper = text("roles/desktop/files/privatestack-theme.sh")
+    theme_helper = text("roles/host_desktop_sway/files/privatestack-theme.sh")
     require("public_wallpaper_count=20" in theme_helper and
             "personal_wallpaper_count" in theme_helper and
             "active_wallpaper_count" in theme_helper and
@@ -224,11 +224,11 @@ def main():
             "lock_index=$(( (desktop_index + 3) % count ))" in theme_helper and
             "HYPERLAB_WALLPAPER_INTERVAL" in theme_helper,
             "theme helper lacks four themes, source mode, rotation or lock separation")
-    swaylock_helper = text("roles/desktop/files/privatestack-swaylock.sh")
+    swaylock_helper = text("roles/host_desktop_sway/files/privatestack-swaylock.sh")
     require("privatestack-theme lock-image" in swaylock_helper,
             "swaylock does not request a distinct theme-aware image")
 
-    waybar = text("roles/desktop/files/waybar.jsonc")
+    waybar = text("roles/host_desktop_sway/files/waybar.jsonc")
     require('"height": 37' in waybar, "Nitro-compatible Waybar height missing")
     require('"layer": "top"' in waybar and '"mode": "dock"' in waybar and
             '"exclusive": true' in waybar and '"ipc": false' in waybar,
@@ -257,7 +257,7 @@ def main():
             'Gtk.Button(label="Full Control Center")' in manager,
             "resident drawer mapping or explicit full-center escape hatch missing")
 
-    waybar_css = text("roles/desktop/files/waybar.css")
+    waybar_css = text("roles/host_desktop_sway/files/waybar.css")
     for marker in (
         "background-color: alpha(@hl_mantle, 0.985)",
         "#hyperlab",
@@ -274,14 +274,14 @@ def main():
     require("--reload-theme" in manager and "def reload_theme" in manager,
             "resident manager cannot reload Green/Violet palettes")
 
-    foot = text("roles/desktop/files/foot.ini")
+    foot = text("roles/host_desktop_sway/files/foot.ini")
     require("include=~/.config/hyperlab/palette-foot.ini" in foot,
             "Foot is disconnected from the runtime-selected palette")
     require("[colors]" not in foot and "[cursor]" not in foot,
             "Foot main config reintroduced obsolete colour sections")
     for variant in ("green", "violet", "blue", "red"):
         palette_foot = text(
-            f"roles/desktop/files/palette/{variant}/hyperlab-palette-foot.ini"
+            f"roles/host_desktop_sway/files/palette/{variant}/hyperlab-palette-foot.ini"
         )
         require("[colors-dark]" in palette_foot,
                 f"{variant} Foot palette is not using 1.26 colors-dark syntax")
@@ -289,13 +289,13 @@ def main():
                 f"{variant} transparent Hyperlab terminal alpha missing")
         require(re.search(r"(?m)^cursor=\S+\s+\S+$", palette_foot) is not None,
                 f"{variant} Foot cursor is not a parse-clean colour pair")
-    rofi_compat = text("roles/desktop/files/rofi-mocha.rasi")
+    rofi_compat = text("roles/host_desktop_sway/files/rofi-mocha.rasi")
     require('@import "~/.config/hyperlab/palette.rasi"' in rofi_compat,
             "Rofi is disconnected from the runtime-selected palette")
     require("accent2:     @hl-accent2;" in rofi_compat,
             "Rofi secondary accent is disconnected from the palette")
-    for rofi_path in ("roles/desktop/files/rofi-launcher.rasi",
-                      "roles/desktop/files/rofi-hyperlab.rasi"):
+    for rofi_path in ("roles/host_desktop_sway/files/rofi-launcher.rasi",
+                      "roles/host_desktop_sway/files/rofi-hyperlab.rasi"):
         rofi_theme = text(rofi_path)
         require("background-color: @base;" in rofi_theme,
                 f"{rofi_path} does not use the active palette base")
@@ -310,11 +310,11 @@ def main():
         "ly-hyperlab-startup.sh.j2",
     ):
         require(ly_marker in tasks, f"Ly visual contract missing: {ly_marker}")
-    ly_startup = text("roles/desktop/templates/ly-hyperlab-startup.sh.j2")
+    ly_startup = text("roles/host_desktop_sway/templates/ly-hyperlab-startup.sh.j2")
     require("\\033]P0" in ly_startup and "\\033]PF" in ly_startup,
             "Ly virtual-terminal palette hook is incomplete")
 
-    superfile = text("roles/desktop/files/superfile-config.toml")
+    superfile = text("roles/host_desktop_sway/files/superfile-config.toml")
     require('theme = "hyperlab"' in superfile,
             "Superfile custom theme is not selected")
     require("transparent_background = true" in superfile,
@@ -323,37 +323,37 @@ def main():
             "blurred image preview remains enabled")
     require("default_open_file_preview = false" in superfile,
             "preview panel still opens by default")
-    theme = text("roles/desktop/files/superfile-theme.toml")
+    theme = text("roles/host_desktop_sway/files/superfile-theme.toml")
     require('gradient_color = ["#7ee787", "#35e4dd"]' in theme,
             "Superfile fallback gradient diverges from Green tokens")
     require('full_screen_bg = "#0c1512"' in theme,
             "Superfile fallback base diverges from Green")
     for variant in ("green", "violet", "blue", "red"):
-        variant_theme = text("roles/desktop/files/palette/%s/hyperlab-palette-superfile.toml" % variant)
+        variant_theme = text("roles/host_desktop_sway/files/palette/%s/hyperlab-palette-superfile.toml" % variant)
         require("code_syntax_highlight" in variant_theme and "modal_confirm_bg" in variant_theme,
                 "Superfile palette is not a complete theme: %s" % variant)
 
-    ET.parse(ROOT / "roles/desktop/files/hyperlab-control-center.svg")
+    ET.parse(ROOT / "roles/host_desktop_sway/files/hyperlab-control-center.svg")
     for domain in ("clean", "dev", "lab", "dirty", "services"):
-        ET.parse(ROOT / ("roles/desktop/files/domain-%s.svg" % domain))
+        ET.parse(ROOT / ("roles/host_desktop_sway/files/domain-%s.svg" % domain))
         require(('"icon": "/usr/share/icons/hyperlab/domains/%s.svg"' % domain) in manager,
                 "manager domain SVG mapping missing: %s" % domain)
     require('Gtk.Image.new_from_file(meta["icon"])' in manager and
             'text_label("◆"' not in manager,
             "text diamonds remain instead of SVG domain cubes")
-    ET.parse(ROOT / "roles/desktop/files/hyperlab-wallpaper.svg")
-    desktop_wallpaper = ROOT / "roles/desktop/files/wallpaper-desktop.png"
-    lockscreen_wallpaper = ROOT / "roles/desktop/files/wallpaper-lockscreen.png"
+    ET.parse(ROOT / "roles/host_desktop_sway/files/hyperlab-wallpaper.svg")
+    desktop_wallpaper = ROOT / "roles/host_desktop_sway/files/wallpaper-desktop.png"
+    lockscreen_wallpaper = ROOT / "roles/host_desktop_sway/files/wallpaper-lockscreen.png"
     require(desktop_wallpaper.is_file() and desktop_wallpaper.stat().st_size > 25000,
             "desktop wallpaper PNG is missing or suspiciously small")
     require(lockscreen_wallpaper.is_file() and lockscreen_wallpaper.stat().st_size > 25000,
             "lockscreen wallpaper PNG is missing or suspiciously small")
-    swaylock = text("roles/desktop/files/swaylock.conf")
+    swaylock = text("roles/host_desktop_sway/files/swaylock.conf")
     require("image=" not in swaylock,
             "static lockscreen image bypasses the distinct-image wrapper")
     for variant in ("green", "violet", "blue", "red"):
         for number in range(1, 21):
-            wallpaper = ROOT / f"roles/desktop/files/wallpapers/{variant}/{number:02d}.png"
+            wallpaper = ROOT / f"roles/host_desktop_sway/files/wallpapers/{variant}/{number:02d}.png"
             require(wallpaper.is_file() and wallpaper.stat().st_size > 25000,
                     f"wallpaper pool asset missing or suspiciously small: {variant}/{number:02d}")
 

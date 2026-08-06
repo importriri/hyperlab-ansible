@@ -3,5 +3,5 @@
 # every other open decision, because a setting that can be written in two files
 # is a setting that will eventually disagree with itself.
 desktop_palette_source: "{{ playbook_dir | dirname }}/tools/palette"
-desktop_palette_fragments: "{{ playbook_dir | dirname }}/roles/desktop/files/palette"
+desktop_palette_fragments: "{{ playbook_dir | dirname }}/roles/host_desktop_sway/files/palette"
 desktop_palette_install_root: /usr/share/hyperlab
