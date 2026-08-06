@@ -47,11 +47,13 @@
     guest_vfio: "{{ guest_vfio_plan_command.stdout | from_json }}"
 
 - name: Inspect the kvmfr character device
+  when: guest_vfio.looking_glass_enabled | bool
   ansible.builtin.stat:
     path: "{{ guest_vfio.looking_glass_device }}"
   register: guest_vfio_kvmfr_stat
 
 - name: Refuse an absent or unsafe Looking Glass transport
+  when: guest_vfio.looking_glass_enabled | bool
   ansible.builtin.assert:
     that:
       - guest_vfio_kvmfr_stat.stat.exists | default(false)
@@ -63,11 +65,13 @@
       device, group kvm and mode 0660. Reconcile playbooks/looking-glass.yml.
 
 - name: Read the loaded kvmfr shared-memory size
+  when: guest_vfio.looking_glass_enabled | bool
   ansible.builtin.slurp:
     src: /sys/module/kvmfr/parameters/static_size_mb
   register: guest_vfio_kvmfr_size_slurp
 
 - name: Require the kernel and XML shared-memory sizes to match
+  when: guest_vfio.looking_glass_enabled | bool
   ansible.builtin.assert:
     that:
       - >-

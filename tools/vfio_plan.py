@@ -76,6 +76,109 @@ def power_of_two(value: int) -> bool:
     return value > 0 and (value & (value - 1)) == 0
 
 
+def cpu_id_list(value: Any, label: str) -> list[int]:
+    require(isinstance(value, list) and value, f"{label} must be a non-empty list")
+    require(
+        all(isinstance(item, int) and not isinstance(item, bool) and item >= 0 for item in value),
+        f"{label} must contain non-negative CPU integers",
+    )
+    require(len(set(value)) == len(value), f"{label} contains duplicate CPU IDs")
+    return value
+
+
+def build_cpu_pinning(
+    profile: dict[str, Any],
+    report: dict[str, Any],
+    guest_vcpus: Any,
+) -> dict[str, Any]:
+    raw = profile.get("cpu_pinning")
+    if raw in (None, {}):
+        return {"enabled": False}
+    require(isinstance(raw, dict), "cpu_pinning must be a mapping")
+    host_threads = raw.get("host_cpu_threads")
+    report_threads = report.get("cpu_threads")
+    require(
+        isinstance(host_threads, int) and not isinstance(host_threads, bool) and host_threads > 0,
+        "cpu_pinning.host_cpu_threads must be a positive integer",
+    )
+    require(
+        isinstance(report_threads, int) and not isinstance(report_threads, bool),
+        "hardware report cpu_threads must be an integer",
+    )
+    require(
+        report_threads == host_threads,
+        "reviewed CPU pinning does not match the detected host thread count",
+    )
+    require(
+        isinstance(guest_vcpus, int) and not isinstance(guest_vcpus, bool),
+        "guest vCPU count must be an integer",
+    )
+    plans = raw.get("plans")
+    require(isinstance(plans, dict), "cpu_pinning.plans must be a mapping")
+    selected = plans.get(str(guest_vcpus))
+    require(
+        isinstance(selected, dict),
+        f"no reviewed CPU pinning plan exists for {guest_vcpus} vCPUs",
+    )
+    vcpu_pins = cpu_id_list(
+        selected.get("vcpu_pins"),
+        f"cpu_pinning.plans.{guest_vcpus}.vcpu_pins",
+    )
+    emulator_cpus = cpu_id_list(
+        selected.get("emulator_cpus"),
+        f"cpu_pinning.plans.{guest_vcpus}.emulator_cpus",
+    )
+    iothread_cpus = cpu_id_list(
+        selected.get("iothread_cpus"),
+        f"cpu_pinning.plans.{guest_vcpus}.iothread_cpus",
+    )
+    require(
+        len(vcpu_pins) == guest_vcpus,
+        "reviewed vCPU pin count differs from the guest vCPU count",
+    )
+    all_ids = vcpu_pins + emulator_cpus + iothread_cpus
+    require(
+        all(cpu_id < host_threads for cpu_id in all_ids),
+        "reviewed CPU pinning names a CPU outside the detected host",
+    )
+    require(
+        set(vcpu_pins).isdisjoint(emulator_cpus)
+        and set(vcpu_pins).isdisjoint(iothread_cpus),
+        "guest CPU pins must be disjoint from emulator and I/O CPU sets",
+    )
+    topology = selected.get("topology")
+    require(isinstance(topology, dict), "cpu_pinning.topology must be a mapping")
+    required_topology = ("sockets", "dies", "cores", "threads")
+    require(set(topology) == set(required_topology), "CPU topology fields are incomplete")
+    require(
+        all(
+            isinstance(topology[key], int)
+            and not isinstance(topology[key], bool)
+            and topology[key] > 0
+            for key in required_topology
+        ),
+        "CPU topology values must be positive integers",
+    )
+    require(
+        topology["sockets"]
+        * topology["dies"]
+        * topology["cores"]
+        * topology["threads"]
+        == guest_vcpus,
+        "CPU topology product differs from the guest vCPU count",
+    )
+    return {
+        "enabled": True,
+        "vcpu_pins": [
+            {"vcpu": index, "cpuset": str(cpu_id)}
+            for index, cpu_id in enumerate(vcpu_pins)
+        ],
+        "emulator_cpuset": ",".join(str(item) for item in emulator_cpus),
+        "iothread_cpuset": ",".join(str(item) for item in iothread_cpus),
+        "topology": topology,
+    }
+
+
 def build_vfio_plan(
     plan: dict[str, Any],
     report: dict[str, Any],
@@ -135,6 +238,7 @@ def build_vfio_plan(
     require(spice_host == "127.0.0.1", "VFIO SPICE recovery must stay loopback-only")
     require(spice_port == 5900, "VFIO recovery console requires fixed SPICE port 5900")
 
+    cpu_pinning = build_cpu_pinning(profile, report, plan.get("vcpus"))
     looking_glass = plan["looking_glass"]
     required_build = plan.get("looking_glass_host_build_required")
     if looking_glass:
@@ -165,6 +269,7 @@ def build_vfio_plan(
         "devices": [gpu, audio],
         "network_profile": network,
         "trust_level": trust_level,
+        "cpu_pinning": cpu_pinning,
         "looking_glass_enabled": looking_glass,
         "looking_glass_build": lg_build,
         "looking_glass_device": lg_device,

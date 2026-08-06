@@ -63,8 +63,9 @@ same or a lower trust level until reboot clears `/run/gpu-handoff`.
 - Services can never receive the GPU because no services trust level exists.
 - The two Windows images must contain the pinned Looking Glass host application
   before they can be sealed and used.
-- USB passthrough, CPU pinning and real-time tuning remain later stages rather
-  than entering M4 as unreviewed exceptions.
+- USB passthrough and real-time scheduling remain later stages. CPU pinning is
+  rendered only when the selected host profile contains a reviewed plan for the
+  exact guest vCPU count and preflight confirms the expected host thread count.
 - Hardware validation is deferred to the final campaign; until then M4 remains
   a draft stage protected by host-independent plans, render tests, protocol
   tests and CI.

@@ -170,6 +170,27 @@ def vfio_fixture(root: Path) -> tuple[Path, Path, Path, dict[str, Any], dict[str
                 "max_auto_memory_mb": 6144,
                 "standard_overcommit_ratio": 1.0,
             },
+            "cpu_pinning": {
+                "host_cpu_threads": 8,
+                "plans": {
+                    "4": {
+                        "vcpu_pins": [2, 6, 3, 7],
+                        "emulator_cpus": [0, 4],
+                        "iothread_cpus": [1, 5],
+                        "topology": {
+                            "sockets": 1, "dies": 1, "cores": 2, "threads": 2
+                        },
+                    },
+                    "6": {
+                        "vcpu_pins": [1, 5, 2, 6, 3, 7],
+                        "emulator_cpus": [0, 4],
+                        "iothread_cpus": [0, 4],
+                        "topology": {
+                            "sockets": 1, "dies": 1, "cores": 3, "threads": 2
+                        },
+                    },
+                },
+            },
         }
     }
     trust = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
@@ -258,6 +279,12 @@ def test_vfio_plan() -> None:
         assert vfio["trust_level"] == 3
         assert vfio["looking_glass_shm_bytes"] == 64 * 1024 * 1024
         assert vfio["spice_port"] == 5900
+        assert vfio["cpu_pinning"]["enabled"] is True
+        assert [item["cpuset"] for item in vfio["cpu_pinning"]["vcpu_pins"]] == [
+            "1", "5", "2", "6", "3", "7"
+        ]
+        assert vfio["cpu_pinning"]["emulator_cpuset"] == "0,4"
+        assert vfio["cpu_pinning"]["iothread_cpuset"] == "0,4"
 
         mismatch = build_vfio_plan(plan, report, profiles, trust, build="B7-999-g0123456789")
         assert mismatch.returncode == 2 and "differs" in mismatch.stderr
@@ -338,6 +365,20 @@ def test_domain_templates() -> None:
         assert domain.find("./devices/input[@type='mouse'][@bus='virtio']") is not None
         assert domain.find("./devices/input[@type='keyboard'][@bus='virtio']") is not None
         assert domain.find("./devices/memballoon").get("model") == "none"
+        assert domain.find("./iothreads").text == "1"
+        pins = domain.findall("./cputune/vcpupin")
+        assert [(node.get("vcpu"), node.get("cpuset")) for node in pins] == [
+            ("0", "1"), ("1", "5"), ("2", "2"),
+            ("3", "6"), ("4", "3"), ("5", "7"),
+        ]
+        assert domain.find("./cputune/emulatorpin").get("cpuset") == "0,4"
+        assert domain.find("./cputune/iothreadpin").get("cpuset") == "0,4"
+        topology = domain.find("./cpu/topology")
+        assert topology.attrib == {
+            "sockets": "1", "dies": "1", "cores": "3", "threads": "2"
+        }
+        disk_driver = domain.find("./devices/disk[@device='disk']/driver")
+        assert disk_driver.get("iothread") == "1"
         qemu_args = [node.get("value") for node in domain.findall(
             "./{http://libvirt.org/schemas/domain/qemu/1.0}commandline/"
             "{http://libvirt.org/schemas/domain/qemu/1.0}arg"
