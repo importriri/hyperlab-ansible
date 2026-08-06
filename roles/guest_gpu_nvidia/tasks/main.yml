@@ -1,0 +1,116 @@
+---
+- name: Keep the NVIDIA driver contract inside workstation guests
+  ansible.builtin.assert:
+    that:
+      - "'workstations' in group_names"
+      - "'hypervisor' not in group_names"
+      - ansible_facts['virtualization_role'] == 'guest'
+      - ansible_facts['os_family'] == 'Archlinux'
+      - "'-zen' in ansible_facts['kernel']"
+      - guest_gpu_nvidia_vendor_id == '10de'
+      - guest_gpu_nvidia_modules == ['nvidia', 'nvidia_modeset', 'nvidia_uvm', 'nvidia_drm']
+    fail_msg: >-
+      guest_gpu_nvidia is an Arch Zen workstation-guest brick for the reviewed
+      NVIDIA passthrough path. It must never configure the physical host.
+
+- name: Inspect the running Zen kernel build tree
+  ansible.builtin.stat:
+    path: "/usr/lib/modules/{{ ansible_facts['kernel'] }}/build"
+    follow: true
+  register: guest_gpu_nvidia_kernel_build
+
+- name: Require matching headers before a DKMS transaction
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_nvidia_kernel_build.stat.exists | default(false)
+      - guest_gpu_nvidia_kernel_build.stat.isdir | default(false)
+    fail_msg: >-
+      The running Zen kernel needs its matching build tree before NVIDIA DKMS
+      can be reconciled. Apply workstation_kernel and reboot first.
+
+- name: Install the guest PCI probe dependency
+  community.general.pacman:
+    name: "{{ guest_gpu_nvidia_probe_packages }}"
+    state: present
+
+- name: Detect NVIDIA PCI functions inside the guest
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/lspci
+      - -Dn
+      - -d
+      - "{{ guest_gpu_nvidia_vendor_id }}:"
+  register: guest_gpu_nvidia_lspci
+  changed_when: false
+  check_mode: false
+
+- name: Refuse driver activation before the passed GPU is visible
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_nvidia_lspci.stdout_lines | length >= 1
+      - >-
+        guest_gpu_nvidia_lspci.stdout is
+        search('(?i)\\b' ~ guest_gpu_nvidia_vendor_id ~ ':')
+    fail_msg: >-
+      No NVIDIA PCI function is visible inside this guest. Attach the reviewed
+      GPU and audio functions through the VFIO VM transaction before applying
+      guest_gpu_nvidia.
+
+- name: Install the official NVIDIA Wayland guest stack
+  community.general.pacman:
+    name: "{{ guest_gpu_nvidia_packages }}"
+    state: present
+
+- name: Load the NVIDIA module set at guest boot
+  ansible.builtin.copy:
+    content: "{{ guest_gpu_nvidia_modules | join('\\n') }}\n"
+    dest: /etc/modules-load.d/privatestack-nvidia.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Rebuild guest initramfs for NVIDIA
+
+- name: Enable NVIDIA DRM kernel modesetting
+  ansible.builtin.copy:
+    src: privatestack-nvidia.conf
+    dest: /etc/modprobe.d/privatestack-nvidia.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Rebuild guest initramfs for NVIDIA
+
+- name: Keep nouveau away from the passed NVIDIA device
+  ansible.builtin.copy:
+    src: privatestack-nouveau.conf
+    dest: /etc/modprobe.d/privatestack-nouveau.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Rebuild guest initramfs for NVIDIA
+
+- name: Complete pending NVIDIA initramfs work
+  ansible.builtin.meta: flush_handlers
+
+- name: Inspect the built NVIDIA kernel module
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/modinfo
+      - -n
+      - nvidia
+  register: guest_gpu_nvidia_modinfo
+  changed_when: false
+  check_mode: false
+
+- name: Require the built NVIDIA module to belong to the running kernel
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_nvidia_modinfo.stdout is match('^/usr/lib/modules/' ~ ansible_facts['kernel'] ~ '/')
+    fail_msg: >-
+      nvidia-open-dkms did not produce a module for the running Zen kernel.
+
+- name: Record that the guest_gpu_nvidia brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_gpu_nvidia

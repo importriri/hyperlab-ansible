@@ -1,0 +1,10 @@
+---
+- name: Assemble an accelerated Arch Hyprland development workstation
+  hosts: workstations
+  become: true
+  roles:
+    - workstation_kernel
+    - workstation_access
+    - guest_desktop_hyprland
+    - dev_ide
+    - guest_gpu_nvidia

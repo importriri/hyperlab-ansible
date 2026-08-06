@@ -150,6 +150,9 @@ identity is unambiguous.
 
 - `guest-arch-hyprland.yml` builds the reusable Arch Hyprland workstation.
 - `guest-arch-dev.yml` adds the development stack to that workstation.
+- `guest-gpu-nvidia.yml` is the narrow post-passthrough NVIDIA driver target.
+- `guest-arch-dev-vfio.yml` assembles the full accelerated development guest,
+  but refuses to install the driver until an NVIDIA PCI function is visible.
 - `dev.yml` remains a compatibility entrypoint for `guest-arch-dev.yml`.
 - `./verify.sh` mirrors the full CI discovery locally.
 - `tests/render.yml` verifies generated configuration without touching the host.

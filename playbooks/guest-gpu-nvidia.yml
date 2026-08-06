@@ -1,0 +1,9 @@
+---
+- name: Configure the passed NVIDIA GPU inside an Arch workstation guest
+  hosts: workstations
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest_gpu_nvidia
+    - guest_gpu_nvidia

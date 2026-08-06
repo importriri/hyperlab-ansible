@@ -1,0 +1,7 @@
+---
+- name: Rebuild guest initramfs for NVIDIA
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mkinitcpio
+      - -P
+  changed_when: true

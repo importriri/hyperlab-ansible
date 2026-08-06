@@ -51,6 +51,10 @@ brick exists; task files remain the source for implementation details.
   keeping direct root authentication disabled.
 - **`guest_desktop_hyprland`** provides the guest-only Hyprland shell and removes
   legacy host-cockpit artefacts from migrated workstations.
+- **`guest_visual_assets`** verifies and injects private wallpaper pools through
+  ephemeral controller and guest staging; no asset remains on the host.
+- **`guest_gpu_nvidia`** installs the official open NVIDIA DKMS and Wayland stack
+  only after a passed NVIDIA PCI function is visible inside the guest.
 - **`dev_ide`** adds the pinned editor and language-server stack after the guest
   desktop is present; it is never a host dependency.
 

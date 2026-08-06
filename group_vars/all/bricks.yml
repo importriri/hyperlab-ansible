@@ -24,6 +24,7 @@ brick_requires:
   workstation_access: []
   guest_desktop_hyprland: [workstation_kernel, workstation_access]
   guest_visual_assets: [guest_desktop_hyprland]
+  guest_gpu_nvidia: [guest_desktop_hyprland]
   dev_ide: [guest_desktop_hyprland]
   looking_glass: [host_desktop_sway, kvm_host]
 
@@ -49,5 +50,6 @@ brick_playbooks:
   workstation_access: playbooks/guest-arch-hyprland.yml
   guest_desktop_hyprland: playbooks/guest-arch-hyprland.yml
   guest_visual_assets: playbooks/guest-visual-assets.yml
+  guest_gpu_nvidia: playbooks/guest-gpu-nvidia.yml
   dev_ide: playbooks/guest-arch-dev.yml
   looking_glass: playbooks/looking-glass.yml
