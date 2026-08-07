@@ -15,6 +15,18 @@ looking_glass_shm_mb: "{{ hyperlab_looking_glass_shm_mb }}"
 looking_glass_device: "{{ hyperlab_looking_glass_device }}"
 looking_glass_qemu_user: libvirt-qemu
 looking_glass_device_group: kvm
+looking_glass_qemu_conf: /etc/libvirt/qemu.conf
+looking_glass_libvirt_service: libvirtd.service
+looking_glass_cgroup_required_devices:
+  - /dev/null
+  - /dev/full
+  - /dev/zero
+  - /dev/random
+  - /dev/urandom
+  - /dev/ptmx
+  - /dev/kvm
+looking_glass_cgroup_optional_devices:
+  - /dev/userfaultfd
 looking_glass_escape_key: KEY_RIGHTCTRL
 looking_glass_fullscreen: true
 looking_glass_spice_host: "{{ hyperlab_looking_glass_spice_host }}"

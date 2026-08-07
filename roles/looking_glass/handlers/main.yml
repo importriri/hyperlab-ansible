@@ -17,3 +17,8 @@
 - name: Retrigger the kvmfr device
   ansible.builtin.command: udevadm trigger --subsystem-match=kvmfr --action=change
   changed_when: true
+
+- name: Restart libvirtd for KVMFR cgroup policy
+  ansible.builtin.systemd_service:
+    name: "{{ looking_glass_libvirt_service }}"
+    state: restarted

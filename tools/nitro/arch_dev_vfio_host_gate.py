@@ -67,18 +67,67 @@ def pci_from_xml(address: ET.Element) -> str:
     return f"{number('domain'):04x}:{number('bus'):02x}:{number('slot'):02x}.{number('function')}"
 
 
+def xml_memory_mib(
+    node: ET.Element | None,
+    label: str,
+) -> int:
+    require(node is not None, f"{label} is missing")
+
+    raw = (node.text or "").strip()
+
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise GateError(
+            f"{label} value is invalid: {raw!r}"
+        ) from error
+
+    require(
+        value >= 0,
+        f"{label} value must not be negative",
+    )
+
+    unit = node.get("unit", "KiB")
+
+    if unit == "KiB":
+        require(
+            value % 1024 == 0,
+            f"{label} is not a whole MiB",
+        )
+        return value // 1024
+
+    if unit == "MiB":
+        return value
+
+    if unit == "GiB":
+        return value * 1024
+
+    raise GateError(
+        f"{label} unit is unsupported: {unit!r}"
+    )
+
+
 def validate_xml(xml_text: str, report: dict[str, Any]) -> dict[str, Any]:
     root = ET.fromstring(xml_text)
     require(root.findtext("name") == "arch-dev-vfio", "unexpected domain name")
-    memory = root.find("memory")
-    require(memory is not None and memory.get("unit") == "MiB", "memory must use MiB")
-    memory_mib = int(memory.text or "0")
-    require(memory_mib in {8192, 16384}, "memory must use balanced or heavy profile")
-    current_memory = root.find("currentMemory")
+
+    memory_mib = xml_memory_mib(
+        root.find("memory"),
+        "memory",
+    )
+
     require(
-        current_memory is not None
-        and current_memory.get("unit") == "MiB"
-        and int(current_memory.text or "0") == memory_mib,
+        memory_mib in {8192, 16384},
+        "memory must use balanced or heavy profile",
+    )
+
+    current_memory_mib = xml_memory_mib(
+        root.find("currentMemory"),
+        "current memory",
+    )
+
+    require(
+        current_memory_mib == memory_mib,
         "current memory must match the selected profile",
     )
     require(root.findtext("vcpu") == "4", "Nitro Linux profile requires four vCPUs")
@@ -93,8 +142,27 @@ def validate_xml(xml_text: str, report: dict[str, Any]) -> dict[str, Any]:
 
     topology = root.find("./cpu/topology")
     require(topology is not None, "virtual CPU topology is missing")
+
+    topology_attributes = dict(topology.attrib)
+    topology_keys = {
+        "sockets",
+        "dies",
+        "clusters",
+        "cores",
+        "threads",
+    }
+
     require(
-        topology.attrib == {"sockets": "1", "dies": "1", "cores": "2", "threads": "2"},
+        set(topology_attributes) <= topology_keys,
+        "virtual CPU topology has unsupported attributes",
+    )
+
+    require(
+        topology_attributes.get("sockets") == "1"
+        and topology_attributes.get("dies") == "1"
+        and topology_attributes.get("clusters", "1") == "1"
+        and topology_attributes.get("cores") == "2"
+        and topology_attributes.get("threads") == "2",
         "virtual CPU topology drift",
     )
     disk_driver = root.find("./devices/disk[@device='disk']/driver")
@@ -132,6 +200,7 @@ def validate_runtime(
     sysfs: Path,
     kvmfr: Path,
     vfio_root: Path,
+    probe_group_viability: bool = True,
 ) -> None:
     require(kvmfr.exists(), "kvmfr device is missing")
     require(stat.S_ISCHR(kvmfr.stat().st_mode), "kvmfr path is not a character device")
@@ -161,10 +230,12 @@ def validate_runtime(
 
     for group_name in unique_groups:
         vfio_group = vfio_root / group_name
-        require(
-            vfio_group_is_viable(vfio_group),
-            f"VFIO group is not viable: {group_name}",
-        )
+
+        if probe_group_viability:
+            require(
+                vfio_group_is_viable(vfio_group),
+                f"VFIO group is not viable: {group_name}",
+            )
 
         group_devices = sysfs / "kernel/iommu_groups" / group_name / "devices"
         require(
@@ -230,6 +301,7 @@ def main() -> int:
                 Path(args.sysfs_root),
                 Path(args.kvmfr_device),
                 Path(args.vfio_root),
+                probe_group_viability=bool(args.xml_file),
             )
     except (OSError, ET.ParseError, GateError, yaml.YAMLError) as error:
         print(f"Nitro VFIO host gate refused: {error}", file=sys.stderr)

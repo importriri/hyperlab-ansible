@@ -104,6 +104,110 @@
       - looking_glass_device_stat.stat.exists | default(false)
       - looking_glass_device_stat.stat.ischr | default(false)
 
+- name: Inspect the libvirt QEMU policy file
+  ansible.builtin.stat:
+    path: "{{ looking_glass_qemu_conf }}"
+    follow: false
+  register: looking_glass_qemu_conf_stat
+
+- name: Refuse a missing or redirected libvirt QEMU policy file
+  ansible.builtin.assert:
+    that:
+      - looking_glass_qemu_conf_stat.stat.exists | default(false)
+      - looking_glass_qemu_conf_stat.stat.isreg | default(false)
+      - not (looking_glass_qemu_conf_stat.stat.islnk | default(false))
+    fail_msg: >-
+      Looking Glass requires one regular libvirt QEMU configuration file at
+      {{ looking_glass_qemu_conf }} before KVMFR cgroup policy can be managed.
+
+- name: Read the current libvirt QEMU policy
+  ansible.builtin.slurp:
+    src: "{{ looking_glass_qemu_conf }}"
+  register: looking_glass_qemu_conf_raw
+
+- name: Publish the current libvirt QEMU policy text
+  ansible.builtin.set_fact:
+    looking_glass_qemu_conf_text: >-
+      {{ looking_glass_qemu_conf_raw.content | b64decode }}
+
+- name: Count active libvirt cgroup device ACL assignments
+  ansible.builtin.set_fact:
+    looking_glass_qemu_acl_active_count: >-
+      {{ looking_glass_qemu_conf_text
+         | regex_findall('(?m)^[ \t]*cgroup_device_acl[ \t]*=')
+         | length }}
+    looking_glass_qemu_acl_managed: >-
+      {{ '# BEGIN PRIVATESTACK KVMFR CGROUP ACL'
+         in looking_glass_qemu_conf_text
+         and '# END PRIVATESTACK KVMFR CGROUP ACL'
+         in looking_glass_qemu_conf_text }}
+
+- name: Refuse an unmanaged libvirt cgroup device ACL
+  ansible.builtin.assert:
+    that:
+      - >-
+        looking_glass_qemu_acl_active_count | int == 0
+        or
+        (looking_glass_qemu_acl_active_count | int == 1
+         and looking_glass_qemu_acl_managed | bool)
+    fail_msg: >-
+      {{ looking_glass_qemu_conf }} already has an active administrator-owned
+      cgroup_device_acl. Refusing to replace or shadow an unknown device policy.
+
+- name: Inspect required libvirt shared devices
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ looking_glass_cgroup_required_devices }}"
+  register: looking_glass_cgroup_required_stats
+
+- name: Require every core libvirt shared device
+  ansible.builtin.assert:
+    that:
+      - >-
+        looking_glass_cgroup_required_stats.results
+        | selectattr('stat.exists', 'equalto', false)
+        | list
+        | length == 0
+      - >-
+        looking_glass_cgroup_required_stats.results
+        | selectattr('stat.ischr', 'equalto', false)
+        | list
+        | length == 0
+    fail_msg: >-
+      A required QEMU character device is missing. Refusing to replace
+      libvirt's implicit device policy with an incomplete explicit ACL.
+
+- name: Inspect optional libvirt shared devices
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop: "{{ looking_glass_cgroup_optional_devices }}"
+  register: looking_glass_cgroup_optional_stats
+
+- name: Build the explicit KVMFR cgroup device ACL
+  ansible.builtin.set_fact:
+    looking_glass_cgroup_acl_devices: >-
+      {{ looking_glass_cgroup_required_devices
+         + (looking_glass_cgroup_optional_stats.results
+            | selectattr('stat.exists')
+            | map(attribute='item')
+            | list)
+         + [looking_glass_device] }}
+
+- name: Allow the confined QEMU process to open KVMFR
+  ansible.builtin.blockinfile:
+    path: "{{ looking_glass_qemu_conf }}"
+    marker: "# {mark} PRIVATESTACK KVMFR CGROUP ACL"
+    block: |
+      cgroup_device_acl = [
+      {% for device in looking_glass_cgroup_acl_devices %}
+          "{{ device }}"{% if not loop.last %},{% endif %}
+      {% endfor %}
+      ]
+  notify:
+    - Restart libvirtd for KVMFR cgroup policy
+
 - name: Own the stamp directory
   ansible.builtin.file:
     path: "{{ looking_glass_stamp | dirname }}"

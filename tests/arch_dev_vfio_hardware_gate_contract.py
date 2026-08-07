@@ -8,6 +8,7 @@ import subprocess
 import sys
 import os
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import ModuleType
 
@@ -107,6 +108,96 @@ def main() -> int:
             "bdfs": ["0000:01:00.0", "0000:01:00.1"],
         }
 
+        live_root = ET.fromstring(xml)
+
+        for tag in ("memory", "currentMemory"):
+            node = live_root.find(tag)
+            assert node is not None
+            node.set("unit", "KiB")
+            node.text = str(8192 * 1024)
+
+        live_topology = live_root.find("./cpu/topology")
+        assert live_topology is not None
+        live_topology.set("clusters", "1")
+
+        live_xml = ET.tostring(
+            live_root,
+            encoding="unicode",
+        )
+
+        live_summary = host_gate.validate_xml(
+            live_xml,
+            report,
+        )
+
+        assert live_summary == summary
+
+        bad_topology_root = ET.fromstring(live_xml)
+        bad_topology = bad_topology_root.find("./cpu/topology")
+        assert bad_topology is not None
+        bad_topology.set("clusters", "2")
+
+        bad_topology_xml = ET.tostring(
+            bad_topology_root,
+            encoding="unicode",
+        )
+
+        try:
+            host_gate.validate_xml(
+                bad_topology_xml,
+                report,
+            )
+        except host_gate.GateError as error:
+            assert "topology drift" in str(error)
+        else:
+            raise AssertionError(
+                "clusters drift was accepted"
+            )
+
+        bad_topology_root = ET.fromstring(live_xml)
+        bad_topology = bad_topology_root.find("./cpu/topology")
+        assert bad_topology is not None
+        bad_topology.set("unknown", "1")
+
+        bad_topology_xml = ET.tostring(
+            bad_topology_root,
+            encoding="unicode",
+        )
+
+        try:
+            host_gate.validate_xml(
+                bad_topology_xml,
+                report,
+            )
+        except host_gate.GateError as error:
+            assert "unsupported attributes" in str(error)
+        else:
+            raise AssertionError(
+                "unknown topology attribute was accepted"
+            )
+
+        bad_live_root = ET.fromstring(live_xml)
+        bad_memory = bad_live_root.find("memory")
+        assert bad_memory is not None
+        bad_memory.text = str((8192 * 1024) + 1)
+
+        bad_live_xml = ET.tostring(
+            bad_live_root,
+            encoding="unicode",
+        )
+
+        try:
+            host_gate.validate_xml(
+                bad_live_xml,
+                report,
+            )
+        except host_gate.GateError as error:
+            assert "whole MiB" in str(error)
+        else:
+            raise AssertionError(
+                "fractional MiB live memory was accepted"
+            )
+
         broken = xml.replace('cpuset="2"', 'cpuset="1"', 1)
         try:
             host_gate.validate_xml(broken, report)
@@ -195,6 +286,23 @@ def main() -> int:
             assert "not viable" in str(error)
         else:
             raise AssertionError("non-viable VFIO group was accepted")
+
+        host_gate.vfio_group_is_viable = viable
+
+        def unexpected_live_probe(_path: Path) -> bool:
+            raise AssertionError(
+                "active-domain runtime gate reopened the owned VFIO group"
+            )
+
+        host_gate.vfio_group_is_viable = unexpected_live_probe
+
+        host_gate.validate_runtime(
+            report,
+            sysfs,
+            Path("/dev/null"),
+            vfio_root,
+            probe_group_viability=False,
+        )
 
         host_gate.vfio_group_is_viable = viable
 
