@@ -332,6 +332,7 @@ def test_domain_templates() -> None:
         assert disk_dac is not None and disk_dac.get("relabel") == "no"
         assert domain.find("./devices/graphics").get("autoport") == "yes"
         assert domain.find("./devices/input[@type='tablet']") is not None
+        assert domain.find("./features/ps2") is None
         assert domain.find("./devices/memballoon").get("model") == "virtio"
 
         public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGateFixture gate"]
@@ -366,6 +367,8 @@ def test_domain_templates() -> None:
         assert graphics.get("port") == "5900" and graphics.get("autoport") == "no"
         assert domain.find("./devices/input[@type='mouse'][@bus='virtio']") is not None
         assert domain.find("./devices/input[@type='keyboard'][@bus='virtio']") is not None
+        ps2 = domain.find("./features/ps2")
+        assert ps2 is not None and ps2.get("state") == "off"
         assert domain.find("./devices/memballoon").get("model") == "none"
         assert domain.find("./iothreads").text == "1"
         pins = domain.findall("./cputune/vcpupin")

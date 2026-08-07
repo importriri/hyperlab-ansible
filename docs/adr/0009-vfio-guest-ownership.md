@@ -40,8 +40,9 @@ The rendered libvirt domain owns both reviewed PCI functions through managed
 pinned QEMU command line; SPICE remains loopback-only on port 5900 for input and
 recovery. A VGA device remains until hardware acceptance proves the complete
 Looking Glass path. Linux guests may request the same IVSHMEM transport only
-through the explicit experimental mode; SPICE remains available throughout. VFIO domains use virtio keyboard and mouse and disable the
-balloon because IOMMU-pinned memory is not reclaimable.
+through the explicit experimental mode; SPICE remains available throughout. VFIO domains use virtio keyboard and mouse, explicitly disable the Q35 PS/2
+controller so libvirt cannot synthesize duplicate legacy input devices, and
+disable the balloon because IOMMU-pinned memory is not reclaimable.
 
 Before definition, every libvirt domain is checked for UUID, MAC and PCI
 collisions. Before start, a global GPU lock and the existing capacity lock are

@@ -39,6 +39,9 @@
     <acpi/>
     <apic/>
     <vmport state="off"/>
+{% if guest_plan.device_profile == 'vfio' %}
+    <ps2 state="off"/>
+{% endif %}
 {% if guest_plan.device_profile == 'vfio' and guest_plan.os_family == 'windows' %}
     <hyperv mode="custom">
       <relaxed state="on"/>

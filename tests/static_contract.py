@@ -246,6 +246,20 @@ def collect_errors(root: Path = ROOT) -> list[str]:
         "guest VFIO must compare runtime bytes with the XML MiB contract",
     )
 
+    check(
+        '<ps2 state="off"/>' in guest_template
+        and "guest_plan.device_profile == 'vfio'" in guest_template,
+        "VFIO domains must disable the legacy PS/2 controller",
+    )
+    guest_xml_contract = (
+        ROOT / "tools/guest_xml_contract.py"
+    ).read_text()
+    check(
+        '"ps2": attr(root, "./features/ps2", "state")'
+        in guest_xml_contract,
+        "guest XML comparison must pin the PS/2 feature state",
+    )
+
     requires = bricks.get("brick_requires", {})
     role_names = {d.name for d in (ROOT / "roles").iterdir() if d.is_dir()}
     check(set(requires) <= role_names, "brick_requires names a role that does not exist")

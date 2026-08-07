@@ -170,6 +170,7 @@ def signature(path: Path) -> dict[str, Any]:
         "cpu_migratable": None if cpu is None else cpu.get("migratable"),
         "hyperv": root.find("./features/hyperv") is not None,
         "kvm_hidden": attr(root, "./features/kvm/hidden", "state"),
+        "ps2": attr(root, "./features/ps2", "state"),
         "disk": None if disk_source is None else disk_source.get("file"),
         "disk_dac_relabel": (
             None if disk_dac_seclabel is None else disk_dac_seclabel.get("relabel")
