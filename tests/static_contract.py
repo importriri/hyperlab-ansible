@@ -215,6 +215,37 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("qemu:commandline" in guest_template and "guest_vfio.looking_glass_device" in guest_template, "VFIO XML must use the reviewed kvmfr command line")
     check("autoport=\"no\"" in guest_template and "guest_vfio.spice_port" in guest_template, "VFIO XML must pin the SPICE input endpoint")
 
+    guest_defaults = load_mapping(
+        ROOT / "roles/guest/defaults/main.yml",
+        errors,
+    )
+    guest_vfio_tasks = (
+        ROOT / "roles/guest/tasks/vfio.yml"
+    ).read_text()
+    kvmfr_size_tool = (
+        ROOT / "tools/kvmfr_size.py"
+    ).read_text()
+    check(
+        guest_defaults.get("guest_kvmfr_size_tool")
+        == "{{ guest_repository_root }}/tools/kvmfr_size.py",
+        "guest role must use the versioned kvmfr size probe",
+    )
+    check(
+        "KVMFR_DMABUF_GETSIZE" in kvmfr_size_tool
+        and "fcntl.ioctl" in kvmfr_size_tool,
+        "kvmfr runtime size must come from the device ioctl",
+    )
+    check(
+        "/sys/module/kvmfr/parameters/static_size_mb"
+        not in guest_vfio_tasks,
+        "guest VFIO must not read the hidden kvmfr module parameter",
+    )
+    check(
+        "guest_kvmfr_size_tool" in guest_vfio_tasks
+        and "1024 * 1024" in guest_vfio_tasks,
+        "guest VFIO must compare runtime bytes with the XML MiB contract",
+    )
+
     requires = bricks.get("brick_requires", {})
     role_names = {d.name for d in (ROOT / "roles").iterdir() if d.is_dir()}
     check(set(requires) <= role_names, "brick_requires names a role that does not exist")

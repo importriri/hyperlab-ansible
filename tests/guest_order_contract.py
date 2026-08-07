@@ -104,6 +104,13 @@ def main() -> int:
     assert vfio_text.index(
         "Build the host-local VFIO plan without side effects"
     ) < vfio_text.index("Inspect the kvmfr character device")
+    assert vfio_text.index(
+        "Inspect the kvmfr character device"
+    ) < vfio_text.index(
+        "Read the loaded kvmfr shared-memory size through its ioctl"
+    )
+    assert "guest_kvmfr_size_tool" in vfio_text
+    assert "/sys/module/kvmfr/parameters/static_size_mb" not in vfio_text
     assert "vfio-pci" in vfio_text
     assert "iommu_group" in vfio_text
 

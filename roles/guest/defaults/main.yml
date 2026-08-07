@@ -25,6 +25,7 @@ guest_resource_profiles_file: >-
 
 guest_plan_tool: "{{ guest_repository_root }}/tools/guest_plan.py"
 guest_vfio_plan_tool: "{{ guest_repository_root }}/tools/vfio_plan.py"
+guest_kvmfr_size_tool: "{{ guest_repository_root }}/tools/kvmfr_size.py"
 guest_vfio_registry_tool: "{{ guest_repository_root }}/tools/vfio_registry.py"
 guest_image_plan_tool: "{{ guest_repository_root }}/tools/image_plan.py"
 guest_image_receipt_guard_tool: "{{ guest_repository_root }}/tools/image_receipt_guard.py"

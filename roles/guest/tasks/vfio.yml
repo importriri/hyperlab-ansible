@@ -64,22 +64,30 @@
       {{ guest_vfio.looking_glass_device }} must be the reviewed kvmfr character
       device, group kvm and mode 0660. Reconcile playbooks/looking-glass.yml.
 
-- name: Read the loaded kvmfr shared-memory size
+- name: Read the loaded kvmfr shared-memory size through its ioctl
   when: guest_vfio.looking_glass_enabled | bool
-  ansible.builtin.slurp:
-    src: /sys/module/kvmfr/parameters/static_size_mb
-  register: guest_vfio_kvmfr_size_slurp
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_python_bin }}"
+      - "{{ guest_kvmfr_size_tool }}"
+      - --device
+      - "{{ guest_vfio.looking_glass_device }}"
+  register: guest_vfio_kvmfr_size_command
+  changed_when: false
+  check_mode: false
 
-- name: Require the kernel and XML shared-memory sizes to match
+- name: Require the device and XML shared-memory sizes to match
   when: guest_vfio.looking_glass_enabled | bool
   ansible.builtin.assert:
     that:
       - >-
-        guest_vfio_kvmfr_size_slurp.content | b64decode | trim | int ==
-        guest_vfio.looking_glass_shm_mb | int
+        guest_vfio_kvmfr_size_command.stdout | trim | int ==
+        (guest_vfio.looking_glass_shm_mb | int) * 1024 * 1024
     fail_msg: >-
-      Loaded kvmfr size differs from the {{ guest_vfio.looking_glass_shm_mb }} MiB
-      XML contract. Reboot after reconciling playbooks/looking-glass.yml.
+      Loaded kvmfr device reports
+      {{ guest_vfio_kvmfr_size_command.stdout | trim }} bytes, but the XML
+      contract requires {{ guest_vfio.looking_glass_shm_mb }} MiB. Reboot after
+      reconciling playbooks/looking-glass.yml.
 
 - name: Inspect every reviewed VFIO PCI function
   ansible.builtin.stat:
