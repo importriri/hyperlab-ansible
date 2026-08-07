@@ -58,6 +58,39 @@ def main() -> int:
     assert "/boot/vmlinuz-linux-zen" in kernel
     assert "'-zen' in ansible_facts['kernel']" in kernel
     assert "workstation_kernel_remove_fallback" in kernel
+
+    kernel_tasks = yaml.safe_load(kernel)
+    assert isinstance(kernel_tasks, list)
+
+    kernel_task_names = [
+        task.get("name")
+        for task in kernel_tasks
+        if isinstance(task, dict)
+    ]
+
+    sync_name = "Fully synchronize the Arch workstation package state"
+    install_name = "Install the Zen kernel contract"
+
+    assert sync_name in kernel_task_names
+    assert install_name in kernel_task_names
+    assert kernel_task_names.index(sync_name) < kernel_task_names.index(
+        install_name
+    )
+
+    sync_task = next(
+        task
+        for task in kernel_tasks
+        if isinstance(task, dict) and task.get("name") == sync_name
+    )
+
+    sync_pacman = sync_task["community.general.pacman"]
+    assert sync_pacman["update_cache"] is True
+    assert sync_pacman["upgrade"] is True
+    assert (
+        "workstation_kernel_system_upgrade.packages"
+        in sync_task["changed_when"]
+    )
+
     assert "brick_guard_brick: workstation_kernel" in text(
         "roles/workstation_kernel/tasks/main.yml"
     )

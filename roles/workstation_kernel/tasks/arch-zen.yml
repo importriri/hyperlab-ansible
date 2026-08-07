@@ -37,6 +37,14 @@
   loop_control:
     label: "{{ item.item }}"
 
+- name: Fully synchronize the Arch workstation package state
+  community.general.pacman:
+    update_cache: true
+    upgrade: true
+  register: workstation_kernel_system_upgrade
+  changed_when: >-
+    workstation_kernel_system_upgrade.packages | default([]) | length > 0
+
 - name: Install the Zen kernel contract
   community.general.pacman:
     name:
