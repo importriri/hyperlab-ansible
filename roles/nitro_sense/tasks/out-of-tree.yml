@@ -1,0 +1,516 @@
+---
+- name: Claim the role-owned out-of-tree replacement boundary
+  ansible.builtin.copy:
+    content: "{{ nitro_sense_replacement_marker_content }}"
+    dest: "{{ nitro_sense_replacement_marker }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Publish replacement ownership for same-run rollback
+  ansible.builtin.set_fact:
+    nitro_sense_managed_replacement: true
+
+- name: Install the pinned module build stack
+  community.general.pacman:
+    name: "{{ nitro_sense_build_packages }}"
+    state: present
+
+- name: Verify headers for the running hardened kernel
+  ansible.builtin.stat:
+    path: "/lib/modules/{{ ansible_facts['kernel'] }}/build/Makefile"
+  register: nitro_sense_kernel_build_tree
+
+- name: Refuse without the running hardened kernel build tree
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_kernel_build_tree.stat.exists | default(false)
+      - nitro_sense_kernel_build_tree.stat.isreg | default(false)
+    fail_msg: >-
+      linux-hardened-headers did not provide a build tree for the running
+      kernel {{ ansible_facts['kernel'] }}. acer_wmi has not been touched.
+
+- name: Declare the pinned source parent directory
+  ansible.builtin.file:
+    path: "{{ nitro_sense_source_dir | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Clone Linuwu-Sense at the pinned commit
+  ansible.builtin.git:
+    repo: "{{ nitro_sense_repo }}"
+    dest: "{{ nitro_sense_source_dir }}"
+    version: "{{ nitro_sense_commit }}"
+    force: true
+
+- name: Resolve the pinned source identity
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ nitro_sense_source_dir }}"
+      - rev-parse
+      - HEAD
+  register: nitro_sense_resolved_commit
+  changed_when: false
+  check_mode: false
+
+- name: Inspect the pinned source worktree
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/git
+      - -C
+      - "{{ nitro_sense_source_dir }}"
+      - status
+      - --porcelain
+      - --untracked-files=no
+  register: nitro_sense_source_status
+  changed_when: false
+  check_mode: false
+
+- name: Refuse source identity drift
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_resolved_commit.stdout | trim == nitro_sense_commit
+      - nitro_sense_source_status.stdout | trim | length == 0
+    fail_msg: >-
+      The Linuwu-Sense checkout did not resolve to the reviewed full commit.
+      acer_wmi has not been touched.
+
+- name: Inspect exact DKMS state for the running kernel
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - status
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_dkms_version }}"
+      - -k
+      - "{{ ansible_facts['kernel'] }}"
+  register: nitro_sense_dkms_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether the pinned module must be rebuilt
+  ansible.builtin.set_fact:
+    nitro_sense_build_needed: >-
+      {{ nitro_sense_stamp_data.requested_commit | default('') != nitro_sense_commit
+         or nitro_sense_stamp_data.resolved_commit | default('') !=
+            (nitro_sense_resolved_commit.stdout | trim)
+         or nitro_sense_stamp_data.dkms_version | default('') !=
+            nitro_sense_dkms_version
+         or nitro_sense_stamp_data.kernel | default('') != ansible_facts['kernel']
+         or 'installed' not in nitro_sense_dkms_status.stdout }}
+
+- name: Prove the pinned source builds before replacing acer_wmi
+  when: nitro_sense_build_needed | bool
+  block:
+    - name: Create an isolated build-probe directory
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .nitro-sense-build
+      register: nitro_sense_build_probe_dir
+
+    - name: Declare the build-probe source directory
+      ansible.builtin.file:
+        path: "{{ nitro_sense_build_probe_dir.path }}/src"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy the pinned driver source into the build probe
+      ansible.builtin.copy:
+        src: "{{ nitro_sense_source_dir }}/src/linuwu_sense.c"
+        dest: "{{ nitro_sense_build_probe_dir.path }}/src/linuwu_sense.c"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the deterministic build recipe for the probe
+      ansible.builtin.template:
+        src: Makefile.j2
+        dest: "{{ nitro_sense_build_probe_dir.path }}/Makefile"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Compile the isolated build probe
+      ansible.builtin.command:
+        cmd: >-
+          /usr/bin/make -j{{ ansible_facts['processor_vcpus'] | default(2) }}
+          KVER={{ ansible_facts['kernel'] }}
+        chdir: "{{ nitro_sense_build_probe_dir.path }}"
+      changed_when: false
+
+    - name: Inspect the build-probe module
+      ansible.builtin.stat:
+        path: "{{ nitro_sense_build_probe_dir.path }}/src/linuwu_sense.ko"
+      register: nitro_sense_build_probe_module
+
+    - name: Require a non-empty build-probe module
+      ansible.builtin.assert:
+        that:
+          - nitro_sense_build_probe_module.stat.exists | default(false)
+          - nitro_sense_build_probe_module.stat.isreg | default(false)
+          - nitro_sense_build_probe_module.stat.size | int > 0
+        fail_msg: >-
+          The pinned source did not produce linuwu_sense.ko for the running
+          hardened kernel. acer_wmi has not been touched.
+  always:
+    - name: Remove the isolated build probe
+      ansible.builtin.file:
+        path: "{{ nitro_sense_build_probe_dir.path }}"
+        state: absent
+      when: nitro_sense_build_probe_dir.path is defined
+
+- name: Declare the DKMS package root
+  ansible.builtin.file:
+    path: "{{ nitro_sense_dkms_source_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Declare the DKMS source directory
+  ansible.builtin.file:
+    path: "{{ nitro_sense_dkms_source_dir }}/src"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy the pinned driver source into DKMS
+  ansible.builtin.copy:
+    src: "{{ nitro_sense_source_dir }}/src/linuwu_sense.c"
+    dest: "{{ nitro_sense_dkms_source_dir }}/src/linuwu_sense.c"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the deterministic DKMS build recipe
+  ansible.builtin.template:
+    src: Makefile.j2
+    dest: "{{ nitro_sense_dkms_source_dir }}/Makefile"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Register the pinned source with DKMS
+  ansible.builtin.template:
+    src: dkms.conf.j2
+    dest: "{{ nitro_sense_dkms_source_dir }}/dkms.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Inspect a superseded managed DKMS version
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - status
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_stamp_data.dkms_version }}"
+      - -k
+      - "{{ ansible_facts['kernel'] }}"
+  register: nitro_sense_previous_dkms_status
+  changed_when: false
+  failed_when: false
+  when:
+    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
+    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
+
+- name: Select the installed DKMS version available for failure recovery
+  ansible.builtin.set_fact:
+    nitro_sense_dkms_fallback_version: >-
+      {{ nitro_sense_stamp_data.dkms_version
+         if ('installed' in
+             (nitro_sense_previous_dkms_status.stdout | default('')))
+         else (nitro_sense_dkms_version
+               if 'installed' in nitro_sense_dkms_status.stdout else '') }}
+
+- name: Replace the installed DKMS build for the running kernel
+  when: nitro_sense_build_needed | bool
+  block:
+    - name: Remove the superseded module from the running kernel
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/dkms
+          - remove
+          - -m
+          - "{{ nitro_sense_module_name }}"
+          - -v
+          - "{{ nitro_sense_stamp_data.dkms_version }}"
+          - -k
+          - "{{ ansible_facts['kernel'] }}"
+      changed_when: true
+      when:
+        - >-
+          nitro_sense_previous_dkms_status.stdout | default('') | trim | length
+          > 0
+
+    - name: Remove a stale exact-version build from the running kernel
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/dkms
+          - remove
+          - -m
+          - "{{ nitro_sense_module_name }}"
+          - -v
+          - "{{ nitro_sense_dkms_version }}"
+          - -k
+          - "{{ ansible_facts['kernel'] }}"
+      changed_when: true
+      when:
+        - "'installed' in nitro_sense_dkms_status.stdout"
+        - >-
+          nitro_sense_stamp_data.requested_commit | default('') !=
+          nitro_sense_commit
+
+    - name: Build and install the pinned module through DKMS
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/dkms
+          - install
+          - -m
+          - "{{ nitro_sense_module_name }}"
+          - -v
+          - "{{ nitro_sense_dkms_version }}"
+          - -k
+          - "{{ ansible_facts['kernel'] }}"
+      changed_when: true
+  rescue:
+    - name: Inspect the fallback DKMS source after an install failure
+      ansible.builtin.stat:
+        path: >-
+          /usr/src/linuwu_sense-{{ nitro_sense_dkms_fallback_version }}
+      register: nitro_sense_dkms_fallback_source
+      when: >-
+        nitro_sense_dkms_fallback_version is match('^[0-9a-f]{12}$')
+
+    - name: Restore the previous module for the running kernel
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/dkms
+          - install
+          - -m
+          - "{{ nitro_sense_module_name }}"
+          - -v
+          - "{{ nitro_sense_dkms_fallback_version }}"
+          - -k
+          - "{{ ansible_facts['kernel'] }}"
+      register: nitro_sense_dkms_fallback_install
+      changed_when: nitro_sense_dkms_fallback_install.rc == 0
+      failed_when: false
+      when:
+        - >-
+          nitro_sense_dkms_fallback_version is match('^[0-9a-f]{12}$')
+        - nitro_sense_dkms_fallback_source.stat.exists | default(false)
+
+    - name: Refuse the failed DKMS replacement before touching acer_wmi
+      ansible.builtin.fail:
+        msg: >-
+          DKMS could not install the pinned module. acer_wmi was not touched.
+          {{ 'The previous running-kernel module was restored.'
+             if nitro_sense_dkms_fallback_install.rc | default(1) == 0
+             else 'No previous running-kernel module could be restored; do not reboot until the DKMS state is repaired.' }}
+
+- name: Verify the installed DKMS result
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - status
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_dkms_version }}"
+      - -k
+      - "{{ ansible_facts['kernel'] }}"
+  register: nitro_sense_dkms_installed
+  changed_when: false
+  check_mode: false
+
+- name: Require the exact module for the running kernel
+  ansible.builtin.assert:
+    that:
+      - "'installed' in nitro_sense_dkms_installed.stdout"
+    fail_msg: >-
+      DKMS did not report the pinned Linuwu-Sense module as installed for the
+      running hardened kernel. acer_wmi has not been touched.
+
+- name: Remove the superseded managed DKMS version after replacement
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - remove
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_stamp_data.dkms_version }}"
+      - --all
+  changed_when: true
+  when:
+    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
+    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
+
+- name: Remove the superseded managed DKMS source
+  ansible.builtin.file:
+    path: >-
+      /usr/src/linuwu_sense-{{ nitro_sense_stamp_data.dkms_version }}
+    state: absent
+  when:
+    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
+    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
+
+- name: Commit the persistent driver transition and settings transaction
+  block:
+    - name: Declare the module-load directory
+      ansible.builtin.file:
+        path: "{{ nitro_sense_modules_load_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Load the replacement module at boot
+      ansible.builtin.copy:
+        content: "{{ nitro_sense_module_name }}\n"
+        dest: "{{ nitro_sense_modules_load_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: nitro_sense_modules_load_file
+
+    - name: Declare the modprobe policy directory
+      ansible.builtin.file:
+        path: "{{ nitro_sense_blacklist_path | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Prevent the in-tree driver from racing the replacement at boot
+      ansible.builtin.copy:
+        content: "blacklist {{ nitro_sense_in_tree_module_name }}\n"
+        dest: "{{ nitro_sense_blacklist_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: nitro_sense_blacklist_file
+
+    - name: Decide whether the platform driver must transition
+      ansible.builtin.set_fact:
+        nitro_sense_module_transition_needed: >-
+          {{ nitro_sense_build_needed | bool
+             or not nitro_sense_module_loaded | bool
+             or nitro_sense_modules_load_file.changed | bool
+             or nitro_sense_blacklist_file.changed | bool }}
+
+    - name: Unload the previously managed replacement
+      community.general.modprobe:
+        name: "{{ nitro_sense_module_name }}"
+        state: absent
+      when:
+        - nitro_sense_module_transition_needed | bool
+        - nitro_sense_module_loaded | bool
+
+    - name: Unload the in-tree Acer platform driver
+      community.general.modprobe:
+        name: "{{ nitro_sense_in_tree_module_name }}"
+        state: absent
+      when: nitro_sense_module_transition_needed | bool
+
+    - name: Load the pinned replacement driver
+      community.general.modprobe:
+        name: "{{ nitro_sense_module_name }}"
+        state: present
+      when: nitro_sense_module_transition_needed | bool
+
+    - name: Inspect the active replacement module
+      ansible.builtin.stat:
+        path: "/sys/module/{{ nitro_sense_module_name }}"
+      register: nitro_sense_active_module_state
+
+    - name: Inspect the active documented Nitro fan interface
+      ansible.builtin.stat:
+        path: "{{ nitro_sense_fan_speed_path }}"
+      register: nitro_sense_active_fan_state
+
+    - name: Require the active managed replacement
+      ansible.builtin.assert:
+        that:
+          - nitro_sense_active_module_state.stat.exists | default(false)
+          - nitro_sense_active_fan_state.stat.exists | default(false)
+          - nitro_sense_active_fan_state.stat.isreg | default(false)
+        fail_msg: >-
+          The replacement did not expose the documented Nitro fan interface.
+          The rescue path will restore acer_wmi.
+
+    - name: Refresh platform-profile support from the active replacement
+      ansible.builtin.include_tasks: platform-profile.yml
+
+    - name: Require an advertised profile when configured as mandatory
+      ansible.builtin.assert:
+        that:
+          - nitro_sense_native_profile_sufficient | bool
+        fail_msg: >-
+          The loaded replacement does not advertise the requested platform
+          profile. The model may need manual profile handling or may expose only
+          the legacy fan interface.
+      when: nitro_sense_thermal_profile_required | bool
+
+    - name: Declare the build-stamp directory
+      ansible.builtin.file:
+        path: "{{ nitro_sense_stamp | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Stamp the full source and running-kernel identity
+      ansible.builtin.copy:
+        content: |-
+          requested_commit: {{ nitro_sense_commit }}
+          resolved_commit: {{ nitro_sense_resolved_commit.stdout | trim }}
+          dkms_version: {{ nitro_sense_dkms_version }}
+          kernel: {{ ansible_facts['kernel'] }}
+        dest: "{{ nitro_sense_stamp }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install the persistent out-of-tree settings service
+      ansible.builtin.include_tasks: configure.yml
+
+    - name: Read the applied fan setting
+      ansible.builtin.slurp:
+        src: "{{ nitro_sense_fan_speed_path }}"
+      register: nitro_sense_applied_fan_raw
+      changed_when: false
+
+    - name: Require the configured fan setting
+      ansible.builtin.assert:
+        that:
+          - >-
+            nitro_sense_applied_fan_raw.content | b64decode | trim ==
+            (nitro_sense_fan_cpu_percent | string ~ ',' ~
+             nitro_sense_fan_gpu_percent | string)
+        fail_msg: >-
+          The documented fan interface did not retain the requested value.
+  rescue:
+    - name: Roll back the failed platform-driver transaction
+      ansible.builtin.include_tasks: rollback.yml
+
+    - name: Report the restored driver after a failed transaction
+      ansible.builtin.fail:
+        msg: >-
+          Linuwu-Sense failed its persistent driver transaction. Managed
+          replacement state was removed and acer_wmi was restored.

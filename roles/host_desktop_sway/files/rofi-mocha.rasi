@@ -1,4 +1,4 @@
-/* Hyperlab compatibility aliases backed by the selected shared palette. */
+/* HyperLab compatibility aliases backed by the selected shared palette. */
 @import "~/.config/hyperlab/palette.rasi"
 
 * {

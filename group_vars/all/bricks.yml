@@ -32,6 +32,7 @@ brick_requires:
   guest_looking_glass_linux: [guest_desktop_hyprland]
   dev_ide: [guest_desktop_hyprland]
   looking_glass: [host_desktop_sway, kvm_host]
+  nitro_sense: [base, hardware_probe]
 
 # Point refusals at the narrowest playbook that can establish the prerequisite.
 brick_playbooks:
@@ -59,3 +60,4 @@ brick_playbooks:
   guest_looking_glass_linux: playbooks/guest-looking-glass-linux.yml
   dev_ide: playbooks/guest-arch-dev.yml
   looking_glass: playbooks/looking-glass.yml
+  nitro_sense: playbooks/nitro-sense.yml

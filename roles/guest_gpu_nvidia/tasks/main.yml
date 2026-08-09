@@ -63,7 +63,12 @@
 
 - name: Load the NVIDIA module set at guest boot
   ansible.builtin.copy:
-    content: "{{ guest_gpu_nvidia_modules | join('\\n') }}\n"
+    # systemd-modules-load treats each line as one module name, so
+    # literal escape text would postpone this failure until the reboot gate.
+    content: |
+      {% for module in guest_gpu_nvidia_modules -%}
+      {{ module }}
+      {% endfor %}
     dest: /etc/modules-load.d/privatestack-nvidia.conf
     owner: root
     group: root
@@ -101,10 +106,23 @@
   changed_when: false
   check_mode: false
 
+# Arch aliases /lib to /usr/lib, so canonical comparison prevents a
+# healthy DKMS build from being rejected only because modinfo chose
+# the compatibility prefix.
+- name: Resolve the built NVIDIA kernel module path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/readlink
+      - -f
+      - "{{ guest_gpu_nvidia_modinfo.stdout }}"
+  register: guest_gpu_nvidia_modinfo_canonical
+  changed_when: false
+  check_mode: false
+
 - name: Require the built NVIDIA module to belong to the running kernel
   ansible.builtin.assert:
     that:
-      - guest_gpu_nvidia_modinfo.stdout is match('^/usr/lib/modules/' ~ ansible_facts['kernel'] ~ '/')
+      - guest_gpu_nvidia_modinfo_canonical.stdout is match('^/usr/lib/modules/' ~ ansible_facts['kernel'] ~ '/')
     fail_msg: >-
       nvidia-open-dkms did not produce a module for the running Zen kernel.
 

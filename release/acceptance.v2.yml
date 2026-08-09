@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 profiles:
   nitro-3060:
     order: 1
@@ -9,8 +9,8 @@ profiles:
     label: Acer Predator Helios 300 / RTX 3070 Mobile
 
 repositories:
-  privatestack_ansible:
-    remote: importriri/privatestack-ansible
+  hyperlab_ansible:
+    remote: importriri/hyperlab-ansible
     required_branch: main
   arch_bootstrap:
     remote: importriri/arch-bootstrap

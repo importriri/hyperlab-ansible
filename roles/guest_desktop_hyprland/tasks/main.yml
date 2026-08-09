@@ -27,6 +27,37 @@
       The guest theme order and palette map must describe the same unique
       themes.
 
+- name: Validate optional NVIDIA-only compositor policy
+  ansible.builtin.assert:
+    that:
+      - guest_desktop_hyprland_nvidia_only is boolean
+      - guest_desktop_hyprland_nvidia_drm_device is string
+      - >-
+        not guest_desktop_hyprland_nvidia_only or
+        guest_desktop_hyprland_nvidia_drm_device | length > 0
+    fail_msg: >-
+      NVIDIA-only Hyprland requires a non-empty DRM device path.
+
+- name: Validate optional headless monitor policy
+  ansible.builtin.assert:
+    that:
+      - guest_desktop_hyprland_headless_monitor is boolean
+      - guest_desktop_hyprland_headless_output is string
+      - >-
+        guest_desktop_hyprland_headless_output is
+        match('^[A-Za-z0-9_.-]+$')
+      - guest_desktop_hyprland_headless_mode is string
+      - guest_desktop_hyprland_headless_position is string
+      - guest_desktop_hyprland_headless_scale | float > 0
+      - >-
+        not guest_desktop_hyprland_headless_monitor or
+        guest_desktop_hyprland_headless_output | length > 0
+      - >-
+        not guest_desktop_hyprland_headless_monitor or
+        guest_desktop_hyprland_headless_mode | length > 0
+    fail_msg: >-
+      The optional Hyprland headless monitor policy is incomplete.
+
 - name: Install the official Hyprland guest stack
   community.general.pacman:
     name: "{{ guest_desktop_hyprland_packages }}"
@@ -299,7 +330,15 @@
     - .config/privatestack-guest
     - .local/state/privatestack-guest-theme
 
-- name: Deploy the static Hyprland guest configuration
+- name: Deploy the managed Hyprland guest configuration
+  ansible.builtin.template:
+    src: hyprland.lua.j2
+    dest: "/home/{{ admin_user }}/.config/hypr/hyprland.lua"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+
+- name: Deploy the static guest desktop configuration
   ansible.builtin.copy:
     src: "{{ item.src }}"
     dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
@@ -307,7 +346,6 @@
     group: "{{ admin_user }}"
     mode: "0644"
   loop:
-    - { src: hyprland.lua, dest: hypr/hyprland.lua }
     - { src: hypridle.conf, dest: hypr/hypridle.conf }
     - { src: hyprlock.conf, dest: hypr/hyprlock.conf }
     - { src: waybar.jsonc, dest: waybar/config.jsonc }
@@ -360,6 +398,21 @@
     group: root
     mode: "0755"
 
+- name: Deploy the optional NVIDIA-only Ly login hook
+  ansible.builtin.template:
+    src: ly-guest-login.sh.j2
+    dest: /etc/ly/guest-hyprland-login.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: guest_desktop_hyprland_nvidia_only
+
+- name: Remove the NVIDIA-only Ly login hook when disabled
+  ansible.builtin.file:
+    path: /etc/ly/guest-hyprland-login.sh
+    state: absent
+  when: not guest_desktop_hyprland_nvidia_only
+
 - name: Configure Ly for the guest workstation
   ansible.builtin.lineinfile:
     path: /etc/ly/config.ini
@@ -369,9 +422,10 @@
   loop:
     - { key: full_color, value: "true" }
     - { key: hide_version_string, value: "true" }
-    - { key: initial_info_text, value: "Privatestack guest workstation" }
+    - { key: initial_info_text, value: "HyperLab guest workstation" }
     - { key: default_input, value: "login" }
     - { key: start_cmd, value: "/etc/ly/guest-hyprland-startup.sh" }
+    - { key: login_cmd, value: "{{ '/etc/ly/guest-hyprland-login.sh' if guest_desktop_hyprland_nvidia_only else 'null' }}" }
 
 - name: Enable Ly on tty2
   ansible.builtin.systemd_service:

@@ -1,0 +1,164 @@
+---
+- name: Inspect the persistent settings unit before rollback
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_apply_unit }}"
+  register: nitro_sense_rollback_unit_state
+
+- name: Stop and disable persistent settings before driver rollback
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_apply_service }}"
+    enabled: false
+    state: stopped
+  when:
+    - nitro_sense_managed_installation | bool
+    - nitro_sense_rollback_unit_state.stat.exists | default(false)
+
+- name: Inspect the replacement module before rollback
+  ansible.builtin.stat:
+    path: "/sys/module/{{ nitro_sense_module_name }}"
+  register: nitro_sense_rollback_module_state
+
+- name: Unload the replacement before removing its installed files
+  community.general.modprobe:
+    name: "{{ nitro_sense_module_name }}"
+    state: absent
+  when:
+    - nitro_sense_managed_replacement | bool
+    - nitro_sense_rollback_module_state.stat.exists | default(false)
+
+- name: Remove the managed settings service files
+  ansible.builtin.file:
+    path: "{{ nitro_sense_rollback_path }}"
+    state: absent
+  loop:
+    - "{{ nitro_sense_apply_unit }}"
+    - "{{ nitro_sense_apply_script }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_path
+  when: nitro_sense_managed_installation | bool
+
+- name: Remove replacement boot policy
+  ansible.builtin.file:
+    path: "{{ nitro_sense_rollback_path }}"
+    state: absent
+  loop:
+    - "{{ nitro_sense_modules_load_path }}"
+    - "{{ nitro_sense_blacklist_path }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_path
+  when: nitro_sense_managed_replacement | bool
+
+- name: Reload systemd after removing the managed settings unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when:
+    - nitro_sense_managed_installation | bool
+    - nitro_sense_rollback_unit_state.stat.exists | default(false)
+
+- name: Inspect DKMS availability for rollback
+  ansible.builtin.stat:
+    path: /usr/bin/dkms
+  register: nitro_sense_rollback_dkms_binary
+  when: nitro_sense_managed_replacement | bool
+
+- name: Select managed DKMS versions for removal
+  ansible.builtin.set_fact:
+    nitro_sense_rollback_dkms_versions: >-
+      {{ ([nitro_sense_dkms_version,
+           nitro_sense_stamp_data.dkms_version | default('')]
+          | select('match', '^[0-9a-f]{12}$') | unique | list) }}
+  when: nitro_sense_managed_replacement | bool
+
+- name: Inspect managed DKMS versions before removal
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - status
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_rollback_dkms_version }}"
+  loop: "{{ nitro_sense_rollback_dkms_versions | default([]) }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_dkms_version
+  register: nitro_sense_rollback_dkms_status
+  changed_when: false
+  failed_when: false
+  when:
+    - nitro_sense_managed_replacement | bool
+    - nitro_sense_rollback_dkms_binary.stat.exists | default(false)
+
+- name: Remove each registered managed DKMS version
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - remove
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_rollback_dkms_result.nitro_sense_rollback_dkms_version }}"
+      - --all
+  loop: "{{ nitro_sense_rollback_dkms_status.results | default([]) }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_dkms_result
+  changed_when: true
+  when:
+    - nitro_sense_managed_replacement | bool
+    - nitro_sense_rollback_dkms_result.stdout | default('') | trim | length > 0
+
+- name: Remove managed DKMS source trees
+  ansible.builtin.file:
+    path: "/usr/src/linuwu_sense-{{ nitro_sense_rollback_dkms_version }}"
+    state: absent
+  loop: "{{ nitro_sense_rollback_dkms_versions | default([]) }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_dkms_version
+  when: nitro_sense_managed_replacement | bool
+
+- name: Remove managed replacement source and identity
+  ansible.builtin.file:
+    path: "{{ nitro_sense_rollback_owned_path }}"
+    state: absent
+  loop:
+    - "{{ nitro_sense_source_dir }}"
+    - "{{ nitro_sense_stamp }}"
+    - "{{ nitro_sense_replacement_marker }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_owned_path
+  when: nitro_sense_managed_replacement | bool
+
+- name: Remove managed role and brick ownership
+  ansible.builtin.file:
+    path: "{{ nitro_sense_rollback_owned_path }}"
+    state: absent
+  loop:
+    - "{{ brick_stamp_dir }}/nitro_sense"
+    - "{{ nitro_sense_owner_marker }}"
+  loop_control:
+    loop_var: nitro_sense_rollback_owned_path
+  when: nitro_sense_managed_installation | bool
+
+- name: Publish the removed managed replacement state
+  ansible.builtin.set_fact:
+    nitro_sense_module_loaded: false
+    nitro_sense_managed_replacement: false
+    nitro_sense_managed_installation: false
+    nitro_sense_stamp_data: {}
+
+- name: Restore the in-tree Acer platform driver
+  community.general.modprobe:
+    name: "{{ nitro_sense_in_tree_module_name }}"
+    state: present
+
+- name: Inspect acer_wmi after rollback
+  ansible.builtin.stat:
+    path: "/sys/module/{{ nitro_sense_in_tree_module_name }}"
+  register: nitro_sense_rollback_in_tree_state
+
+- name: Require the restored in-tree driver
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_rollback_in_tree_state.stat.exists | default(false)
+    fail_msg: >-
+      The managed replacement was removed, but acer_wmi did not load. Keep the
+      host in a recovery TTY and follow docs/nitro-sense.md before rebooting.

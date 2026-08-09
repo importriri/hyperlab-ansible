@@ -2,7 +2,7 @@
 """The cross-repository half of ADR 0006, which the ADR described as if it
 already existed.
 
-privatestack-ansible owns what the pipeline configures. arch-hypervisor-lab
+hyperlab-ansible owns what the pipeline configures. arch-hypervisor-lab
 owns what has been proven. The overlap is the profile name and the VFIO IDs,
 and nothing compared them: each repository could rename a profile or correct a
 device ID on its own and both suites stayed green.

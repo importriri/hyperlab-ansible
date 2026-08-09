@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from release_acceptance import AcceptanceError, load_yaml  # noqa: E402
 from release_probe import build_payload, hash_regular_file, storage_payload  # noqa: E402
 
-MANIFEST = ROOT / "release/acceptance.v1.yml"
+MANIFEST = ROOT / "release/acceptance.v2.yml"
 
 
 def contract(topology: str) -> dict[str, object]:

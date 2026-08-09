@@ -1,0 +1,11 @@
+[Unit]
+Description=Apply managed Acer Nitro thermal controls
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash {{ nitro_sense_apply_script }}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

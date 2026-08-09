@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Collect a privacy-safe Hyperlab Windows workshop evidence bundle.
+  Collect a privacy-safe HyperLab Windows workshop evidence bundle.
 
 .DESCRIPTION
   Run inside the Windows workshop VM as Administrator after drivers, QEMU Guest
@@ -222,4 +222,4 @@ if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 }
 $evidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $outputFullPath -Encoding UTF8
-Write-Host "Hyperlab workshop evidence written to $outputFullPath"
+Write-Host "HyperLab workshop evidence written to $outputFullPath"

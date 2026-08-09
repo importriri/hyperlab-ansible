@@ -1,4 +1,4 @@
-/* Hyperlab palette: translucent dark companion to the terminal cockpit. */
+/* HyperLab palette: translucent dark companion to the terminal cockpit. */
 @import "rofi-mocha.rasi"
 
 * {

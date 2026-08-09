@@ -54,7 +54,15 @@ def main() -> int:
     assert 'PRIVATESTACK_BECOME_PASSWORD_FILE:-' in VERIFY
     assert 'become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")' in VERIFY
     assert "sudo -n true" in VERIFY
-    assert "become_args=(-K)" in VERIFY
+    assert 'mktemp "${runtime_dir}/privatestack-verify-become.XXXXXX"' in VERIFY
+    assert 'chmod 0600 "${render_password_file}"' in VERIFY
+    assert "IFS= read -r -s become_password" in VERIFY
+    assert "unset become_password" in VERIFY
+    assert "sudo -S -k -p '' -v" in VERIFY
+    assert 'become_args=(--become-password-file "${render_password_file}")' in VERIFY
+    assert "trap cleanup_render_password_file EXIT" in VERIFY
+    assert "if sudo -v; then" not in VERIFY
+    assert "become_args=(-K)" not in VERIFY
     assert 'ansible-playbook "${become_args[@]}"' in VERIFY
 
     print("Nitro gate contract: OK")

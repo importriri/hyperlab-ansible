@@ -94,7 +94,7 @@ def contract():
         binary = module["exec"].split()[0]
         check("the role deploys %s" % binary, Path(binary).name in tasks)
 
-    inspect_checkout = tasks.index("- name: Inspect the configured Hyperlab checkout before host writes")
+    inspect_checkout = tasks.index("- name: Inspect the configured HyperLab checkout before host writes")
     install_desktop = tasks.index("- name: Install the desktop stack")
     completion = tasks.index("- name: Generate shell completion from the subcommands that exist")
     install_completion = tasks.index("- name: Install the completion, when the CLI could produce one")

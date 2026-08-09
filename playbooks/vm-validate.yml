@@ -1,5 +1,5 @@
 ---
-- name: Validate one managed standard Hyperlab VM
+- name: Validate one managed standard HyperLab VM
   hosts: hypervisor
   become: true
   environment:

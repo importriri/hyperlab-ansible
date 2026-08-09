@@ -1,5 +1,5 @@
 ---
-- name: Expand one managed Hyperlab VM disk
+- name: Expand one managed HyperLab VM disk
   hosts: hypervisor
   become: true
   environment:

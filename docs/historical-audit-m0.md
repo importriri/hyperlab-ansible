@@ -10,7 +10,7 @@ decisions are indexed in [`adr/README.md`](adr/README.md).
 | Repository | Branch | Commit | Files | Suite |
 |---|---|---|---|---|
 | arch-bootstrap | main | `ff640a5` | 44 | bats 26/26 green |
-| privatestack-ansible | main | `4358b88` | 79 | `verify.sh` all green |
+| hyperlab-ansible | main | `4358b88` | 79 | `verify.sh` all green |
 | arch-hypervisor-lab | main | `f2e2312` | 32 | `verify_repo.py` OK |
 
 All three working trees clean. Every suite was run unmodified before
@@ -20,7 +20,7 @@ anything was written.
 
 The three-stage split holds and the boundaries are not blurred.
 `arch-bootstrap` produces an encrypted, Secure Boot host and stops.
-`privatestack-ansible` turns it into a segmented hypervisor.
+`hyperlab-ansible` turns it into a segmented hypervisor.
 `arch-hypervisor-lab` records what was proven and what went wrong.
 
 The level reached is **a configured host**: five libvirt networks, the

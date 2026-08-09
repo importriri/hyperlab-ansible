@@ -1,0 +1,68 @@
+set -euo pipefail
+
+out_of_tree={{ nitro_sense_use_out_of_tree | ternary('true', 'false') }}
+profile={{ nitro_sense_thermal_profile | to_json }}
+profile_required={{ nitro_sense_thermal_profile_required | ternary('true', 'false') }}
+profile_path={{ nitro_sense_platform_profile_path | to_json }}
+profile_choices_path={{ nitro_sense_platform_profile_choices_path | to_json }}
+fan_path={{ nitro_sense_fan_speed_path | to_json }}
+fan_value={{ (nitro_sense_fan_cpu_percent | string ~ ',' ~ nitro_sense_fan_gpu_percent | string) | to_json }}
+led_mode={{ nitro_sense_led_mode | to_json }}
+led_per_zone_path={{ nitro_sense_led_per_zone_path | to_json }}
+led_effect_path={{ nitro_sense_led_effect_path | to_json }}
+led_per_zone_value={{ (nitro_sense_led_zone_colors | map('lower') | join(',') ~ ',' ~ nitro_sense_led_brightness_percent | string) | to_json }}
+led_effect_value={{ (nitro_sense_led_effect.mode | string ~ ',' ~ nitro_sense_led_effect.speed | string ~ ',' ~ nitro_sense_led_brightness_percent | string ~ ',' ~ nitro_sense_led_effect.direction | string ~ ',' ~ nitro_sense_led_effect.red | string ~ ',' ~ nitro_sense_led_effect.green | string ~ ',' ~ nitro_sense_led_effect.blue | string) | to_json }}
+
+fail_missing() {
+    printf 'Required documented sysfs node is missing: %s\n' "$1" >&2
+    exit 1
+}
+
+write_and_verify() {
+    local path=$1
+    local desired=$2
+    local observed
+
+    [[ -f $path && -w $path ]] || fail_missing "$path"
+    observed=$(<"$path")
+    if [[ $observed != "$desired" ]]; then
+        printf '%s\n' "$desired" >"$path"
+    fi
+    observed=$(<"$path")
+    [[ $observed == "$desired" ]] || {
+        printf 'Sysfs refused the requested value for %s: expected %s, observed %s\n' \
+            "$path" "$desired" "$observed" >&2
+        exit 1
+    }
+}
+
+if [[ -f $profile_path && -f $profile_choices_path ]]; then
+    tr ' ' '\n' <"$profile_choices_path" | grep -Fxq -- "$profile" || {
+        printf 'Requested platform profile is not advertised: %s\n' "$profile" >&2
+        exit 1
+    }
+    write_and_verify "$profile_path" "$profile"
+elif [[ $profile_required == true || $out_of_tree == false ]]; then
+    fail_missing "$profile_path"
+else
+    printf 'Platform profile is unavailable on this supported legacy Nitro model; leaving it untouched.\n' >&2
+fi
+
+if [[ $out_of_tree == true ]]; then
+    write_and_verify "$fan_path" "$fan_value"
+
+    case $led_mode in
+        disabled)
+            ;;
+        per_zone)
+            write_and_verify "$led_per_zone_path" "$led_per_zone_value"
+            ;;
+        effect)
+            write_and_verify "$led_effect_path" "$led_effect_value"
+            ;;
+        *)
+            printf 'Unsupported LED mode: %s\n' "$led_mode" >&2
+            exit 1
+            ;;
+    esac
+fi

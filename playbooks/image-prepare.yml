@@ -1,5 +1,5 @@
 ---
-- name: Acquire or import and prepare one verified Hyperlab base image
+- name: Acquire or import and prepare one verified HyperLab base image
   hosts: hypervisor
   become: true
   environment:

@@ -1,0 +1,37 @@
+---
+- name: Require the writable generic platform-profile ABI
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_platform_profile_path }}"
+  register: nitro_sense_native_profile_state
+
+- name: Refuse an incomplete native profile interface
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_native_profile_state.stat.exists | default(false)
+      - nitro_sense_native_profile_state.stat.isreg | default(false)
+      - nitro_sense_native_profile_sufficient | bool
+    fail_msg: >-
+      platform_profile_choices advertised the requested profile, but the
+      documented writable platform_profile node is not available.
+
+- name: Commit the persistent native settings transaction
+  when: not ansible_check_mode
+  block:
+    - name: Install the persistent native settings service
+      ansible.builtin.include_tasks: configure.yml
+  rescue:
+    - name: Roll back the failed native settings transaction
+      ansible.builtin.include_tasks: rollback.yml
+
+    - name: Report the restored native driver after a settings failure
+      ansible.builtin.fail:
+        msg: >-
+          The generic platform-profile settings transaction failed. Managed
+          service state was removed and acer_wmi remains the active driver.
+
+- name: Describe native profile persistence in check mode
+  ansible.builtin.debug:
+    msg: >-
+      The native platform-profile ABI is sufficient. A real run will install
+      and start the persistent settings service without replacing acer_wmi.
+  when: ansible_check_mode

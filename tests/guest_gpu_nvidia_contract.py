@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""Static contract for the opt-in NVIDIA VFIO guest driver brick."""
-from __future__ import annotations
-
 from pathlib import Path
 
 import yaml
@@ -9,15 +6,23 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main() -> int:
-    defaults = yaml.safe_load(
-        (ROOT / "roles/guest_gpu_nvidia/defaults/main.yml").read_text()
+def load(relative: str):
+    return yaml.safe_load(
+        (ROOT / relative).read_text(encoding="utf-8")
     )
-    tasks = (ROOT / "roles/guest_gpu_nvidia/tasks/main.yml").read_text()
-    handlers = (ROOT / "roles/guest_gpu_nvidia/handlers/main.yml").read_text()
-    graph = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
 
-    assert defaults["guest_gpu_nvidia_probe_packages"] == ["pciutils"]
+
+def main() -> None:
+    defaults = load("roles/guest_gpu_nvidia/defaults/main.yml")
+    tasks = load("roles/guest_gpu_nvidia/tasks/main.yml")
+    tasks_text = (
+        ROOT / "roles/guest_gpu_nvidia/tasks/main.yml"
+    ).read_text(encoding="utf-8")
+    handlers_text = (
+        ROOT / "roles/guest_gpu_nvidia/handlers/main.yml"
+    ).read_text(encoding="utf-8")
+    graph = load("group_vars/all/bricks.yml")
+
     assert defaults["guest_gpu_nvidia_packages"] == [
         "nvidia-open-dkms",
         "nvidia-utils",
@@ -25,31 +30,35 @@ def main() -> int:
         "egl-wayland",
         "vulkan-icd-loader",
     ]
+
+    assert defaults["guest_gpu_nvidia_probe_packages"] == ["pciutils"]
     assert defaults["guest_gpu_nvidia_modules"] == [
         "nvidia",
         "nvidia_modeset",
         "nvidia_uvm",
         "nvidia_drm",
     ]
-    assert "'hypervisor' not in group_names" in tasks
-    assert "ansible_facts['virtualization_role'] == 'guest'" in tasks
-    assert "No NVIDIA PCI function is visible inside this guest" in tasks
-    assert tasks.index("Detect NVIDIA PCI functions") < tasks.index(
+    assert "'hypervisor' not in group_names" in tasks_text
+    assert "ansible_facts['virtualization_role'] == 'guest'" in tasks_text
+    assert "No NVIDIA PCI function is visible inside this guest" in tasks_text
+    assert tasks_text.index("Detect NVIDIA PCI functions") < tasks_text.index(
         "Install the official NVIDIA Wayland guest stack"
     )
-    assert "/etc/modules-load.d/privatestack-nvidia.conf" in tasks
-    assert "/etc/modprobe.d/privatestack-nvidia.conf" in tasks
-    assert "/etc/modprobe.d/privatestack-nouveau.conf" in tasks
-    assert "brick_guard_brick: guest_gpu_nvidia" in tasks
-    assert "/usr/bin/mkinitcpio" in handlers and "-P" in handlers
+    assert "/etc/modules-load.d/privatestack-nvidia.conf" in tasks_text
+    assert "/etc/modprobe.d/privatestack-nvidia.conf" in tasks_text
+    assert "/etc/modprobe.d/privatestack-nouveau.conf" in tasks_text
+    assert "brick_guard_brick: guest_gpu_nvidia" in tasks_text
+    assert "/usr/bin/mkinitcpio" in handlers_text
+    assert "-P" in handlers_text
 
     nvidia_options = (
         ROOT / "roles/guest_gpu_nvidia/files/privatestack-nvidia.conf"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     nouveau_options = (
         ROOT / "roles/guest_gpu_nvidia/files/privatestack-nouveau.conf"
-    ).read_text()
-    assert "modeset=1" in nvidia_options and "fbdev=1" in nvidia_options
+    ).read_text(encoding="utf-8")
+    assert "modeset=1" in nvidia_options
+    assert "fbdev=1" in nvidia_options
     assert "blacklist nouveau" in nouveau_options
 
     assert graph["brick_requires"]["guest_gpu_nvidia"] == [
@@ -59,9 +68,7 @@ def main() -> int:
         "playbooks/guest-gpu-nvidia.yml"
     )
 
-    vfio_roles = yaml.safe_load(
-        (ROOT / "playbooks/guest-arch-dev-vfio.yml").read_text()
-    )[0]["roles"]
+    vfio_roles = load("playbooks/guest-arch-dev-vfio.yml")[0]["roles"]
     assert vfio_roles[:5] == [
         "workstation_kernel",
         "workstation_access",
@@ -74,9 +81,42 @@ def main() -> int:
         "vars": {"guest_looking_glass_linux_experimental": True},
     }
 
+    by_name = {
+        task.get("name"): task
+        for task in tasks
+        if isinstance(task, dict)
+    }
+
+    module_task = by_name[
+        "Load the NVIDIA module set at guest boot"
+    ]
+    module_content = module_task["ansible.builtin.copy"]["content"]
+
+    assert "{% for module in guest_gpu_nvidia_modules" in module_content
+    assert "{{ module }}" in module_content
+    assert "join(" not in module_content
+
+    resolve_task = by_name[
+        "Resolve the built NVIDIA kernel module path"
+    ]
+    argv = resolve_task["ansible.builtin.command"]["argv"]
+
+    assert argv[:2] == ["/usr/bin/readlink", "-f"]
+    assert "guest_gpu_nvidia_modinfo.stdout" in argv[2]
+
+    verify_task = by_name[
+        "Require the built NVIDIA module to belong to the running kernel"
+    ]
+    assertions = verify_task["ansible.builtin.assert"]["that"]
+
+    assert any(
+        "guest_gpu_nvidia_modinfo_canonical.stdout" in item
+        and "^/usr/lib/modules/" in item
+        for item in assertions
+    )
+
     print("guest NVIDIA contract: OK")
-    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

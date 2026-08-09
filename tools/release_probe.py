@@ -191,7 +191,7 @@ def storage_payload(
     require(str(mountpoint) == "/var/lib/libvirt/images", "storage probe mountpoint drift")
     require(
         str(hyperlab_root).startswith(str(mountpoint) + "/"),
-        "Hyperlab root is outside the canonical VM store",
+        "HyperLab root is outside the canonical VM store",
     )
     try:
         mounted = normalized_observation(mount_observation["filesystems"][0])
@@ -205,16 +205,16 @@ def storage_payload(
     require(attribute_fields and "C" in attribute_fields[0], "VM store lacks inherited NOCOW")
     require(
         hyperlab["source"] == verified["mapper"],
-        "Hyperlab root is not backed by the verified mapper",
+        "HyperLab root is not backed by the verified mapper",
     )
     require(
         hyperlab["fstype"] == verified["fstype"],
-        "Hyperlab root filesystem differs from the verified store",
+        "HyperLab root filesystem differs from the verified store",
     )
     require(
         hyperlab["fsroot"] == verified["fsroot"]
         or hyperlab["fsroot"].startswith(verified["fsroot"].rstrip("/") + "/"),
-        "Hyperlab root filesystem root differs from the verified store",
+        "HyperLab root filesystem root differs from the verified store",
     )
     return {
         "topology": verified["topology"],

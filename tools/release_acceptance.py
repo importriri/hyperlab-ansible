@@ -100,7 +100,7 @@ def write_json(path: Path, data: dict[str, Any], *, replace: bool) -> None:
 
 
 def validate_manifest(manifest: dict[str, Any]) -> None:
-    require(manifest.get("schema_version") == 1, "acceptance schema_version must be 1")
+    require(manifest.get("schema_version") == 2, "acceptance schema_version must be 2")
     profiles = manifest.get("profiles")
     repositories = manifest.get("repositories")
     gates = manifest.get("gates")
@@ -113,7 +113,7 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
     )
     require(
         isinstance(repositories, dict)
-        and set(repositories) == {"privatestack_ansible", "arch_bootstrap"},
+        and set(repositories) == {"hyperlab_ansible", "arch_bootstrap"},
         "acceptance repositories must name both release repositories",
     )
     require(isinstance(gates, list) and gates, "acceptance gates must be a non-empty list")
@@ -225,7 +225,7 @@ def build_plan(
     )
     require(
         SHA_RE.fullmatch(ansible_sha) is not None,
-        "privatestack SHA must be 40 lowercase hex",
+        "hyperlab-ansible SHA must be 40 lowercase hex",
     )
     require(
         SHA_RE.fullmatch(bootstrap_sha) is not None,
@@ -241,14 +241,14 @@ def build_plan(
         for gate in manifest["gates"]
     ]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "campaign_id": campaign_id,
         "profile": profile,
         "profile_label": manifest["profiles"][profile]["label"],
         "profile_order": manifest["profiles"][profile]["order"],
         "repositories": {
-            "privatestack_ansible": {
-                **manifest["repositories"]["privatestack_ansible"],
+            "hyperlab_ansible": {
+                **manifest["repositories"]["hyperlab_ansible"],
                 "expected_sha": ansible_sha,
             },
             "arch_bootstrap": {
@@ -286,11 +286,11 @@ def validate_plan(manifest: dict[str, Any], plan: dict[str, Any]) -> None:
     repositories = plan.get("repositories")
     require(
         isinstance(repositories, dict)
-        and set(repositories) == {"privatestack_ansible", "arch_bootstrap"},
+        and set(repositories) == {"hyperlab_ansible", "arch_bootstrap"},
         "release plan repositories differ from the manifest",
     )
     try:
-        ansible_sha = repositories["privatestack_ansible"]["expected_sha"]
+        ansible_sha = repositories["hyperlab_ansible"]["expected_sha"]
         bootstrap_sha = repositories["arch_bootstrap"]["expected_sha"]
     except (KeyError, TypeError) as exc:
         raise AcceptanceError("release plan repository identities are incomplete") from exc
@@ -336,7 +336,7 @@ def reject_sensitive_strings(plan: dict[str, Any], value: Any) -> None:
 
 def scaffold(plan: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "campaign_id": plan["campaign_id"],
         "profile": plan["profile"],
         "repositories": {
@@ -446,7 +446,7 @@ def validate_partial_evidence(plan: dict[str, Any], evidence: dict[str, Any]) ->
         },
         "evidence keys differ from the schema",
     )
-    require(evidence.get("schema_version") == 1, "evidence schema_version must be 1")
+    require(evidence.get("schema_version") == 2, "evidence schema_version must be 2")
     require(evidence.get("campaign_id") == plan["campaign_id"], "evidence campaign id differs")
     require(evidence.get("profile") == plan["profile"], "evidence hardware profile differs")
     require(
@@ -705,9 +705,9 @@ def repository_proof(
     log_dir: Path | None,
 ) -> dict[str, Any]:
     ansible_head, ansible_log = verify_repository(
-        "privatestack_ansible",
+        "hyperlab_ansible",
         ansible_repo,
-        plan["repositories"]["privatestack_ansible"],
+        plan["repositories"]["hyperlab_ansible"],
         log_dir,
     )
     bootstrap_head, bootstrap_log = verify_repository(
@@ -717,7 +717,7 @@ def repository_proof(
         log_dir,
     )
     digest = hashlib.sha256(
-        b"privatestack_ansible\0"
+        b"hyperlab_ansible\0"
         + ansible_log
         + b"\0arch_bootstrap\0"
         + bootstrap_log
@@ -726,7 +726,7 @@ def repository_proof(
         "verify_sha256": digest,
         "clean_worktrees": True,
         "exact_commits": (
-            f"privatestack_ansible={ansible_head};arch_bootstrap={bootstrap_head}"
+            f"hyperlab_ansible={ansible_head};arch_bootstrap={bootstrap_head}"
         ),
     }
 
@@ -744,7 +744,7 @@ def seal(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
     evidence_hash = hashlib.sha256(canonical_json(evidence)).hexdigest()
     plan_hash = hashlib.sha256(canonical_json(plan)).hexdigest()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "campaign_id": plan["campaign_id"],
         "profile": plan["profile"],
         "repositories": {

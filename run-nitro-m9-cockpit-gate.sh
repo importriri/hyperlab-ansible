@@ -13,7 +13,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 
 [[ -d .git && -x ./verify.sh ]] \
-  || fail "run from the privatestack-ansible repository root"
+  || fail "run from the hyperlab-ansible repository root"
 [[ -z "$(git status --porcelain)" ]] \
   || fail "the candidate working tree is not clean"
 [[ -x tools/guest_store_guard.py ]] \
@@ -253,7 +253,7 @@ printf '\nAUTOMATED NITRO M9 + COCKPIT GATE: GREEN\n'
 printf 'Candidate: %s\nEvidence: %s\n' "${candidate_head}" "${LOG_DIR}"
 printf '%s\n' 'Manual desktop boundary remains:'
 printf '%s\n' '  1. reload Sway; verify Mod+F1 palette, Mod+F2 panel and Mod+F3 doctor'
-printf '%s\n' '  2. hover the Waybar Hyperlab group and verify the drawer opens'
+printf '%s\n' '  2. hover the Waybar HyperLab group and verify the drawer opens'
 printf '%s\n' '  3. start/stop an unmanaged disposable test domain and verify immediate refresh'
 printf '%s\n' '  4. select a managed action and verify it only prepares the privileged playbook'
 printf '%s\n' '  5. verify Catppuccin colours and panel geometry in Foot'

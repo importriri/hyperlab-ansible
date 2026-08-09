@@ -18,6 +18,11 @@ host_profiles:
       keyboard_layout: it
       keyboard_variant: ""
       keyboard_options: ""
+      # Hardware gate 2026-08-08: event4 reports KEY_PRESENTATION (425) and a
+      # short physical tap produces exactly one press/release pair.
+      theme_cycle_binding:
+        input_device: "1:1:AT_Translated_Set_2_keyboard"
+        keysym: XF86Presentation
       touchpad:
         dwt: enabled
         middle_emulation: enabled

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rofi command palette for the Hyperlab.
+# rofi command palette for the HyperLab.
 #
 # The list and the final argv both come from hyperlabctl. This shell never joins
 # target values into a command: `actions --resolve` validates the selected

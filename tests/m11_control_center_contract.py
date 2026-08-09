@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused M11 v7 Hyperlab Shell visual-lock contract."""
+"""Focused M11 v7 HyperLab Shell visual-lock contract."""
 
 from __future__ import annotations
 
@@ -26,6 +26,9 @@ def main():
     manager = text(manager_path)
     compile(manager, manager_path, "exec")
     ast.parse(manager)
+    manager_session = text(
+        "roles/host_desktop_sway/files/privatestack-hyperlab-session.sh"
+    )
 
     for boundary in (
         'CDLL("libgtk4-layer-shell.so")',
@@ -34,7 +37,6 @@ def main():
         'gi.require_version("Gtk4LayerShell", "1.0")',
         "LayerShell.init_for_window(self)",
         "LayerShell.Layer.OVERLAY",
-        "LayerShell.KeyboardMode.ON_DEMAND",
         "LayerShell.KeyboardMode.EXCLUSIVE",
     ):
         require(boundary in manager, "Layer Shell boundary missing: %s" % boundary)
@@ -48,6 +50,19 @@ def main():
             "compact fixed-size drawer missing")
     require("panel.set_size_request(1180, 760)" in manager,
             "target-size central manager missing")
+    require("LayerShell.set_anchor(self, LayerShell.Edge.TOP, True)" in manager and
+            "LayerShell.set_anchor(self, LayerShell.Edge.LEFT, True)" in manager,
+            "compact drawer is not anchored top-left")
+    require("LayerShell.set_margin(self, LayerShell.Edge.TOP, 0)" in manager and
+            "LayerShell.set_margin(self, LayerShell.Edge.LEFT, 0)" in manager,
+            "drawer adds a gap after Waybar's exclusive zone or is not flush left")
+    require('gapplication action "${app_id}" quit' in manager_session and
+            "flock -n 9" in manager_session and
+            'exec "${manager}" --warm' in manager_session,
+            "reload-safe resident manager replacement is missing")
+    require('kill -TERM "${manager_pids[@]}"' in manager_session and
+            "kill -KILL" not in manager_session,
+            "manager replacement is not bounded and graceful")
     require('.config/gtk-4.0/hyperlab-palette.css' in manager and
             "self._style_provider.load_from_data" in manager and
             'palette.read_text(encoding="utf-8")' in manager,
@@ -67,11 +82,14 @@ def main():
             "prebuilt resident drawer missing")
     require("Gtk.Image.new_from_file(" in manager and
             "/usr/share/icons/hicolor/scalable/apps/hyperlab-control-center.svg" in manager,
-            "shared Hyperlab logo is not used by the manager")
+            "shared HyperLab logo is not used by the manager")
     require("Gtk.EventControllerKey()" in manager and
             "Gtk.PropagationPhase.CAPTURE" in manager and
             "keyval == Gdk.KEY_Escape" in manager,
             "single-Escape close capture missing")
+    require("LayerShell.KeyboardMode.ON_DEMAND" not in manager and
+            "LayerShell.set_keyboard_mode(self, LayerShell.KeyboardMode.EXCLUSIVE)" in manager,
+            "drawer does not take keyboard focus when mapped")
     require("self.set_visible(False)" in manager and
             "def close_surface" in manager,
             "resident hide/reopen close path missing")
@@ -95,7 +113,7 @@ def main():
         "Looking Glass", "GPU Passthrough", "Image validation", "Host recovery",
         "SPICE recovery", "no kvmfr", "Snapshot", "Backup", "disposable",
     ):
-        require(capability in manager, "Hyperlab capability missing: %s" % capability)
+        require(capability in manager, "HyperLab capability missing: %s" % capability)
     require("shell=True" not in manager and "os.system" not in manager and "eval(" not in manager,
             "manager introduced a shell execution boundary")
     require("chromium" not in manager.lower() and "webkit" not in manager.lower(),
@@ -110,16 +128,21 @@ def main():
     for package in ("gtk4", "gtk4-layer-shell", "python-gobject", "virt-viewer", "superfile"):
         require("  - %s\n" % package in defaults,
                 "desktop package missing: %s" % package)
-    require("host_desktop_sway_removed_packages:\n  - yazi\n" in defaults,
-            "Yazi removal policy missing")
+    require("host_desktop_sway_removed_packages:\n  - yazi\n  - cava\n" in defaults,
+            "retired desktop package removal policy missing")
 
     tasks = text("roles/host_desktop_sway/tasks/main.yml")
     palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
+    require("/usr/local/bin/privatestack-cava" in tasks and
+            "/usr/local/bin/privatestack-fullscreen" in tasks and
+            'state: absent' in tasks,
+            "retired desktop helpers are not removed from existing hosts")
     for deployed in (
         "superfile-config.toml", "hyperlab-gtk.css",
         "hyperlab-wallpaper.svg", "hyperlab-control-center.svg",
-        "privatestack-hyperlab-domains.py", "privatestack-waybar.sh",
-        "privatestack-fullscreen.sh", "privatestack-theme.sh",
+        "privatestack-hyperlab-domains.py", "privatestack-hyperlab-session.sh",
+        "privatestack-waybar.sh",
+        "privatestack-theme.sh",
         "privatestack-keyboard.sh", "privatestack-controls.sh",
         "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
     ):
@@ -138,7 +161,7 @@ def main():
     require("/usr/share/backgrounds/privatestack/hyperlab.svg" in tasks,
             "editable vector wallpaper is not installed")
     require("gtk-3.0/gtk.css" in tasks and "gtk-4.0/gtk.css" in tasks,
-            "global Hyperlab GTK theme is not deployed to GTK3 and GTK4")
+            "global HyperLab GTK theme is not deployed to GTK3 and GTK4")
 
     gtk_theme = text("roles/host_desktop_sway/files/hyperlab-gtk.css")
     # The GTK sheet imports the generated shared palette instead of carrying
@@ -152,7 +175,7 @@ def main():
     require("output * bg /usr/share/backgrounds/privatestack/public/green/01.png fill" in sway,
             "Green wallpaper pool fallback path missing")
     require("rofi -show drun -theme ~/.config/rofi/rofi-launcher.rasi" in sway,
-            "Mod+d does not select the Hyperlab Rofi theme explicitly")
+            "Mod+d does not select the HyperLab Rofi theme explicitly")
     # The geometry moved out of the binding and into the launcher, which clamps
     # it to the focused output instead of assuming one screen size. The
     # invariant is that Mod+Shift+f reaches the single-instance launcher.
@@ -189,17 +212,12 @@ def main():
     require("bindsym $mod+Shift+w exec /usr/local/bin/privatestack-theme mode-toggle" in sway,
             "public/personal wallpaper shortcut is missing")
     require("exec_always /usr/local/bin/privatestack-waybar" in sway and
-            "exec_always /usr/local/bin/privatestack-hyperlab-domains --warm" in sway,
+            "exec_always /usr/local/bin/privatestack-hyperlab-session" in sway,
             "supervised bar or warm control plane is not active")
     require("exec_always /usr/local/bin/privatestack-theme session-start" in sway and
             "exec_always /usr/local/bin/privatestack-theme daemon" in sway,
             "theme state or wallpaper rotation is not started by Sway")
 
-    # Native fullscreen remains the stable path. Waybar is supervised and
-    # automatically falls back to native Swaybar after rapid failures.
-    fullscreen = text("roles/host_desktop_sway/files/privatestack-fullscreen.sh")
-    require("hyperlab-transparent-fullscreen" in fullscreen,
-            "historical fullscreen helper was deleted instead of deactivated")
     superfile_launcher = text("roles/host_desktop_sway/files/privatestack-superfile.sh")
     require("--session" in superfile_launcher and
             "stty size" in superfile_launcher and
@@ -209,9 +227,11 @@ def main():
     waybar_launcher = text("roles/host_desktop_sway/files/privatestack-waybar.sh")
     require("waybar -l info -c" in waybar_launcher and
             "waybar.log" in waybar_launcher and
+            "flock -n 9" in waybar_launcher and
+            "9>&-" in waybar_launcher and
             "failures >= 3" in waybar_launcher and
             "native_bar" in waybar_launcher,
-            "supervised Waybar fallback contract missing")
+            "single-instance supervised Waybar fallback contract missing")
     swaybar_status = text("roles/host_desktop_sway/files/privatestack-swaybar-status.py")
     require('"click_events": True' in swaybar_status and
             'block("theme", theme.upper()' in swaybar_status and
@@ -251,10 +271,33 @@ def main():
     for route in (
         "privatestack-hyperlab-domains --surface drawer --section vms",
         "privatestack-hyperlab-domains --surface drawer --section diagnostics",
+        "privatestack-hyperlab-domains --surface overlay --section vms",
+        "privatestack-hyperlab-domains --surface overlay --section diagnostics",
     ):
-        require(route in waybar, "direct resident drawer route missing: %s" % route)
-    require("--surface overlay" not in waybar,
-            "Waybar still opens the full Control Center instead of the compact drawer")
+        require(route in waybar, "HyperLab Waybar route missing: %s" % route)
+    require(
+        '"on-click-middle": "/usr/local/bin/privatestack-hyperlab-domains --surface overlay --section vms"'
+        in waybar,
+        "HyperLab middle click does not open the full Control Center",
+    )
+    require(
+        '"on-click-middle": "/usr/local/bin/privatestack-hyperlab-domains --surface overlay --section diagnostics"'
+        in waybar,
+        "TRUST middle click does not open full System diagnostics",
+    )
+    for stale_module in (
+        "custom/cava", "custom/logo", "idle_inhibitor", "cpu", "memory",
+        "backlight", "tray",
+    ):
+        require(('"%s"' % stale_module) not in waybar,
+                "unused Waybar module returned: %s" % stale_module)
+    waybar_css = text("roles/host_desktop_sway/files/waybar.css")
+    for stale_selector in (
+        "#custom-cava", "#custom-logo", "#idle_inhibitor", "#cpu",
+        "#memory", "#backlight", "#tray",
+    ):
+        require(stale_selector not in waybar_css,
+                "retired Waybar CSS selector returned: %s" % stale_selector)
     require('window.set_visible(True)' in manager and
             'Gtk.Button(label="Full Control Center")' in manager,
             "resident drawer mapping or explicit full-center escape hatch missing")
@@ -288,7 +331,7 @@ def main():
         require("[colors-dark]" in palette_foot,
                 f"{variant} Foot palette is not using 1.26 colors-dark syntax")
         require("alpha=0.72" in palette_foot,
-                f"{variant} transparent Hyperlab terminal alpha missing")
+                f"{variant} transparent HyperLab terminal alpha missing")
         require(re.search(r"(?m)^cursor=\S+\s+\S+$", palette_foot) is not None,
                 f"{variant} Foot cursor is not a parse-clean colour pair")
     rofi_compat = text("roles/host_desktop_sway/files/rofi-mocha.rasi")
@@ -368,7 +411,7 @@ def main():
     ):
         require(marker in render, "render contract lacks visual marker: %s" % marker)
 
-    print("M11 v7 Hyperlab Shell visual-lock contract: OK")
+    print("M11 v7 HyperLab Shell visual-lock contract: OK")
     return 0
 
 

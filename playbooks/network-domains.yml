@@ -2,7 +2,7 @@
 # Reconcile only the five libvirt network domains. The guard requires the
 # already-landed KVM host and prevents this scoped playbook from becoming an
 # implicit replacement for the complete lab bundle.
-- name: Reconcile the Hyperlab libvirt network domains
+- name: Reconcile the HyperLab libvirt network domains
   hosts: hypervisor
   become: true
   roles:

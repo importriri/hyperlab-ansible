@@ -72,6 +72,9 @@ remain explicit transactions.
 - `network-domains.yml` — reconcile only the five libvirt networks.
 - `host-desktop-sway.yml` — reconcile the Sway cockpit on the physical host only.
 - `looking-glass.yml` — reconcile only the host-side Looking Glass transport.
+- `nitro-sense.yml` — reconcile native Acer Nitro platform profiles or the
+  explicitly enabled Linuwu-Sense replacement; it is never part of a broad
+  target.
 
 These playbooks are maintenance tools, not an alternative installation order.
 

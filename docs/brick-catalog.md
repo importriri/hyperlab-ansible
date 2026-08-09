@@ -19,6 +19,10 @@ brick exists; task files remain the source for implementation details.
   libvirt's generated NAT rules.
 - **`gpu_handoff`** gives the dGPU to exact reviewed domain names and prevents a
   lower-trust guest from handing it upward without reboot.
+- **`nitro_sense`** keeps native Acer platform-profile support when it is
+  sufficient and otherwise installs the pinned Linuwu-Sense replacement only
+  after an explicit opt-in, an isolated build proof and a recoverable driver
+  transition. It remains outside every broad host target.
 
 ## Storage and provenance
 

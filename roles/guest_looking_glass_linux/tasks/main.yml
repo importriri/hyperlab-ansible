@@ -65,6 +65,119 @@
       The experimental Linux sender must use the exact source and build identity
       already reviewed for the physical-host client.
 
+- name: Read any guest kvmfr module options
+  ansible.builtin.slurp:
+    src: /etc/modprobe.d/kvmfr.conf
+  register: guest_looking_glass_linux_kvmfr_options
+  failed_when: false
+  changed_when: false
+
+- name: Refuse a static kvmfr device inside the passthrough guest
+  ansible.builtin.assert:
+    that:
+      - >-
+        'static_size_mb' not in
+        ((guest_looking_glass_linux_kvmfr_options.content | default(''))
+         | b64decode)
+    fail_msg: >-
+      The passthrough guest must bind kvmfr to its PCI IVSHMEM device.
+      A static kvmfr allocation would create a second ambiguous transport.
+
+- name: Inspect kvmfr DKMS state for the running kernel
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - status
+      - -m
+      - kvmfr
+      - -v
+      - "{{ guest_looking_glass_linux_kvmfr_version }}"
+      - -k
+      - "{{ ansible_facts['kernel'] }}"
+  register: guest_looking_glass_linux_kvmfr_dkms
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install pinned kvmfr for the running guest kernel
+  ansible.builtin.command:
+    cmd: >-
+      /usr/bin/dkms install . -k {{ ansible_facts['kernel'] }}
+    chdir: "{{ guest_looking_glass_linux_source }}/module"
+  when: >-
+    ': installed'
+    not in guest_looking_glass_linux_kvmfr_dkms.stdout
+  changed_when: true
+
+- name: Load guest kvmfr at boot
+  ansible.builtin.copy:
+    content: "kvmfr\n"
+    dest: /etc/modules-load.d/kvmfr.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Give the workstation session sole access to guest kvmfr
+  ansible.builtin.template:
+    src: 70-kvmfr-guest.rules.j2
+    dest: /etc/udev/rules.d/70-kvmfr-guest.rules
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Load guest kvmfr now
+  community.general.modprobe:
+    name: kvmfr
+    state: present
+
+- name: Reload guest kvmfr device policy
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/udevadm
+      - control
+      - --reload
+  changed_when: false
+
+- name: Apply guest kvmfr device policy now
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/udevadm
+      - trigger
+      - --subsystem-match=kvmfr
+      - --action=change
+  changed_when: false
+
+- name: Inspect the guest IVSHMEM PCI binding
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/lspci
+      - -nnk
+      - -d
+      - "{{ guest_looking_glass_linux_kvmfr_pci_id }}"
+  register: guest_looking_glass_linux_kvmfr_pci
+  changed_when: false
+
+- name: Inspect the guest kvmfr device
+  ansible.builtin.stat:
+    path: "{{ guest_looking_glass_linux_kvmfr_device }}"
+    follow: false
+  register: guest_looking_glass_linux_kvmfr_stat
+
+- name: Require the PCI-backed guest transport
+  ansible.builtin.assert:
+    that:
+      - >-
+        'Kernel driver in use: kvmfr'
+        in guest_looking_glass_linux_kvmfr_pci.stdout
+      - guest_looking_glass_linux_kvmfr_stat.stat.exists | default(false)
+      - guest_looking_glass_linux_kvmfr_stat.stat.ischr | default(false)
+      - guest_looking_glass_linux_kvmfr_stat.stat.pw_name == admin_user
+      - guest_looking_glass_linux_kvmfr_stat.stat.gr_name == admin_user
+      - guest_looking_glass_linux_kvmfr_stat.stat.mode == '0600'
+    fail_msg: >-
+      The Linux sender requires the passed PCI IVSHMEM device to be bound
+      to kvmfr and directly readable and writable by the workstation session.
+
 - name: Inspect any previously installed experimental sender
   ansible.builtin.stat:
     path: "{{ guest_looking_glass_linux_binary }}"
@@ -91,6 +204,8 @@
          guest_looking_glass_linux_commit or
          guest_looking_glass_linux_stamp_data.build | default('') !=
          guest_looking_glass_linux_build or
+         guest_looking_glass_linux_stamp_data.compat_patch_sha256 | default('') !=
+         guest_looking_glass_linux_compat_patch_sha256 or
          not (guest_looking_glass_linux_existing_binary.stat.exists | default(false)) or
          not (guest_looking_glass_linux_existing_binary.stat.isreg | default(false)) or
          (guest_looking_glass_linux_existing_binary.stat.islnk | default(false)) or
@@ -99,38 +214,130 @@
 - name: Build the pinned PipeWire-only Linux sender
   when: guest_looking_glass_linux_build_needed | bool
   block:
-    - name: Configure the upstream Linux host with PipeWire capture
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/cmake
-          - -S
-          - "{{ guest_looking_glass_linux_source }}/host"
-          - -B
-          - "{{ guest_looking_glass_linux_build_dir }}"
-          - -DCMAKE_BUILD_TYPE=Release
-          - -DCMAKE_INSTALL_PREFIX=/usr/local
-          - -DOPTIMIZE_FOR_NATIVE=OFF
-          - -DUSE_XCB=OFF
-          - -DUSE_PIPEWIRE=ON
-      changed_when: true
+    - name: Build with the reviewed GCC compatibility patch
+      block:
+        - name: Require clean pinned portal source before patching
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - status
+              - --porcelain
+              - --untracked-files=no
+              - --
+              - "{{ guest_looking_glass_linux_compat_patch_target }}"
+          register: guest_looking_glass_linux_portal_status
+          changed_when: false
 
-    - name: Compile the experimental Linux sender
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/cmake
-          - --build
-          - "{{ guest_looking_glass_linux_build_dir }}"
-          - --parallel
-          - "{{ ansible_facts['processor_vcpus'] | default(2) | string }}"
-      changed_when: true
+        - name: Refuse unexpected changes in the pinned portal source
+          ansible.builtin.assert:
+            that:
+              - guest_looking_glass_linux_portal_status.stdout | trim | length == 0
+            fail_msg: >-
+              The pinned PipeWire portal source has unreviewed local changes.
+              Preserve or review them before applying the GCC compatibility patch.
 
-    - name: Install the experimental Linux sender
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/cmake
-          - --install
-          - "{{ guest_looking_glass_linux_build_dir }}"
-      changed_when: true
+        - name: Stage the reviewed GCC compatibility patch for this rebuild
+          ansible.builtin.copy:
+            src: "{{ guest_looking_glass_linux_compat_patch }}"
+            dest: "{{ guest_looking_glass_linux_compat_patch_remote }}"
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Inspect the staged GCC compatibility patch
+          ansible.builtin.stat:
+            path: "{{ guest_looking_glass_linux_compat_patch_remote }}"
+            checksum_algorithm: sha256
+          register: guest_looking_glass_linux_compat_patch_stat
+
+        - name: Require the exact reviewed GCC compatibility patch
+          ansible.builtin.assert:
+            that:
+              - >-
+                guest_looking_glass_linux_compat_patch_stat.stat.checksum ==
+                guest_looking_glass_linux_compat_patch_sha256
+            fail_msg: >-
+              The staged GCC compatibility patch differs from the bytes
+              validated against the pinned Looking Glass source.
+
+        - name: Require the compatibility patch to match the pinned source
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - apply
+              - --check
+              - "{{ guest_looking_glass_linux_compat_patch_remote }}"
+          changed_when: false
+
+        - name: Apply the reviewed GCC compatibility patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - apply
+              - "{{ guest_looking_glass_linux_compat_patch_remote }}"
+          register: guest_looking_glass_linux_compat_patch_apply
+          changed_when: true
+
+        - name: Configure the upstream Linux host with PipeWire capture
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/cmake
+              - -S
+              - "{{ guest_looking_glass_linux_source }}/host"
+              - -B
+              - "{{ guest_looking_glass_linux_build_dir }}"
+              - -DCMAKE_BUILD_TYPE=Release
+              - -DCMAKE_INSTALL_PREFIX=/usr/local
+              - -DOPTIMIZE_FOR_NATIVE=OFF
+              - -DUSE_XCB=OFF
+              - -DUSE_PIPEWIRE=ON
+          changed_when: true
+
+        - name: Compile the experimental Linux sender
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/cmake
+              - --build
+              - "{{ guest_looking_glass_linux_build_dir }}"
+              - --parallel
+              - "{{ ansible_facts['processor_vcpus'] | default(2) | string }}"
+          changed_when: true
+
+        - name: Install the experimental Linux sender
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/cmake
+              - --install
+              - "{{ guest_looking_glass_linux_build_dir }}"
+          changed_when: true
+
+      always:
+        - name: Restore the pinned portal source after the transient build patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - checkout
+              - --
+              - "{{ guest_looking_glass_linux_compat_patch_target }}"
+          changed_when: false
+          when:
+            - guest_looking_glass_linux_compat_patch_apply is defined
+            - >-
+              guest_looking_glass_linux_compat_patch_apply.rc
+              | default(1) == 0
+
+        - name: Remove the transient GCC compatibility patch
+          ansible.builtin.file:
+            path: "{{ guest_looking_glass_linux_compat_patch_remote }}"
+            state: absent
 
     - name: Create the experimental sender stamp directory
       ansible.builtin.file:
@@ -145,6 +352,7 @@
         content: |-
           commit: {{ guest_looking_glass_linux_commit }}
           build: {{ guest_looking_glass_linux_build }}
+          compat_patch_sha256: {{ guest_looking_glass_linux_compat_patch_sha256 }}
           capture: pipewire
           runtime_enabled: false
         dest: "{{ guest_looking_glass_linux_stamp }}"

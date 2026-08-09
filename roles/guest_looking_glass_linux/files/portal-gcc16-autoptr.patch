@@ -1,0 +1,65 @@
+diff --git a/host/platform/Linux/capture/pipewire/src/portal.c b/host/platform/Linux/capture/pipewire/src/portal.c
+index 38e9b1ff..603e16bf 100644
+--- a/host/platform/Linux/capture/pipewire/src/portal.c
++++ b/host/platform/Linux/capture/pipewire/src/portal.c
+@@ -177,6 +177,7 @@ bool portal_createScreenCastSession(struct Portal * portal, char ** handle)
+   char * sessionToken = NULL;
+   bool result = false;
+   struct DBusCallback callback = {0, .opaque = handle};
++  g_autoptr(GVariant) response = NULL;
+ 
+   if (!getRequestPath(portal, &requestPath, &requestToken))
+   {
+@@ -198,7 +199,7 @@ bool portal_createScreenCastSession(struct Portal * portal, char ** handle)
+   g_variant_builder_add(&builder, "{sv}", "handle_token", g_variant_new_string(requestToken));
+   g_variant_builder_add(&builder, "{sv}", "session_handle_token", g_variant_new_string(sessionToken));
+ 
+-  g_autoptr(GVariant) response = g_dbus_proxy_call_sync(portal->screenCast, "CreateSession",
++  response = g_dbus_proxy_call_sync(portal->screenCast, "CreateSession",
+     g_variant_new("(a{sv})", &builder), G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+ 
+   if (err)
+@@ -257,6 +258,8 @@ bool portal_selectSource(struct Portal * portal, const char * sessionHandle)
+   char * requestPath = NULL;
+   char * requestToken = NULL;
+   struct DBusCallback callback = {0};
++  g_autoptr(GVariant) cursorModes_ = NULL;
++  g_autoptr(GVariant) response = NULL;
+ 
+   if (!getRequestPath(portal, &requestPath, &requestToken))
+   {
+@@ -272,7 +275,7 @@ bool portal_selectSource(struct Portal * portal, const char * sessionHandle)
+   g_variant_builder_add(&builder, "{sv}", "multiple", g_variant_new_boolean(FALSE));
+   g_variant_builder_add(&builder, "{sv}", "handle_token", g_variant_new_string(requestToken));
+ 
+-  g_autoptr(GVariant) cursorModes_ = g_dbus_proxy_get_cached_property(
++  cursorModes_ = g_dbus_proxy_get_cached_property(
+     portal->screenCast, "AvailableCursorModes");
+   uint32_t cursorModes = cursorModes_ ? g_variant_get_uint32(cursorModes_) : 0;
+ 
+@@ -293,7 +296,7 @@ bool portal_selectSource(struct Portal * portal, const char * sessionHandle)
+     goto cleanup;
+   }
+ 
+-  g_autoptr(GVariant) response = g_dbus_proxy_call_sync(portal->screenCast, "SelectSources",
++  response = g_dbus_proxy_call_sync(portal->screenCast, "SelectSources",
+     g_variant_new("(oa{sv})", sessionHandle, &builder), G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+ 
+   if (err)
+@@ -359,6 +362,7 @@ uint32_t portal_getPipewireNode(struct Portal * portal, const char * sessionHand
+   char * requestToken = NULL;
+   uint32_t result = 0;
+   struct DBusCallback callback = {0, .opaque = &result};
++  g_autoptr(GVariant) response = NULL;
+ 
+   if (!getRequestPath(portal, &requestPath, &requestToken))
+   {
+@@ -372,7 +376,7 @@ uint32_t portal_getPipewireNode(struct Portal * portal, const char * sessionHand
+   g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
+   g_variant_builder_add(&builder, "{sv}", "handle_token", g_variant_new_string(requestToken));
+ 
+-  g_autoptr(GVariant) response = g_dbus_proxy_call_sync(portal->screenCast, "Start",
++  response = g_dbus_proxy_call_sync(portal->screenCast, "Start",
+     g_variant_new("(osa{sv})", sessionHandle, "", &builder), G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
+ 
+   if (err)

@@ -65,7 +65,7 @@
       - bootstrap_storage_lsattr.stdout.split() | length > 0
       - "'C' in bootstrap_storage_lsattr.stdout.split()[0]"
     fail_msg: >-
-      {{ bootstrap_storage_mountpoint }} lacks +C. Refusing before Hyperlab
+      {{ bootstrap_storage_mountpoint }} lacks +C. Refusing before HyperLab
       creates or imports any qcow2 image.
 
 - name: Inspect the arch-bootstrap storage contract

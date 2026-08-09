@@ -453,6 +453,34 @@ of mutations; it is that each safety claim has a test capable of becoming red.
   registry, so an action that cannot run is an action the operator will pick
   and watch fail.
 
+## Optional Acer Nitro platform driver
+
+### 85. Out-of-tree replacement becomes the default
+- Break: `sed -i 's/^nitro_sense_out_of_tree_enabled: false$/nitro_sense_out_of_tree_enabled: true/' roles/nitro_sense/defaults/main.yml`
+- Red: render suite, "A Nitro Sense invariant broke". A reverse-engineered
+  platform driver must never replace a sufficient in-tree driver implicitly.
+- Restore: `git checkout -- roles/nitro_sense/defaults/main.yml`
+
+### 86. Generic kernel headers replace hardened headers
+- Break: `sed -i 's/^  - linux-hardened-headers$/  - linux-headers/' roles/nitro_sense/defaults/main.yml`
+- Red: render suite, "A Nitro Sense invariant broke". Stage 1 boots
+  `linux-hardened`; a successful package transaction for another kernel is not
+  a build proof for the running host.
+- Restore: `git checkout -- roles/nitro_sense/defaults/main.yml`
+
+### 87. Rollback no longer restores acer_wmi
+- Break: `sed -i 's/name: "{{ nitro_sense_in_tree_module_name }}"/name: broken_in_tree_driver/' roles/nitro_sense/tasks/rollback.yml`
+- Red: render suite, "A Nitro Sense invariant broke". Removing the replacement
+  without restoring the in-tree platform driver can leave function keys and
+  radio controls unavailable.
+- Restore: `git checkout -- roles/nitro_sense/tasks/rollback.yml`
+
+### 88. The Nitro fan path is guessed
+- Break: `sed -i 's#/nitro_sense/fan_speed#/nitro_sense/fan_curve#' roles/nitro_sense/defaults/main.yml`
+- Red: render suite, "A Nitro Sense invariant broke". Only the exact node
+  documented by the pinned upstream source may receive a WMI-backed write.
+- Restore: `git checkout -- roles/nitro_sense/defaults/main.yml`
+
 
 ## Cockpit and M3 integration
 

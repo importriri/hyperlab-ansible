@@ -1,0 +1,44 @@
+---
+- name: Create the managed helper directory
+  ansible.builtin.file:
+    path: "{{ nitro_sense_apply_script | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy the fail-closed settings helper
+  ansible.builtin.template:
+    src: nitro-sense-apply.sh.j2
+    dest: "{{ nitro_sense_apply_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Apply Nitro Sense settings
+
+- name: Declare the systemd unit directory
+  ansible.builtin.file:
+    path: "{{ nitro_sense_apply_unit | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Persist settings after the selected platform driver loads
+  ansible.builtin.template:
+    src: nitro-sense-apply.service.j2
+    dest: "{{ nitro_sense_apply_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Apply Nitro Sense settings
+
+- name: Enable and start the settings service
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_apply_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply changed settings before validating them
+  ansible.builtin.meta: flush_handlers

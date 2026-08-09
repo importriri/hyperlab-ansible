@@ -2,6 +2,10 @@
 guest_gpu_nvidia_probe_packages:
   - pciutils
 
+# Ampere follows Arch's supported open-kernel-module branch because DKMS
+# must stay aligned with linux-zen. Vendor userspace is intentionally allowed
+# in the account-bearing dev workstation; the disposable zero-trust guest is
+# the trust boundary for unreviewed software instead.
 guest_gpu_nvidia_packages:
   - nvidia-open-dkms
   - nvidia-utils

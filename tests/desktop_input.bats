@@ -74,6 +74,7 @@ fallback = render(defaults)
 assert "xkb_layout it,us,ara" in fallback
 assert "xkb_variant" not in fallback
 assert "xkb_options" not in fallback
+assert "XF86Presentation" not in fallback
 for line in ("dwt enabled", "middle_emulation enabled", "natural_scroll enabled", "tap enabled"):
     assert line in fallback
 
@@ -84,10 +85,20 @@ optional_render = render(optional)
 assert "xkb_variant nodeadkeys,," in optional_render
 assert "xkb_options ctrl:nocaps" in optional_render
 
+rendered_profiles = {}
 for name, profile in hardware.items():
     assert "desktop" in profile, f"{name} has no explicit desktop profile"
     rendered = render(merge(defaults, profile["desktop"]))
+    rendered_profiles[name] = rendered
     assert "xkb_layout it,us,ara" in rendered
+
+nitro_binding = (
+    "bindsym --no-repeat "
+    "--input-device=1:1:AT_Translated_Set_2_keyboard "
+    "XF86Presentation exec /usr/local/bin/privatestack-theme cycle"
+)
+assert rendered_profiles["nitro-3060"].count(nitro_binding) == 1
+assert "XF86Presentation" not in rendered_profiles["predator-3070"]
 PY
   [ "$status" -eq 0 ]
 }

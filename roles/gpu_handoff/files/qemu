@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gpu-handoff - libvirt qemu hook. Managed by privatestack-ansible.
+# gpu-handoff - libvirt qemu hook. Managed by hyperlab-ansible.
 #
 # Protocol: exact VM names map to security domains, and security domains map to
 # trust levels. Between reboots the GPU only moves DOWN the trust ladder:

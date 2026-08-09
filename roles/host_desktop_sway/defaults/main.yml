@@ -1,35 +1,20 @@
 ---
-# The local cockpit. foundation.yml keeps a recovery host blind (TTY), while
-# the normal laptop target lab.yml mounts this brick before Looking Glass.
-# desktop.yml remains the narrow maintenance entrypoint. On the host the
-# cockpit rides the free iGPU: the dGPU belongs to gpu_handoff.
-#
-# sway, NOT swayfx and NOT a DE: official repos only (no AUR in bricks),
-# one compositor, no dependency chain. The eye candy is theming
-# (Catppuccin Mocha end to end), not a fork.
-#
-# The rice pass added rofi (launcher + power menu), papirus-icon-theme
-# (rofi's icons) and cava (the waybar strip). rofi 2.0 absorbed the
-# wayland fork: `rofi-wayland` is gone from the repos - the package
-# `rofi` now Provides and Replaces it, so THAT is the name to install.
-# The wallpaper ships with the role and lands in
-# /usr/share/backgrounds/privatestack/: drop another PNG on that path to
-# swap the backdrop without touching ansible.
-# --- per-machine input --------------------------------------------------------
-# The only genuinely per-laptop part of the cockpit, and the reason
-# sway.config carries no hardware assumption of its own: this is rendered
-# into ~/.config/sway/input.conf, which sway.config includes by relative
+# foundation.yml keeps a recovery host blind (TTY). This role is mounted by
+# lab.yml when the laptop needs its local Sway cockpit and Looking Glass client
 # path.
 #
-# These are the FALLBACK. A host with a recorded hardware profile takes that
-# profile's `desktop:` block instead (group_vars/all/hardware.yml), merged
-# over these. A guest VM has no profile and keeps them, which is right: it
-# has no touchpad and no opinion about the keyboard.
-# --- the Hyperlab cockpit -----------------------------------------------------
-# Where this host keeps the checkout. The CLI reads group_vars, so it runs FROM
-# the repository: /usr/local/bin/hyperlabctl is a wrapper that points here, not
-# a copy. A host that clones somewhere else overrides this and nothing else.
-host_desktop_sway_hyperlab_checkout: "/home/{{ admin_user }}/privatestack-ansible"
+# The host desktop uses the iGPU. The dGPU remains owned by the VFIO handoff
+# policy, so desktop convenience cannot silently take the passthrough device.
+# Sway comes from the official Arch repositories; no desktop fork is required.
+#
+# Per-machine input
+# These values are fallbacks. A recorded hardware profile can override them
+# without putting laptop-specific assumptions in sway.config.
+#
+# HyperLab checkout
+# hyperlabctl reads checked-in policy, so the installed wrapper points at the
+# local checkout instead of copying repository code into /usr/local.
+host_desktop_sway_hyperlab_checkout: "/home/{{ admin_user }}/hyperlab-ansible"
 
 host_desktop_sway_input_defaults:
   keyboard_layout: it
@@ -39,6 +24,8 @@ host_desktop_sway_input_defaults:
     - ara
   keyboard_variant: ""
   keyboard_options: ""
+  # Optional hardware-profile binding. Generic hosts and guests render none.
+  theme_cycle_binding: null
   touchpad:
     dwt: enabled
     middle_emulation: enabled
@@ -47,6 +34,7 @@ host_desktop_sway_input_defaults:
 
 host_desktop_sway_removed_packages:
   - yazi
+  - cava
 
 host_desktop_sway_packages:
   - sway
@@ -72,7 +60,6 @@ host_desktop_sway_packages:
   - pipewire-pulse
   - wireplumber
   - pamixer
-  - cava
   - papirus-icon-theme
   - ttf-jetbrains-mono-nerd
   - noto-fonts

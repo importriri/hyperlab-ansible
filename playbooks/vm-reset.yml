@@ -1,5 +1,5 @@
 ---
-- name: Reset one managed standard Hyperlab VM
+- name: Reset one managed standard HyperLab VM
   hosts: hypervisor
   become: true
   environment:

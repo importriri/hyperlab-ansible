@@ -105,6 +105,21 @@ def main() -> int:
         "glitch-lab",
     ]
     assert set(palettes) == set(themes)
+    assert defaults["guest_desktop_hyprland_nvidia_only"] is False
+    assert defaults["guest_desktop_hyprland_headless_monitor"] is False
+    assert defaults["guest_desktop_hyprland_headless_output"] == "HEADLESS-0"
+    assert defaults["guest_desktop_hyprland_headless_mode"] == "1920x1080@144"
+    assert defaults["guest_desktop_hyprland_headless_position"] == "0x0"
+    assert defaults["guest_desktop_hyprland_headless_scale"] == 1
+
+    vfio_play = yaml.safe_load(
+        text("playbooks/guest-arch-dev-vfio.yml")
+    )[0]
+    assert vfio_play["vars"]["guest_desktop_hyprland_nvidia_only"] is True
+    assert (
+        vfio_play["vars"]["guest_desktop_hyprland_headless_monitor"]
+        is True
+    )
 
     guest_tasks = text("roles/guest_desktop_hyprland/tasks/main.yml")
     assert "'workstations' in group_names" in guest_tasks
@@ -112,10 +127,22 @@ def main() -> int:
     assert "Remove legacy Sway and host-only guest packages" in guest_tasks
     assert "brick_guard_brick: guest_desktop_hyprland" in guest_tasks
 
-    hyprland = text("roles/guest_desktop_hyprland/files/hyprland.lua")
+    hyprland = text(
+        "roles/guest_desktop_hyprland/templates/hyprland.lua.j2"
+    )
     assert "dwindle.pseudotile" not in hyprland
     assert '"pidof hyprlock || hyprlock"' in hyprland
     assert 'require("theme")' in hyprland
+    assert "guest_desktop_hyprland_headless_monitor" in hyprland
+    assert "guest_desktop_hyprland_headless_output" in hyprland
+    assert "guest_desktop_hyprland_headless_mode" in hyprland
+    assert "guest_desktop_hyprland_headless_position" in hyprland
+    assert "guest_desktop_hyprland_headless_scale" in hyprland
+    assert "hyprctl output create headless" in hyprland
+    assert (
+        "{% if guest_desktop_hyprland_headless_monitor %}"
+        in hyprland
+    )
 
     controller = text(
         "roles/guest_desktop_hyprland/files/privatestack-guest-theme.py"

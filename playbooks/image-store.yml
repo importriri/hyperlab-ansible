@@ -1,8 +1,8 @@
 ---
-# Validate the stage-1 storage hand-off, then create the Hyperlab image layout.
+# Validate the stage-1 storage hand-off, then create the HyperLab image layout.
 # No package, directory or image write is allowed before mapper/fsroot/+C agree
 # with /etc/privatestack/bootstrap-storage.yml.
-- name: Validate storage ownership and lay out the Hyperlab image store
+- name: Validate storage ownership and lay out the HyperLab image store
   hosts: hypervisor
   become: true
   gather_facts: true

@@ -336,12 +336,22 @@ def main() -> int:
         looking["hyperlab_looking_glass_commit"],
         looking["hyperlab_looking_glass_build"],
     )
+    assert guest_module.load_expected_transport(ROOT) == (
+        "/dev/kvmfr0",
+        "0.0.12",
+        "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2",
+    )
     assert guest_module.pci_class("0000:01:00.0 0300: 10de:2520") == "0300"
     assert guest_module.pci_class("0000:01:00.1 0403: 10de:228e") == "0403"
 
     guest_gate = (ROOT / "tools/nitro/arch_dev_vfio_guest_gate.py").read_text()
     assert '"10de:"' in guest_gate
     assert '"1af4:1110"' in guest_gate
+    assert "Kernel driver in use: kvmfr" in guest_gate
+    assert "stat.S_ISCHR" in guest_gate
+    assert '"modinfo"' in guest_gate
+    assert "compat_patch_sha256" in guest_gate
+    assert "shmFile=" in guest_gate
     assert '"nvidia-smi"' in guest_gate
     assert "runtime_enabled" in guest_gate
     assert "nvidia_drm/parameters" in guest_gate

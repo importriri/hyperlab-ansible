@@ -43,21 +43,34 @@ def main() -> int:
             "controls status signal changed")
     require(right.index("custom/controls") < right.index("custom/wallpaper-mode"),
             "Controls must have a distinct hit target before wallpaper mode")
-    for mouse_action in ("on-click", "on-click-right", "on-click-middle"):
+    for mouse_action in ("on-click", "on-click-right"):
         require("--surface drawer" in bar["custom/brand"][mouse_action],
                 f"brand {mouse_action} does not open the compact drawer")
-    require("--surface overlay" not in json.dumps(bar["custom/brand"]),
-            "the Waybar brand still exposes the full center directly")
+    require("--surface overlay --section vms" in bar["custom/brand"]["on-click-middle"],
+            "brand middle click does not open the full Control Center")
 
     defaults = yaml.safe_load(text("roles/host_desktop_sway/defaults/main.yml"))
     cycle = defaults["host_desktop_sway_input_defaults"]["keyboard_layout_cycle"]
     require(cycle == ["it", "us", "ara"], "keyboard cycle must be Italian, English, Arabic")
     require(defaults["host_desktop_sway_input_defaults"]["keyboard_layout"] == "it",
             "Italian must remain the default layout")
+    require(defaults["host_desktop_sway_input_defaults"]["theme_cycle_binding"] is None,
+            "generic hosts must not inherit the Nitro theme key")
+
+    hardware = yaml.safe_load(text("group_vars/all/hardware.yml"))["host_profiles"]
+    nitro_binding = hardware["nitro-3060"]["desktop"]["theme_cycle_binding"]
+    require(nitro_binding == {
+        "input_device": "1:1:AT_Translated_Set_2_keyboard",
+        "keysym": "XF86Presentation",
+    }, "Nitro theme key does not match the hardware gate")
+    require("theme_cycle_binding" not in hardware["predator-3070"]["desktop"],
+            "unverified Predator profile inherited the Nitro theme key")
 
     template = text("roles/host_desktop_sway/templates/sway-input.conf.j2")
     require("keyboard_layout_cycle | join(',')" in template,
             "Sway input template does not render the three-layout keymap")
+    for marker in ("--no-repeat", "--input-device=", "theme_cycle_binding.keysym"):
+        require(marker in template, f"hardware theme-key binding missing: {marker}")
 
     keyboard = text("roles/host_desktop_sway/files/privatestack-keyboard.sh")
     for marker in (

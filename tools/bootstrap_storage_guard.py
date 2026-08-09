@@ -116,7 +116,7 @@ def validate_contract(data: dict[str, Any], observed: dict[str, str], hyperlab_r
     require(mountpoint == "/var/lib/libvirt/images",
             "bootstrap storage mountpoint must be /var/lib/libvirt/images")
     require(hyperlab_root == mountpoint or hyperlab_root.startswith(mountpoint + "/"),
-            "Hyperlab root must live below the bootstrap VM-store mountpoint")
+            "HyperLab root must live below the bootstrap VM-store mountpoint")
     require(store.get("mapper") == expected["mapper"],
             "declared mapper differs from the topology contract")
     require(store.get("fstype") == "btrfs", "bootstrap storage fstype must be btrfs")
@@ -168,7 +168,7 @@ def adopt_contract(observed: dict[str, str], hyperlab_root: str) -> dict[str, An
         )
     expected = expected_from_topology(topology)
     require(hyperlab_root.startswith("/var/lib/libvirt/images/"),
-            "legacy adoption Hyperlab root is outside the VM-store mountpoint")
+            "legacy adoption HyperLab root is outside the VM-store mountpoint")
     return {
         "schema_version": 1,
         "vm_store": {

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -59,6 +61,30 @@ def load_expected_pin(repo_root: Path) -> tuple[str, str]:
     return commit, build
 
 
+def load_expected_transport(
+    repo_root: Path,
+) -> tuple[str, str, str]:
+    path = (
+        repo_root
+        / "roles/guest_looking_glass_linux/defaults/main.yml"
+    )
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    require(isinstance(data, dict), "guest transport defaults must be a mapping")
+    device = data.get("guest_looking_glass_linux_kvmfr_device")
+    version = data.get("guest_looking_glass_linux_kvmfr_version")
+    patch_sha256 = data.get(
+        "guest_looking_glass_linux_compat_patch_sha256"
+    )
+    require(isinstance(device, str) and device, "invalid guest kvmfr device")
+    require(isinstance(version, str) and version, "invalid guest kvmfr version")
+    require(
+        isinstance(patch_sha256, str)
+        and len(patch_sha256) == 64,
+        "invalid sender compatibility patch hash",
+    )
+    return device, version, patch_sha256
+
+
 def pci_class(line: str) -> str:
     fields = line.split()
     require(len(fields) >= 3, f"unexpected lspci row: {line}")
@@ -68,7 +94,13 @@ def pci_class(line: str) -> str:
 def main() -> int:
     args = parse_args()
     try:
-        expected_commit, expected_build = load_expected_pin(Path(args.repo_root))
+        repo_root = Path(args.repo_root)
+        expected_commit, expected_build = load_expected_pin(repo_root)
+        (
+            expected_kvmfr_device,
+            expected_kvmfr_version,
+            expected_patch_sha256,
+        ) = load_expected_transport(repo_root)
         nvidia_pci = command("lspci", "-Dn", "-d", "10de:").splitlines()
         classes = {pci_class(line) for line in nvidia_pci}
         require(
@@ -79,6 +111,37 @@ def main() -> int:
 
         ivshmem = command("lspci", "-Dn", "-d", "1af4:1110").splitlines()
         require(ivshmem, "QEMU IVSHMEM PCI device 1af4:1110 is missing")
+        ivshmem_driver = command("lspci", "-nnk", "-d", "1af4:1110")
+        require(
+            "Kernel driver in use: kvmfr" in ivshmem_driver,
+            "guest IVSHMEM device is not bound to kvmfr",
+        )
+
+        kvmfr_path = Path(expected_kvmfr_device)
+        kvmfr_stat = kvmfr_path.stat()
+        require(
+            stat.S_ISCHR(kvmfr_stat.st_mode),
+            "guest kvmfr transport is not a character device",
+        )
+        require(
+            stat.S_IMODE(kvmfr_stat.st_mode) == 0o600,
+            "guest kvmfr transport mode drift",
+        )
+        require(
+            kvmfr_stat.st_uid == os.getuid(),
+            "guest kvmfr transport is not owned by the gate user",
+        )
+        kvmfr_version = command(
+            "modinfo",
+            "-F",
+            "version",
+            "kvmfr",
+        )
+        require(
+            kvmfr_version == expected_kvmfr_version,
+            "guest kvmfr module version drift",
+        )
+
         gpu = command(
             "nvidia-smi",
             "--query-gpu=name,driver_version",
@@ -98,11 +161,20 @@ def main() -> int:
         require(isinstance(stamp, dict), "Linux sender stamp is invalid")
         require(stamp.get("commit") == expected_commit, "Linux sender commit pin drift")
         require(stamp.get("build") == expected_build, "Linux sender build pin drift")
+        require(
+            stamp.get("compat_patch_sha256") == expected_patch_sha256,
+            "Linux sender compatibility patch drift",
+        )
         require(stamp.get("capture") == "pipewire", "sender was not built for PipeWire")
         require(stamp.get("runtime_enabled") is False, "sender must remain manually gated")
         config = Path(args.config)
         require(config.is_file() and not config.is_symlink(), "user sender configuration is missing")
-        require("capture=pipewire" in config.read_text(encoding="utf-8"), "PipeWire capture is not selected")
+        config_text = config.read_text(encoding="utf-8")
+        require("capture=pipewire" in config_text, "PipeWire capture is not selected")
+        require(
+            f"shmFile={expected_kvmfr_device}" in config_text,
+            "sender is not bound to the reviewed guest kvmfr device",
+        )
     except (OSError, GateError, yaml.YAMLError) as error:
         print(f"arch-dev-vfio guest gate refused: {error}", file=sys.stderr)
         return 2
@@ -113,6 +185,8 @@ def main() -> int:
                 "nvidia_classes": sorted(classes),
                 "nvidia_functions": len(nvidia_pci),
                 "ivshmem": ivshmem[0],
+                "kvmfr_device": expected_kvmfr_device,
+                "kvmfr_version": kvmfr_version,
                 "looking_glass_build": expected_build,
             },
             sort_keys=True,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hyperlab Control Center.
+"""HyperLab Control Center.
 
 A native GTK4 control plane for the complete laptop lab. Every operation is
 resolved by hyperlabctl; this process never assembles a shell command from user
@@ -484,15 +484,18 @@ class HyperlabWindow(Gtk.Window):
         if self.surface_mode == "drawer":
             LayerShell.set_anchor(self, LayerShell.Edge.TOP, True)
             LayerShell.set_anchor(self, LayerShell.Edge.LEFT, True)
-            LayerShell.set_margin(self, LayerShell.Edge.TOP, 48)
-            LayerShell.set_margin(self, LayerShell.Edge.LEFT, 14)
+            # A zero exclusive zone makes the compositor place this surface
+            # below Waybar's reserved area. Any positive top margin would be
+            # added afterwards and create a second gap below the 37 px bar.
+            LayerShell.set_margin(self, LayerShell.Edge.TOP, 0)
+            LayerShell.set_margin(self, LayerShell.Edge.LEFT, 0)
         LayerShell.set_exclusive_zone(self, 0)
-        LayerShell.set_keyboard_mode(
-            self,
-            LayerShell.KeyboardMode.ON_DEMAND
-            if self.surface_mode == "drawer"
-            else LayerShell.KeyboardMode.EXCLUSIVE,
-        )
+        # Sway gives ON_DEMAND layer surfaces regular click-to-focus semantics,
+        # so mapping a warmed drawer would leave keyboard focus on the previous
+        # application. Both surfaces must take focus as soon as they are shown
+        # so Escape and the keyboard controls work without a preceding click.
+        # Hiding the surface releases this exclusive request immediately.
+        LayerShell.set_keyboard_mode(self, LayerShell.KeyboardMode.EXCLUSIVE)
         self.model = Model()
         self.last_refresh_monotonic = 0.0
         self.events: list[SessionEvent] = []

@@ -9,7 +9,7 @@ installs.
 
 ## Decision
 
-`privatestack-ansible/tools/hyperlabctl/`, next to the automation it
+`hyperlab-ansible/tools/hyperlabctl/`, next to the automation it
 drives, packaged so it can be installed but usable straight from the
 checkout.
 

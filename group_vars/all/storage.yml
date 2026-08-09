@@ -1,5 +1,5 @@
 ---
-# The Hyperlab image store: where it is, who may reach it, and which roots are
+# The HyperLab image store: where it is, who may reach it, and which roots are
 # never it.
 #
 # The image_store brick creates and validates directories. It does not create,

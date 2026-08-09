@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "release/acceptance.v1.yml"
+MANIFEST = ROOT / "release/acceptance.v2.yml"
 TOOL = ROOT / "tools/release_acceptance.py"
 ANSIBLE_SHA = "a" * 40
 BOOTSTRAP_SHA = "b" * 40
@@ -93,7 +93,7 @@ def scalar_for(field: str) -> Any:
 
 def evidence_for(release_plan: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "campaign_id": release_plan["campaign_id"],
         "profile": release_plan["profile"],
         "repositories": {
@@ -255,7 +255,7 @@ def test_plan_is_deterministic_and_orders_nitro_before_predator() -> None:
     assert orders == sorted(orders)
     assert len(orders) == len(set(orders))
     assert (
-        first["repositories"]["privatestack_ansible"]["expected_sha"]
+        first["repositories"]["hyperlab_ansible"]["expected_sha"]
         == ANSIBLE_SHA
     )
     assert (
@@ -371,7 +371,7 @@ def test_repository_proof_binds_clean_exact_checkouts_and_hashes_logs() -> None:
         ansible_sha = init_fake_repo(
             ansible,
             "main",
-            "https://github.com/importriri/privatestack-ansible.git",
+            "https://github.com/importriri/hyperlab-ansible.git",
             "ansible verification pass",
         )
         bootstrap_sha = init_fake_repo(
@@ -409,7 +409,7 @@ def test_repository_proof_binds_clean_exact_checkouts_and_hashes_logs() -> None:
         assert ansible_sha in payload["exact_commits"]
         assert bootstrap_sha in payload["exact_commits"]
         assert (
-            (logs / "privatestack_ansible.verify.log").stat().st_mode & 0o777
+            (logs / "hyperlab_ansible.verify.log").stat().st_mode & 0o777
             == 0o600
         )
         assert (
@@ -532,7 +532,7 @@ def test_manifest_covers_every_required_final_boundary() -> None:
         == "main"
     )
     assert (
-        manifest["repositories"]["privatestack_ansible"]["required_branch"]
+        manifest["repositories"]["hyperlab_ansible"]["required_branch"]
         == "main"
     )
 

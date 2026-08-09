@@ -1,25 +1,34 @@
-# Nitro `arch-dev-vfio` hardware campaign
+# Nitro `arch-dev-vfio` campaign
 
-This runbook starts only after the ten local preparation commits pass the
-repository verification battery. It creates a separate accelerated candidate;
-`arch-dev` remains the proven SPICE recovery workstation and is never converted
-in place.
+`arch-dev-vfio` is the accelerated candidate. `arch-dev` remains unchanged as
+the standard recovery workstation.
 
-## Campaign invariants
+## Fixed boundaries
 
 - libvirt connection: `qemu:///system`;
-- candidate domain: `arch-dev-vfio`;
+- domain: `arch-dev-vfio`;
 - source spec: `vm-specs/arch-dev-vfio.yml`;
 - resource profile selected once at creation: `balanced` (8 GiB) or `heavy`
   (16 GiB), both with four pinned vCPUs;
 - reviewed Nitro pins: guest `2,6,3,7`, emulator `0,4`, disk I/O `1,5`;
-- loopback SPICE and virtual VGA stay present until the campaign is sealed;
-- no persistent Linux Looking Glass sender service is permitted;
-- the existing `arch-dev` domain and disk are not modified.
+- loopback SPICE and virtual VGA remain available until the campaign is sealed;
+- the RTX 3060 display and audio functions move together;
+- no persistent Linux Looking Glass sender service;
+- hardware evidence is tied to the exact repository commit.
 
-## 1. Reconcile the physical host
+## Completed Nitro evidence
 
-Run the normal host pipeline first and require an idempotent second pass:
+The host and guest acceptance work has already proved the VFIO attachment, CPU
+plan, NVIDIA driver, kvmfr/IVSHMEM transport and real Looking Glass video path.
+The managed Hyprland role also installs the NVIDIA-only Ly login hook and the
+headless-output callback idempotently.
+
+Do not repeat those investigations unless a later change touches the same
+boundary or new evidence contradicts them.
+
+## Revalidation order
+
+Reconcile the host twice and require the final recap to report `changed=0`:
 
 ```bash
 ansible-playbook -K -i inventory.ini playbooks/lab.yml --check --diff
@@ -27,40 +36,9 @@ ansible-playbook -K -i inventory.ini playbooks/lab.yml
 ansible-playbook -K -i inventory.ini playbooks/lab.yml
 ```
 
-The final recap must report `changed=0`. Confirm that the hardware report still
-selects `nitro-3060`, records eight CPU threads and names both reviewed NVIDIA
-PCI functions.
-
-## 2. Create the isolated VFIO candidate
-
-Choose exactly one profile for this candidate. The balanced example is:
-
-```bash
-ansible-playbook -K -i inventory.ini playbooks/vm-create.yml --check --diff \
-  -e guest_spec=vm-specs/arch-dev-vfio.yml \
-  -e guest_resource_profile=balanced \
-  -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
-
-ansible-playbook -K -i inventory.ini playbooks/vm-create.yml \
-  -e guest_spec=vm-specs/arch-dev-vfio.yml \
-  -e guest_resource_profile=balanced \
-  -e '{"guest_cloud_init_ssh_public_keys":["ssh-ed25519 AAAA..."]}'
-
-ansible-playbook -K -i inventory.ini playbooks/vm-start.yml \
-  -e guest_spec=vm-specs/arch-dev-vfio.yml \
-  -e guest_resource_profile=balanced
-```
-
-Replace `balanced` with `heavy` consistently to create the 16 GiB candidate.
-Do not change the profile on later lifecycle calls; the managed state binds the
-creation choice and refuses silent resource drift.
-
-## 3. Stage the Zen workstation before NVIDIA
-
-Discover the candidate address through QEMU Guest Agent or the Dev-domain lease,
-then create a temporary workstation inventory outside Git. The first guest pass
-keeps the stock kernel only as a boot fallback while installing Zen, Hyprland and
-the development stack:
+Create `arch-dev-vfio` from the checked-in spec with one resource profile, then
+keep that profile fixed for every lifecycle call. The first guest pass preserves
+the stock recovery kernel while Zen is proven:
 
 ```bash
 ansible-playbook -i /run/user/$UID/arch-dev-vfio.ini \
@@ -70,89 +48,33 @@ ansible-playbook -i /run/user/$UID/arch-dev-vfio.ini \
   -e workstation_kernel_remove_fallback=false
 ```
 
-Use the managed shutdown and start playbooks, then prove the guest booted a Zen
-kernel. Rerun `guest-arch-dev.yml` without the fallback override; this removes
-the stock kernel only after the running Zen kernel is proven.
-
-## 4. Install the passed-GPU stack
-
-With both NVIDIA PCI functions visible inside the Zen guest, apply the complete
-accelerated workstation playbook twice:
-
-```bash
-ansible-playbook -i /run/user/$UID/arch-dev-vfio.ini \
-  playbooks/guest-arch-dev-vfio.yml \
-  -e admin_user=sid \
-  -e workstation_kernel_profile=arch-zen
-
-ansible-playbook -i /run/user/$UID/arch-dev-vfio.ini \
-  playbooks/guest-arch-dev-vfio.yml \
-  -e admin_user=sid \
-  -e workstation_kernel_profile=arch-zen
-```
-
-The second recap must report `changed=0`. Perform another managed shutdown and
-start so the open NVIDIA module set, DRM parameters and regenerated initramfs
-are tested from a clean boot.
-
-## 5. Run the read-only acceptance gates
-
-On the physical Nitro host:
-
-```bash
-sudo tools/nitro/arch_dev_vfio_host_gate.py
-```
-
-Inside the guest, as `sid`, from its repository checkout:
-
-```bash
-tools/nitro/arch_dev_vfio_guest_gate.py
-```
-
-Required markers:
+After the guest boots Zen and both NVIDIA PCI functions are visible, apply
+`playbooks/guest-arch-dev-vfio.yml` twice. The second pass must report
+`changed=0`. The host and guest read-only gates must then emit:
 
 ```text
 ARCH_DEV_VFIO_HOST_GATE_OK
 ARCH_DEV_VFIO_GUEST_GATE_OK
 ```
 
-A refusal is evidence, not a prompt to bypass the contract. Preserve the full
-output and repair the checked-in profile or role before retrying.
+Apply `playbooks/guest-visual-assets.yml` only after the guest role is green and
+rerun the asset transaction for idempotence. Start the Linux Looking Glass sender
+manually from the Hyprland session. Do not create a systemd sender unit; capture
+frames, input return, lock/unlock, reconnect and loopback SPICE recovery as
+separate observations.
 
-## 6. Inject private wallpaper assets
+## Remaining acceptance
 
-After the Hyprland role is green, inject the reviewed private bundle. The
-controller and remote staging copies are deleted by the role; only the installed
-pools remain in the guest:
+A fresh graphical session must still prove that `HEADLESS-0` appears without a
+manual `hyprctl` command at `1920x1080@144`, scale `1`. After that:
 
-```bash
-ansible-playbook -i /run/user/$UID/arch-dev-vfio.ini \
-  playbooks/guest-visual-assets.yml \
-  -e guest_visual_assets_bundle_url=https://assets.example/private.tar.zst \
-  -e guest_visual_assets_bundle_sha256=<reviewed-lowercase-sha256>
-```
+1. persist deterministic XDPH selection of `HEADLESS-0`;
+2. run the Linux Looking Glass sender manually;
+3. confirm real frames on the physical-host client;
+4. check keyboard and pointer return separately from video;
+5. check lock/unlock and guest reboot/reconnect;
+6. rerun the guest role and require `changed=0`;
+7. retain sanitized logs and the final screenshot evidence.
 
-Rerun the same transaction and require `changed=0`.
-
-## 7. Interactive Linux Looking Glass gate
-
-Start `looking-glass-host` manually from the active Hyprland session. Record:
-
-1. the portal source selection and the chosen monitor;
-2. first frame and sustained frame production;
-3. resolution changes and fullscreen behaviour;
-4. keyboard and pointer return paths;
-5. Hyprlock lock and unlock;
-6. guest reboot and reconnect;
-7. recovery through loopback SPICE after the sender is stopped.
-
-Then launch the already configured physical-host Looking Glass client and retain
-both sender and client logs. Do not create a systemd sender unit. A fork decision
-is made only from this evidence and is limited to the Linux capture/input side;
-the upstream LGMP, kvmfr and client contracts remain the compatibility target.
-
-## 8. Seal or refuse
-
-The candidate is sealable only when both automated markers, the manual checklist,
-a post-reboot idempotent guest pass and SPICE recovery are green. Otherwise keep
-`arch-dev-vfio` as an experimental candidate and leave `arch-dev` untouched.
+The candidate is not a final compatibility result until those observations are
+closed.

@@ -7,7 +7,20 @@ guest_looking_glass_linux_source: /usr/local/src/looking-glass-linux-host
 guest_looking_glass_linux_build_dir: /usr/local/src/looking-glass-linux-host/host/build
 guest_looking_glass_linux_stamp: /usr/local/share/looking-glass-linux-host/built-from.yml
 guest_looking_glass_linux_binary: /usr/local/bin/looking-glass-host
+guest_looking_glass_linux_compat_patch: portal-gcc16-autoptr.patch
+guest_looking_glass_linux_compat_patch_sha256: "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2"
+guest_looking_glass_linux_compat_patch_remote: /run/privatestack-looking-glass-portal-gcc16.patch
+guest_looking_glass_linux_compat_patch_target: host/platform/Linux/capture/pipewire/src/portal.c
+guest_looking_glass_linux_kvmfr_version: "0.0.12"
+guest_looking_glass_linux_kvmfr_device: /dev/kvmfr0
+guest_looking_glass_linux_kvmfr_pci_id: "1af4:1110"
+guest_looking_glass_linux_headers_package: >-
+  {{ 'linux-zen-headers' if '-zen' in ansible_facts['kernel']
+     else 'linux-hardened-headers' if '-hardened' in ansible_facts['kernel']
+     else 'linux-headers' }}
 guest_looking_glass_linux_packages:
+  - dkms
+  - "{{ guest_looking_glass_linux_headers_package }}"
   - git
   - cmake
   - gcc

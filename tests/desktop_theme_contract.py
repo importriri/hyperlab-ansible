@@ -12,7 +12,7 @@ def main() -> int:
     for marker in (
         "privatestack-waybar toggle", "privatestack-theme cycle",
         "privatestack-theme mode-toggle", "privatestack-theme daemon",
-        "privatestack-hyperlab-domains --warm",
+        "privatestack-hyperlab-session",
         "/usr/share/backgrounds/privatestack/public/green/01.png",
     ): require(marker in sway, f"Sway integration missing: {marker}")
     theme = text("roles/host_desktop_sway/files/privatestack-theme.sh")

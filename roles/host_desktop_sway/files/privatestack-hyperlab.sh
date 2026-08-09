@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# waybar bridge for the Hyperlab cockpit.
+# waybar bridge for the HyperLab cockpit.
 #
 #   privatestack-hyperlab <field>          one payload, then exit  (polled pill)
 #   privatestack-hyperlab watch <field>    a payload per event     (stream)

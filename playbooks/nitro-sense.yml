@@ -1,0 +1,12 @@
+---
+# Nitro Sense replaces a platform driver and is intentionally absent from the
+# broad host targets. Invoke this playbook only on a reviewed Acer Nitro.
+- name: Reconcile optional Acer Nitro platform controls
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: nitro_sense
+      when: nitro_sense_state | default('present') == 'present'
+    - nitro_sense

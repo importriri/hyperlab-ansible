@@ -1,5 +1,5 @@
 ---
-- name: Destroy one managed standard Hyperlab VM
+- name: Destroy one managed standard HyperLab VM
   hosts: hypervisor
   become: true
   environment:

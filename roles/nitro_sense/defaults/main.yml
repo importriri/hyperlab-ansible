@@ -1,0 +1,84 @@
+---
+# Replacing acer_wmi affects hotkeys and platform controls. The conservative
+# default keeps the in-tree driver and only manages an already exposed native
+# platform profile; the out-of-tree replacement requires an explicit opt-in.
+nitro_sense_state: present
+nitro_sense_out_of_tree_enabled: false
+# Runtime selection is recomputed after native capability inspection.
+nitro_sense_use_out_of_tree: false
+
+nitro_sense_repo: https://github.com/0x7375646F/Linuwu-Sense.git
+nitro_sense_commit: 73a25ec243a44ba2b1703e8d0a76fa2735062506
+nitro_sense_dkms_version: 73a25ec243a4
+nitro_sense_module_name: linuwu_sense
+nitro_sense_in_tree_module_name: acer_wmi
+nitro_sense_source_dir: /usr/local/src/linuwu-sense
+nitro_sense_dkms_source_dir: "/usr/src/linuwu_sense-{{ nitro_sense_dkms_version }}"
+nitro_sense_owner_marker: /usr/local/share/nitro-sense/managed-by-hyperlab-ansible
+nitro_sense_owner_marker_content: "owner=hyperlab-ansible;role=nitro_sense\n"
+nitro_sense_replacement_marker: /usr/local/share/nitro-sense/managed-replacement
+nitro_sense_replacement_marker_content: >-
+  owner=hyperlab-ansible;role=nitro_sense;scope=replacement
+nitro_sense_stamp: /usr/local/share/nitro-sense/built-from.yml
+nitro_sense_build_packages:
+  - dkms
+  - git
+  - gcc
+  - make
+  - linux-hardened-headers
+
+# This allowlist mirrors the DMI entries in the pinned upstream source. A new
+# model needs an upstream entry and a reviewed pin before it may reach WMI.
+nitro_sense_supported_models:
+  - Nitro AN16-43
+  - Nitro AN16-42
+  - Nitro AN515-58
+  - Nitro AN16-41
+  - Nitro ANV16-41
+  - Nitro ANV15-41
+  - Nitro ANV15-51
+  - Nitro AN515-55
+nitro_sense_four_zone_models:
+  - Nitro AN16-43
+  - Nitro AN16-42
+  - Nitro AN515-58
+  - Nitro AN16-41
+
+nitro_sense_dmi_vendor_path: /sys/class/dmi/id/sys_vendor
+nitro_sense_dmi_product_path: /sys/class/dmi/id/product_name
+nitro_sense_platform_profile_choices_path: /sys/firmware/acpi/platform_profile_choices
+nitro_sense_platform_profile_path: /sys/firmware/acpi/platform_profile
+nitro_sense_fan_speed_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/fan_speed
+nitro_sense_led_per_zone_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode
+nitro_sense_led_effect_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/four_zone_mode
+
+nitro_sense_thermal_profile: balanced
+# The pinned upstream classifies AN515-55 as legacy and does not promise a
+# platform-profile node for it. Set this true only on a model that exposes the
+# documented generic kernel ABI after the selected driver loads.
+nitro_sense_thermal_profile_required: false
+nitro_sense_fan_cpu_percent: 0
+nitro_sense_fan_gpu_percent: 0
+
+# Keyboard lighting is untouched unless one documented four-zone interface is
+# selected explicitly. Per-key RGB is not implemented by the upstream module.
+nitro_sense_led_mode: disabled
+nitro_sense_led_zone_colors:
+  - ffffff
+  - ffffff
+  - ffffff
+  - ffffff
+nitro_sense_led_brightness_percent: 25
+nitro_sense_led_effect:
+  mode: 0
+  speed: 1
+  direction: 1
+  red: 255
+  green: 255
+  blue: 255
+
+nitro_sense_apply_script: /usr/local/libexec/nitro-sense-apply
+nitro_sense_apply_unit: /etc/systemd/system/nitro-sense-apply.service
+nitro_sense_apply_service: nitro-sense-apply.service
+nitro_sense_modules_load_path: /etc/modules-load.d/linuwu_sense.conf
+nitro_sense_blacklist_path: /etc/modprobe.d/nitro-sense-blacklist-acer_wmi.conf

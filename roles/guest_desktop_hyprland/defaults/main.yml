@@ -42,6 +42,19 @@ guest_desktop_hyprland_packages:
 
 guest_desktop_hyprland_theme_default: sakura-circuit
 
+# Disabled for ordinary workstation guests. VFIO guests may opt in when
+# Hyprland must start directly on a passed NVIDIA DRM node.
+guest_desktop_hyprland_nvidia_only: false
+guest_desktop_hyprland_nvidia_drm_device: /dev/dri/privatestack-nvidia
+
+# Ordinary guests keep the generic monitor rule. The accelerated VFIO
+# workstation opts into Hyprland's automatic HEADLESS-0 output.
+guest_desktop_hyprland_headless_monitor: false
+guest_desktop_hyprland_headless_output: HEADLESS-0
+guest_desktop_hyprland_headless_mode: "1920x1080@144"
+guest_desktop_hyprland_headless_position: "0x0"
+guest_desktop_hyprland_headless_scale: 1
+
 guest_desktop_hyprland_theme_order:
   - sakura-circuit
   - neon-terminal

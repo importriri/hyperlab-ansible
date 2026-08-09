@@ -1,0 +1,17 @@
+---
+- name: Read the generic platform-profile choices
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_platform_profile_choices_path }}"
+  register: nitro_sense_platform_profile_choices_raw
+  failed_when: false
+  changed_when: false
+
+- name: Normalize the generic platform-profile choices
+  ansible.builtin.set_fact:
+    nitro_sense_platform_profile_choices: >-
+      {{ (nitro_sense_platform_profile_choices_raw.content
+          | default('') | b64decode | trim).split() }}
+    nitro_sense_native_profile_sufficient: >-
+      {{ nitro_sense_thermal_profile in
+         (nitro_sense_platform_profile_choices_raw.content
+          | default('') | b64decode | trim).split() }}

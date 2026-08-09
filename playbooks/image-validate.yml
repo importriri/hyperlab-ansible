@@ -1,5 +1,5 @@
 ---
-- name: Validate one committed Hyperlab base image and provenance receipt
+- name: Validate one committed HyperLab base image and provenance receipt
   hosts: hypervisor
   become: true
   environment:

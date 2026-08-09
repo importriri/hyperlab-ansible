@@ -1,0 +1,214 @@
+---
+- name: Validate the public Nitro Sense policy
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_state in ['present', 'absent']
+      - nitro_sense_commit is match('^[0-9a-f]{40}$')
+      - nitro_sense_dkms_version == nitro_sense_commit[0:12]
+      - "'-hardened' in ansible_facts['kernel']"
+      - nitro_sense_build_packages | select('equalto', 'linux-hardened-headers') | list | length == 1
+      - nitro_sense_build_packages | select('equalto', 'linux-headers') | list | length == 0
+      - nitro_sense_thermal_profile is match('^[a-z0-9_-]+$')
+      - nitro_sense_fan_cpu_percent | int >= 0
+      - nitro_sense_fan_cpu_percent | int <= 100
+      - nitro_sense_fan_gpu_percent | int >= 0
+      - nitro_sense_fan_gpu_percent | int <= 100
+      - nitro_sense_led_mode in ['disabled', 'per_zone', 'effect']
+      - nitro_sense_led_zone_colors | length == 4
+      - >-
+        nitro_sense_led_zone_colors
+        | reject('match', '^[0-9a-fA-F]{6}$') | list | length == 0
+      - nitro_sense_led_brightness_percent | int >= 0
+      - nitro_sense_led_brightness_percent | int <= 100
+      - nitro_sense_led_effect.mode | int >= 0
+      - nitro_sense_led_effect.mode | int <= 7
+      - nitro_sense_led_effect.speed | int >= 0
+      - nitro_sense_led_effect.speed | int <= 9
+      - nitro_sense_led_effect.direction | int in [1, 2]
+      - nitro_sense_led_effect.red | int >= 0
+      - nitro_sense_led_effect.red | int <= 255
+      - nitro_sense_led_effect.green | int >= 0
+      - nitro_sense_led_effect.green | int <= 255
+      - nitro_sense_led_effect.blue | int >= 0
+      - nitro_sense_led_effect.blue | int <= 255
+      - >-
+        nitro_sense_fan_speed_path ==
+        '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/fan_speed'
+      - >-
+        nitro_sense_led_per_zone_path ==
+        '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode'
+      - >-
+        nitro_sense_led_effect_path ==
+        '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/four_zone_mode'
+    fail_msg: >-
+      Nitro Sense policy is invalid. The role accepts only the pinned upstream
+      identity, the linux-hardened header contract, conservative fan bounds and
+      documented upstream sysfs paths.
+
+- name: Read the DMI system vendor before installing anything
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_dmi_vendor_path }}"
+  register: nitro_sense_dmi_vendor_raw
+  failed_when: false
+  changed_when: false
+
+- name: Read the DMI product name before installing anything
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_dmi_product_path }}"
+  register: nitro_sense_dmi_product_raw
+  failed_when: false
+  changed_when: false
+
+- name: Publish the DMI identity
+  ansible.builtin.set_fact:
+    nitro_sense_dmi_vendor: >-
+      {{ (nitro_sense_dmi_vendor_raw.content | default('') | b64decode) | trim }}
+    nitro_sense_dmi_product: >-
+      {{ (nitro_sense_dmi_product_raw.content | default('') | b64decode) | trim }}
+
+- name: Refuse non-Acer and unsupported Nitro hardware
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_dmi_vendor | lower == 'acer'
+      - nitro_sense_dmi_product is search('(?i)^Nitro ')
+      - nitro_sense_dmi_product in nitro_sense_supported_models
+    fail_msg: >-
+      Refusing Nitro Sense on vendor={{ nitro_sense_dmi_vendor | default('unknown', true) }}
+      product={{ nitro_sense_dmi_product | default('unknown', true) }}. The
+      pinned upstream source must contain an exact reviewed DMI entry before
+      this role may issue WMI commands.
+
+- name: Refuse unavailable four-zone keyboard controls before installing anything
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_out_of_tree_enabled | bool
+      - nitro_sense_dmi_product in nitro_sense_four_zone_models
+    fail_msg: >-
+      The requested LED mode needs the documented four_zoned_kb interface, but
+      the pinned upstream quirk does not advertise it for this model.
+  when: nitro_sense_led_mode != 'disabled'
+
+- name: Inspect the managed ownership marker
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_owner_marker }}"
+  register: nitro_sense_owner_marker_raw
+  failed_when: false
+  changed_when: false
+
+- name: Publish managed replacement ownership
+  ansible.builtin.set_fact:
+    nitro_sense_managed_installation: >-
+      {{ (nitro_sense_owner_marker_raw.content | default('') | b64decode) ==
+         nitro_sense_owner_marker_content }}
+
+- name: Inspect the managed replacement marker
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_replacement_marker }}"
+  register: nitro_sense_replacement_marker_raw
+  failed_when: false
+  changed_when: false
+
+- name: Publish out-of-tree replacement ownership
+  ansible.builtin.set_fact:
+    nitro_sense_managed_replacement: >-
+      {{ (nitro_sense_replacement_marker_raw.content | default('') | b64decode) ==
+         nitro_sense_replacement_marker_content }}
+
+- name: Inspect paths reserved by the Nitro Sense role
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_reserved_path }}"
+  loop:
+    - "{{ nitro_sense_owner_marker }}"
+    - "{{ nitro_sense_apply_unit }}"
+    - "{{ nitro_sense_apply_script }}"
+    - "{{ nitro_sense_replacement_marker }}"
+    - "{{ nitro_sense_stamp }}"
+    - "{{ nitro_sense_source_dir }}"
+    - "{{ nitro_sense_dkms_source_dir }}"
+    - "{{ nitro_sense_modules_load_path }}"
+    - "{{ nitro_sense_blacklist_path }}"
+    - "{{ brick_stamp_dir }}/nitro_sense"
+  loop_control:
+    loop_var: nitro_sense_reserved_path
+  register: nitro_sense_reserved_path_states
+
+- name: Refuse to take over unowned role paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        nitro_sense_managed_installation | bool
+        or (nitro_sense_reserved_path_states.results
+            | selectattr('stat.exists', 'equalto', true) | list | length == 0)
+    fail_msg: >-
+      A Nitro Sense reserved path exists without the exact role ownership
+      marker. Refusing to overwrite or delete administrator-owned state.
+
+- name: Inspect paths reserved by the out-of-tree replacement
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_replacement_reserved_path }}"
+  loop:
+    - "{{ nitro_sense_replacement_marker }}"
+    - "{{ nitro_sense_stamp }}"
+    - "{{ nitro_sense_source_dir }}"
+    - "{{ nitro_sense_dkms_source_dir }}"
+    - "{{ nitro_sense_modules_load_path }}"
+    - "{{ nitro_sense_blacklist_path }}"
+  loop_control:
+    loop_var: nitro_sense_replacement_reserved_path
+  register: nitro_sense_replacement_reserved_path_states
+
+- name: Refuse replacement paths without replacement ownership
+  ansible.builtin.assert:
+    that:
+      - >-
+        nitro_sense_managed_replacement | bool
+        or (nitro_sense_replacement_reserved_path_states.results
+            | selectattr('stat.exists', 'equalto', true) | list | length == 0)
+    fail_msg: >-
+      Out-of-tree replacement state exists without the exact replacement
+      marker. Refusing to claim, unload or remove it.
+
+- name: Inspect the managed build stamp
+  ansible.builtin.slurp:
+    src: "{{ nitro_sense_stamp }}"
+  register: nitro_sense_stamp_raw
+  failed_when: false
+  changed_when: false
+
+- name: Normalize the managed build stamp
+  ansible.builtin.set_fact:
+    nitro_sense_stamp_text: >-
+      {{ nitro_sense_stamp_raw.content | default('') | b64decode }}
+
+- name: Parse only a complete managed build stamp
+  ansible.builtin.set_fact:
+    nitro_sense_stamp_data: >-
+      {{ (nitro_sense_stamp_text | from_yaml)
+         if (nitro_sense_managed_replacement | bool and
+             nitro_sense_stamp_text is match(
+               '^requested_commit: [0-9a-f]{40}\nresolved_commit: [0-9a-f]{40}' ~
+               '\ndkms_version: [0-9a-f]{12}\nkernel: [^\n]+\n?$'))
+         else {} }}
+
+- name: Inspect the out-of-tree module
+  ansible.builtin.stat:
+    path: "/sys/module/{{ nitro_sense_module_name }}"
+  register: nitro_sense_module_state
+
+- name: Publish managed-module state
+  ansible.builtin.set_fact:
+    nitro_sense_module_loaded: >-
+      {{ nitro_sense_module_state.stat.exists | default(false) }}
+
+- name: Refuse to take over an unmanaged replacement driver
+  ansible.builtin.assert:
+    that:
+      - >-
+        not nitro_sense_module_loaded | bool
+        or nitro_sense_managed_replacement | bool
+    fail_msg: >-
+      linuwu_sense is already loaded without this role's full-commit stamp.
+      Refusing to unload, upgrade or claim an administrator-owned driver.
+
+- name: Read the current platform-profile choices
+  ansible.builtin.include_tasks: platform-profile.yml

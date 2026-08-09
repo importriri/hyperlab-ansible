@@ -2,6 +2,7 @@
 """Contracts for the opt-in Linux Looking Glass sender experiment."""
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -126,12 +127,19 @@ def main() -> int:
         (ROOT / "roles/guest_looking_glass_linux/defaults/main.yml").read_text()
     )
     tasks = (ROOT / "roles/guest_looking_glass_linux/tasks/main.yml").read_text()
+    patch_path = (
+        ROOT
+        / "roles/guest_looking_glass_linux/files/portal-gcc16-autoptr.patch"
+    )
+    patch_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
     graph = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
     assert defaults["guest_looking_glass_linux_experimental"] is False
     assert defaults["guest_looking_glass_linux_commit"] == (
         "{{ hyperlab_looking_glass_commit }}"
     )
     assert defaults["guest_looking_glass_linux_packages"] == [
+        "dkms",
+        "{{ guest_looking_glass_linux_headers_package }}",
         "git",
         "cmake",
         "gcc",
@@ -140,6 +148,46 @@ def main() -> int:
         "glib2",
         "libpipewire",
     ]
+    assert defaults["guest_looking_glass_linux_compat_patch"] == (
+        "portal-gcc16-autoptr.patch"
+    )
+    assert defaults["guest_looking_glass_linux_compat_patch_sha256"] == patch_sha256
+    assert patch_sha256 == (
+        "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2"
+    )
+    assert "guest_looking_glass_linux_compat_patch_sha256" in tasks
+    assert "compat_patch_sha256:" in tasks
+    assert "--check" in tasks
+    assert "checkout" in tasks
+    assert "register: guest_looking_glass_linux_compat_patch_apply" in tasks
+    assert "guest_looking_glass_linux_compat_patch_apply is defined" in tasks
+    assert "guest_looking_glass_linux_compat_patch_apply.rc" in tasks
+    assert "| default(1) == 0" in tasks
+    assert "-Wno-error" not in tasks
+    assert defaults["guest_looking_glass_linux_kvmfr_version"] == "0.0.12"
+    assert defaults["guest_looking_glass_linux_kvmfr_device"] == "/dev/kvmfr0"
+    assert defaults["guest_looking_glass_linux_kvmfr_pci_id"] == "1af4:1110"
+    assert "static_size_mb" in tasks
+    assert "/etc/modules-load.d/kvmfr.conf" in tasks
+    assert '- "{{ guest_looking_glass_linux_kvmfr_version }}"' in tasks
+    assert '- "{{ ansible_facts[\'kernel\'] }}"' in tasks
+    assert "': installed'" in tasks
+    assert "70-kvmfr-guest.rules.j2" in tasks
+    assert "Kernel driver in use: kvmfr" in tasks
+    assert "--subsystem-match=kvmfr" in tasks
+    sender_config = (
+        ROOT
+        / "roles/guest_looking_glass_linux/templates/looking-glass-host.ini.j2"
+    ).read_text()
+    assert "shmFile={{ guest_looking_glass_linux_kvmfr_device }}" in sender_config
+    guest_rule = (
+        ROOT
+        / "roles/guest_looking_glass_linux/templates/70-kvmfr-guest.rules.j2"
+    ).read_text()
+    assert 'OWNER="{{ admin_user }}"' in guest_rule
+    assert 'MODE="0600"' in guest_rule
+    assert "\\n" not in guest_rule
+    assert guest_rule.endswith("\n")
     assert "-DUSE_XCB=OFF" in tasks
     assert "-DUSE_PIPEWIRE=ON" in tasks
     assert "runtime_enabled: false" in tasks

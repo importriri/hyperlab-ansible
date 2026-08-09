@@ -5,7 +5,7 @@ pipeline. `virt-manager` is used only to install and prepare a temporary source
 VM. It is **not** the lifecycle manager for the final HyperLab domains.
 
 Run this procedure only after the same frozen `arch-bootstrap` and
-`privatestack-ansible` candidates have completed:
+`hyperlab-ansible` candidates have completed:
 
 1. clean Arch installation and two successful Hardened boots;
 2. `foundation.yml` convergence and an immediate `changed=0` run;

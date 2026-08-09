@@ -2,6 +2,9 @@
 - name: Assemble an accelerated Arch Hyprland development workstation
   hosts: workstations
   become: true
+  vars:
+    guest_desktop_hyprland_nvidia_only: true
+    guest_desktop_hyprland_headless_monitor: true
   roles:
     - workstation_kernel
     - workstation_access

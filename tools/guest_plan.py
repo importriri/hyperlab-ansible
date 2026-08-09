@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic, side-effect-free plan for one Hyperlab VM."""
+"""Build a deterministic, side-effect-free plan for one HyperLab VM."""
 from __future__ import annotations
 
 import argparse

@@ -315,8 +315,6 @@
         - roles/host_desktop_sway/files/swaylock.conf
         - roles/host_desktop_sway/files/rofi-config.rasi
         - roles/host_desktop_sway/files/rofi-powermenu.rasi
-        - roles/host_desktop_sway/files/privatestack-cava.sh
-        - roles/host_desktop_sway/files/cava-waybar.conf
         - roles/host_desktop_sway/files/privatestack-hyperlab.sh
         - roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh
         - roles/host_desktop_sway/files/hyperlabctl-wrapper.sh
@@ -328,7 +326,6 @@
         - roles/host_desktop_sway/files/hyperlab-wallpaper.svg
         - roles/host_desktop_sway/files/hyperlab-gtk.css
         - roles/host_desktop_sway/files/privatestack-waybar.sh
-        - roles/host_desktop_sway/files/privatestack-fullscreen.sh
         - roles/host_desktop_sway/files/privatestack-superfile.sh
         - roles/host_desktop_sway/files/privatestack-opacity-toggle.sh
         - roles/host_desktop_sway/files/privatestack-theme.sh
@@ -346,10 +343,10 @@
           - "'rofi' in render_desk_pkgs"
           - "'rofi-wayland' not in render_desk_pkgs"
           - "'fuzzel' not in render_desk_pkgs"
-          - "'cava' in render_desk_pkgs"
+          - "'cava' not in render_desk_pkgs"
           - "'superfile' in render_desk_pkgs"
           - "'yazi' not in render_desk_pkgs"
-          - "render_desk_removed_pkgs == ['yazi']"
+          - "render_desk_removed_pkgs == ['yazi', 'cava']"
           - "'papirus-icon-theme' in render_desk_pkgs"
           - "'sddm' not in render_desk_pkgs"
           - "'gdm' not in render_desk_pkgs"
@@ -382,10 +379,17 @@
       ansible.builtin.assert:
         that:
           - "render_desk_bin_modes == ['0755']"
-          - "'privatestack-cava' in render_desk_dests"
           - "'privatestack-powermenu' in render_desk_dests"
+          - "'privatestack-cava' not in render_desk_dests"
+          - "'privatestack-fullscreen' not in render_desk_dests"
+          - "'custom/cava' not in render_waybar"
+          - "'custom/logo' not in render_waybar"
+          - "'idle_inhibitor' not in render_waybar"
+          - "'cpu' not in render_waybar"
+          - "'memory' not in render_waybar"
+          - "'backlight' not in render_waybar"
+          - "'tray' not in render_waybar"
           - "'privatestack-waybar' in render_desk_dests"
-          - "'privatestack-fullscreen' in render_desk_dests"
           - "'privatestack-superfile' in render_desk_dests"
           - "'privatestack-opacity-toggle' in render_desk_dests"
           - "'privatestack-theme' in render_desk_dests"
@@ -401,8 +405,6 @@
           - "'custom/controls' in render_waybar['modules-right']"
           - "render_waybar['exclusive'] == true"
           - "render_waybar['ipc'] == false"
-          - "render_waybar['custom/cava']['exec'] == '/usr/local/bin/privatestack-cava'"
-          - "render_waybar['custom/logo']['on-click'] == '/usr/local/bin/privatestack-powermenu'"
           - "'custom/cava' not in render_waybar['modules-left']"
           - "'/usr/local/bin/privatestack-powermenu' in render_sway"
           - "'set $filemanager /usr/local/bin/privatestack-superfile' in render_sway"
@@ -422,15 +424,13 @@
           - "'bindsym $mod+Shift+p exec $controls' in render_sway"
           - "'status_command /usr/local/bin/privatestack-swaybar-status' in render_sway"
           - "'exec_always /usr/local/bin/privatestack-waybar' in render_sway"
-          - "'exec_always /usr/local/bin/privatestack-hyperlab-domains --warm' in render_sway"
+          - "'exec_always /usr/local/bin/privatestack-hyperlab-session' in render_sway"
           - "'exec_always /usr/local/bin/privatestack-theme session-start' in render_sway"
           - "'exec_always /usr/local/bin/privatestack-keyboard session-start' in render_sway"
           - "'exec_always /usr/local/bin/privatestack-theme daemon' in render_sway"
           - "'waybar -l info -c' in render_waybar_launcher"
-          - "'--toggle-mode' in render_fullscreen_helper"
-          - "'hyperlab-transparent-fullscreen' in render_fullscreen_helper"
-          - "'opacity set ${opacity}' in render_fullscreen_helper"
-          - "'opacity set 1.0' in render_fullscreen_helper"
+          - "'flock -n 9' in render_waybar_launcher"
+          - "'9>&-' in render_waybar_launcher"
           - "'--session' in render_superfile_launcher"
           - "'stty size' in render_superfile_launcher"
           - "'opacity-${con_id}.state' in render_opacity_helper"
@@ -473,7 +473,6 @@
           - "'lock_index=$(( (desktop_index + 3) % count ))' in render_theme_helper"
           - "'privatestack-theme lock-image' in render_swaylock_helper"
           - "'click_events\": True' in render_swaybar_status"
-          - "render_cava_glyphs == render_cava_max | int + 1"
           - "'fuzzel' not in render_sway"
           - render_sway_window_types | difference(render_sway_types_valid) == []
         quiet: true
@@ -548,28 +547,21 @@
         render_rofi_missing: >-
           {{ render_rofi_imports | map('regex_replace', '^', 'rofi/') | list
              | difference(render_desk_dests) }}
-        render_cava_glyphs: >-
-          {{ (render_cockpit.results[11].content | b64decode)
-             | regex_findall('s/([0-7])/') | unique | length }}
-        render_cava_max: >-
-          {{ (render_cockpit.results[12].content | b64decode)
-             | regex_findall('ascii_max_range[^0-9]+([0-9]+)') | first }}
-        render_foot: "{{ render_cockpit.results[17].content | b64decode }}"
+        render_foot: "{{ render_cockpit.results[15].content | b64decode }}"
         render_foot_palette: >-
           {{ lookup('file', repo_root ~
              '/roles/host_desktop_sway/files/palette/green/hyperlab-palette-foot.ini') }}
-        render_superfile_config: "{{ render_cockpit.results[18].content | b64decode }}"
-        render_superfile_theme: "{{ render_cockpit.results[19].content | b64decode }}"
-        render_hyperlab_logo: "{{ render_cockpit.results[20].content | b64decode }}"
-        render_hyperlab_wallpaper: "{{ render_cockpit.results[21].content | b64decode }}"
-        render_hyperlab_gtk: "{{ render_cockpit.results[22].content | b64decode }}"
-        render_waybar_launcher: "{{ render_cockpit.results[23].content | b64decode }}"
-        render_fullscreen_helper: "{{ render_cockpit.results[24].content | b64decode }}"
-        render_superfile_launcher: "{{ render_cockpit.results[25].content | b64decode }}"
-        render_opacity_helper: "{{ render_cockpit.results[26].content | b64decode }}"
-        render_theme_helper: "{{ render_cockpit.results[27].content | b64decode }}"
-        render_swaylock_helper: "{{ render_cockpit.results[30].content | b64decode }}"
-        render_swaybar_status: "{{ render_cockpit.results[31].content | b64decode }}"
+        render_superfile_config: "{{ render_cockpit.results[16].content | b64decode }}"
+        render_superfile_theme: "{{ render_cockpit.results[17].content | b64decode }}"
+        render_hyperlab_logo: "{{ render_cockpit.results[18].content | b64decode }}"
+        render_hyperlab_wallpaper: "{{ render_cockpit.results[19].content | b64decode }}"
+        render_hyperlab_gtk: "{{ render_cockpit.results[20].content | b64decode }}"
+        render_waybar_launcher: "{{ render_cockpit.results[21].content | b64decode }}"
+        render_superfile_launcher: "{{ render_cockpit.results[22].content | b64decode }}"
+        render_opacity_helper: "{{ render_cockpit.results[23].content | b64decode }}"
+        render_theme_helper: "{{ render_cockpit.results[24].content | b64decode }}"
+        render_swaylock_helper: "{{ render_cockpit.results[27].content | b64decode }}"
+        render_swaybar_status: "{{ render_cockpit.results[28].content | b64decode }}"
         render_sway_window_types: >-
           {{ render_sway | regex_findall('window_type="([^"]*)"') }}
         render_sway_types_valid:
@@ -592,7 +584,7 @@
           - "render_waybar['custom/brand']['format'] == '  HyperLab'"
           - "render_waybar['custom/brand']['on-click'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms'"
           - "render_waybar['custom/brand']['on-click-right'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics'"
-          - "render_waybar['custom/brand']['on-click-middle'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms'"
+          - "render_waybar['custom/brand']['on-click-middle'] == '/usr/local/bin/privatestack-hyperlab-domains --surface overlay --section vms'"
           - "render_waybar['custom/hyperlab']['format'] == 'TRUST {}'"
           - "render_waybar['group/hyperlab']['drawer']['reveal-delay'] == 40"
           - >-
@@ -624,7 +616,7 @@
           - "render_palette_never_runs_privileged"
           - "'destroy' not in render_waybar | to_json"
         fail_msg: >-
-          A Hyperlab Shell invariant broke. The first Waybar module must be the
+          A HyperLab Shell invariant broke. The first Waybar module must be the
           HyperLab launcher followed by the hover trust drawer; direct UI routes
           must reuse the resident Layer Shell manager. Operations inside the
           manager must never bypass hyperlabctl or poll
@@ -697,13 +689,13 @@
         render_hyper_allowed_clicks:
           - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms
           - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics
-          - /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics
+          - /usr/local/bin/privatestack-hyperlab-domains --surface overlay --section diagnostics
         render_hyper_states:
           - ok
           - warn
           - error
         render_hyper_css_classes: >-
-          {{ (render_cockpit.results[16].content | b64decode)
+          {{ (render_cockpit.results[14].content | b64decode)
              | regex_findall('#custom-hyperlab[a-z-]*\.([a-z]+)') | unique | list }}
         render_cli_signal: >-
           {{ (lookup('file', repo_root ~ '/tools/hyperlabctl/hyperlabctl/operations.py')
@@ -726,11 +718,11 @@
           {{ render_sway | regex_findall('(?m)^bindsym \$mod\+F[123] ') }}
         render_palette_never_runs_privileged: >-
           {{ (
-               ((render_cockpit.results[14].content | b64decode)
+               ((render_cockpit.results[12].content | b64decode)
                 | regex_search('if \[\[ \${privileged} == yes \]\]; then[\s\S]{0,160}show_prepared[\s\S]{0,80}return 0'))
                is not none
              ) and (
-               ((render_cockpit.results[14].content | b64decode)
+               ((render_cockpit.results[12].content | b64decode)
                 | regex_search('show_prepared\(\)[\s\S]{0,360}review it, then run it yourself'))
                is not none
              ) }}
@@ -817,6 +809,171 @@
         path: "{{ render_lg_ws.path }}"
         state: absent
 
+    - name: Load the Nitro Sense defaults as real variables
+      tags: [nitro_sense_render]
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/nitro_sense/defaults/main.yml"
+
+    - name: Make a Nitro Sense rendering workspace
+      tags: [nitro_sense_render]
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .nitro-sense-render
+      register: render_ns_ws
+
+    - name: Render the Nitro Sense managed files
+      tags: [nitro_sense_render]
+      ansible.builtin.template:
+        src: "{{ repo_root }}/roles/nitro_sense/templates/{{ item }}"
+        dest: "{{ render_ns_ws.path }}/{{ item | regex_replace('\\.j2$', '') }}"
+        mode: "0644"
+      loop:
+        - nitro-sense-apply.sh.j2
+        - nitro-sense-apply.service.j2
+        - dkms.conf.j2
+        - Makefile.j2
+
+    - name: Shellcheck the rendered Nitro Sense helper
+      tags: [nitro_sense_render]
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - -s
+          - bash
+          - "{{ render_ns_ws.path }}/nitro-sense-apply.sh"
+      changed_when: false
+
+    - name: Read Nitro Sense source, rendered files and operator contracts
+      tags: [nitro_sense_render]
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: render_ns
+      loop:
+        - "{{ repo_root }}/roles/nitro_sense/tasks/main.yml"
+        - "{{ repo_root }}/roles/nitro_sense/tasks/preflight.yml"
+        - "{{ repo_root }}/roles/nitro_sense/tasks/platform-profile.yml"
+        - "{{ repo_root }}/roles/nitro_sense/tasks/out-of-tree.yml"
+        - "{{ repo_root }}/roles/nitro_sense/tasks/rollback.yml"
+        - "{{ repo_root }}/roles/nitro_sense/tasks/configure.yml"
+        - "{{ repo_root }}/playbooks/nitro-sense.yml"
+        - "{{ repo_root }}/playbooks/foundation.yml"
+        - "{{ repo_root }}/playbooks/lab.yml"
+        - "{{ repo_root }}/docs/nitro-sense.md"
+        - "{{ repo_root }}/docs/nitro-sense-procedure.md"
+        - "{{ repo_root }}/README.md"
+        - "{{ render_ns_ws.path }}/nitro-sense-apply.sh"
+        - "{{ render_ns_ws.path }}/nitro-sense-apply.service"
+        - "{{ render_ns_ws.path }}/dkms.conf"
+        - "{{ render_ns_ws.path }}/Makefile"
+
+    - name: Nitro Sense invariants (native first, exact pin, reversible replacement)
+      tags: [nitro_sense_render]
+      ansible.builtin.assert:
+        that:
+          - nitro_sense_state == 'present'
+          - not nitro_sense_out_of_tree_enabled | bool
+          - not nitro_sense_use_out_of_tree | bool
+          - nitro_sense_commit | length == 40
+          - nitro_sense_dkms_version == nitro_sense_commit[0:12]
+          - nitro_sense_build_packages | select('equalto', 'linux-hardened-headers') | list | length == 1
+          - nitro_sense_build_packages | select('equalto', 'linux-headers') | list | length == 0
+          - nitro_sense_fan_cpu_percent | int == 0
+          - nitro_sense_fan_gpu_percent | int == 0
+          - nitro_sense_led_mode == 'disabled'
+          - render_ns_play[0].hosts == 'hypervisor'
+          - render_ns_play[0].roles[0].role == 'brick_guard'
+          - render_ns_play[0].roles[1] == 'nitro_sense'
+          - "'nitro_sense' not in render_ns_foundation | to_json"
+          - "'nitro_sense' not in render_ns_lab | to_json"
+          - brick_requires.nitro_sense == ['base', 'hardware_probe']
+          - brick_playbooks.nitro_sense == 'playbooks/nitro-sense.yml'
+          - render_ns_main.find('preflight.yml') < render_ns_main.find('out-of-tree.yml')
+          - nitro_sense_platform_profile_choices_path == '/sys/firmware/acpi/platform_profile_choices'
+          - nitro_sense_dmi_vendor_path == '/sys/class/dmi/id/sys_vendor'
+          - nitro_sense_dmi_product_path == '/sys/class/dmi/id/product_name'
+          - "'nitro_sense_supported_models' in render_ns_preflight"
+          - "'nitro_sense_platform_profile_choices_path' in render_ns_profile"
+          - "'nitro_sense_native_profile_sufficient' in render_ns_profile"
+          - "'nitro_sense_native_controls_sufficient' in render_ns_main"
+          - "'nitro_sense_use_out_of_tree' in render_ns_main"
+          - render_ns_out.find('Compile the isolated build probe') < render_ns_out.find('Unload the in-tree Acer platform driver')
+          - render_ns_out.find('Build and install the pinned module through DKMS') < render_ns_out.find('Unload the in-tree Acer platform driver')
+          - "'/usr/bin/dkms' in render_ns_out"
+          - "'requested_commit:' in render_ns_out"
+          - "'resolved_commit:' in render_ns_out"
+          - "'dkms_version:' in render_ns_out"
+          - "'kernel:' in render_ns_out"
+          - "'nitro_sense_stamp | dirname' in render_ns_out"
+          - "'state: directory' in render_ns_out"
+          - "'state: absent' in render_ns_rollback"
+          - "'nitro_sense_managed_replacement' in render_ns_rollback"
+          - "'nitro_sense_replacement_marker' in render_ns_rollback"
+          - "'nitro_sense_blacklist_path' in render_ns_rollback"
+          - "'nitro_sense_modules_load_path' in render_ns_rollback"
+          - "'brick_stamp_dir }}/nitro_sense' in render_ns_rollback"
+          - >-
+            render_ns_rollback is search(
+              'Restore the in-tree Acer platform driver[\\s\\S]{0,240}' ~
+              'name: "\\{\\{ nitro_sense_in_tree_module_name \\}\\}"[\\s\\S]{0,100}' ~
+              'state: present')
+          - >-
+            nitro_sense_fan_speed_path ==
+            '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/fan_speed'
+          - >-
+            nitro_sense_led_per_zone_path ==
+            '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode'
+          - >-
+            nitro_sense_led_effect_path ==
+            '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/four_zone_mode'
+          - "nitro_sense_fan_speed_path in render_ns_helper"
+          - "nitro_sense_led_per_zone_path in render_ns_helper"
+          - "nitro_sense_led_effect_path in render_ns_helper"
+          - "'Required documented sysfs node is missing' in render_ns_helper"
+          - "'After=systemd-modules-load.service' in render_ns_unit"
+          - "'AUTOINSTALL=\"yes\"' in render_ns_dkms"
+          - "'BUILT_MODULE_LOCATION[0]=\"src\"' in render_ns_dkms"
+          - "'${kernelver}' in render_ns_dkms"
+          - "'creates:' not in render_ns_out"
+          - "'ansible_kernel' not in render_ns_all_tasks"
+          - "'foundation.yml' in render_ns_docs"
+          - "'lab.yml' in render_ns_docs"
+          - "'Per-key RGB is not supported' in render_ns_docs"
+          - "'Nitro AN515-55' in render_ns_docs"
+          - "'nitro_sense' in render_ns_readme"
+        fail_msg: >-
+          A Nitro Sense invariant broke. The optional role must remain outside
+          broad targets, prefer the generic native profile ABI, build the exact
+          full pin against linux-hardened before touching acer_wmi, use only
+          documented sysfs nodes and retain an executable rollback to acer_wmi.
+        quiet: true
+      vars:
+        render_ns_main: "{{ render_ns.results[0].content | b64decode }}"
+        render_ns_preflight: "{{ render_ns.results[1].content | b64decode }}"
+        render_ns_profile: "{{ render_ns.results[2].content | b64decode }}"
+        render_ns_out: "{{ render_ns.results[3].content | b64decode }}"
+        render_ns_rollback: "{{ render_ns.results[4].content | b64decode }}"
+        render_ns_configure: "{{ render_ns.results[5].content | b64decode }}"
+        render_ns_play: "{{ render_ns.results[6].content | b64decode | from_yaml }}"
+        render_ns_foundation: "{{ render_ns.results[7].content | b64decode | from_yaml }}"
+        render_ns_lab: "{{ render_ns.results[8].content | b64decode | from_yaml }}"
+        render_ns_docs: >-
+          {{ (render_ns.results[9].content | b64decode) ~
+             (render_ns.results[10].content | b64decode) }}
+        render_ns_readme: "{{ render_ns.results[11].content | b64decode }}"
+        render_ns_helper: "{{ render_ns.results[12].content | b64decode }}"
+        render_ns_unit: "{{ render_ns.results[13].content | b64decode }}"
+        render_ns_dkms: "{{ render_ns.results[14].content | b64decode }}"
+        render_ns_makefile: "{{ render_ns.results[15].content | b64decode }}"
+        render_ns_all_tasks: >-
+          {{ render_ns_main ~ render_ns_preflight ~ render_ns_profile ~
+             render_ns_out ~ render_ns_rollback ~ render_ns_configure }}
+
+    - name: Remove the Nitro Sense rendering workspace
+      tags: [nitro_sense_render]
+      ansible.builtin.file:
+        path: "{{ render_ns_ws.path }}"
+        state: absent
+
     - name: Make the input rendering workspace
       ansible.builtin.tempfile:
         state: directory
@@ -866,6 +1023,13 @@
           - "'xkb_options ctrl:nocaps' in render_input_optional"
           - render_input_touchpad == render_input_touchpad_expected
           - "'xkb_layout it,us,ara' in render_input_nitro"
+          - "'XF86Presentation' not in render_input_fallback"
+          - "'XF86Presentation' not in render_input_optional"
+          - >-
+            render_input_nitro | select(
+              'equalto',
+              'bindsym --no-repeat --input-device=1:1:AT_Translated_Set_2_keyboard XF86Presentation exec /usr/local/bin/privatestack-theme cycle')
+            | list | length == 1
           - render_hw_profiles | dict2items | rejectattr('value.desktop', 'defined') | list | length == 0
         quiet: true
       vars:

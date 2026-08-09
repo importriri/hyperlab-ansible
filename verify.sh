@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # verify.sh - the whole verification battery, one command, from the repo
-# root. Managed by privatestack-ansible (part of the A1 scaffold).
+# root. Managed by hyperlab-ansible (part of the A1 scaffold).
 set -u
 cd "$(dirname "$0")" || exit 1
 
 fail=0
+render_password_file=""
+
+cleanup_render_password_file() {
+    if [ -n "${render_password_file}" ]; then
+        rm -f -- "${render_password_file}"
+        render_password_file=""
+    fi
+}
+trap cleanup_render_password_file EXIT
 
 if ! ansible-galaxy collection list community.general >/dev/null 2>&1 \
    || ! ansible-galaxy collection list community.libvirt >/dev/null 2>&1; then
@@ -39,6 +48,10 @@ run() {
 
 run_render() {
     local -a become_args=()
+    local attempt
+    local become_password
+    local password_valid=0
+    local runtime_dir
 
     # A supplied password file is authoritative even when verify.sh runs in the
     # background or with redirected stdin. TTY detection is only a fallback for
@@ -51,9 +64,70 @@ run_render() {
         fi
         become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")
     elif [ -t 0 ]; then
-        # Interactive runs always pass the password explicitly to Ansible.
-        # Do not rely on a sudo timestamp that may expire during earlier tests.
-        become_args=(-K)
+        # A sudo timestamp may be scoped to a process or terminal and therefore
+        # unavailable to Ansible's become subprocess. Validate one credential
+        # directly, then give Ansible that same credential through a private,
+        # short-lived password file. This also avoids Ansible's non-retryable
+        # duplicate-prompt failure after a typo.
+        runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+        if [ ! -d "${runtime_dir}" ] || [ ! -O "${runtime_dir}" ]; then
+            echo "Render tests require a private user runtime directory: ${runtime_dir}" >&2
+            fail=1
+            return
+        fi
+
+        render_password_file="$(mktemp "${runtime_dir}/privatestack-verify-become.XXXXXX")" \
+            || {
+                echo "Render tests could not create a private become password file." >&2
+                fail=1
+                return
+            }
+        if ! chmod 0600 "${render_password_file}"; then
+            echo "Render tests could not protect the become password file." >&2
+            cleanup_render_password_file
+            fail=1
+            return
+        fi
+
+        for attempt in 1 2 3; do
+            printf 'BECOME password (attempt %s/3): ' "${attempt}" >&2
+            if ! IFS= read -r -s become_password; then
+                printf '\n' >&2
+                echo "Render tests could not read sudo credentials." >&2
+                unset become_password
+                cleanup_render_password_file
+                fail=1
+                return
+            fi
+            printf '\n' >&2
+
+            if [ -z "${become_password}" ]; then
+                echo "The become password cannot be empty." >&2
+                continue
+            fi
+
+            printf '%s\n' "${become_password}" >"${render_password_file}"
+            unset become_password
+
+            if awk 'NR == 1 { print; exit }' "${render_password_file}" \
+                | sudo -S -k -p '' -v; then
+                password_valid=1
+                break
+            fi
+        done
+        unset become_password
+
+        if [ "${password_valid}" -ne 1 ]; then
+            echo "Render tests could not validate sudo credentials." >&2
+            cleanup_render_password_file
+            fail=1
+            return
+        fi
+
+        # Prove the render suite uses the supplied credential, not a timestamp
+        # that happens to be valid in this shell.
+        sudo -k
+        become_args=(--become-password-file "${render_password_file}")
     elif sudo -n true 2>/dev/null; then
         # Non-interactive CI may use passwordless sudo.
         become_args=()
@@ -75,6 +149,8 @@ run_render() {
         run ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
     fi
+
+    cleanup_render_password_file
 }
 
 scripts="$(grep -rlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)"

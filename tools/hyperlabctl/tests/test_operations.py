@@ -95,7 +95,7 @@ def test_managed_domain_cannot_bypass_the_m3_start_playbook():
     argv = ["/usr/bin/virsh", "-c", "qemu:///system", "-q", "dumpxml", "debian-dev"]
     ctx.runner.register(argv, """<domain type='kvm'>
       <name>debian-dev</name><memory unit='MiB'>1024</memory>
-      <metadata><hyperlab:instance xmlns:hyperlab='https://github.com/importriri/privatestack-ansible/hyperlab/1'
+      <metadata><hyperlab:instance xmlns:hyperlab='https://github.com/importriri/hyperlab-ansible/hyperlab/1'
         schema='1' lifecycle='permanent' device-profile='standard'/></metadata>
       <devices><interface type='network'><source network='dev'/></interface></devices>
     </domain>""")

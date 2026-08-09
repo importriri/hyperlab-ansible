@@ -1,5 +1,5 @@
 ---
-- name: Inspect the configured Hyperlab checkout before host writes
+- name: Inspect the configured HyperLab checkout before host writes
   ansible.builtin.stat:
     path: "{{ host_desktop_sway_hyperlab_checkout }}/tools/hyperlabctl/bin/hyperlabctl"
   register: host_desktop_sway_hyperlab_checkout_stat
@@ -153,13 +153,12 @@
     group: root
     mode: "0755"
   loop:
-    - { src: privatestack-cava.sh, dest: privatestack-cava }
     - { src: privatestack-powermenu.sh, dest: privatestack-powermenu }
     - { src: privatestack-hyperlab.sh, dest: privatestack-hyperlab }
     - { src: privatestack-hyperlab-palette.sh, dest: privatestack-hyperlab-palette }
     - { src: privatestack-hyperlab-domains.py, dest: privatestack-hyperlab-domains }
+    - { src: privatestack-hyperlab-session.sh, dest: privatestack-hyperlab-session }
     - { src: privatestack-waybar.sh, dest: privatestack-waybar }
-    - { src: privatestack-fullscreen.sh, dest: privatestack-fullscreen }
     - { src: privatestack-superfile.sh, dest: privatestack-superfile }
     - { src: privatestack-opacity-toggle.sh, dest: privatestack-opacity-toggle }
     - { src: privatestack-theme.sh, dest: privatestack-theme }
@@ -169,7 +168,16 @@
     - { src: privatestack-swaybar-status.py, dest: privatestack-swaybar-status }
     - { src: hyperlabctl-wrapper.sh, dest: hyperlabctl }
 
-- name: Deploy the Hyperlab Control Center application entry
+- name: Remove retired desktop artifacts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/privatestack-cava
+    - /usr/local/bin/privatestack-fullscreen
+    - "/home/{{ admin_user }}/.config/cava"
+
+- name: Deploy the HyperLab Control Center application entry
   ansible.builtin.copy:
     src: hyperlab-control-center.desktop
     dest: /usr/share/applications/hyperlab-control-center.desktop
@@ -177,7 +185,7 @@
     group: root
     mode: "0644"
 
-- name: Create the Hyperlab application icon directory
+- name: Create the HyperLab application icon directory
   ansible.builtin.file:
     path: /usr/share/icons/hicolor/scalable/apps
     state: directory
@@ -185,7 +193,7 @@
     group: root
     mode: "0755"
 
-- name: Deploy the Hyperlab Control Center icon
+- name: Deploy the HyperLab Control Center icon
   ansible.builtin.copy:
     src: hyperlab-control-center.svg
     dest: /usr/share/icons/hicolor/scalable/apps/hyperlab-control-center.svg
@@ -193,7 +201,7 @@
     group: root
     mode: "0644"
 
-- name: Create the Hyperlab domain icon directory
+- name: Create the HyperLab domain icon directory
   ansible.builtin.file:
     path: /usr/share/icons/hyperlab/domains
     state: directory
@@ -239,7 +247,7 @@
     group: root
     mode: "0644"
 
-- name: Deploy the editable Hyperlab wallpaper source
+- name: Deploy the editable HyperLab wallpaper source
   ansible.builtin.copy:
     src: hyperlab-wallpaper.svg
     dest: /usr/share/backgrounds/privatestack/hyperlab.svg
@@ -297,14 +305,13 @@
     - foot
     - mako
     - rofi
-    - cava
     - swaylock
     - gtk-3.0
     - gtk-4.0
     - superfile
     - superfile/theme
 
-- name: Deploy the Hyperlab desktop shell
+- name: Deploy the HyperLab desktop shell
   ansible.builtin.copy:
     src: "{{ item.src }}"
     dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
@@ -323,8 +330,6 @@
     - { src: rofi-launcher.rasi, dest: rofi/rofi-launcher.rasi }
     - { src: rofi-powermenu.rasi, dest: rofi/rofi-powermenu.rasi }
     - { src: rofi-hyperlab.rasi, dest: rofi/rofi-hyperlab.rasi }
-    - { src: cava.conf, dest: cava/config }
-    - { src: cava-waybar.conf, dest: cava/cava-waybar.conf }
     - { src: gtk3-settings.ini, dest: gtk-3.0/settings.ini }
     - { src: hyperlab-gtk.css, dest: gtk-3.0/gtk.css }
     - { src: hyperlab-gtk.css, dest: gtk-4.0/gtk.css }

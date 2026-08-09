@@ -1,0 +1,123 @@
+---
+- name: Run the Nitro Sense refusal preflight
+  ansible.builtin.include_tasks: preflight.yml
+
+- name: Remove the managed replacement and restore acer_wmi
+  ansible.builtin.include_tasks: rollback.yml
+  when: nitro_sense_state == 'absent'
+
+- name: Reconcile Nitro Sense controls
+  when: nitro_sense_state == 'present'
+  block:
+    - name: Decide whether the managed replacement must return to native first
+      ansible.builtin.set_fact:
+        nitro_sense_native_reevaluation_needed: >-
+          {{ nitro_sense_module_loaded | bool
+             and nitro_sense_managed_replacement | bool
+             and (not nitro_sense_out_of_tree_enabled | bool
+                  or nitro_sense_stamp_data.requested_commit | default('') !=
+                     nitro_sense_commit
+                  or nitro_sense_stamp_data.kernel | default('') !=
+                     ansible_facts['kernel']) }}
+
+    - name: Restore acer_wmi before reevaluating native platform profiles
+      ansible.builtin.include_tasks: rollback.yml
+      when: nitro_sense_native_reevaluation_needed | bool
+
+    - name: Refresh the native platform-profile decision after rollback
+      ansible.builtin.include_tasks: platform-profile.yml
+      when: nitro_sense_native_reevaluation_needed | bool
+
+    - name: Decide whether native controls satisfy the requested policy
+      ansible.builtin.set_fact:
+        nitro_sense_native_controls_sufficient: >-
+          {{ nitro_sense_native_profile_sufficient | bool
+             and nitro_sense_fan_cpu_percent | int == 0
+             and nitro_sense_fan_gpu_percent | int == 0
+             and nitro_sense_led_mode == 'disabled' }}
+
+    - name: Select the effective platform-driver path
+      ansible.builtin.set_fact:
+        nitro_sense_use_out_of_tree: >-
+          {{ nitro_sense_out_of_tree_enabled | bool
+             and ((nitro_sense_module_loaded | bool and
+                   nitro_sense_managed_replacement | bool)
+                  or not nitro_sense_native_controls_sufficient | bool) }}
+
+    - name: Require native support or explicit replacement permission
+      ansible.builtin.assert:
+        that:
+          - >-
+            nitro_sense_native_controls_sufficient | bool
+            or nitro_sense_use_out_of_tree | bool
+        fail_msg: >-
+          The in-tree driver does not expose the requested
+          {{ nitro_sense_thermal_profile }} platform profile. Refusing to
+          replace acer_wmi implicitly. Review docs/nitro-sense.md, then set
+          nitro_sense_out_of_tree_enabled=true only if the replacement and its
+          rollback boundary are acceptable.
+
+    - name: Explain why the in-tree driver is retained
+      ansible.builtin.debug:
+        msg: >-
+          The running kernel already exposes the requested platform profile.
+          Keeping acer_wmi and managing only the generic platform-profile ABI.
+      when: not nitro_sense_use_out_of_tree | bool
+
+    - name: Explain the explicit out-of-tree override
+      ansible.builtin.debug:
+        msg: >-
+          Explicit out-of-tree replacement requested. The pinned Linuwu-Sense
+          module will replace acer_wmi after its build probe succeeds.
+      when: nitro_sense_use_out_of_tree | bool
+
+    - name: Declare the managed Nitro Sense state directory
+      ansible.builtin.file:
+        path: "{{ nitro_sense_owner_marker | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: not ansible_check_mode
+
+    - name: Claim the role-owned Nitro Sense boundary
+      ansible.builtin.copy:
+        content: "{{ nitro_sense_owner_marker_content }}"
+        dest: "{{ nitro_sense_owner_marker }}"
+        owner: root
+        group: root
+        mode: "0644"
+      when: not ansible_check_mode
+
+    - name: Publish ownership for same-run rollback
+      ansible.builtin.set_fact:
+        nitro_sense_managed_installation: true
+      when: not ansible_check_mode
+
+    - name: Reconcile the native platform-profile path
+      ansible.builtin.include_tasks: native.yml
+      when: not nitro_sense_use_out_of_tree | bool
+
+    - name: Reconcile the pinned out-of-tree driver
+      ansible.builtin.include_tasks: out-of-tree.yml
+      when:
+        - nitro_sense_use_out_of_tree | bool
+        - not ansible_check_mode
+
+    - name: Describe the real-run build and transition gates in check mode
+      ansible.builtin.debug:
+        msg: >-
+          Check mode stops before package installation, compilation, DKMS and
+          the platform-driver transition. A real run must prove those gates in
+          that order before acer_wmi is touched.
+      when:
+        - nitro_sense_use_out_of_tree | bool
+        - ansible_check_mode
+
+    - name: Record that the nitro_sense brick landed
+      ansible.builtin.include_role:
+        name: brick_guard
+        tasks_from: stamp
+      vars:
+        brick_guard_brick: nitro_sense
+      when: not ansible_check_mode

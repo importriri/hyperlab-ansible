@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 
 from .errors import Unavailable
 
-HL = "https://github.com/importriri/privatestack-ansible/hyperlab/1"
+HL = "https://github.com/importriri/hyperlab-ansible/hyperlab/1"
 
 
 def _pci_address(node):

@@ -1,0 +1,8 @@
+PACKAGE_NAME="{{ nitro_sense_module_name }}"
+PACKAGE_VERSION="{{ nitro_sense_dkms_version }}"
+BUILT_MODULE_NAME[0]="{{ nitro_sense_module_name }}"
+BUILT_MODULE_LOCATION[0]="src"
+DEST_MODULE_LOCATION[0]="/kernel/drivers/platform/x86"
+AUTOINSTALL="yes"
+MAKE[0]="make KVER=${kernelver}"
+CLEAN="make KVER=${kernelver} clean"

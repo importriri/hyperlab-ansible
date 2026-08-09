@@ -319,6 +319,16 @@ def collect_errors(root: Path = ROOT) -> list[str]:
         '--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}"' in verify_text,
         "verify.sh must pass the configured become password file to render tests",
     )
+    check(
+        'mktemp "${runtime_dir}/privatestack-verify-become.XXXXXX"' in verify_text
+        and "IFS= read -r -s become_password" in verify_text
+        and "sudo -S -k -p '' -v" in verify_text
+        and 'become_args=(--become-password-file "${render_password_file}")' in verify_text
+        and "trap cleanup_render_password_file EXIT" in verify_text
+        and "become_args=(-K)" not in verify_text
+        and "if sudo -v; then" not in verify_text,
+        "interactive verify must validate and hand off a private temporary become password file",
+    )
     ci_text = (root / ".github/workflows/ci.yml").read_text()
     for text, where in ((verify_text, "verify.sh"), (ci_text, "CI")):
         check("tests/*_contract.py" in text, f"{where} must discover structural contracts")

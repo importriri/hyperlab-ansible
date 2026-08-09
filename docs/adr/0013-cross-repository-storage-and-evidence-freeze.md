@@ -6,7 +6,7 @@
 ## Context
 
 `arch-bootstrap` owns destructive disk selection, encryption, filesystems and
-mounts. `privatestack-ansible` owns the HyperLab directory and VM lifecycle.
+mounts. `hyperlab-ansible` owns the HyperLab directory and VM lifecycle.
 Without an explicit hand-off, stage 2 could create valid VM paths on the wrong
 physical disk while both repositories independently report success.
 
@@ -31,7 +31,7 @@ Adoption writes the contract after exact confirmation and changes no storage.
 Fresh Predator installations must receive the contract from the complete
 bootstrap entrypoint.
 
-The final campaign is generated from `release/acceptance.v1.yml` with exact
+The final campaign is generated from `release/acceptance.v2.yml` with exact
 40-character SHA values for both repositories. Nitro runs first. Predator may
 run only with the same frozen pair. Evidence sealing accepts only the complete
 ordered gate matrix, scalar reviewed facts, hashes and short summaries. Raw logs

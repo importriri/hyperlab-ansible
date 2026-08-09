@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-HL = "https://github.com/importriri/privatestack-ansible/hyperlab/1"
+HL = "https://github.com/importriri/hyperlab-ansible/hyperlab/1"
 QEMU = "http://libvirt.org/schemas/domain/qemu/1.0"
 Q35_VERSIONED = re.compile(r"pc-q35-\d+(?:\.\d+)+")
 

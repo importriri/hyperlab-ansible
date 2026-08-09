@@ -1,5 +1,5 @@
 @import url("palette.css");
-/* Hyperlab Shell visual lock: transparent neon/Qubes-style Waybar. */
+/* HyperLab Shell visual lock: transparent neon/Qubes-style Waybar. */
 * {
     font-family: "JetBrainsMono Nerd Font";
     font-size: 12px;
@@ -121,11 +121,6 @@ window#waybar > box {
 #pulseaudio,
 #battery,
 #clock,
-#tray,
-#idle_inhibitor,
-#backlight,
-#cpu,
-#memory,
 #temperature {
     margin: 2px 1px;
     padding: 0 7px;
@@ -152,18 +147,6 @@ window#waybar > box {
 #battery.warning:not(.charging) { color: @hl_warn; }
 #battery.critical:not(.charging) { color: @hl_bad; }
 #clock { color: @hl_text; padding-left: 10px; padding-right: 9px; }
-#tray { padding-left: 6px; padding-right: 5px; }
-#tray > .needs-attention {
-    background: alpha(@hl_bad, 0.24);
-    border-radius: 7px;
-}
-
-#custom-logo,
-#custom-cava {
-    color: alpha(@hl_subtext, 0.55);
-    padding: 0 5px;
-}
-
 tooltip {
     background: alpha(@hl_base, 0.94);
     border: 1px solid alpha(@hl_accent, 0.24);
