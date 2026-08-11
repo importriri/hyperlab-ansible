@@ -72,8 +72,10 @@ shutdown and deletion remain available without adding that unrelated gate.
 Lifecycle operations are separate playbooks. `reset` is legal only for a
 shut-off disposable VM and keeps one lock across undefine, deletion and
 recreation. It preserves the committed memory allocation while replacing disk,
-NVRAM and TPM identity. `destroy` and forced `stop` require the exact VM name as
-confirmation. Permanent reset is an error.
+NVRAM and TPM identity. For Linux guests, reset validates the complete supplied
+SSH public-key set before package, directory, lock, disk or libvirt writes, then
+validates it again at the creation boundary. `destroy` and forced `stop` require
+the exact VM name as confirmation. Permanent reset is an error.
 
 ## Consequences
 

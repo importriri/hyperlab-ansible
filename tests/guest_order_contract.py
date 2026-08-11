@@ -27,6 +27,9 @@ def main() -> int:
     reset_preflight = main_text.index(
         "- name: Refuse an unsafe reset request before host writes"
     )
+    creation_input_preflight = main_text.index(
+        "- name: Require safe creation inputs before create or reset host writes"
+    )
     vfio = main_text.index(
         "- name: Rebuild the live VFIO contract for hardware-sensitive operations"
     )
@@ -54,7 +57,13 @@ def main() -> int:
     release_per_vm = main_text.index("- name: Release the per-VM operation lock")
 
     assert plan < publish < store_guard < inspect < network < transaction_preflight
-    assert transaction_preflight < reset_preflight < vfio < verify_base
+    assert (
+        transaction_preflight
+        < reset_preflight
+        < creation_input_preflight
+        < vfio
+        < verify_base
+    )
     assert verify_base < packages < roots < post_roots < per_vm
     assert per_vm < registry < libvirt_registry < dispatch_create
     assert dispatch_create < dispatch_resize < dispatch_destroy
@@ -69,6 +78,7 @@ def main() -> int:
         in verify_block
     )
     assert "guest_confirm_reset == guest_plan.name" in main_text[reset_preflight:vfio]
+    assert "guest_cloud_init_ssh_public_keys" in main_text[creation_input_preflight:vfio]
     assert "guest_network_defined" in main_text[network:transaction_preflight]
     assert "guest_network_active" in main_text[network:transaction_preflight]
     assert "vfio.yml" in main_text[vfio:verify_base]
@@ -127,6 +137,28 @@ def main() -> int:
     assert virsh_start < release_capacity < release_gpu
 
     create_text = (TASKS / "create.yml").read_text(encoding="utf-8")
+    main_tasks = yaml.safe_load(main_text)
+    create_tasks = yaml.safe_load(create_text)
+    creation_input_task = next(
+        task
+        for task in main_tasks
+        if task.get("name")
+        == "Require safe creation inputs before create or reset host writes"
+    )
+    create_input_task = next(
+        task
+        for task in create_tasks
+        if task.get("name")
+        == "Require safe host-local SSH public keys for a Linux guest"
+    )
+    assert creation_input_task.get("when") == [
+        "guest_operation in ['create', 'reset']",
+        "guest_plan.cloud_init",
+    ]
+    assert (
+        creation_input_task["ansible.builtin.assert"]
+        == create_input_task["ansible.builtin.assert"]
+    )
     freeze = create_text.index("- name: Freeze ownership of a new guest transaction")
     create = create_text.index("- name: Create a new standard guest transaction")
     define = create_text.index("- name: Define the persistent libvirt domain")

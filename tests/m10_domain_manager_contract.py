@@ -174,6 +174,19 @@ def main():
             stat.S_IMODE(written.stat().st_mode) == 0o600,
             "generated spec mode is not 0600",
         )
+        payload = written.read_text(encoding="utf-8")
+        sequence_lines = [
+            line for line in payload.splitlines() if line.lstrip().startswith("- ")
+        ]
+        assert_true(sequence_lines, "generated spec lacks a block sequence fixture")
+        assert_true(
+            all(len(line) - len(line.lstrip()) >= 2 for line in sequence_lines),
+            "generated spec contains an indentless block sequence",
+        )
+        assert_true(
+            yaml.safe_load(payload) == linux,
+            "generated spec serialization changed its values",
+        )
         assert_true(generated_specs(root) == [path], "generated list drift")
 
         guest_plan = load_module(ROOT / "tools/guest_plan.py", "m10_guest_plan")

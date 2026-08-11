@@ -380,7 +380,18 @@ def write_spec(repo_root, spec, replace=False):
     except ImportError as exc:
         raise Unavailable("PyYAML is not importable; install python-yaml") from exc
 
-    payload = yaml.safe_dump(spec, sort_keys=False, explicit_start=True)
+    class IndentedSafeDumper(yaml.SafeDumper):
+        """Emit block sequences with the repository's two-space indentation."""
+
+        def increase_indent(self, flow=False, indentless=False):
+            return super().increase_indent(flow, False)
+
+    payload = yaml.dump(
+        spec,
+        Dumper=IndentedSafeDumper,
+        sort_keys=False,
+        explicit_start=True,
+    )
     descriptor, temporary = tempfile.mkstemp(
         prefix=".%s." % name,
         suffix=".tmp",

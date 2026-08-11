@@ -169,6 +169,24 @@
       Reset requires a complete shut-off disposable guest and exact confirmation
       guest_confirm_reset={{ guest_plan.name }} before any host write.
 
+- name: Require safe creation inputs before create or reset host writes
+  when:
+    - guest_operation in ['create', 'reset']
+    - guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_cloud_init_ssh_public_keys is sequence
+      - guest_cloud_init_ssh_public_keys is not string
+      - guest_cloud_init_ssh_public_keys | length > 0
+      - >-
+        guest_cloud_init_ssh_public_keys
+        | select('match', guest_ssh_public_key_pattern)
+        | list | length == guest_cloud_init_ssh_public_keys | length
+    fail_msg: >-
+      Linux guest creation needs one or more complete one-line OpenSSH
+      public keys in guest_cloud_init_ssh_public_keys. Passwords, private
+      keys and malformed key material are never accepted.
+
 - name: Rebuild the live VFIO contract for hardware-sensitive operations
   when:
     - guest_plan.device_profile == 'vfio'
