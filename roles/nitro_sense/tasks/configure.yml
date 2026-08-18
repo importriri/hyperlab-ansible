@@ -42,3 +42,26 @@
 
 - name: Apply changed settings before validating them
   ansible.builtin.meta: flush_handlers
+
+- name: Read the applied battery limiter
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/cat
+      - "{{ nitro_sense_battery_limiter_path }}"
+  register: nitro_sense_battery_limiter_state
+  changed_when: false
+  when: nitro_sense_use_out_of_tree | bool
+
+- name: Require the configured battery limiter
+  ansible.builtin.assert:
+    that:
+      - >-
+        (nitro_sense_battery_limiter_state.stdout | trim) ==
+        (nitro_sense_battery_limiter_enabled | ternary('1', '0'))
+    fail_msg: >-
+      The Nitro battery limiter did not retain the configured state.
+  when: nitro_sense_use_out_of_tree | bool
+
+- name: Mount the narrow Nitro runtime control backend
+  ansible.builtin.include_tasks: control-backend.yml
+  when: nitro_sense_use_out_of_tree | bool

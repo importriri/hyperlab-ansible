@@ -1,0 +1,154 @@
+--- a/src/linuwu_sense.c
++++ b/src/linuwu_sense.c
+@@ -411,6 +411,7 @@
+      u8 nitro_v4;
+      u8 nitro_sense;
+      u8 four_zone_kb;
++     u8 four_zone_kb_legacy_payload;
+  };
+  
+  static struct quirk_entry *quirks;
+@@ -508,15 +509,17 @@
+     .four_zone_kb = 1,
+  };
+  
+- static struct quirk_entry quirk_acer_nitro_legacy = {
+-     .nitro_sense = 2,
+- };
+- 
+  static struct quirk_entry quirk_acer_nitro_an515_58 = {
+     .nitro_v4 = 1,
+     .four_zone_kb = 1,
+  };
+ 
++
++ static struct quirk_entry quirk_acer_nitro_an515_55 = {
++     .nitro_sense = 2,
++     .four_zone_kb = 1,
++     .four_zone_kb_legacy_payload = 1,
++ };
+ 
+  static struct quirk_entry quirk_acer_nitro = {
+      .nitro_sense = 1,
+@@ -659,7 +662,7 @@
+              DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
+              DMI_MATCH(DMI_PRODUCT_NAME, "Nitro AN515-55"),
+          },
+-         .driver_data = &quirk_acer_nitro_legacy,
++         .driver_data = &quirk_acer_nitro_an515_55,
+      },
+      {
+          .callback = dmi_matched,
+@@ -3883,28 +3886,93 @@
+      acpi_status status;
+      u64 *zones[] = { &input->zone1, &input->zone2, &input->zone3, &input->zone4 };
+      u8 zone_ids[] = { 0x1, 0x2, 0x4, 0x8 };
+- 
+-     status = set_kb_status(0, 0, input->brightness, 0, 0, 0, 0);
+-     if (ACPI_FAILURE(status)) {
+-         pr_err("Error setting KB status.\n");
+-         return -ENODEV;
+-     }
+- 
+-     for (int i = 0; i < 4; i++) {
+-         *zones[i] = (cpu_to_be64(*zones[i]) >> 32) | zone_ids[i];
+-         status = WMI_gaming_execute_u64(ACER_WMID_SET_GAMING_RGB_KB_METHODID, *zones[i], NULL);
++
++     if (quirks->four_zone_kb_legacy_payload) {
++         u64 gaming_sysinfo;
++         u8 static_mode[16] = {
++             0, 0, input->brightness, 0,
++             0, 0, 0, 0,
++             0, 1, 0, 0, 0, 0, 0, 0
++         };
++         struct acpi_buffer static_mode_input = {
++             (acpi_size)sizeof(static_mode),
++             (void *)static_mode
++         };
++
++         status = WMI_gaming_execute_u64(
++             ACER_WMID_GET_GAMING_SYS_INFO_METHODID,
++             0,
++             &gaming_sysinfo);
++         if (ACPI_FAILURE(status))
++             return status;
++
++         status = WMI_gaming_execute_u64(
++             ACER_WMID_SET_GAMING_LED_METHODID,
++             8ULL | (15ULL << 40),
++             NULL);
++         if (ACPI_FAILURE(status))
++             return status;
++
++         for (int i = 0; i < 4; i++) {
++             u64 color = *zones[i] & 0xffffff;
++             u8 payload[4] = {
++                 zone_ids[i],
++                 (color >> 16) & 0xff,
++                 (color >> 8) & 0xff,
++                 color & 0xff
++             };
++             struct acpi_buffer color_input = {
++                 (acpi_size)sizeof(payload),
++                 (void *)payload
++             };
++
++             status = wmi_evaluate_method(
++                 WMID_GUID4,
++                 0,
++                 ACER_WMID_SET_GAMING_RGB_KB_METHODID,
++                 &color_input,
++                 NULL);
++             if (ACPI_FAILURE(status)) {
++                 pr_err("Error setting KB color (zone %d): %s\n",
++                        i + 1, acpi_format_exception(status));
++                 return status;
++             }
++         }
++
++         status = wmi_evaluate_method(
++             WMID_GUID4,
++             0,
++             ACER_WMID_SET_GAMING_KB_BACKLIGHT_METHODID,
++             &static_mode_input,
++             NULL);
++         if (ACPI_FAILURE(status))
++             return status;
++     } else {
++         status = set_kb_status(0, 0, input->brightness, 0, 0, 0, 0);
+          if (ACPI_FAILURE(status)) {
+-             pr_err("Error setting KB color (zone %d): %s\n", i + 1, acpi_format_exception(status));
+-             return status;
++             pr_err("Error setting KB status.\n");
++             return -ENODEV;
+          }
+-     }
+-     /* set per_zone to 1*/
+- 
++
++         for (int i = 0; i < 4; i++) {
++             *zones[i] = (cpu_to_be64(*zones[i]) >> 32) | zone_ids[i];
++             status = WMI_gaming_execute_u64(
++                 ACER_WMID_SET_GAMING_RGB_KB_METHODID,
++                 *zones[i],
++                 NULL);
++             if (ACPI_FAILURE(status)) {
++                 pr_err("Error setting KB color (zone %d): %s\n",
++                        i + 1, acpi_format_exception(status));
++                 return status;
++             }
++         }
++     }
++
+      current_kb_state.per_zone = 1;
+- 
+-     return status;  
+- }
+- 
++
++     return status;
++ }
++
+  static ssize_t per_zoned_rgb_kb_show(struct device *dev, struct device_attribute *attr,char *buf){
+      struct per_zone_color output;
+      acpi_status status;

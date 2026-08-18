@@ -14,11 +14,7 @@
         nitro_sense_native_reevaluation_needed: >-
           {{ nitro_sense_module_loaded | bool
              and nitro_sense_managed_replacement | bool
-             and (not nitro_sense_out_of_tree_enabled | bool
-                  or nitro_sense_stamp_data.requested_commit | default('') !=
-                     nitro_sense_commit
-                  or nitro_sense_stamp_data.kernel | default('') !=
-                     ansible_facts['kernel']) }}
+             and not nitro_sense_out_of_tree_enabled | bool }}
 
     - name: Restore acer_wmi before reevaluating native platform profiles
       ansible.builtin.include_tasks: rollback.yml
@@ -110,6 +106,12 @@
           Check mode stops before package installation, compilation, DKMS and
           the platform-driver transition. A real run must prove those gates in
           that order before acer_wmi is touched.
+      when:
+        - nitro_sense_use_out_of_tree | bool
+        - ansible_check_mode
+
+    - name: Preview the Nitro runtime control landing in check mode
+      ansible.builtin.include_tasks: control-backend.yml
       when:
         - nitro_sense_use_out_of_tree | bool
         - ansible_check_mode

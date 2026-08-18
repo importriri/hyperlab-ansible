@@ -1,0 +1,91 @@
+---
+- name: Resolve the Nitro runtime control account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ nitro_sense_control_user }}"
+
+- name: Resolve the Nitro runtime control group
+  ansible.builtin.getent:
+    database: group
+    key: "{{ nitro_sense_control_group }}"
+
+- name: Refuse an unresolved runtime control identity
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_control_user in ansible_facts.getent_passwd
+      - nitro_sense_control_group in ansible_facts.getent_group
+    fail_msg: >-
+      The Nitro runtime broker delegates only to the configured HyperLab
+      operator. Refusing an account or group that does not exist.
+
+- name: Install the narrow Nitro runtime broker
+  ansible.builtin.copy:
+    src: hyperlab-nitro-control-daemon.py
+    dest: "{{ nitro_sense_control_daemon }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart Nitro runtime control backend
+
+- name: Install the unprivileged Nitro control client
+  ansible.builtin.copy:
+    src: hyperlab-nitro-control-client.py
+    dest: "{{ nitro_sense_control_client }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Nitro runtime broker unit
+  ansible.builtin.template:
+    src: hyperlab-nitro-control.service.j2
+    dest: "{{ nitro_sense_control_unit }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Nitro runtime control backend
+
+- name: Enable and start the Nitro runtime broker
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_control_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Apply broker changes before probing the operator boundary
+  ansible.builtin.meta: flush_handlers
+  when: not ansible_check_mode
+
+- name: Probe Nitro status through the unprivileged client
+  ansible.builtin.command:
+    argv:
+      - "{{ nitro_sense_control_client }}"
+      - status
+  become: true
+  become_user: "{{ nitro_sense_control_user }}"
+  register: nitro_sense_control_status_probe
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Parse the Nitro runtime broker probe
+  ansible.builtin.set_fact:
+    nitro_sense_control_status_data: >-
+      {{ nitro_sense_control_status_probe.stdout | from_json }}
+  when: not ansible_check_mode
+
+- name: Require the narrow runtime capability boundary
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_control_status_data.ok | bool
+      - >-
+        nitro_sense_control_status_data.status.model ==
+        nitro_sense_dmi_product
+      - >-
+        nitro_sense_control_status_data.status.capabilities.per_zone | bool ==
+        (nitro_sense_dmi_product in nitro_sense_led_per_zone_models)
+      - not nitro_sense_control_status_data.status.capabilities.effect | bool
+      - nitro_sense_control_status_data.status.persistence == 'runtime-only'
+    fail_msg: >-
+      The Nitro runtime broker did not preserve the reviewed model,
+      per-zone-only and runtime-only privilege boundary.
+  when: not ansible_check_mode

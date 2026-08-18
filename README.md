@@ -122,6 +122,7 @@ Operator and architecture references:
 - [`docs/hardware-profiles.md`](docs/hardware-profiles.md) — reviewed laptop boundaries;
 - [`docs/network-reconciliation.md`](docs/network-reconciliation.md) — network ownership and drift handling;
 - [`docs/arch-dev-acceleration.md`](docs/arch-dev-acceleration.md) — accelerated Arch guest policy;
+- [`docs/nitro-control-backend.md`](docs/nitro-control-backend.md) — privileged Nitro broker boundary and runtime protocol;
 - [`docs/nitro-arch-dev-vfio-campaign.md`](docs/nitro-arch-dev-vfio-campaign.md) — ordered Nitro VFIO campaign;
 - [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — Windows image sealing;
 - [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md) — ISO-to-qcow2 handoff;

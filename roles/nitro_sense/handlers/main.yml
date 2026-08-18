@@ -5,3 +5,11 @@
     enabled: true
     state: restarted
     daemon_reload: true
+
+- name: Restart Nitro runtime control backend
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_control_service }}"
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  when: not ansible_check_mode

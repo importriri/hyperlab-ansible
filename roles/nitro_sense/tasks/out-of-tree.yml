@@ -95,6 +95,11 @@
   failed_when: false
   check_mode: false
 
+- name: Inspect the managed DKMS source
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_dkms_source_dir }}/src/linuwu_sense.c"
+  register: nitro_sense_dkms_source_state
+
 - name: Decide whether the pinned module must be rebuilt
   ansible.builtin.set_fact:
     nitro_sense_build_needed: >-
@@ -104,6 +109,9 @@
          or nitro_sense_stamp_data.dkms_version | default('') !=
             nitro_sense_dkms_version
          or nitro_sense_stamp_data.kernel | default('') != ansible_facts['kernel']
+         or nitro_sense_stamp_data.source_patch_sha256 | default('') !=
+            nitro_sense_source_patch_sha256
+         or not (nitro_sense_dkms_source_state.stat.exists | default(false))
          or 'installed' not in nitro_sense_dkms_status.stdout }}
 
 - name: Prove the pinned source builds before replacing acer_wmi
@@ -131,6 +139,28 @@
         owner: root
         group: root
         mode: "0644"
+
+    - name: Copy the reviewed source overlay into the build probe
+      ansible.builtin.copy:
+        src: "{{ nitro_sense_source_patch }}"
+        dest: >-
+          {{ nitro_sense_build_probe_dir.path }}/{{ nitro_sense_source_patch }}
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply the reviewed source overlay to the build probe
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/patch
+          - --batch
+          - --forward
+          - -p1
+          - -i
+          - >-
+            {{ nitro_sense_build_probe_dir.path }}/{{ nitro_sense_source_patch }}
+        chdir: "{{ nitro_sense_build_probe_dir.path }}"
+      changed_when: false
 
     - name: Render the deterministic build recipe for the probe
       ansible.builtin.template:
@@ -176,6 +206,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: nitro_sense_build_needed | bool
 
 - name: Declare the DKMS source directory
   ansible.builtin.file:
@@ -184,6 +215,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: nitro_sense_build_needed | bool
 
 - name: Copy the pinned driver source into DKMS
   ansible.builtin.copy:
@@ -193,6 +225,29 @@
     owner: root
     group: root
     mode: "0644"
+  when: nitro_sense_build_needed | bool
+
+- name: Copy the reviewed source overlay into DKMS
+  ansible.builtin.copy:
+    src: "{{ nitro_sense_source_patch }}"
+    dest: "{{ nitro_sense_dkms_source_dir }}/{{ nitro_sense_source_patch }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: nitro_sense_build_needed | bool
+
+- name: Apply the reviewed source overlay to DKMS
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/patch
+      - --batch
+      - --forward
+      - -p1
+      - -i
+      - "{{ nitro_sense_dkms_source_dir }}/{{ nitro_sense_source_patch }}"
+    chdir: "{{ nitro_sense_dkms_source_dir }}"
+  changed_when: true
+  when: nitro_sense_build_needed | bool
 
 - name: Install the deterministic DKMS build recipe
   ansible.builtin.template:
@@ -201,6 +256,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: nitro_sense_build_needed | bool
 
 - name: Register the pinned source with DKMS
   ansible.builtin.template:
@@ -209,6 +265,7 @@
     owner: root
     group: root
     mode: "0644"
+  when: nitro_sense_build_needed | bool
 
 - name: Inspect a superseded managed DKMS version
   ansible.builtin.command:
@@ -240,24 +297,7 @@
 - name: Replace the installed DKMS build for the running kernel
   when: nitro_sense_build_needed | bool
   block:
-    - name: Remove the superseded module from the running kernel
-      ansible.builtin.command:
-        argv:
-          - /usr/bin/dkms
-          - remove
-          - -m
-          - "{{ nitro_sense_module_name }}"
-          - -v
-          - "{{ nitro_sense_stamp_data.dkms_version }}"
-          - -k
-          - "{{ ansible_facts['kernel'] }}"
-      changed_when: true
-      when:
-        - >-
-          nitro_sense_previous_dkms_status.stdout | default('') | trim | length
-          > 0
-
-    - name: Remove a stale exact-version build from the running kernel
+    - name: Remove the exact-version build before rebuilding
       ansible.builtin.command:
         argv:
           - /usr/bin/dkms
@@ -271,9 +311,6 @@
       changed_when: true
       when:
         - "'installed' in nitro_sense_dkms_status.stdout"
-        - >-
-          nitro_sense_stamp_data.requested_commit | default('') !=
-          nitro_sense_commit
 
     - name: Build and install the pinned module through DKMS
       ansible.builtin.command:
@@ -345,30 +382,6 @@
     fail_msg: >-
       DKMS did not report the pinned Linuwu-Sense module as installed for the
       running hardened kernel. acer_wmi has not been touched.
-
-- name: Remove the superseded managed DKMS version after replacement
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/dkms
-      - remove
-      - -m
-      - "{{ nitro_sense_module_name }}"
-      - -v
-      - "{{ nitro_sense_stamp_data.dkms_version }}"
-      - --all
-  changed_when: true
-  when:
-    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
-    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
-
-- name: Remove the superseded managed DKMS source
-  ansible.builtin.file:
-    path: >-
-      /usr/src/linuwu_sense-{{ nitro_sense_stamp_data.dkms_version }}
-    state: absent
-  when:
-    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
-    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
 
 - name: Commit the persistent driver transition and settings transaction
   block:
@@ -482,6 +495,7 @@
           resolved_commit: {{ nitro_sense_resolved_commit.stdout | trim }}
           dkms_version: {{ nitro_sense_dkms_version }}
           kernel: {{ ansible_facts['kernel'] }}
+          source_patch_sha256: {{ nitro_sense_source_patch_sha256 }}
         dest: "{{ nitro_sense_stamp }}"
         owner: root
         group: root
@@ -514,3 +528,30 @@
         msg: >-
           Linuwu-Sense failed its persistent driver transaction. Managed
           replacement state was removed and acer_wmi was restored.
+
+- name: Remove the superseded managed DKMS version after successful transition
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/dkms
+      - remove
+      - -m
+      - "{{ nitro_sense_module_name }}"
+      - -v
+      - "{{ nitro_sense_stamp_data.dkms_version }}"
+      - --all
+  changed_when: true
+  when:
+    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
+    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version
+    - >-
+      nitro_sense_previous_dkms_status.stdout | default('') | trim | length
+      > 0
+
+- name: Remove the superseded managed DKMS source after successful transition
+  ansible.builtin.file:
+    path: >-
+      /usr/src/linuwu_sense-{{ nitro_sense_stamp_data.dkms_version }}
+    state: absent
+  when:
+    - nitro_sense_stamp_data.dkms_version | default('') is match('^[0-9a-f]{12}$')
+    - nitro_sense_stamp_data.dkms_version != nitro_sense_dkms_version

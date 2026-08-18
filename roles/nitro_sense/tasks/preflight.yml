@@ -1,18 +1,48 @@
 ---
+- name: Inspect the reviewed source overlay
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ nitro_sense_source_patch }}"
+    checksum_algorithm: sha256
+  register: nitro_sense_source_patch_state
+
 - name: Validate the public Nitro Sense policy
   ansible.builtin.assert:
     that:
       - nitro_sense_state in ['present', 'absent']
       - nitro_sense_commit is match('^[0-9a-f]{40}$')
-      - nitro_sense_dkms_version == nitro_sense_commit[0:12]
+      - nitro_sense_source_patch == 'an515-55-four-zone.patch'
+      - nitro_sense_source_patch_sha256 is match('^[0-9a-f]{64}$')
+      - nitro_sense_source_patch_state.stat.exists | default(false)
+      - nitro_sense_source_patch_state.stat.isreg | default(false)
+      - >-
+        nitro_sense_source_patch_state.stat.checksum | default('') ==
+        nitro_sense_source_patch_sha256
+      - nitro_sense_dkms_version is match('^[0-9a-f]{12}$')
+      - >-
+        nitro_sense_dkms_version ==
+        ((nitro_sense_commit ~ nitro_sense_source_patch_sha256)
+         | hash('sha256'))[0:12]
       - "'-hardened' in ansible_facts['kernel']"
       - nitro_sense_build_packages | select('equalto', 'linux-hardened-headers') | list | length == 1
       - nitro_sense_build_packages | select('equalto', 'linux-headers') | list | length == 0
+      - nitro_sense_build_packages | select('equalto', 'patch') | list | length == 1
       - nitro_sense_thermal_profile is match('^[a-z0-9_-]+$')
       - nitro_sense_fan_cpu_percent | int >= 0
       - nitro_sense_fan_cpu_percent | int <= 100
       - nitro_sense_fan_gpu_percent | int >= 0
       - nitro_sense_fan_gpu_percent | int <= 100
+      - nitro_sense_battery_limiter_enabled is boolean
+      - nitro_sense_control_user == admin_user
+      - nitro_sense_control_group == admin_user
+      - nitro_sense_control_socket == '/run/hyperlab-nitro/control.sock'
+      - nitro_sense_control_daemon == '/usr/local/libexec/hyperlab-nitro-control-daemon'
+      - nitro_sense_control_client == '/usr/local/bin/hyperlab-nitro-control'
+      - nitro_sense_control_unit == '/etc/systemd/system/hyperlab-nitro-control.service'
+      - nitro_sense_control_service == 'hyperlab-nitro-control.service'
+      - nitro_sense_control_rgb_min_interval_ms | int >= 100
+      - nitro_sense_control_rgb_min_interval_ms | int <= 1000
+      - nitro_sense_control_max_request_bytes | int >= 1024
+      - nitro_sense_control_max_request_bytes | int <= 16384
       - nitro_sense_led_mode in ['disabled', 'per_zone', 'effect']
       - nitro_sense_led_zone_colors | length == 4
       - >-
@@ -34,6 +64,9 @@
       - >-
         nitro_sense_fan_speed_path ==
         '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/fan_speed'
+      - >-
+        nitro_sense_battery_limiter_path ==
+        '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/battery_limiter'
       - >-
         nitro_sense_led_per_zone_path ==
         '/sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode'
@@ -78,15 +111,33 @@
       pinned upstream source must contain an exact reviewed DMI entry before
       this role may issue WMI commands.
 
-- name: Refuse unavailable four-zone keyboard controls before installing anything
+- name: Require the replacement path for keyboard lighting
   ansible.builtin.assert:
     that:
       - nitro_sense_out_of_tree_enabled | bool
-      - nitro_sense_dmi_product in nitro_sense_four_zone_models
     fail_msg: >-
-      The requested LED mode needs the documented four_zoned_kb interface, but
-      the pinned upstream quirk does not advertise it for this model.
+      Keyboard lighting is exposed only by the reviewed replacement driver;
+      enable the out-of-tree path explicitly before requesting an LED mode.
   when: nitro_sense_led_mode != 'disabled'
+
+- name: Refuse unavailable per-zone keyboard controls before installing anything
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_dmi_product in nitro_sense_led_per_zone_models
+    fail_msg: >-
+      Per-zone RGB is not an accepted capability for this model. A model enters
+      this allowlist only after its static four-zone payload is reviewed.
+  when: nitro_sense_led_mode == 'per_zone'
+
+- name: Refuse unavailable firmware-effect controls before installing anything
+  ansible.builtin.assert:
+    that:
+      - nitro_sense_dmi_product in nitro_sense_led_effect_models
+    fail_msg: >-
+      Firmware RGB effects are not an accepted capability for this model.
+      Static per-zone hardware evidence must not authorize a different WMI
+      command path.
+  when: nitro_sense_led_mode == 'effect'
 
 - name: Inspect the managed ownership marker
   ansible.builtin.slurp:
@@ -121,6 +172,9 @@
     - "{{ nitro_sense_owner_marker }}"
     - "{{ nitro_sense_apply_unit }}"
     - "{{ nitro_sense_apply_script }}"
+    - "{{ nitro_sense_control_unit }}"
+    - "{{ nitro_sense_control_daemon }}"
+    - "{{ nitro_sense_control_client }}"
     - "{{ nitro_sense_replacement_marker }}"
     - "{{ nitro_sense_stamp }}"
     - "{{ nitro_sense_source_dir }}"
@@ -148,6 +202,9 @@
     path: "{{ nitro_sense_replacement_reserved_path }}"
   loop:
     - "{{ nitro_sense_replacement_marker }}"
+    - "{{ nitro_sense_control_unit }}"
+    - "{{ nitro_sense_control_daemon }}"
+    - "{{ nitro_sense_control_client }}"
     - "{{ nitro_sense_stamp }}"
     - "{{ nitro_sense_source_dir }}"
     - "{{ nitro_sense_dkms_source_dir }}"
@@ -187,7 +244,8 @@
          if (nitro_sense_managed_replacement | bool and
              nitro_sense_stamp_text is match(
                '^requested_commit: [0-9a-f]{40}\nresolved_commit: [0-9a-f]{40}' ~
-               '\ndkms_version: [0-9a-f]{12}\nkernel: [^\n]+\n?$'))
+               '\ndkms_version: [0-9a-f]{12}\nkernel: [^\n]+' ~
+               '(\nsource_patch_sha256: [0-9a-f]{64})?\n?$'))
          else {} }}
 
 - name: Inspect the out-of-tree module

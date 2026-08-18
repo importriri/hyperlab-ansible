@@ -874,11 +874,14 @@
           - not nitro_sense_out_of_tree_enabled | bool
           - not nitro_sense_use_out_of_tree | bool
           - nitro_sense_commit | length == 40
-          - nitro_sense_dkms_version == nitro_sense_commit[0:12]
+          - >-
+            nitro_sense_dkms_version ==
+            ((nitro_sense_commit ~ nitro_sense_source_patch_sha256)
+             | hash('sha256'))[0:12]
           - nitro_sense_build_packages | select('equalto', 'linux-hardened-headers') | list | length == 1
           - nitro_sense_build_packages | select('equalto', 'linux-headers') | list | length == 0
-          - nitro_sense_fan_cpu_percent | int == 0
-          - nitro_sense_fan_gpu_percent | int == 0
+          - nitro_sense_fan_cpu_percent | int == 100
+          - nitro_sense_fan_gpu_percent | int == 100
           - nitro_sense_led_mode == 'disabled'
           - render_ns_play[0].hosts == 'hypervisor'
           - render_ns_play[0].roles[0].role == 'brick_guard'
@@ -937,7 +940,7 @@
           - "'ansible_kernel' not in render_ns_all_tasks"
           - "'foundation.yml' in render_ns_docs"
           - "'lab.yml' in render_ns_docs"
-          - "'Per-key RGB is not supported' in render_ns_docs"
+          - "'Per-key RGB is not provided by this hardware path' in render_ns_docs"
           - "'Nitro AN515-55' in render_ns_docs"
           - "'nitro_sense' in render_ns_readme"
         fail_msg: >-

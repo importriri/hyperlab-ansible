@@ -1,7 +1,8 @@
 ---
-# Replacing acer_wmi affects hotkeys and platform controls. The conservative
-# default keeps the in-tree driver and only manages an already exposed native
-# platform profile; the out-of-tree replacement requires an explicit opt-in.
+# Replacing acer_wmi affects hotkeys and platform controls. Replacement
+# permission stays disabled by default: the role keeps the in-tree driver when
+# the requested policy is natively satisfiable, otherwise it refuses rather
+# than replacing acer_wmi implicitly.
 nitro_sense_state: present
 nitro_sense_out_of_tree_enabled: false
 # Runtime selection is recomputed after native capability inspection.
@@ -9,7 +10,9 @@ nitro_sense_use_out_of_tree: false
 
 nitro_sense_repo: https://github.com/0x7375646F/Linuwu-Sense.git
 nitro_sense_commit: 73a25ec243a44ba2b1703e8d0a76fa2735062506
-nitro_sense_dkms_version: 73a25ec243a4
+nitro_sense_source_patch: an515-55-four-zone.patch
+nitro_sense_source_patch_sha256: 1a53b4709330ae86dcae16f2efd55ce9468e2cd2d850b48d0f6902641457a778
+nitro_sense_dkms_version: 6b45d4439e68
 nitro_sense_module_name: linuwu_sense
 nitro_sense_in_tree_module_name: acer_wmi
 nitro_sense_source_dir: /usr/local/src/linuwu-sense
@@ -25,6 +28,7 @@ nitro_sense_build_packages:
   - git
   - gcc
   - make
+  - patch
   - linux-hardened-headers
 
 # This allowlist mirrors the DMI entries in the pinned upstream source. A new
@@ -38,7 +42,17 @@ nitro_sense_supported_models:
   - Nitro ANV15-41
   - Nitro ANV15-51
   - Nitro AN515-55
-nitro_sense_four_zone_models:
+# Per-zone and firmware-effect support are separate capabilities. AN515-55 is
+# hardware-proved for static four-zone colour and brightness only; advertising
+# the broader effect path would turn one validated protocol into an unproved
+# capability.
+nitro_sense_led_per_zone_models:
+  - Nitro AN16-43
+  - Nitro AN16-42
+  - Nitro AN515-58
+  - Nitro AN16-41
+  - Nitro AN515-55
+nitro_sense_led_effect_models:
   - Nitro AN16-43
   - Nitro AN16-42
   - Nitro AN515-58
@@ -49,6 +63,7 @@ nitro_sense_dmi_product_path: /sys/class/dmi/id/product_name
 nitro_sense_platform_profile_choices_path: /sys/firmware/acpi/platform_profile_choices
 nitro_sense_platform_profile_path: /sys/firmware/acpi/platform_profile
 nitro_sense_fan_speed_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/fan_speed
+nitro_sense_battery_limiter_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense/battery_limiter
 nitro_sense_led_per_zone_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/per_zone_mode
 nitro_sense_led_effect_path: /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb/four_zone_mode
 
@@ -57,8 +72,12 @@ nitro_sense_thermal_profile: balanced
 # platform-profile node for it. Set this true only on a model that exposes the
 # documented generic kernel ABI after the selected driver loads.
 nitro_sense_thermal_profile_required: false
-nitro_sense_fan_cpu_percent: 0
-nitro_sense_fan_gpu_percent: 0
+nitro_sense_fan_cpu_percent: 100
+nitro_sense_fan_gpu_percent: 100
+
+# The pinned driver exposes a boolean battery-health limiter. When
+# enabled, Acer firmware stops normal charging at 80 percent.
+nitro_sense_battery_limiter_enabled: true
 
 # Keyboard lighting is untouched unless one documented four-zone interface is
 # selected explicitly. Per-key RGB is not implemented by the upstream module.
@@ -80,5 +99,18 @@ nitro_sense_led_effect:
 nitro_sense_apply_script: /usr/local/libexec/nitro-sense-apply
 nitro_sense_apply_unit: /etc/systemd/system/nitro-sense-apply.service
 nitro_sense_apply_service: nitro-sense-apply.service
+
+# Runtime controls are delegated to one logged-in operator through a typed
+# AF_UNIX protocol. The broker changes live state only; boot policy remains
+# owned by the Ansible settings service.
+nitro_sense_control_user: "{{ admin_user }}"
+nitro_sense_control_group: "{{ admin_user }}"
+nitro_sense_control_socket: /run/hyperlab-nitro/control.sock
+nitro_sense_control_daemon: /usr/local/libexec/hyperlab-nitro-control-daemon
+nitro_sense_control_client: /usr/local/bin/hyperlab-nitro-control
+nitro_sense_control_unit: /etc/systemd/system/hyperlab-nitro-control.service
+nitro_sense_control_service: hyperlab-nitro-control.service
+nitro_sense_control_rgb_min_interval_ms: 200
+nitro_sense_control_max_request_bytes: 4096
 nitro_sense_modules_load_path: /etc/modules-load.d/linuwu_sense.conf
 nitro_sense_blacklist_path: /etc/modprobe.d/nitro-sense-blacklist-acer_wmi.conf

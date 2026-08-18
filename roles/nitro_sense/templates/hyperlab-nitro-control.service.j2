@@ -1,0 +1,31 @@
+[Unit]
+Description=HyperLab Nitro runtime control broker
+After=nitro-sense-apply.service
+Requires=nitro-sense-apply.service
+
+[Service]
+Type=simple
+User=root
+Group={{ nitro_sense_control_group }}
+RuntimeDirectory=hyperlab-nitro
+RuntimeDirectoryMode=0750
+UMask=0077
+ExecStart={{ nitro_sense_control_daemon }} --socket {{ nitro_sense_control_socket }} --user {{ nitro_sense_control_user }} --model {{ nitro_sense_dmi_product | quote }} --fan-path {{ nitro_sense_fan_speed_path }} --battery-path {{ nitro_sense_battery_limiter_path }} --rgb-path {{ nitro_sense_led_per_zone_path }} {% if nitro_sense_dmi_product in nitro_sense_led_per_zone_models %}--per-zone-enabled {% endif %}--rgb-min-interval-ms {{ nitro_sense_control_rgb_min_interval_ms }} --max-request-bytes {{ nitro_sense_control_max_request_bytes }}
+Restart=on-failure
+RestartSec=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

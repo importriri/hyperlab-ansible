@@ -6,6 +6,8 @@ profile_required={{ nitro_sense_thermal_profile_required | ternary('true', 'fals
 profile_path={{ nitro_sense_platform_profile_path | to_json }}
 profile_choices_path={{ nitro_sense_platform_profile_choices_path | to_json }}
 fan_path={{ nitro_sense_fan_speed_path | to_json }}
+battery_limiter_path={{ nitro_sense_battery_limiter_path | to_json }}
+battery_limiter_value={{ (nitro_sense_battery_limiter_enabled | ternary('1', '0')) | to_json }}
 fan_value={{ (nitro_sense_fan_cpu_percent | string ~ ',' ~ nitro_sense_fan_gpu_percent | string) | to_json }}
 led_mode={{ nitro_sense_led_mode | to_json }}
 led_per_zone_path={{ nitro_sense_led_per_zone_path | to_json }}
@@ -50,6 +52,7 @@ fi
 
 if [[ $out_of_tree == true ]]; then
     write_and_verify "$fan_path" "$fan_value"
+    write_and_verify "$battery_limiter_path" "$battery_limiter_value"
 
     case $led_mode in
         disabled)

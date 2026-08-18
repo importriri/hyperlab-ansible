@@ -13,6 +13,20 @@
     - nitro_sense_managed_installation | bool
     - nitro_sense_rollback_unit_state.stat.exists | default(false)
 
+- name: Inspect the Nitro runtime broker before rollback
+  ansible.builtin.stat:
+    path: "{{ nitro_sense_control_unit }}"
+  register: nitro_sense_rollback_control_unit_state
+
+- name: Stop runtime hardware delegation before driver rollback
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_control_service }}"
+    enabled: false
+    state: stopped
+  when:
+    - nitro_sense_managed_installation | bool
+    - nitro_sense_rollback_control_unit_state.stat.exists | default(false)
+
 - name: Inspect the replacement module before rollback
   ansible.builtin.stat:
     path: "/sys/module/{{ nitro_sense_module_name }}"
@@ -33,6 +47,9 @@
   loop:
     - "{{ nitro_sense_apply_unit }}"
     - "{{ nitro_sense_apply_script }}"
+    - "{{ nitro_sense_control_unit }}"
+    - "{{ nitro_sense_control_daemon }}"
+    - "{{ nitro_sense_control_client }}"
   loop_control:
     loop_var: nitro_sense_rollback_path
   when: nitro_sense_managed_installation | bool
@@ -53,7 +70,9 @@
     daemon_reload: true
   when:
     - nitro_sense_managed_installation | bool
-    - nitro_sense_rollback_unit_state.stat.exists | default(false)
+    - >-
+      (nitro_sense_rollback_unit_state.stat.exists | default(false))
+      or (nitro_sense_rollback_control_unit_state.stat.exists | default(false))
 
 - name: Inspect DKMS availability for rollback
   ansible.builtin.stat:
