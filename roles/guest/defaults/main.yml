@@ -4,7 +4,9 @@ guest_supported_operations:
   - create
   - start
   - shutdown
+  - reboot
   - stop
+  - power-cycle
   - reset
   - resize
   - destroy
@@ -16,6 +18,7 @@ guest_vfio: {}
 guest_windows_workshop: {}
 guest_service_reservations: {reserved_mb: 0, reservations: {}}
 guest_confirm_resize: ""
+guest_confirm_power_cycle: ""
 
 # Empty uses the checked-in spec default. A named override is resolved only
 # through the reviewed profile map and is committed into managed VM state.

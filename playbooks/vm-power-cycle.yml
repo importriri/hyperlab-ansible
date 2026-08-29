@@ -1,0 +1,13 @@
+---
+- name: Power-cycle one managed HyperLab VM through a full QEMU stop
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    guest_operation: power-cycle
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest
+    - guest

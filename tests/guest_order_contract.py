@@ -74,7 +74,7 @@ def main() -> int:
     assert "guest_operation == 'create' and guest_transaction_clean" in verify_block
     assert "guest_plan.lifecycle == 'disposable'" in verify_block
     assert (
-        "guest_operation in ['create', 'reset', 'start', 'validate', 'resize']"
+        "guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate', 'resize']"
         in verify_block
     )
     assert "guest_confirm_reset == guest_plan.name" in main_text[reset_preflight:vfio]

@@ -1,0 +1,13 @@
+---
+- name: Reboot one managed HyperLab VM without replacing QEMU
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    guest_operation: reboot
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest
+    - guest

@@ -1,0 +1,61 @@
+---
+- name: Validate the managed guest before power cycle
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Require a running guest and exact confirmation for power cycle
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state == 'running'
+      - guest_confirm_power_cycle == guest_plan.name
+    fail_msg: >-
+      Power cycle forcibly stops QEMU and may lose unflushed guest data.
+      It accepts only a running managed guest and exact confirmation
+      guest_confirm_power_cycle={{ guest_plan.name }}.
+
+- name: Predict the full QEMU power cycle in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would force-stop QEMU for {{ guest_plan.name }}, wait for
+      libvirt to report shut off, then start a new QEMU process through the
+      normal VFIO, capacity and QGA readiness gates.
+  changed_when: true
+
+- name: Force-stop QEMU before the replacement start
+  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - destroy
+      - "{{ guest_plan.name }}"
+  changed_when: true
+
+- name: Wait until QEMU is fully shut off
+  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domstate
+      - "{{ guest_plan.name }}"
+  register: guest_power_cycle_stopped
+  changed_when: false
+  retries: 20
+  delay: 1
+  until: guest_power_cycle_stopped.stdout | trim | lower == 'shut off'
+
+- name: Refresh observations after the forced QEMU stop
+  when: not ansible_check_mode
+  ansible.builtin.include_tasks: inspect.yml
+
+- name: Require the stopped boundary before starting replacement QEMU
+  when: not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state == 'shut off'
+    fail_msg: >-
+      {{ guest_plan.name }} never reached the required shut-off boundary.
+      Refusing to start replacement QEMU.
+
+- name: Start replacement QEMU through the normal managed start contract
+  when: not ansible_check_mode
+  ansible.builtin.include_tasks: start.yml

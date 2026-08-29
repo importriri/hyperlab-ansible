@@ -126,7 +126,7 @@
   ansible.builtin.include_tasks: inspect.yml
 
 - name: Refuse a missing or inactive selected network before VM operations
-  when: guest_operation in ['create', 'reset', 'start', 'validate']
+  when: guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate']
   ansible.builtin.assert:
     that:
       - guest_network_defined
@@ -190,13 +190,13 @@
 - name: Rebuild the live VFIO contract for hardware-sensitive operations
   when:
     - guest_plan.device_profile == 'vfio'
-    - guest_operation in ['create', 'reset', 'start', 'validate']
+    - guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate']
   ansible.builtin.include_tasks: vfio.yml
 
 - name: Load the committed VFIO contract for offline state-bound operations
   when:
     - guest_plan.device_profile == 'vfio'
-    - guest_operation in ['shutdown', 'stop', 'resize', 'destroy']
+    - guest_operation in ['shutdown', 'reboot', 'stop', 'resize', 'destroy']
   block:
     - name: Require committed VFIO state before an offline operation
       ansible.builtin.assert:
@@ -216,7 +216,7 @@
     - >-
       (guest_operation == 'create' and guest_transaction_clean) or
       (guest_plan.lifecycle == 'disposable' and
-       guest_operation in ['create', 'reset', 'start', 'validate', 'resize'])
+       guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate', 'resize'])
   ansible.builtin.include_tasks: verify-base.yml
 
 - name: Install lifecycle dependencies after every read-only gate
@@ -312,9 +312,17 @@
       when: guest_operation == 'shutdown'
       ansible.builtin.include_tasks: shutdown.yml
 
+    - name: Dispatch guest reboot
+      when: guest_operation == 'reboot'
+      ansible.builtin.include_tasks: reboot.yml
+
     - name: Dispatch forced guest stop
       when: guest_operation == 'stop'
       ansible.builtin.include_tasks: stop.yml
+
+    - name: Dispatch full QEMU power cycle
+      when: guest_operation == 'power-cycle'
+      ansible.builtin.include_tasks: power-cycle.yml
 
     - name: Dispatch disposable guest reset
       when: guest_operation == 'reset'

@@ -1,0 +1,99 @@
+---
+- name: Validate the managed guest before reboot
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Require a running managed guest before reboot
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state == 'running'
+    fail_msg: >-
+      {{ guest_plan.name }} is {{ guest_domain_state }}. Managed reboot accepts
+      only a running guest; use Start for a shut-off domain.
+
+- name: Predict graceful guest reboot in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would request a graceful {{ 'QEMU Guest Agent'
+      if guest_plan.qemu_guest_agent else 'ACPI' }} reboot of
+      {{ guest_plan.name }} without stopping its QEMU process. A QGA-backed
+      reboot is complete only after the agent disconnects and reconnects.
+
+- name: Request a graceful guest reboot
+  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv: >-
+      {{ [guest_virsh_bin, 'reboot']
+         + (['--mode', 'agent']
+            if guest_plan.qemu_guest_agent
+            else ['--mode', 'acpi'])
+         + [guest_plan.name] }}
+  changed_when: true
+
+- name: Prove the QEMU Guest Agent crossed the reboot boundary
+  when:
+    - not ansible_check_mode
+    - guest_plan.qemu_guest_agent
+    - guest_wait_for_qga | bool
+  block:
+    - name: Wait until QEMU Guest Agent disconnects for reboot
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - guestinfo
+          - "{{ guest_plan.name }}"
+          - --hostname
+      register: guest_reboot_qga_disconnect
+      changed_when: false
+      failed_when: false
+      retries: 30
+      delay: 1
+      until: guest_reboot_qga_disconnect.rc != 0
+
+    - name: Refuse a reboot that never crossed the guest-agent boundary
+      ansible.builtin.assert:
+        that:
+          - guest_reboot_qga_disconnect.rc != 0
+        fail_msg: >-
+          {{ guest_plan.name }} never disconnected its QEMU Guest Agent after
+          the reboot request. Refusing to treat a continuously-running QEMU
+          process as proof that the guest rebooted.
+
+    - name: Wait for QEMU Guest Agent readiness after reboot
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - guestinfo
+          - "{{ guest_plan.name }}"
+          - --hostname
+      register: guest_reboot_qga_ready
+      changed_when: false
+      retries: "{{ [guest_qga_timeout_seconds | int // 5, 1] | max }}"
+      delay: 5
+      until: guest_reboot_qga_ready.rc == 0
+
+  rescue:
+    - name: Report an incomplete managed guest reboot
+      ansible.builtin.fail:
+        msg: >-
+          {{ guest_plan.name }} did not complete the QEMU Guest Agent
+          disconnect/reconnect boundary after a graceful reboot request.
+          QEMU may still be running while the guest is unhealthy.
+          {{ 'For this VFIO guest, use the explicit Power Cycle recovery path; '
+             if guest_plan.device_profile == 'vfio' else '' }}
+          never replace Reboot with a hidden forced reset.
+
+- name: Wait for a non-QGA reboot target to remain running
+  when:
+    - not ansible_check_mode
+    - not guest_plan.qemu_guest_agent
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_virsh_bin }}"
+      - domstate
+      - "{{ guest_plan.name }}"
+  register: guest_reboot_state
+  changed_when: false
+  retries: 20
+  delay: 1
+  until: guest_reboot_state.stdout | trim | lower == 'running'
