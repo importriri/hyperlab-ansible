@@ -9,10 +9,15 @@ looking_glass_build: "{{ hyperlab_looking_glass_build }}"
 looking_glass_repo: https://github.com/gnif/LookingGlass.git
 looking_glass_src: /usr/local/src/looking-glass
 looking_glass_stamp: /usr/local/share/looking-glass/built-from
+looking_glass_input_patch: client-captured-button-press.patch
+looking_glass_input_patch_sha256: "3356aac4f99e83a63c4239ac456441901a1fe1f9364b85fa8a7645c2359d213a"
+looking_glass_input_patch_remote: /run/privatestack-looking-glass-client-input.patch
+looking_glass_input_patch_target: client/src/app.c
 looking_glass_width: "{{ hyperlab_looking_glass_width }}"
 looking_glass_height: "{{ hyperlab_looking_glass_height }}"
 looking_glass_shm_mb: "{{ hyperlab_looking_glass_shm_mb }}"
 looking_glass_device: "{{ hyperlab_looking_glass_device }}"
+looking_glass_kvmfr_size_tool: "{{ playbook_dir | dirname }}/tools/kvmfr_size.py"
 looking_glass_qemu_user: libvirt-qemu
 looking_glass_device_group: kvm
 looking_glass_qemu_conf: /etc/libvirt/qemu.conf
@@ -31,6 +36,8 @@ looking_glass_escape_key: KEY_RIGHTCTRL
 looking_glass_fullscreen: true
 looking_glass_spice_host: "{{ hyperlab_looking_glass_spice_host }}"
 looking_glass_spice_port: "{{ hyperlab_looking_glass_spice_port }}"
+looking_glass_spice_socket_dir: "{{ hyperlab_looking_glass_spice_socket_dir }}"
+looking_glass_spice_tmpfiles_path: /etc/tmpfiles.d/hyperlab-spice.conf
 looking_glass_packages:
   - dkms
   - "{{ kernel_name }}-headers"

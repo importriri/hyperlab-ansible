@@ -57,6 +57,56 @@
   changed_when: looking_glass_dkms_install.rc == 0
   when: "'kvmfr' not in looking_glass_dkms.stdout"
 
+- name: Inspect whether kvmfr is already loaded
+  ansible.builtin.stat:
+    path: /sys/module/kvmfr
+  register: looking_glass_kvmfr_loaded
+
+- name: Inspect the pre-existing kvmfr device
+  ansible.builtin.stat:
+    path: "{{ looking_glass_device }}"
+    follow: false
+  register: looking_glass_kvmfr_device_before
+
+- name: Refuse a stale regular kvmfr path before runtime reconciliation
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (looking_glass_kvmfr_device_before.stat.exists | default(false))
+        or (looking_glass_kvmfr_device_before.stat.ischr | default(false))
+    fail_msg: >-
+      {{ looking_glass_device }} already exists but is not the kvmfr character
+      device. Stop every VM using the path, remove the stale regular file and
+      reconcile the Looking Glass transport before continuing.
+
+- name: Read the loaded kvmfr shared-memory size through its ioctl
+  when:
+    - looking_glass_kvmfr_loaded.stat.exists | default(false)
+    - looking_glass_kvmfr_device_before.stat.ischr | default(false)
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_facts.python.executable }}"
+      - "{{ looking_glass_kvmfr_size_tool }}"
+      - --device
+      - "{{ looking_glass_device }}"
+  register: looking_glass_kvmfr_size_command
+  changed_when: false
+  check_mode: false
+
+- name: Decide whether the loaded kvmfr transport needs a real reload
+  ansible.builtin.set_fact:
+    looking_glass_kvmfr_reload_required: >-
+      {{
+        looking_glass_kvmfr_loaded.stat.exists | default(false)
+        and (
+          not (looking_glass_kvmfr_device_before.stat.exists | default(false))
+          or (
+            looking_glass_kvmfr_size_command.stdout | default('0') | trim | int
+            != (looking_glass_shm_mb | int) * 1024 * 1024
+          )
+        )
+      }}
+
 - name: Size the shared memory from the frame geometry
   ansible.builtin.template:
     src: kvmfr.conf.j2
@@ -64,9 +114,77 @@
     owner: root
     group: root
     mode: "0644"
-  notify:
-    - Unload kvmfr before applying a new size
-    - Load kvmfr with the current size
+
+- name: Resolve kvmfr for the running kernel before a required reload
+  when: looking_glass_kvmfr_reload_required | bool
+  ansible.builtin.command:
+    argv:
+      - modinfo
+      - -k
+      - "{{ ansible_kernel }}"
+      - kvmfr
+  register: looking_glass_kvmfr_modinfo
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Refuse a kvmfr reload across a stale running-kernel module tree
+  when: looking_glass_kvmfr_reload_required | bool
+  ansible.builtin.assert:
+    that:
+      - looking_glass_kvmfr_modinfo.rc == 0
+    fail_msg: >-
+      The loaded kvmfr transport must change size, but kvmfr cannot be resolved
+      for the running kernel {{ ansible_kernel }}. This commonly means the
+      kernel packages were upgraded without rebooting. Reboot into the installed
+      kernel before retrying; the role will not unload the live module blindly.
+
+- name: Inspect users of kvmfr before a required reload
+  when:
+    - looking_glass_kvmfr_reload_required | bool
+    - looking_glass_kvmfr_device_before.stat.ischr | default(false)
+  ansible.builtin.command:
+    argv:
+      - fuser
+      - "{{ looking_glass_device }}"
+  register: looking_glass_kvmfr_users
+  changed_when: false
+  failed_when: looking_glass_kvmfr_users.rc not in [0, 1]
+  check_mode: false
+
+- name: Refuse to resize kvmfr while the live device is in use
+  when:
+    - looking_glass_kvmfr_reload_required | bool
+    - looking_glass_kvmfr_device_before.stat.ischr | default(false)
+  ansible.builtin.assert:
+    that:
+      - looking_glass_kvmfr_users.rc == 1
+    fail_msg: >-
+      {{ looking_glass_device }} is in use by PID(s)
+      {{ looking_glass_kvmfr_users.stdout | trim }}. Stop the VM or client that
+      owns the shared-memory device before changing its runtime size.
+
+- name: Unload kvmfr only for a verified runtime size change
+  when: looking_glass_kvmfr_reload_required | bool
+  community.general.modprobe:
+    name: kvmfr
+    state: absent
+
+- name: Load kvmfr with the reconciled runtime size
+  when: looking_glass_kvmfr_reload_required | bool
+  community.general.modprobe:
+    name: kvmfr
+    state: present
+
+- name: Retrigger the recreated kvmfr device after a runtime size change
+  when: looking_glass_kvmfr_reload_required | bool
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - trigger
+      - --subsystem-match=kvmfr
+      - --action=change
+  changed_when: true
 
 - name: Load kvmfr at boot
   ansible.builtin.copy:
@@ -235,7 +353,9 @@
       {{ looking_glass_stamp_data.requested_commit | default('') != looking_glass_commit
          or looking_glass_stamp_data.resolved_commit | default('') !=
             (looking_glass_resolved_commit.stdout | trim)
-         or looking_glass_stamp_data.build | default('') != looking_glass_build }}
+         or looking_glass_stamp_data.build | default('') != looking_glass_build
+         or looking_glass_stamp_data.input_patch_sha256 | default('') !=
+            looking_glass_input_patch_sha256 }}
 
 - name: Build and install the client from the pinned checkout
   when: looking_glass_build_needed | bool
@@ -248,23 +368,114 @@
         group: root
         mode: "0755"
 
-    - name: Configure the client build
-      ansible.builtin.command:
-        cmd: cmake -DENABLE_X11=no -DENABLE_WAYLAND=yes -DENABLE_LIBDECOR=yes ../
-        chdir: "{{ looking_glass_src }}/client/build"
-      changed_when: true
+    - name: Build with the reviewed captured-input compatibility patch
+      block:
+        - name: Require clean pinned client input source before patching
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ looking_glass_src }}"
+              - status
+              - --porcelain
+              - --untracked-files=no
+              - --
+              - "{{ looking_glass_input_patch_target }}"
+          register: looking_glass_input_source_status
+          changed_when: false
 
-    - name: Compile the client
-      ansible.builtin.command:
-        cmd: make -j{{ ansible_facts['processor_vcpus'] | default(2) }}
-        chdir: "{{ looking_glass_src }}/client/build"
-      changed_when: true
+        - name: Refuse unexpected changes in the pinned client input source
+          ansible.builtin.assert:
+            that:
+              - looking_glass_input_source_status.stdout | trim | length == 0
+            fail_msg: >-
+              The pinned Looking Glass client input source has unreviewed local
+              changes. Preserve or review them before applying the captured-input
+              compatibility patch.
 
-    - name: Install the client
-      ansible.builtin.command:
-        cmd: make install
-        chdir: "{{ looking_glass_src }}/client/build"
-      changed_when: true
+        - name: Stage the reviewed captured-input compatibility patch
+          ansible.builtin.copy:
+            src: "{{ looking_glass_input_patch }}"
+            dest: "{{ looking_glass_input_patch_remote }}"
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Inspect the staged captured-input compatibility patch
+          ansible.builtin.stat:
+            path: "{{ looking_glass_input_patch_remote }}"
+            checksum_algorithm: sha256
+          register: looking_glass_input_patch_stat
+
+        - name: Require the exact reviewed captured-input compatibility patch
+          ansible.builtin.assert:
+            that:
+              - >-
+                looking_glass_input_patch_stat.stat.checksum ==
+                looking_glass_input_patch_sha256
+            fail_msg: >-
+              The staged Looking Glass captured-input compatibility patch differs
+              from the bytes validated against the pinned client source.
+
+        - name: Require the captured-input patch to match the pinned source
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ looking_glass_src }}"
+              - apply
+              - --check
+              - "{{ looking_glass_input_patch_remote }}"
+          changed_when: false
+
+        - name: Apply the reviewed captured-input compatibility patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ looking_glass_src }}"
+              - apply
+              - "{{ looking_glass_input_patch_remote }}"
+          register: looking_glass_input_patch_apply
+          changed_when: true
+
+        - name: Configure the client build
+          ansible.builtin.command:
+            cmd: cmake -DENABLE_X11=no -DENABLE_WAYLAND=yes -DENABLE_LIBDECOR=yes ../
+            chdir: "{{ looking_glass_src }}/client/build"
+          changed_when: true
+
+        - name: Compile the client
+          ansible.builtin.command:
+            cmd: make -j{{ ansible_facts['processor_vcpus'] | default(2) }}
+            chdir: "{{ looking_glass_src }}/client/build"
+          changed_when: true
+
+        - name: Install the client
+          ansible.builtin.command:
+            cmd: make install
+            chdir: "{{ looking_glass_src }}/client/build"
+          changed_when: true
+
+      always:
+        - name: Restore the pinned client input source after the transient patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ looking_glass_src }}"
+              - checkout
+              - --
+              - "{{ looking_glass_input_patch_target }}"
+          changed_when: false
+          when:
+            - looking_glass_input_patch_apply is defined
+            - looking_glass_input_patch_apply.rc | default(1) == 0
+
+        - name: Remove the transient captured-input compatibility patch
+          ansible.builtin.file:
+            path: "{{ looking_glass_input_patch_remote }}"
+            state: absent
 
     - name: Stamp the requested pin and the observed build identity
       ansible.builtin.copy:
@@ -272,6 +483,7 @@
           requested_commit: {{ looking_glass_commit }}
           resolved_commit: {{ looking_glass_resolved_commit.stdout | trim }}
           build: {{ looking_glass_build }}
+          input_patch_sha256: {{ looking_glass_input_patch_sha256 }}
         dest: "{{ looking_glass_stamp }}"
         owner: root
         group: root
@@ -299,3 +511,20 @@
     tasks_from: stamp
   vars:
     brick_guard_brick: looking_glass
+
+- name: Install the private SPICE runtime directory policy
+  ansible.builtin.template:
+    src: hyperlab-spice.tmpfiles.j2
+    dest: "{{ looking_glass_spice_tmpfiles_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Reconcile the private SPICE runtime directory
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemd-tmpfiles
+      - --create
+      - "{{ looking_glass_spice_tmpfiles_path }}"
+  changed_when: false
+  check_mode: false

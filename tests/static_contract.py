@@ -186,10 +186,15 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("command: define" not in network_tasks, "virt_net define must not silently skip existing networks")
 
     looking_tasks = (ROOT / "roles/looking_glass/tasks/main.yml").read_text()
-    looking_handlers = (ROOT / "roles/looking_glass/handlers/main.yml").read_text()
     looking_defaults = load_mapping(ROOT / "roles/looking_glass/defaults/main.yml", errors)
     check("stat.ischr" in looking_tasks, "kvmfr must be verified as a character device")
-    check("failed_when: looking_glass_unload.rc != 0" in looking_handlers, "kvmfr resize must fail when unload fails")
+    check(
+        "Refuse to resize kvmfr while the live device is in use" in looking_tasks
+        and "looking_glass_kvmfr_users.rc == 1" in looking_tasks
+        and "Unload kvmfr only for a verified runtime size change" in looking_tasks
+        and "looking_glass_kvmfr_reload_required | bool" in looking_tasks,
+        "kvmfr resize must refuse live users before a verified reload",
+    )
     check("rev-parse" in looking_tasks and "resolved_commit:" in looking_tasks, "Looking Glass stamp must record the resolved full SHA")
     check("--abbrev=10" in looking_tasks, "Looking Glass build identity must use the client's ten-digit SHA abbreviation")
     lg_commit = str(looking_contract.get("hyperlab_looking_glass_commit", ""))

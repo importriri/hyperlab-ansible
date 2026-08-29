@@ -1,15 +1,4 @@
 ---
-- name: Unload kvmfr before applying a new size
-  ansible.builtin.command: modprobe -r kvmfr
-  register: looking_glass_unload
-  changed_when: looking_glass_unload.rc == 0
-  failed_when: looking_glass_unload.rc != 0
-
-- name: Load kvmfr with the current size
-  community.general.modprobe:
-    name: kvmfr
-    state: present
-
 - name: Reload the udev rules
   ansible.builtin.command: udevadm control --reload
   changed_when: true

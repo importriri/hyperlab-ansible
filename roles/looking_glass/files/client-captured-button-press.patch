@@ -1,0 +1,12 @@
+diff --git a/client/src/app.c b/client/src/app.c
+--- a/client/src/app.c
++++ b/client/src/app.c
+@@ -280,7 +280,7 @@ void app_handleButtonPress(int button)
+     return;
+   }
+ 
+-  if (!core_inputEnabled() || !g_cursor.inView)
++  if (!core_inputEnabled() || (!g_cursor.grab && !g_cursor.inView))
+     return;
+ 
+   if (!purespice_mousePress(button))

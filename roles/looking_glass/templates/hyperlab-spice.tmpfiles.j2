@@ -1,0 +1,3 @@
+# Managed by hyperlab-ansible. VFIO SPICE sockets are private host-local IPC.
+d {{ looking_glass_spice_socket_dir }} 0770 root libvirt-qemu -
+a+ {{ looking_glass_spice_socket_dir }} - - - - u:{{ admin_user }}:rwx,d:u:{{ admin_user }}:rwX,d:o::---

@@ -19,12 +19,14 @@ setGuestRes=no
 escapeKey={{ looking_glass_escape_key }}
 captureOnFocus=yes
 autoCapture=yes
+captureOnly=yes
+releaseKeysOnFocusLoss=yes
 rawMouse=yes
 
 [spice]
-; SPICE carries keyboard and mouse only. The picture comes through kvmfr; if
-; you can see a desktop while the log says the host application is not
-; running, you are looking at the SPICE fallback surface, not at Looking Glass.
+; SPICE carries keyboard and mouse only. The picture comes through kvmfr.
+; The canonical HyperLab launcher overrides host/port with the live per-domain
+; UNIX socket. These static values are not the VFIO transport authority.
 enable=yes
 host={{ looking_glass_spice_host }}
 port={{ looking_glass_spice_port }}
