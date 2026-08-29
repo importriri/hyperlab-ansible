@@ -5,3 +5,6 @@
 (scroll-bar-mode -1)
 (setq inhibit-startup-screen t
       frame-resize-pixelwise t)
+
+(add-to-list 'default-frame-alist '(alpha-background . 92))
+(add-to-list 'default-frame-alist '(font . "JetBrainsMono Nerd Font-11.5"))

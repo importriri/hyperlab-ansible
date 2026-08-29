@@ -22,6 +22,20 @@ dev_ide_npm_globals:
   - vscode-langservers-extracted
   - "@ansible/ansible-language-server"
 
+# Emacs packages are provisioned by the brick so the first graphical launch
+# is already a complete IDE and never performs an implicit package bootstrap.
+dev_ide_emacs_packages:
+  - nerd-icons
+  - doom-modeline
+  - vertico
+  - orderless
+  - marginalia
+  - consult
+  - corfu
+  - yaml-mode
+  - magit
+  - eat
+
 # Eclipse JDT LS is not packaged in the official Arch repositories. Pin one
 # upstream milestone and verify its upstream SHA-256 manifest before extraction.
 dev_ide_jdtls_version: "1.60.0"

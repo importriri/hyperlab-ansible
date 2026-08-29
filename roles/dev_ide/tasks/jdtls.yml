@@ -172,6 +172,7 @@
     executable: /usr/bin/bash
   register: dev_ide_java_specification
   changed_when: false
+  check_mode: false
 
 - name: Require a JDT LS compatible Java runtime
   ansible.builtin.assert:

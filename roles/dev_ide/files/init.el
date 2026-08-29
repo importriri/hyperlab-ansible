@@ -1,13 +1,12 @@
 ;;; init.el --- privatestack dev_ide brick -*- lexical-binding: t -*-
 ;; Emacs as the IDE: eglot + one language server per stack, Mocha end
-;; to end. First launch installs the packages below from (M)ELPA - give
-;; it a minute, once.
+;; to end. The dev_ide brick provisions the complete Emacs package set;
+;; this file only activates and configures it.
 
 ;;; packages
 (require 'package)
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
-(setq use-package-always-ensure t)
 
 ;;; sane defaults
 (setq make-backup-files nil
@@ -22,16 +21,13 @@
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
 (which-key-mode 1)
 
-;;; the look: Catppuccin Mocha + a modeline that earns its pixels
-(use-package catppuccin-theme
-  :config
-  (setq catppuccin-flavor 'mocha)
-  (load-theme 'catppuccin :no-confirm))
+;;; the look: generated HyperLab theme + compact modeline
+(add-to-list 'custom-theme-load-path user-emacs-directory)
+(load-theme 'hyperlab :no-confirm)
+
 (use-package nerd-icons)
 (use-package doom-modeline
   :init (doom-modeline-mode 1))
-(set-face-attribute 'default nil
-                    :family "JetBrainsMono Nerd Font" :height 110)
 
 ;;; navigation: vertico stack + consult
 (use-package vertico

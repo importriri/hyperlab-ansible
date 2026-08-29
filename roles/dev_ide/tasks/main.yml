@@ -22,6 +22,50 @@
     group: "{{ admin_user }}"
     mode: "0755"
 
+- name: Provision the managed Emacs package set
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/emacs
+      - --batch
+      - -Q
+      - --eval
+      - |-
+        (progn
+          (require 'package)
+          (require 'seq)
+          (setq user-emacs-directory
+                (expand-file-name ".config/emacs/" (getenv "HOME")))
+          (setq package-user-dir
+                (expand-file-name "elpa" user-emacs-directory))
+          (add-to-list
+           'package-archives
+           '("melpa" . "https://melpa.org/packages/")
+           t)
+          (package-initialize)
+          (let* ((wanted
+                  '({% for package in dev_ide_emacs_packages %}{{ package }}{% if not loop.last %} {% endif %}{% endfor %}))
+                 (missing
+                  (seq-filter
+                   (lambda (pkg) (not (package-installed-p pkg)))
+                   wanted)))
+            (if (null missing)
+                (princ "HYPERLAB_EMACS_PACKAGES_OK\n")
+              (package-refresh-contents)
+              (dolist (pkg missing)
+                (unless (assq pkg package-archive-contents)
+                  (error "required Emacs package is unavailable: %s" pkg))
+                (package-install pkg))
+              (princ "HYPERLAB_EMACS_PACKAGES_CHANGED\n"))))
+  environment:
+    HOME: "/home/{{ admin_user }}"
+    XDG_CONFIG_HOME: "/home/{{ admin_user }}/.config"
+  register: dev_ide_emacs_package_bootstrap
+  changed_when: >-
+    'HYPERLAB_EMACS_PACKAGES_CHANGED'
+    in dev_ide_emacs_package_bootstrap.stdout
+
 - name: Deploy the emacs configuration
   ansible.builtin.copy:
     src: "{{ item }}"
