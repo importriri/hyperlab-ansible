@@ -14,6 +14,10 @@ guest_looking_glass_linux_compat_patch_target: host/platform/Linux/capture/pipew
 guest_looking_glass_linux_kvmfr_version: "0.0.12"
 guest_looking_glass_linux_kvmfr_device: /dev/kvmfr0
 guest_looking_glass_linux_kvmfr_pci_id: "1af4:1110"
+guest_looking_glass_linux_capture_output: HEADLESS-0
+guest_looking_glass_linux_capture_max_fps: 144
+guest_looking_glass_linux_xdph_picker: /usr/local/bin/privatestack-looking-glass-xdph-picker
+guest_looking_glass_linux_xdph_config: "/home/{{ admin_user }}/.config/hypr/xdph.conf"
 guest_looking_glass_linux_headers_package: >-
   {{ 'linux-zen-headers' if '-zen' in ansible_facts['kernel']
      else 'linux-hardened-headers' if '-hardened' in ansible_facts['kernel']

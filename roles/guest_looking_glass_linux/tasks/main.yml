@@ -9,6 +9,17 @@
       - ansible_facts['os_family'] == 'Archlinux'
       - guest_looking_glass_linux_commit is match('^[0-9a-f]{40}$')
       - guest_looking_glass_linux_build | length > 0
+      - >-
+        guest_looking_glass_linux_capture_output is
+        match('^[A-Za-z0-9._-]+$')
+      - guest_looking_glass_linux_capture_max_fps | int > 0
+      - guest_looking_glass_linux_capture_max_fps | int <= 240
+      - >-
+        guest_looking_glass_linux_xdph_picker is
+        match('^/usr/local/bin/[A-Za-z0-9._-]+$')
+      - >-
+        guest_looking_glass_linux_xdph_config ==
+        '/home/' ~ admin_user ~ '/.config/hypr/xdph.conf'
     fail_msg: >-
       The Linux Looking Glass sender is an opt-in hardware experiment. Set
       guest_looking_glass_linux_experimental=true only inside a reviewed
@@ -156,6 +167,7 @@
       - "{{ guest_looking_glass_linux_kvmfr_pci_id }}"
   register: guest_looking_glass_linux_kvmfr_pci
   changed_when: false
+  check_mode: false
 
 - name: Inspect the guest kvmfr device
   ansible.builtin.stat:
@@ -396,6 +408,22 @@
   ansible.builtin.template:
     src: looking-glass-host.ini.j2
     dest: "/home/{{ admin_user }}/looking-glass-host.ini"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+
+- name: Install the deterministic XDPH capture picker
+  ansible.builtin.template:
+    src: xdph-headless-picker.sh.j2
+    dest: "{{ guest_looking_glass_linux_xdph_picker }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Persist the deterministic XDPH capture source
+  ansible.builtin.template:
+    src: xdph.conf.j2
+    dest: "{{ guest_looking_glass_linux_xdph_config }}"
     owner: "{{ admin_user }}"
     group: "{{ admin_user }}"
     mode: "0600"

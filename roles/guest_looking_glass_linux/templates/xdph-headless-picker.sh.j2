@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Managed by hyperlab-ansible (roles/guest_looking_glass_linux). Do not edit.
+set -eu
+set -o pipefail
+
+guest_looking_glass_linux_capture_output='{{ guest_looking_glass_linux_capture_output }}'
+guest_looking_glass_linux_monitors_json="$(/usr/bin/hyprctl -j monitors)"
+
+/usr/bin/python -c '
+import json
+import sys
+
+wanted = sys.argv[1]
+monitors = json.load(sys.stdin)
+matches = [
+    monitor for monitor in monitors
+    if monitor.get("name") == wanted
+    and not monitor.get("disabled", False)
+]
+if len(matches) != 1:
+    raise SystemExit(1)
+' "$guest_looking_glass_linux_capture_output" \
+  <<<"$guest_looking_glass_linux_monitors_json"
+
+/usr/bin/printf '[SELECTION]/screen:%s\n' \
+  "$guest_looking_glass_linux_capture_output"
