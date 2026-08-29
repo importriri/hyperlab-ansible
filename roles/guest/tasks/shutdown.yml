@@ -15,10 +15,12 @@
     - guest_domain_state == 'running'
     - not ansible_check_mode
   ansible.builtin.command:
-    argv:
-      - "{{ guest_virsh_bin }}"
-      - shutdown
-      - "{{ guest_plan.name }}"
+    argv: >-
+      {{ [guest_virsh_bin, 'shutdown']
+         + (['--mode', 'agent']
+            if guest_plan.qemu_guest_agent
+            else ['--mode', 'acpi'])
+         + [guest_plan.name] }}
   changed_when: true
 
 - name: Predict graceful shutdown in check mode

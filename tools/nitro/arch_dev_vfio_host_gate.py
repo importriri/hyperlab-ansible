@@ -180,8 +180,23 @@ def validate_xml(xml_text: str, report: dict[str, Any]) -> dict[str, Any]:
 
     graphics = root.find("./devices/graphics[@type='spice']")
     require(graphics is not None, "SPICE recovery device is missing")
-    require(graphics.get("listen") == "127.0.0.1", "SPICE must stay loopback-only")
-    require(graphics.get("port") == "5900" and graphics.get("autoport") == "no", "SPICE port drift")
+    require(graphics.get("listen") is None, "SPICE TCP listen attribute must be absent")
+    require(graphics.get("port") is None, "SPICE TCP port must be absent")
+    spice_listen = graphics.find("./listen")
+    require(spice_listen is not None, "SPICE listener is missing")
+    require(
+        spice_listen.get("type") == "socket",
+        "SPICE must use a UNIX socket listener",
+    )
+    require(
+        spice_listen.get("address") is None,
+        "SPICE address listener must be absent",
+    )
+    require(
+        spice_listen.get("socket")
+        == "/run/hyperlab-spice/arch-dev-vfio.sock",
+        "SPICE UNIX socket path drift",
+    )
     require(root.find("./devices/video") is not None, "recovery video is missing")
 
     qemu_args = [

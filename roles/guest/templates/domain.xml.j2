@@ -114,11 +114,20 @@
     </hostdev>
 {% endfor %}
 {% endif %}
-    <graphics type="spice"{% if guest_plan.device_profile == 'vfio' %} port="{{ guest_vfio.spice_port }}" autoport="no"{% else %} autoport="yes"{% endif %} listen="127.0.0.1">
+    <graphics type="spice"{% if guest_plan.device_profile != 'vfio' %} autoport="yes" listen="127.0.0.1"{% endif %}>
+{% if guest_plan.device_profile == 'vfio' %}
+      <listen type="socket" socket="{{ hyperlab_looking_glass_spice_socket_dir }}/{{ guest_plan.name }}.sock"/>
+{% else %}
       <listen type="address" address="127.0.0.1"/>
+{% endif %}
       <clipboard copypaste="{{ 'yes' if guest_plan.clipboard else 'no' }}"/>
       <filetransfer enable="no"/>
     </graphics>
+    <sound model="ich9">
+      <codec type="duplex"/>
+      <audio id="1"/>
+    </sound>
+    <audio id="1" type="spice"/>
     <video>
       <model type="vga" vram="16384" heads="1" primary="yes"/>
     </video>

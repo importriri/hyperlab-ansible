@@ -11,5 +11,6 @@ hyperlab_looking_glass_shm_mb: >-
                     | round(0, 'ceil') | int)
      | first }}
 hyperlab_looking_glass_device: /dev/kvmfr0
+hyperlab_looking_glass_spice_socket_dir: /run/hyperlab-spice
 hyperlab_looking_glass_spice_host: 127.0.0.1
 hyperlab_looking_glass_spice_port: 5900

@@ -30,7 +30,7 @@ min_memory_mb: 2048
 supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
 requires: {uefi: true, secure_boot: false, tpm2: false}
 defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
-network_allowlist: [dev, lab]
+network_allowlist: [clean, dev, dirty, lab, services]
 licensing: {redistributable: true}
 
 looking_glass_host_build_required: null

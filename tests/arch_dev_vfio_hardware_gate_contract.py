@@ -99,12 +99,39 @@ def main() -> int:
         )
         xml = env.get_template("domain.xml.j2").render(
             guest_plan=plan,
-            guest_resolved_memory_mb=8192,
+            guest_resolved_memory_mb=16384,
             guest_vfio=vfio,
+            hyperlab_looking_glass_spice_socket_dir=looking[
+                "hyperlab_looking_glass_spice_socket_dir"
+            ],
         )
         summary = host_gate.validate_xml(xml, report)
+
+        legacy_root = ET.fromstring(xml)
+        legacy_graphics = legacy_root.find("./devices/graphics[@type='spice']")
+        assert legacy_graphics is not None
+        legacy_graphics.set("port", "5900")
+        legacy_graphics.set("autoport", "no")
+        legacy_graphics.set("listen", "127.0.0.1")
+
+        legacy_listen = legacy_graphics.find("./listen")
+        assert legacy_listen is not None
+        legacy_listen.attrib.clear()
+        legacy_listen.set("type", "address")
+        legacy_listen.set("address", "127.0.0.1")
+
+        legacy_tcp_xml = ET.tostring(legacy_root, encoding="unicode")
+        try:
+            host_gate.validate_xml(legacy_tcp_xml, report)
+        except host_gate.GateError as exc:
+            assert "SPICE" in str(exc)
+        else:
+            raise AssertionError(
+                "arch-dev-vfio host gate accepted the legacy TCP SPICE endpoint"
+            )
+
         assert summary == {
-            "memory_mib": 8192,
+            "memory_mib": 16384,
             "bdfs": ["0000:01:00.0", "0000:01:00.1"],
         }
 
@@ -114,7 +141,7 @@ def main() -> int:
             node = live_root.find(tag)
             assert node is not None
             node.set("unit", "KiB")
-            node.text = str(8192 * 1024)
+            node.text = str(16384 * 1024)
 
         live_topology = live_root.find("./cpu/topology")
         assert live_topology is not None
@@ -179,7 +206,7 @@ def main() -> int:
         bad_live_root = ET.fromstring(live_xml)
         bad_memory = bad_live_root.find("memory")
         assert bad_memory is not None
-        bad_memory.text = str((8192 * 1024) + 1)
+        bad_memory.text = str((16384 * 1024) + 1)
 
         bad_live_xml = ET.tostring(
             bad_live_root,
@@ -341,6 +368,67 @@ def main() -> int:
         "0.0.12",
         "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2",
     )
+    assert guest_module.load_expected_portal(ROOT) == (
+        "HEADLESS-0",
+        144,
+        "/usr/local/bin/privatestack-looking-glass-xdph-picker",
+    )
+    with tempfile.TemporaryDirectory() as temporary:
+        sender_config = Path(temporary) / "looking-glass-host.ini"
+        sender_config.write_text(
+            "[app]\n"
+            "capture=pipewire\n"
+            "[shm]\n"
+            "shmFile=/dev/kvmfr0\n",
+            encoding="utf-8",
+        )
+        config_text, sender_uid = guest_module.load_sender_config(
+            sender_config,
+            "/dev/kvmfr0",
+        )
+        assert "capture=pipewire" in config_text
+        assert sender_uid == os.getuid()
+        guest_module.require_transport_owner(sender_uid, sender_uid)
+        try:
+            guest_module.require_transport_owner(sender_uid + 1, sender_uid)
+        except guest_module.GateError as error:
+            assert "sender configuration user" in str(error)
+        else:
+            raise AssertionError("mismatched guest transport owner was accepted")
+
+        portal_config = Path(temporary) / "xdph.conf"
+        portal_config.write_text(
+            "screencopy {\n"
+            "    max_fps = 144\n"
+            "    custom_picker_binary = "
+            "/usr/local/bin/privatestack-looking-glass-xdph-picker\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        portal_config.chmod(0o600)
+        portal_text = guest_module.load_portal_config(
+            portal_config,
+            "/usr/local/bin/privatestack-looking-glass-xdph-picker",
+            144,
+            os.getuid(),
+        )
+        assert "max_fps = 144" in portal_text
+
+        picker = Path(temporary) / "privatestack-looking-glass-xdph-picker"
+        picker.write_text(
+            "#!/usr/bin/env bash\n"
+            "guest_looking_glass_linux_capture_output='HEADLESS-0'\n"
+            "/usr/bin/printf '[SELECTION]/screen:%s\\n' "
+            '"$guest_looking_glass_linux_capture_output"\n',
+            encoding="utf-8",
+        )
+        picker.chmod(0o755)
+        picker_text = guest_module.load_capture_picker(
+            picker,
+            "HEADLESS-0",
+            expected_owner_uid=os.getuid(),
+        )
+        assert "[SELECTION]/screen:%s" in picker_text
     assert guest_module.pci_class("0000:01:00.0 0300: 10de:2520") == "0300"
     assert guest_module.pci_class("0000:01:00.1 0403: 10de:228e") == "0403"
 
@@ -352,9 +440,16 @@ def main() -> int:
     assert '"modinfo"' in guest_gate
     assert "compat_patch_sha256" in guest_gate
     assert "shmFile=" in guest_gate
+    assert "load_expected_portal" in guest_gate
+    assert "load_portal_config" in guest_gate
+    assert "load_capture_picker" in guest_gate
+    assert "xdph_capture_output" in guest_gate
+    assert "xdph_capture_max_fps" in guest_gate
     assert '"nvidia-smi"' in guest_gate
     assert "runtime_enabled" in guest_gate
     assert "nvidia_drm/parameters" in guest_gate
+    assert "os.getuid()" not in guest_gate
+    assert "require_transport_owner(kvmfr_stat.st_uid, sender_uid)" in guest_gate
     assert "Linux sender commit pin drift" in guest_gate
     assert "ARCH_DEV_VFIO_GUEST_GATE_OK" in guest_gate
 

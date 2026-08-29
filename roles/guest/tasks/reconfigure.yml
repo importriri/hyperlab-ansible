@@ -1,0 +1,230 @@
+---
+- name: Require a complete shut-off managed guest before reconfiguration
+  ansible.builtin.assert:
+    that:
+      - guest_transaction_complete
+      - guest_domain_state == 'shut off'
+      - guest_confirm_reconfigure == guest_plan.name
+      - guest_existing_state is mapping
+      - guest_existing_state.resource_profile is defined
+      - guest_existing_state.memory_mb is defined
+      - guest_existing_state.vcpus is defined
+      - guest_existing_state.disk_gib | int == guest_plan.disk_gib | int
+      - guest_existing_state.resize_pending | default({}) | length == 0
+    fail_msg: >-
+      Offline reconfiguration requires a complete shut-off managed guest, an
+      already-reconciled disk size, no pending disk expansion, and exact
+      confirmation guest_confirm_reconfigure={{ guest_plan.name }}.
+
+- name: Preserve source and target reconfiguration contracts
+  ansible.builtin.set_fact:
+    guest_reconfigure_target_plan: "{{ guest_plan }}"
+    guest_reconfigure_original_state: "{{ guest_existing_state }}"
+    guest_reconfigure_source_plan: >-
+      {{ guest_plan |
+         combine({
+           'resource_profile': guest_existing_state.resource_profile | default(none),
+           'vcpus': guest_existing_state.vcpus | int,
+           'disk_gib': guest_existing_state.disk_gib | int
+         }) }}
+
+- name: Validate the committed source transaction before reconfiguration
+  block:
+    - name: Bind validation to the committed source resource profile
+      ansible.builtin.set_fact:
+        guest_plan: "{{ guest_reconfigure_source_plan }}"
+
+    - name: Validate the complete source lifecycle and domain contract
+      ansible.builtin.include_tasks: validate.yml
+
+  always:
+    - name: Restore the requested target resource profile
+      ansible.builtin.set_fact:
+        guest_plan: "{{ guest_reconfigure_target_plan }}"
+        guest_existing_state: "{{ guest_reconfigure_original_state }}"
+
+- name: Resolve the target memory against the live host budget
+  block:
+    - name: Select the target plan memory request
+      ansible.builtin.set_fact:
+        guest_memory_request_override: "{{ guest_reconfigure_target_plan.memory_request }}"
+
+    - name: Resolve the requested target memory
+      ansible.builtin.include_tasks: memory.yml
+
+  always:
+    - name: Clear the target memory request override
+      ansible.builtin.set_fact:
+        guest_memory_request_override: null
+
+- name: Create a private reconfiguration workspace
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ guest_tmp_root }}"
+    prefix: "privatestack-reconfigure.{{ guest_plan.name }}."
+  register: guest_reconfigure_workspace
+  changed_when: false
+  check_mode: false
+
+- name: Build and apply the reversible offline reconfiguration
+  block:
+    - name: Preserve the committed source domain XML transiently
+      ansible.builtin.copy:
+        src: "{{ guest_plan.xml_path }}"
+        dest: "{{ guest_reconfigure_workspace.path }}/source.xml"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+      changed_when: false
+      check_mode: false
+
+    - name: Render the target managed domain XML transiently
+      ansible.builtin.template:
+        src: domain.xml.j2
+        dest: "{{ guest_reconfigure_workspace.path }}/target.xml"
+        owner: root
+        group: root
+        mode: "0600"
+      changed_when: false
+      check_mode: false
+
+    - name: Validate the target domain XML before libvirt sees it
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virt_xml_validate_bin }}"
+          - "{{ guest_reconfigure_workspace.path }}/target.xml"
+      changed_when: false
+      check_mode: false
+
+    - name: Build the target committed state
+      ansible.builtin.set_fact:
+        guest_reconfigure_target_state: >-
+          {{ guest_reconfigure_original_state |
+             combine({
+               'resource_profile': guest_reconfigure_target_plan.resource_profile,
+               'memory_mb': guest_resolved_memory_mb | int,
+               'vcpus': guest_reconfigure_target_plan.vcpus | int
+             }) }}
+
+    - name: Predict the offline resource reconfiguration in check mode
+      when: ansible_check_mode
+      ansible.builtin.debug:
+        msg: >-
+          CHECK MODE: would redefine {{ guest_plan.name }} with
+          resource_profile={{ guest_reconfigure_target_plan.resource_profile }},
+          memory_mb={{ guest_resolved_memory_mb }},
+          vcpus={{ guest_reconfigure_target_plan.vcpus }}, and the current
+          managed device contract. Disk content and guest state remain intact.
+      changed_when: true
+
+    - name: Commit the reversible offline resource reconfiguration
+      when: not ansible_check_mode
+      block:
+        - name: Define the target persistent domain
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - define
+              - --validate
+              - "{{ guest_reconfigure_workspace.path }}/target.xml"
+          register: guest_reconfigure_domain_define
+          changed_when: guest_reconfigure_domain_define.rc == 0
+
+        - name: Commit the target managed XML
+          ansible.builtin.copy:
+            src: "{{ guest_reconfigure_workspace.path }}/target.xml"
+            dest: "{{ guest_plan.xml_path }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0640"
+          register: guest_reconfigure_xml_commit
+
+        - name: Commit the target managed state
+          ansible.builtin.copy:
+            content: >-
+              {{ guest_reconfigure_target_state |
+                 to_nice_yaml(indent=2, sort_keys=false) }}
+            dest: "{{ guest_plan.state_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+          register: guest_reconfigure_state_commit
+
+        - name: Preserve declared domain autostart
+          ansible.builtin.command:
+            argv: >-
+              {{ [guest_virsh_bin, 'autostart'] +
+                 ([] if guest_plan.autostart else ['--disable']) +
+                 [guest_plan.name] }}
+          changed_when: true
+
+        - name: Refresh observations after resource reconfiguration
+          ansible.builtin.include_tasks: inspect.yml
+
+        - name: Read the committed reconfigured state
+          ansible.builtin.slurp:
+            src: "{{ guest_plan.state_path }}"
+          register: guest_reconfigure_committed_state_slurp
+
+        - name: Publish the committed reconfigured state
+          ansible.builtin.set_fact:
+            guest_existing_state: >-
+              {{ guest_reconfigure_committed_state_slurp.content |
+                 b64decode |
+                 from_yaml }}
+
+        - name: Validate the complete reconfigured transaction
+          ansible.builtin.include_tasks: validate.yml
+
+      rescue:
+        - name: Restore the source libvirt definition after a failed commit
+          when:
+            - guest_reconfigure_domain_define is defined
+            - guest_reconfigure_domain_define.rc | default(1) == 0
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - define
+              - --validate
+              - "{{ guest_reconfigure_workspace.path }}/source.xml"
+          changed_when: true
+          failed_when: false
+
+        - name: Restore the source managed XML after a failed commit
+          when: guest_reconfigure_xml_commit is defined
+          ansible.builtin.copy:
+            src: "{{ guest_reconfigure_workspace.path }}/source.xml"
+            dest: "{{ guest_plan.xml_path }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0640"
+          failed_when: false
+
+        - name: Restore the source managed state after a failed commit
+          when: guest_reconfigure_state_commit is defined
+          ansible.builtin.copy:
+            content: >-
+              {{ guest_reconfigure_original_state |
+                 to_nice_yaml(indent=2, sort_keys=false) }}
+            dest: "{{ guest_plan.state_path }}"
+            owner: root
+            group: root
+            mode: "0640"
+          failed_when: false
+
+        - name: Report the rolled-back reconfiguration failure
+          ansible.builtin.fail:
+            msg: >-
+              Offline resource reconfiguration failed. The previous managed
+              XML, libvirt definition and state receipt were restored.
+
+  always:
+    - name: Remove transient reconfiguration evidence
+      ansible.builtin.file:
+        path: "{{ guest_reconfigure_workspace.path }}"
+        state: absent
+      changed_when: false
+      check_mode: false

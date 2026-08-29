@@ -50,6 +50,9 @@ def main() -> int:
     )
     dispatch_create = main_text.index("- name: Dispatch guest creation")
     dispatch_resize = main_text.index("- name: Dispatch managed disk expansion")
+    dispatch_reconfigure = main_text.index(
+        "- name: Dispatch managed offline resource reconfiguration"
+    )
     dispatch_destroy = main_text.index("- name: Dispatch guest destruction")
     release_registry = main_text.index(
         "- name: Release the global guest registry lock owned by this operation"
@@ -66,7 +69,7 @@ def main() -> int:
     )
     assert verify_base < packages < roots < post_roots < per_vm
     assert per_vm < registry < libvirt_registry < dispatch_create
-    assert dispatch_create < dispatch_resize < dispatch_destroy
+    assert dispatch_create < dispatch_resize < dispatch_reconfigure < dispatch_destroy
     assert dispatch_destroy < release_registry < release_per_vm
 
     assert "ansible.builtin.package:" not in main_text[:verify_base]
@@ -74,7 +77,7 @@ def main() -> int:
     assert "guest_operation == 'create' and guest_transaction_clean" in verify_block
     assert "guest_plan.lifecycle == 'disposable'" in verify_block
     assert (
-        "guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate', 'resize']"
+        "guest_operation in ['create', 'reset', 'start', 'power-cycle', 'validate', 'resize', 'reconfigure']"
         in verify_block
     )
     assert "guest_confirm_reset == guest_plan.name" in main_text[reset_preflight:vfio]
@@ -205,16 +208,29 @@ def main() -> int:
     xml_task_names = [task.get("name") for task in xml_validation]
     strict_xml = xml_task_names.index("Compare only the domain fields owned by the guest brick")
     legacy_xml = xml_task_names.index("Recognize only the pre-DAC-pin managed domain contract")
-    refuse_xml = xml_task_names.index("Refuse domain drift or an unsafe DAC migration context")
-    commit_xml = xml_task_names.index("Commit the DAC-pinned managed XML")
-    redefine_xml = xml_task_names.index("Redefine only the exact shut-off legacy domain")
+    legacy_sound_xml = xml_task_names.index(
+        "Recognize only the pre-audio managed domain contract"
+    )
+    refuse_xml = xml_task_names.index(
+        "Refuse domain drift or an unsafe managed XML migration context"
+    )
+    commit_xml = xml_task_names.index("Commit the migrated managed XML")
+    redefine_xml = xml_task_names.index(
+        "Redefine only the exact shut-off legacy managed domain"
+    )
     verify_xml = xml_task_names.index("Verify the migrated domain against the strict contract")
-    assert strict_xml < legacy_xml < refuse_xml < commit_xml < redefine_xml < verify_xml
+    assert strict_xml < legacy_xml < legacy_sound_xml < refuse_xml
+    assert refuse_xml < commit_xml < redefine_xml < verify_xml
     legacy_task = xml_validation[legacy_xml]
     assert "--allow-legacy-missing-dac-relabel" in legacy_task["ansible.builtin.command"]["argv"]
+    legacy_sound_task = xml_validation[legacy_sound_xml]
+    assert "--allow-legacy-missing-spice-sound" in (
+        legacy_sound_task["ansible.builtin.command"]["argv"]
+    )
     refusal = xml_validation[refuse_xml]["ansible.builtin.assert"]
     refusal_text = " ".join(str(item) for item in refusal["that"])
     assert "guest_operation == 'create'" in refusal_text
+    assert "guest_operation in ['create', 'resize', 'reconfigure']" in refusal_text
     assert "guest_domain_state == 'shut off'" in refusal_text
 
     resize_text = (TASKS / "resize.yml").read_text(encoding="utf-8")
@@ -242,10 +258,33 @@ def main() -> int:
     assert "guest_resize_needs_qcow2_growth | bool" in resize_text
     assert "'backing-filename-format'" in resize_text
 
+    reconfigure_text = (TASKS / "reconfigure.yml").read_text(encoding="utf-8")
+    source_validation = reconfigure_text.index(
+        "- name: Validate the committed source transaction before reconfiguration"
+    )
+    target_memory = reconfigure_text.index(
+        "- name: Resolve the target memory against the live host budget"
+    )
+    target_define = reconfigure_text.index("- name: Define the target persistent domain")
+    xml_commit = reconfigure_text.index("- name: Commit the target managed XML")
+    state_commit = reconfigure_text.index("- name: Commit the target managed state")
+    final_validation = reconfigure_text.index(
+        "- name: Validate the complete reconfigured transaction"
+    )
+    rollback = reconfigure_text.index(
+        "- name: Restore the source libvirt definition after a failed commit"
+    )
+    assert source_validation < target_memory < target_define
+    assert target_define < xml_commit < state_commit < final_validation < rollback
+    assert "guest_domain_state == 'shut off'" in reconfigure_text
+    assert "guest_confirm_reconfigure == guest_plan.name" in reconfigure_text
+    assert "guest_existing_state.resize_pending" in reconfigure_text
+
     defaults = yaml.safe_load(
         (ROOT / "roles/guest/defaults/main.yml").read_text(encoding="utf-8")
     )
     assert "resize" in defaults["guest_supported_operations"]
+    assert "reconfigure" in defaults["guest_supported_operations"]
     key_pattern = re.compile(defaults["guest_ssh_public_key_pattern"])
     assert key_pattern.fullmatch("ssh-ed25519 AAAA workstation")
     assert key_pattern.fullmatch("sk-ssh-ed25519@openssh.com AAAA token")

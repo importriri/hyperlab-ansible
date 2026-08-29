@@ -331,6 +331,12 @@ def test_domain_templates() -> None:
         disk_dac = disk_source.find("./seclabel[@model='dac']")
         assert disk_dac is not None and disk_dac.get("relabel") == "no"
         assert domain.find("./devices/graphics").get("autoport") == "yes"
+        sound = domain.find("./devices/sound")
+        assert sound is not None and sound.get("model") == "ich9"
+        assert sound.find("./codec").get("type") == "duplex"
+        assert sound.find("./audio").get("id") == "1"
+        audio = domain.find("./devices/audio")
+        assert audio is not None and audio.attrib == {"id": "1", "type": "spice"}
         assert domain.find("./devices/input[@type='tablet']") is not None
         assert domain.find("./features/ps2") is None
         assert domain.find("./devices/memballoon").get("model") == "virtio"
@@ -353,8 +359,16 @@ def test_domain_templates() -> None:
         result = build_vfio_plan(plan, report, profiles, trust)
         assert result.returncode == 0, result.stderr
         vfio = json.loads(result.stdout)
+        looking = yaml.safe_load(
+            (ROOT / "group_vars/all/looking-glass.yml").read_text()
+        )
         rendered = env.get_template("domain.xml.j2").render(
-            guest_plan=plan, guest_resolved_memory_mb=6144, guest_vfio=vfio
+            guest_plan=plan,
+            guest_resolved_memory_mb=6144,
+            guest_vfio=vfio,
+            hyperlab_looking_glass_spice_socket_dir=looking[
+                "hyperlab_looking_glass_spice_socket_dir"
+            ],
         )
         domain = ET.fromstring(rendered)
         hostdevs = domain.findall("./devices/hostdev")
@@ -364,7 +378,17 @@ def test_domain_templates() -> None:
         disk_dac = disk_source.find("./seclabel[@model='dac']")
         assert disk_dac is not None and disk_dac.get("relabel") == "no"
         graphics = domain.find("./devices/graphics")
-        assert graphics.get("port") == "5900" and graphics.get("autoport") == "no"
+        assert graphics.get("port") is None
+        spice_listen = graphics.find("./listen")
+        assert spice_listen is not None
+        assert spice_listen.get("type") == "socket"
+        assert spice_listen.get("socket", "").startswith("/run/hyperlab-spice/")
+        assert spice_listen.get("socket", "").endswith(".sock")
+        sound = domain.find("./devices/sound")
+        assert sound is not None and sound.get("model") == "ich9"
+        assert sound.find("./audio").get("id") == "1"
+        audio = domain.find("./devices/audio")
+        assert audio is not None and audio.get("type") == "spice"
         assert domain.find("./devices/input[@type='mouse'][@bus='virtio']") is not None
         assert domain.find("./devices/input[@type='keyboard'][@bus='virtio']") is not None
         ps2 = domain.find("./features/ps2")
@@ -517,6 +541,54 @@ def test_xml_contract() -> None:
         drift = run(sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual))
         assert drift.returncode == 1 and "hostdev_bdfs" in drift.stderr
 
+        current_metadata_namespace = (
+            "https://github.com/importriri/hyperlab-ansible/hyperlab/1"
+        )
+        legacy_metadata_namespace = (
+            "https://github.com/importriri/privatestack-ansible/hyperlab/1"
+        )
+        metadata_attributes = (
+            "schema='1' image='arch' lifecycle='permanent' "
+            "device-profile='vfio' network-profile='dev'"
+        )
+        expected.write_text(
+            f"<domain><metadata><hyperlab:instance xmlns:hyperlab='{current_metadata_namespace}' "
+            f"{metadata_attributes}/></metadata><devices/></domain>",
+            encoding="utf-8",
+        )
+        actual.write_text(
+            f"<domain><metadata><hyperlab:instance xmlns:hyperlab='{legacy_metadata_namespace}' "
+            f"{metadata_attributes}/></metadata><devices/></domain>",
+            encoding="utf-8",
+        )
+        legacy_metadata = run(
+            sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual)
+        )
+        assert legacy_metadata.returncode == 0, legacy_metadata.stderr
+
+        actual.write_text(
+            "<domain><metadata><foreign:instance xmlns:foreign='urn:foreign' "
+            f"{metadata_attributes}/></metadata><devices/></domain>",
+            encoding="utf-8",
+        )
+        foreign_metadata = run(
+            sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual)
+        )
+        assert foreign_metadata.returncode == 1 and "metadata" in foreign_metadata.stderr
+
+        actual.write_text(
+            "<domain><metadata>"
+            f"<current:instance xmlns:current='{current_metadata_namespace}' {metadata_attributes}/>"
+            f"<legacy:instance xmlns:legacy='{legacy_metadata_namespace}' {metadata_attributes}/>"
+            "</metadata><devices/></domain>",
+            encoding="utf-8",
+        )
+        duplicate_metadata = run(
+            sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual)
+        )
+        assert duplicate_metadata.returncode == 2
+        assert "multiple supported HyperLab metadata instances" in duplicate_metadata.stderr
+
         expected.write_text(
             "<domain><devices><disk device='disk'><source file='/disk.qcow2'>"
             "<seclabel model='dac' relabel='no'/></source></disk></devices></domain>",
@@ -542,6 +614,51 @@ def test_xml_contract() -> None:
         )
         assert legacy_dac.returncode == 0, legacy_dac.stderr
 
+        expected.write_text(
+            "<domain><devices><sound model='ich9'><codec type='duplex'/>"
+            "<audio id='1'/></sound><audio id='1' type='spice'/></devices></domain>",
+            encoding="utf-8",
+        )
+        actual.write_text(
+            "<domain><devices><audio id='1' type='spice'/></devices></domain>",
+            encoding="utf-8",
+        )
+        missing_sound = run(
+            sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual)
+        )
+        assert missing_sound.returncode == 1 and "sound_model" in missing_sound.stderr
+        legacy_sound = run(
+            sys.executable,
+            str(XML_CONTRACT),
+            "--expected",
+            str(expected),
+            "--actual",
+            str(actual),
+            "--allow-legacy-missing-spice-sound",
+        )
+        assert legacy_sound.returncode == 0, legacy_sound.stderr
+
+        actual.write_text(
+            "<domain><devices><sound model='ac97'><audio id='1'/></sound>"
+            "<audio id='1' type='spice'/></devices></domain>",
+            encoding="utf-8",
+        )
+        unsafe_sound = run(
+            sys.executable,
+            str(XML_CONTRACT),
+            "--expected",
+            str(expected),
+            "--actual",
+            str(actual),
+            "--allow-legacy-missing-spice-sound",
+        )
+        assert unsafe_sound.returncode == 1 and "sound_model" in unsafe_sound.stderr
+
+        expected.write_text(
+            "<domain><devices><disk device='disk'><source file='/disk.qcow2'>"
+            "<seclabel model='dac' relabel='no'/></source></disk></devices></domain>",
+            encoding="utf-8",
+        )
         actual.write_text(
             "<domain><devices><disk device='disk'><source file='/disk.qcow2'>"
             "<seclabel model='dac' relabel='yes'/></source></disk></devices></domain>",

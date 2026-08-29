@@ -6,11 +6,11 @@ lifecycle: permanent
 device_profile: vfio
 network_profile: dev
 looking_glass_mode: linux-experimental
-resource_profile: balanced
+resource_profile: heavy
 resources:
-  memory_mb: 8192
+  memory_mb: 16384
   vcpus: 4
-  disk_gib: 24
+  disk_gib: 100
 memory_overcommit: false
 autostart: false
 qemu_guest_agent: true

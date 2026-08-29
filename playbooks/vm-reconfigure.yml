@@ -1,0 +1,13 @@
+---
+- name: Reconfigure one managed HyperLab VM offline
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    guest_operation: reconfigure
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest
+    - guest

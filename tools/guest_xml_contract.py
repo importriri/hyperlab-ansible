@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 HL = "https://github.com/importriri/hyperlab-ansible/hyperlab/1"
+HL_LEGACY = "https://github.com/importriri/privatestack-ansible/hyperlab/1"
+HL_NAMESPACES = (HL, HL_LEGACY)
 QEMU = "http://libvirt.org/schemas/domain/qemu/1.0"
 Q35_VERSIONED = re.compile(r"pc-q35-\d+(?:\.\d+)+")
 
@@ -73,6 +75,18 @@ def qemu_args(root: ET.Element) -> list[str | None]:
     return [node.get("value") for node in root.findall(f"./{{{QEMU}}}commandline/{{{QEMU}}}arg")]
 
 
+def hyperlab_metadata(root: ET.Element) -> dict[str, str] | None:
+    """Read exactly one current or pre-rename managed metadata element."""
+    matches = [
+        node
+        for namespace in HL_NAMESPACES
+        for node in root.findall(f"./metadata/{{{namespace}}}instance")
+    ]
+    if len(matches) > 1:
+        raise ValueError("multiple supported HyperLab metadata instances")
+    return None if not matches else dict(matches[0].attrib)
+
+
 def machine_matches(expected: str | None, actual: str | None) -> bool:
     """Allow libvirt to resolve only an explicitly generic q35 request."""
     if expected == "q35":
@@ -87,6 +101,7 @@ def contract_value_matches(
     expected: dict[str, Any],
     actual: dict[str, Any],
     allow_legacy_missing_dac_relabel: bool,
+    allow_legacy_missing_spice_sound: bool = False,
 ) -> bool:
     if key == "machine":
         return machine_matches(expected[key], actual[key])
@@ -110,13 +125,23 @@ def contract_value_matches(
         return expected[key] == [("dac", "no", None)] and (
             actual[key] == [] or actual[key] == expected[key]
         )
+    if allow_legacy_missing_spice_sound and key in {
+        "sound_model",
+        "sound_codec",
+        "sound_audio_id",
+    }:
+        legacy_expected = {
+            "sound_model": "ich9",
+            "sound_codec": "duplex",
+            "sound_audio_id": "1",
+        }
+        return expected[key] == legacy_expected[key] and actual[key] is None
     return expected[key] == actual[key]
 
 
 def signature(path: Path) -> dict[str, Any]:
     root = ET.parse(path).getroot()
-    metadata = root.find(f"./metadata/{{{HL}}}instance")
-    metadata_attrs = {} if metadata is None else dict(metadata.attrib)
+    metadata_attrs = hyperlab_metadata(root) or {}
     disk = root.find("./devices/disk[@device='disk']")
     disk_source = None if disk is None else disk.find("./source")
     disk_dac_seclabel = (
@@ -145,6 +170,10 @@ def signature(path: Path) -> dict[str, Any]:
     graphics = root.find("./devices/graphics[@type='spice']")
     clipboard = None if graphics is None else graphics.find("./clipboard")
     filetransfer = None if graphics is None else graphics.find("./filetransfer")
+    sound = root.find("./devices/sound")
+    sound_codec = None if sound is None else sound.find("./codec")
+    sound_audio = None if sound is None else sound.find("./audio")
+    audio = root.find("./devices/audio")
     video = root.find("./devices/video/model")
     balloon = root.find("./devices/memballoon")
     os_type = root.find("./os/type")
@@ -200,6 +229,11 @@ def signature(path: Path) -> dict[str, Any]:
         "graphics_autoport": None if graphics is None else graphics.get("autoport"),
         "clipboard": None if clipboard is None else clipboard.get("copypaste"),
         "filetransfer": None if filetransfer is None else filetransfer.get("enable"),
+        "sound_model": None if sound is None else sound.get("model"),
+        "sound_codec": None if sound_codec is None else sound_codec.get("type"),
+        "sound_audio_id": None if sound_audio is None else sound_audio.get("id"),
+        "audio_id": None if audio is None else audio.get("id"),
+        "audio_type": None if audio is None else audio.get("type"),
         "video_model": None if video is None else video.get("type"),
         "video_vram": None if video is None else video.get("vram"),
         "inputs": input_devices(root) if is_vfio else None,
@@ -219,6 +253,7 @@ def main() -> int:
     parser.add_argument("--expected", required=True)
     parser.add_argument("--actual", required=True)
     parser.add_argument("--allow-legacy-missing-dac-relabel", action="store_true")
+    parser.add_argument("--allow-legacy-missing-spice-sound", action="store_true")
     args = parser.parse_args()
     try:
         expected = signature(Path(args.expected))
@@ -234,6 +269,7 @@ def main() -> int:
             expected,
             actual,
             args.allow_legacy_missing_dac_relabel,
+            args.allow_legacy_missing_spice_sound,
         )
     ]
     if errors:

@@ -186,14 +186,30 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("command: define" not in network_tasks, "virt_net define must not silently skip existing networks")
 
     looking_tasks = (ROOT / "roles/looking_glass/tasks/main.yml").read_text()
+    looking_task_items = yaml.safe_load(looking_tasks)
+    looking_handlers = (ROOT / "roles/looking_glass/handlers/main.yml").read_text()
     looking_defaults = load_mapping(ROOT / "roles/looking_glass/defaults/main.yml", errors)
     check("stat.ischr" in looking_tasks, "kvmfr must be verified as a character device")
+    check("modprobe -r kvmfr" not in looking_handlers, "kvmfr resize must not use a blind unload handler")
+    check("looking_glass_kvmfr_size_tool" in looking_tasks, "kvmfr host resize must inspect the loaded device through the ioctl tool")
+    check("looking_glass_kvmfr_reload_required" in looking_tasks, "kvmfr host resize must distinguish config text changes from runtime size changes")
+    check("modinfo" in looking_tasks and "{{ ansible_kernel }}" in looking_tasks, "kvmfr reload must resolve the module for the running kernel")
+    check("fuser" in looking_tasks, "kvmfr reload must refuse a live device user")
+    looking_kvmfr_unload = next(
+        (
+            task
+            for task in looking_task_items
+            if task.get("name")
+            == "Unload kvmfr only for a verified runtime size change"
+        ),
+        {},
+    )
     check(
-        "Refuse to resize kvmfr while the live device is in use" in looking_tasks
-        and "looking_glass_kvmfr_users.rc == 1" in looking_tasks
-        and "Unload kvmfr only for a verified runtime size change" in looking_tasks
-        and "looking_glass_kvmfr_reload_required | bool" in looking_tasks,
-        "kvmfr resize must refuse live users before a verified reload",
+        looking_kvmfr_unload.get("when")
+        == "looking_glass_kvmfr_reload_required | bool"
+        and looking_kvmfr_unload.get("community.general.modprobe", {}).get("state")
+        == "absent",
+        "kvmfr reload must be explicit and runtime-gated",
     )
     check("rev-parse" in looking_tasks and "resolved_commit:" in looking_tasks, "Looking Glass stamp must record the resolved full SHA")
     check("--abbrev=10" in looking_tasks, "Looking Glass build identity must use the client's ten-digit SHA abbreviation")
@@ -204,12 +220,21 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check(looking_defaults.get("looking_glass_commit") == "{{ hyperlab_looking_glass_commit }}", "Looking Glass role must consume the shared commit")
     check(looking_defaults.get("looking_glass_build") == "{{ hyperlab_looking_glass_build }}", "Looking Glass role must consume the shared build")
     check(looking_contract.get("hyperlab_looking_glass_device") == "/dev/kvmfr0", "reviewed Looking Glass transport must remain kvmfr0")
-    check(looking_contract.get("hyperlab_looking_glass_spice_host") == "127.0.0.1", "SPICE input must remain loopback-only")
-    check(looking_contract.get("hyperlab_looking_glass_spice_port") == 5900, "SPICE input must remain fixed at 5900")
+    check(looking_contract.get("hyperlab_looking_glass_spice_socket_dir") == "/run/hyperlab-spice", "VFIO SPICE must use the reviewed private runtime socket directory")
+    check(
+        looking_contract.get("hyperlab_looking_glass_spice_host") == "127.0.0.1",
+        "legacy VFIO planner SPICE host compatibility value must remain loopback during phase 1",
+    )
+    check(
+        looking_contract.get("hyperlab_looking_glass_spice_port") == 5900,
+        "legacy VFIO planner SPICE port compatibility value must remain 5900 until phase 2",
+    )
 
     client = (ROOT / "roles/looking_glass/templates/client.ini.j2").read_text().splitlines()
     check(not any(line.startswith("#") for line in client), "Looking Glass B7 comments must use semicolons")
-    check(any(line == "port={{ looking_glass_spice_port }}" for line in client), "SPICE port must remain templated")
+    check(any(line == "port={{ looking_glass_spice_port }}" for line in client), "legacy SPICE compatibility port must remain templated")
+    check(any(line == "captureOnly=yes" for line in client), "Looking Glass input must be disabled outside capture mode")
+    check(any(line == "releaseKeysOnFocusLoss=yes" for line in client), "Looking Glass must release held keys on focus loss")
 
     guest_template = (ROOT / "roles/guest/templates/domain.xml.j2").read_text()
     check(
@@ -218,7 +243,18 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     )
     check("<hostdev" in guest_template and "managed=\"yes\"" in guest_template, "VFIO XML must use managed PCI hostdevs")
     check("qemu:commandline" in guest_template and "guest_vfio.looking_glass_device" in guest_template, "VFIO XML must use the reviewed kvmfr command line")
-    check("autoport=\"no\"" in guest_template and "guest_vfio.spice_port" in guest_template, "VFIO XML must pin the SPICE input endpoint")
+    check(
+        'listen type="socket"' in guest_template
+        and "hyperlab_looking_glass_spice_socket_dir" in guest_template,
+        "VFIO XML must use a per-domain UNIX SPICE endpoint",
+    )
+    check(
+        '<sound model="ich9">' in guest_template
+        and '<codec type="duplex"/>' in guest_template
+        and '<audio id="1"/>' in guest_template
+        and '<audio id="1" type="spice"/>' in guest_template,
+        "managed SPICE domains must expose an ICH9 duplex sound device",
+    )
 
     guest_defaults = load_mapping(
         ROOT / "roles/guest/defaults/main.yml",

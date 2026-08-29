@@ -51,7 +51,7 @@ def main() -> int:
     assert plan["looking_glass"] is True
     assert plan["looking_glass_mode"] == "linux-experimental"
     assert plan["looking_glass_host_build_required"] is None
-    assert plan["memory_request"] == 8192
+    assert plan["memory_request"] == 16384
     assert plan["vcpus"] == 4
 
     hardware = yaml.safe_load((ROOT / "group_vars/all/hardware.yml").read_text())
@@ -115,12 +115,16 @@ def main() -> int:
         )
         rendered = env.get_template("domain.xml.j2").render(
             guest_plan=plan,
-            guest_resolved_memory_mb=8192,
+            guest_resolved_memory_mb=16384,
             guest_vfio=vfio,
+            hyperlab_looking_glass_spice_socket_dir=looking[
+                "hyperlab_looking_glass_spice_socket_dir"
+            ],
         )
         assert "ivshmem-plain" in rendered
         assert "/dev/kvmfr0" in rendered
-        assert 'port="5900" autoport="no"' in rendered
+        assert 'listen type="socket"' in rendered
+        assert "/run/hyperlab-spice/" in rendered
         assert "<vcpupin" in rendered
 
     defaults = yaml.safe_load(
@@ -167,6 +171,14 @@ def main() -> int:
     assert defaults["guest_looking_glass_linux_kvmfr_version"] == "0.0.12"
     assert defaults["guest_looking_glass_linux_kvmfr_device"] == "/dev/kvmfr0"
     assert defaults["guest_looking_glass_linux_kvmfr_pci_id"] == "1af4:1110"
+    assert defaults["guest_looking_glass_linux_capture_output"] == "HEADLESS-0"
+    assert defaults["guest_looking_glass_linux_capture_max_fps"] == 144
+    assert defaults["guest_looking_glass_linux_xdph_picker"] == (
+        "/usr/local/bin/privatestack-looking-glass-xdph-picker"
+    )
+    assert defaults["guest_looking_glass_linux_xdph_config"] == (
+        "/home/{{ admin_user }}/.config/hypr/xdph.conf"
+    )
     assert "static_size_mb" in tasks
     assert "/etc/modules-load.d/kvmfr.conf" in tasks
     assert '- "{{ guest_looking_glass_linux_kvmfr_version }}"' in tasks
@@ -192,6 +204,44 @@ def main() -> int:
     assert "-DUSE_PIPEWIRE=ON" in tasks
     assert "runtime_enabled: false" in tasks
     assert "systemd_service" not in tasks
+    assert "xdph-headless-picker.sh.j2" in tasks
+    assert "xdph.conf.j2" in tasks
+    assert 'mode: "0755"' in tasks
+    assert 'mode: "0600"' in tasks
+
+    portal_env = Environment(
+        loader=FileSystemLoader(
+            str(ROOT / "roles/guest_looking_glass_linux/templates")
+        ),
+        undefined=StrictUndefined,
+        autoescape=False,
+        keep_trailing_newline=True,
+    )
+    portal_vars = {
+        "guest_looking_glass_linux_capture_output": "HEADLESS-0",
+        "guest_looking_glass_linux_capture_max_fps": 144,
+        "guest_looking_glass_linux_xdph_picker": (
+            "/usr/local/bin/privatestack-looking-glass-xdph-picker"
+        ),
+    }
+    picker = portal_env.get_template("xdph-headless-picker.sh.j2").render(
+        **portal_vars
+    )
+    assert "/usr/bin/hyprctl -j monitors" in picker
+    assert "json.load(sys.stdin)" in picker
+    assert "monitor.get(\"name\") == wanted" in picker
+    assert "and not monitor.get(\"disabled\", False)" in picker
+    assert "[SELECTION]/screen:%s\\n" in picker
+    assert "guest_looking_glass_linux_capture_output='HEADLESS-0'" in picker
+    portal_config = portal_env.get_template("xdph.conf.j2").render(
+        **portal_vars
+    )
+    assert "max_fps = 144" in portal_config
+    assert (
+        "custom_picker_binary = "
+        "/usr/local/bin/privatestack-looking-glass-xdph-picker"
+        in portal_config
+    )
     assert "brick_guard_brick: guest_looking_glass_linux" in tasks
     assert graph["brick_requires"]["guest_looking_glass_linux"] == [
         "guest_desktop_hyprland"

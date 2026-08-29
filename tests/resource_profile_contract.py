@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / "tools/guest_plan.py"
 PROFILES = ROOT / "group_vars/all/vm-resource-profiles.yml"
 SPEC = ROOT / "vm-specs/arch-dev.yml"
+VFIO_SPEC = ROOT / "vm-specs/arch-dev-vfio.yml"
 STORE = Path("/var/lib/privatestack/hyperlab")
 
 
@@ -48,6 +49,14 @@ def main() -> int:
     assert spec["resource_profile"] == "balanced"
     assert spec["resources"]["memory_mb"] == 8192
     assert spec["resources"]["vcpus"] == 4
+
+    vfio_spec = yaml.safe_load(VFIO_SPEC.read_text(encoding="utf-8"))
+    assert vfio_spec["resource_profile"] == "heavy"
+    assert vfio_spec["resources"] == {
+        "memory_mb": 16384,
+        "vcpus": 4,
+        "disk_gib": 100,
+    }
 
     balanced = plan()
     assert balanced.returncode == 0, balanced.stderr

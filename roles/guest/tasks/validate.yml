@@ -269,35 +269,67 @@
           {{ guest_xml_contract_strict.rc != 0 and
              guest_xml_contract_legacy_dac.rc | default(1) == 0 }}
 
-    - name: Refuse domain drift or an unsafe DAC migration context
+    - name: Recognize only the pre-audio managed domain contract
+      when: guest_xml_contract_strict.rc != 0
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_xml_contract_tool }}"
+          - --expected
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+          - --actual
+          - "{{ guest_xml_workspace.path }}/actual.xml"
+          - --allow-legacy-missing-dac-relabel
+          - --allow-legacy-missing-spice-sound
+      register: guest_xml_contract_legacy_spice_sound
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Classify the exact legacy SPICE sound migration
+      ansible.builtin.set_fact:
+        guest_needs_spice_sound_migration: >-
+          {{ guest_xml_contract_strict.rc != 0 and
+             guest_xml_contract_legacy_spice_sound.rc | default(1) == 0 }}
+        guest_needs_domain_xml_migration: >-
+          {{ guest_needs_dac_relabel_migration | default(false) or
+             (guest_xml_contract_strict.rc != 0 and
+              guest_xml_contract_legacy_spice_sound.rc | default(1) == 0) }}
+
+    - name: Refuse domain drift or an unsafe managed XML migration context
       ansible.builtin.assert:
         that:
           - >-
             guest_xml_contract_strict.rc == 0 or
             (guest_needs_dac_relabel_migration and
              guest_operation == 'create' and
+             guest_domain_state == 'shut off') or
+            (guest_needs_spice_sound_migration and
+             guest_operation in ['create', 'resize', 'reconfigure'] and
              guest_domain_state == 'shut off')
         fail_msg: >-
-          The inactive domain differs from the managed contract. The only
-          automatic migration is an otherwise exact, shut-off domain created
-          before the per-disk DAC relabel pin, and it runs only through
-          vm-create. Strict comparison reported:
+          The inactive domain differs from the managed contract. Automatic
+          migrations are limited to an otherwise exact, shut-off domain that
+          predates the DAC relabel pin or the managed ICH9 SPICE sound device.
+          Resource reconfiguration may absorb only the latter. Strict comparison reported:
           {{ guest_xml_contract_strict.stderr | trim }}
 
-    - name: Predict the exact legacy DAC relabel migration
+    - name: Predict the exact legacy managed XML migration
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - ansible_check_mode
       ansible.builtin.debug:
         msg: >-
-          CHECK MODE: would add the per-disk DAC relabel refusal to the
-          managed XML and redefine the shut-off domain without changing its
-          UUID, disk, NVRAM, state receipt or autostart policy.
+          CHECK MODE: would add the reviewed DAC and ICH9 SPICE sound contract
+          to the managed XML and redefine the shut-off domain without changing
+          its UUID, disk, NVRAM, state receipt or autostart policy.
       changed_when: true
 
-    - name: Commit the DAC-pinned managed XML
+    - name: Commit the migrated managed XML
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - not ansible_check_mode
       ansible.builtin.copy:
         src: "{{ guest_xml_workspace.path }}/desired.xml"
@@ -307,9 +339,10 @@
         group: root
         mode: "0640"
 
-    - name: Redefine only the exact shut-off legacy domain
+    - name: Redefine only the exact shut-off legacy managed domain
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - not ansible_check_mode
       ansible.builtin.command:
         argv:
@@ -317,12 +350,13 @@
           - define
           - --validate
           - "{{ guest_plan.xml_path }}"
-      register: guest_domain_dac_redefine
-      changed_when: guest_domain_dac_redefine.rc == 0
+      register: guest_domain_xml_redefine
+      changed_when: guest_domain_xml_redefine.rc == 0
 
-    - name: Read the DAC-pinned inactive domain XML
+    - name: Read the migrated inactive domain XML
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - not ansible_check_mode
       ansible.builtin.command:
         argv:
@@ -335,7 +369,8 @@
 
     - name: Store the migrated inactive XML transiently
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - not ansible_check_mode
       ansible.builtin.copy:
         content: "{{ guest_migrated_xml_command.stdout }}\n"
@@ -347,7 +382,8 @@
 
     - name: Verify the migrated domain against the strict contract
       when:
-        - guest_needs_dac_relabel_migration
+        - guest_needs_domain_xml_migration
+        - guest_operation == 'create'
         - not ansible_check_mode
       ansible.builtin.command:
         argv:

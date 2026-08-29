@@ -78,9 +78,11 @@
       - "{{ ansible_facts['memtotal_mb'] | int }}"
       - --request
       - >-
-        {{ guest_existing_state.memory_mb
-           if guest_state_stat.stat.exists
-           else guest_plan.memory_request }}
+        {{ guest_memory_request_override
+           if guest_memory_request_override is not none
+           else (guest_existing_state.memory_mb
+                 if guest_state_stat.stat.exists
+                 else guest_plan.memory_request) }}
       - --floor-mb
       - "{{ guest_plan.image_min_memory_mb | int }}"
       - --overcommit
