@@ -1,7 +1,7 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 34,
+  "height": 37,
   "spacing": 6,
 
   "modules-left": [
@@ -9,16 +9,18 @@
     "hyprland/window"
   ],
 
-  "modules-center": [
-    "clock"
-  ],
+  "modules-center": [],
 
   "modules-right": [
+    "custom/headless",
+    "custom/lg",
+    "clock",
     "custom/theme",
     "pulseaudio",
     "network",
     "cpu",
     "memory",
+    "disk",
     "tray"
   ],
 
@@ -29,6 +31,16 @@
 
   "hyprland/window": {
     "max-length": 48
+  },
+
+  "custom/headless": {
+    "exec": "hyprctl -j monitors | jq -r 'map(select(.name == \"HEADLESS-0\"))[0] | if . == null then \"HEADLESS-0 · unavailable\" else \"\\(.name) · \\(.width)x\\(.height)@\\(.refreshRate|floor) · scale \\(.scale)\" end'",
+    "interval": 2
+  },
+
+  "custom/lg": {
+    "exec": "sh -c 'if pgrep -u \"$(id -u)\" -f \"^/usr/local/bin/looking-glass-host([[:space:]]|$)\" >/dev/null; then printf \"LG · ON\\n\"; else printf \"LG · OFF\\n\"; fi'",
+    "interval": 1
   },
 
   "clock": {
@@ -65,6 +77,11 @@
 
   "memory": {
     "format": " {}%"
+  },
+
+  "disk": {
+    "interval": 30,
+    "format": " {percentage_used}%"
   },
 
   "tray": {

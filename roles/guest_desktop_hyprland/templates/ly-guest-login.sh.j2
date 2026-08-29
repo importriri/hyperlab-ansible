@@ -2,7 +2,26 @@
 set -u
 set -o pipefail
 
+drm_device="{{ guest_desktop_hyprland_nvidia_drm_device }}"
+ready_timeout="{{ guest_desktop_hyprland_nvidia_ready_timeout_seconds | int }}"
+deadline=$((SECONDS + ready_timeout))
+
+while true; do
+    drm_target="$(readlink -f "$drm_device" 2>/dev/null || true)"
+    if [[ -n "$drm_target" && -c "$drm_target" ]] &&
+       /usr/bin/nvidia-smi -L >/dev/null 2>&1; then
+        break
+    fi
+
+    if (( SECONDS >= deadline )); then
+        printf 'HyperLab: NVIDIA DRM device did not become ready: %s\n' "$drm_device" >&2
+        exit 75
+    fi
+
+    sleep 1
+done
+
 export AQ_NO_KMS_REQUIREMENT=1
-export AQ_DRM_DEVICES="{{ guest_desktop_hyprland_nvidia_drm_device }}"
+export AQ_DRM_DEVICES="$drm_device"
 
 exec "$@"

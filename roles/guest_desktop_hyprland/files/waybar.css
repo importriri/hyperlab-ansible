@@ -16,12 +16,15 @@ window#waybar {
 
 #workspaces,
 #window,
+#custom-headless,
+#custom-lg,
 #clock,
 #custom-theme,
 #pulseaudio,
 #network,
 #cpu,
 #memory,
+#disk,
 #tray {
     margin: 4px 3px;
     padding: 3px 10px;
@@ -45,6 +48,11 @@ window#waybar {
     color: @guest_background;
 }
 
+#custom-headless,
 #custom-theme {
     color: @guest_accent_alt;
+}
+
+#custom-lg {
+    color: @guest_accent;
 }

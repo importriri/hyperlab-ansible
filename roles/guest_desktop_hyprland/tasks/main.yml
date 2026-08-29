@@ -413,6 +413,34 @@
     state: absent
   when: not guest_desktop_hyprland_nvidia_only
 
+- name: Validate optional Ly autologin policy
+  ansible.builtin.assert:
+    that:
+      - guest_desktop_hyprland_autologin is boolean
+      - guest_desktop_hyprland_autologin_session is string
+      - guest_desktop_hyprland_autologin_session is match('^[A-Za-z0-9_.-]+$')
+      - guest_desktop_hyprland_autologin_session | length > 0
+      - guest_desktop_hyprland_autologin_exec is string
+      - guest_desktop_hyprland_autologin_exec is match('^/[^[:space:]]+$')
+      - guest_desktop_hyprland_nvidia_ready_timeout_seconds | int > 0
+    fail_msg: >-
+      Guest desktop autologin, unique session id, absolute session executable, and NVIDIA readiness timeout must be explicit.
+
+- name: Deploy the dedicated HyperLab Hyprland autologin session
+  ansible.builtin.template:
+    src: hyperlab-hyprland.desktop.j2
+    dest: /usr/share/wayland-sessions/hyperlab-hyprland.desktop
+    owner: root
+    group: root
+    mode: "0644"
+  when: guest_desktop_hyprland_autologin
+
+- name: Remove the dedicated autologin session when disabled
+  ansible.builtin.file:
+    path: /usr/share/wayland-sessions/hyperlab-hyprland.desktop
+    state: absent
+  when: not guest_desktop_hyprland_autologin
+
 - name: Configure Ly for the guest workstation
   ansible.builtin.lineinfile:
     path: /etc/ly/config.ini
@@ -420,6 +448,8 @@
     line: "{{ item.key }} = {{ item.value }}"
     backup: false
   loop:
+    - { key: auto_login_session, value: "{{ guest_desktop_hyprland_autologin_session if guest_desktop_hyprland_autologin else 'null' }}" }
+    - { key: auto_login_user, value: "{{ admin_user if guest_desktop_hyprland_autologin else 'null' }}" }
     - { key: full_color, value: "true" }
     - { key: hide_version_string, value: "true" }
     - { key: initial_info_text, value: "HyperLab guest workstation" }

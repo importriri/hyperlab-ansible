@@ -18,6 +18,7 @@
     LC_ALL: C
   register: workstation_access_user_status_before
   changed_when: false
+  check_mode: false
 
 - name: Validate the workstation account status response
   ansible.builtin.assert:
@@ -44,6 +45,7 @@
     LC_ALL: C
   register: workstation_access_root_status
   changed_when: false
+  check_mode: false
 
 - name: Keep direct root authentication disabled
   ansible.builtin.assert:
@@ -75,6 +77,7 @@
     password_lock: false
     state: present
   no_log: true
+  register: workstation_access_user_update
   when: >-
     workstation_access_user_state_before != 'P' or
     (workstation_access_rotate_password | bool)
@@ -89,15 +92,160 @@
     LC_ALL: C
   register: workstation_access_user_status_after
   changed_when: false
+  check_mode: false
 
 - name: Require a usable graphical workstation account
   ansible.builtin.assert:
     that:
       - >-
         workstation_access_user_status_after.stdout is match(
-        '^' ~ admin_user ~ ' P( |$)')
+        '^' ~ admin_user ~ ' P( |$)') or
+        (ansible_check_mode and workstation_access_user_update is changed)
     fail_msg: >-
       The workstation account is still unavailable for graphical login.
+
+- name: Inspect stale Arch cloud first-boot Pacman unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/pacman-init.service
+    follow: false
+  register: workstation_access_pacman_init_unit
+  changed_when: false
+
+- name: Inspect stale Arch cloud Pacman enablement
+  ansible.builtin.stat:
+    path: /etc/systemd/system/multi-user.target.wants/pacman-init.service
+    follow: false
+  register: workstation_access_pacman_init_enablement
+  changed_when: false
+
+- name: Refuse an orphaned or redirected Pacman first-boot enablement
+  when: workstation_access_pacman_init_enablement.stat.exists
+  ansible.builtin.assert:
+    that:
+      - workstation_access_pacman_init_unit.stat.exists
+      - workstation_access_pacman_init_enablement.stat.islnk
+      - >-
+        workstation_access_pacman_init_enablement.stat.lnk_source
+        == '/etc/systemd/system/pacman-init.service'
+    fail_msg: >-
+      Refusing to alter an unexpected pacman-init.service enablement path.
+
+- name: Refuse an unsafe Pacman first-boot unit before reading it
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.assert:
+    that:
+      - workstation_access_pacman_init_unit.stat.isreg
+      - not workstation_access_pacman_init_unit.stat.islnk
+      - workstation_access_pacman_init_unit.stat.pw_name == 'root'
+      - workstation_access_pacman_init_unit.stat.gr_name == 'root'
+      - workstation_access_pacman_init_unit.stat.mode == '0644'
+    fail_msg: >-
+      Refusing to inspect an unsafe or redirected pacman-init.service.
+
+- name: Check whether the stale Pacman first-boot unit is package-owned
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/pacman
+      - -Qo
+      - /etc/systemd/system/pacman-init.service
+  environment:
+    LC_ALL: C
+  register: workstation_access_pacman_init_package_owner
+  changed_when: false
+  failed_when: workstation_access_pacman_init_package_owner.rc not in [0, 1]
+  check_mode: false
+
+- name: Refuse to alter a package-owned Pacman first-boot unit
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.assert:
+    that:
+      - workstation_access_pacman_init_package_owner.rc == 1
+    fail_msg: >-
+      Refusing to retire pacman-init.service because a package owns it.
+
+- name: Read the stale Arch cloud first-boot Pacman unit
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.slurp:
+    src: /etc/systemd/system/pacman-init.service
+  register: workstation_access_pacman_init_source
+  changed_when: false
+
+- name: Inspect the initialized Pacman keyring state
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - /etc/pacman.d/gnupg/pubring.gpg
+    - /etc/pacman.d/gnupg/trustdb.gpg
+  register: workstation_access_pacman_keyring_state
+  changed_when: false
+
+- name: Refuse an incomplete or redirected Pacman keyring
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - not item.stat.islnk
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.size | int > 0
+    fail_msg: >-
+      Refusing to retire pacman-init.service before the root-owned Pacman
+      keyring is initialized.
+  loop: "{{ workstation_access_pacman_keyring_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Refuse an unexpected stale Pacman first-boot unit
+  when: workstation_access_pacman_init_unit.stat.exists
+  ansible.builtin.assert:
+    that:
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^Description=Initializes Pacman keyring$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^Before=sshd[.]service cloud-final[.]service archlinux-keyring-wkd-sync[.]service$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^After=time-sync[.]target$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^ConditionFirstBoot=yes$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^Type=oneshot$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^RemainAfterExit=yes$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^ExecStart=/usr/bin/pacman-key --init$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^ExecStart=/usr/bin/pacman-key --populate$')
+      - >-
+        (workstation_access_pacman_init_source.content | b64decode)
+        is search('(?m)^WantedBy=multi-user[.]target$')
+    fail_msg: >-
+      Refusing to retire an unreviewed pacman-init.service implementation.
+
+- name: Retire stale Arch cloud Pacman first-boot enablement
+  when: workstation_access_pacman_init_enablement.stat.exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/multi-user.target.wants/pacman-init.service
+    state: absent
+  register: workstation_access_pacman_init_retirement
+
+- name: Reload systemd after retiring stale Pacman first-boot enablement
+  when:
+    - workstation_access_pacman_init_retirement is defined
+    - workstation_access_pacman_init_retirement is changed
+  ansible.builtin.systemd_service:
+    daemon_reload: true
 
 - name: Record that the workstation_access brick landed
   ansible.builtin.include_role:

@@ -177,21 +177,14 @@ def palette_files(
         CONFIG / "hypr/theme.lua": f"""hl.config({{
     general = {{
         col = {{
-            active_border = {{
-                colors = {{
-                    "rgba({accent}ff)",
-                    "rgba({accent_alt}ff)",
-                }},
-                angle = 45,
-            }},
-
-            inactive_border = "rgba({surface}ff)",
+            active_border = "rgba({accent}ff)",
+            inactive_border = "rgba({accent_alt}55)",
         }},
     }},
 
     decoration = {{
         shadow = {{
-            color = "rgba({background}cc)",
+            color = "rgba(00000099)",
         }},
     }},
 }})
@@ -200,6 +193,48 @@ def palette_files(
 $guest_surface = rgb({surface})
 $guest_accent = rgb({accent})
 $guest_lock_wallpaper = {lock_wallpaper}
+""",
+        CONFIG / "emacs/hyperlab-theme.el": f""";;; hyperlab-theme.el --- generated HyperLab guest theme -*- lexical-binding: t -*-
+
+(deftheme hyperlab "Generated HyperLab guest theme.")
+
+(custom-theme-set-faces
+ 'hyperlab
+ '(default ((t (:background "#{background}" :foreground "#{foreground}"))))
+ '(cursor ((t (:background "#{accent}"))))
+ '(fringe ((t (:background "#{background}" :foreground "#{surface}"))))
+ '(region ((t (:background "#{surface}" :foreground "#{foreground}"))))
+ '(highlight ((t (:background "#{surface}"))))
+
+ '(mode-line
+   ((t (:background "#{accent}"
+        :foreground "#{background}"
+        :box nil))))
+ '(mode-line-inactive
+   ((t (:background "#{surface}"
+        :foreground "#{foreground}"
+        :box nil))))
+
+ '(minibuffer-prompt ((t (:foreground "#{accent}" :weight bold))))
+ '(link ((t (:foreground "#{accent_alt}" :underline t))))
+
+ '(font-lock-builtin-face ((t (:foreground "#{accent_alt}"))))
+ '(font-lock-comment-face ((t (:foreground "#{accent_alt}" :slant italic))))
+ '(font-lock-constant-face ((t (:foreground "#{accent}"))))
+ '(font-lock-function-name-face ((t (:foreground "#{accent_alt}"))))
+ '(font-lock-keyword-face ((t (:foreground "#{accent}" :weight bold))))
+ '(font-lock-string-face ((t (:foreground "#{accent_alt}"))))
+ '(font-lock-type-face ((t (:foreground "#{accent}"))))
+ '(font-lock-variable-name-face ((t (:foreground "#{foreground}"))))
+ '(font-lock-warning-face ((t (:foreground "#{urgent}" :weight bold))))
+
+ '(error ((t (:foreground "#{urgent}" :weight bold))))
+ '(warning ((t (:foreground "#{accent}" :weight bold))))
+ '(success ((t (:foreground "#{accent_alt}" :weight bold)))))
+
+(provide-theme 'hyperlab)
+
+;;; hyperlab-theme.el ends here
 """,
         CONFIG / "waybar/theme.css": f"""@define-color guest_background #{background};
 @define-color guest_foreground #{foreground};

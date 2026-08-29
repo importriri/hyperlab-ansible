@@ -15,6 +15,7 @@ guest_desktop_hyprland_packages:
   - kitty-shell-integration
   - kitty-terminfo
   - imagemagick
+  - jq
   - python-pygments
   - thunar
   - tumbler
@@ -29,6 +30,8 @@ guest_desktop_hyprland_packages:
   - pipewire
   - pipewire-pulse
   - wireplumber
+  - rtkit
+  - alsa-utils
   - pamixer
   - playerctl
   - xdg-desktop-portal
@@ -42,10 +45,17 @@ guest_desktop_hyprland_packages:
 
 guest_desktop_hyprland_theme_default: sakura-circuit
 
+# Ordinary workstation guests keep interactive login. Dedicated appliance-style
+# guests may opt into a persistent graphical session.
+guest_desktop_hyprland_autologin: false
+guest_desktop_hyprland_autologin_session: hyperlab-hyprland
+guest_desktop_hyprland_autologin_exec: /usr/bin/start-hyprland
+
 # Disabled for ordinary workstation guests. VFIO guests may opt in when
 # Hyprland must start directly on a passed NVIDIA DRM node.
 guest_desktop_hyprland_nvidia_only: false
 guest_desktop_hyprland_nvidia_drm_device: /dev/dri/privatestack-nvidia
+guest_desktop_hyprland_nvidia_ready_timeout_seconds: 90
 
 # Ordinary guests keep the generic monitor rule. The accelerated VFIO
 # workstation opts into Hyprland's automatic HEADLESS-0 output.
@@ -142,5 +152,4 @@ guest_desktop_hyprland_legacy_user_paths:
   - .config/rofi/rofi-launcher.rasi
   - .config/rofi/rofi-powermenu.rasi
   - .config/rofi/rofi-hyperlab.rasi
-  - .local/state/hyperlab
   - .local/share/hyperlab
