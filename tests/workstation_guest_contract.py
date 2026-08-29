@@ -54,6 +54,31 @@ def main() -> int:
     assert "^root (L|NP)( |$)" in access
     assert "brick_guard_brick: workstation_access" in access
 
+    access_tasks = yaml.safe_load(access)
+    password_reads = [
+        task
+        for task in access_tasks
+        if isinstance(task, dict)
+        and task.get("name") in {
+            "Read the workstation account password state",
+            "Read the root account password state",
+            "Read the reconciled workstation account password state",
+        }
+    ]
+    assert len(password_reads) == 3
+    assert all(task.get("check_mode") is False for task in password_reads)
+
+    password_update = next(
+        task
+        for task in access_tasks
+        if isinstance(task, dict)
+        and task.get("name")
+        == "Install the operator-managed workstation password"
+    )
+    assert password_update["register"] == "workstation_access_user_update"
+    assert "ansible_check_mode" in access
+    assert "workstation_access_user_update is changed" in access
+
     kernel = text("roles/workstation_kernel/tasks/arch-zen.yml")
     assert "/boot/vmlinuz-linux-zen" in kernel
     assert "'-zen' in ansible_facts['kernel']" in kernel
@@ -111,6 +136,9 @@ def main() -> int:
     assert defaults["guest_desktop_hyprland_headless_mode"] == "1920x1080@144"
     assert defaults["guest_desktop_hyprland_headless_position"] == "0x0"
     assert defaults["guest_desktop_hyprland_headless_scale"] == 1
+    assert {"pipewire", "pipewire-pulse", "wireplumber", "rtkit", "alsa-utils"} <= set(
+        defaults["guest_desktop_hyprland_packages"]
+    )
 
     vfio_play = yaml.safe_load(
         text("playbooks/guest-arch-dev-vfio.yml")
@@ -166,6 +194,16 @@ def main() -> int:
     assert 'checksum: "sha256:{{ dev_ide_jdtls_checksum_url }}"' in jdtls
     assert "dev_ide_java_specification.stdout | int >= 21" in jdtls
     assert "/usr/local/bin/jdtls" in jdtls
+
+    jdtls_tasks = yaml.safe_load(jdtls)
+    java_probe = next(
+        task
+        for task in jdtls_tasks
+        if isinstance(task, dict)
+        and task.get("name")
+        == "Read the installed Java specification version"
+    )
+    assert java_probe.get("check_mode") is False
 
     print("workstation guest contract: OK")
     return 0

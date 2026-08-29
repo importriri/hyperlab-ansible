@@ -16,19 +16,19 @@ lab_marking: "colour_and_shape"
 lab_marking_options: ['colour_only', 'colour_and_shape']
 
 # How should HyperLab and trust status be arranged in the bar?
-#   alternatives: brand_and_trust_drawer, single_combined_launcher
-waybar_launcher_shape: "brand_and_trust_drawer"
-waybar_launcher_shape_options: ['brand_and_trust_drawer', 'single_combined_launcher']
+#   alternatives: workspaces_brand_and_trust_drawer, brand_and_trust_drawer, single_combined_launcher
+waybar_launcher_shape: "workspaces_brand_and_trust_drawer"
+waybar_launcher_shape_options: ['workspaces_brand_and_trust_drawer', 'brand_and_trust_drawer', 'single_combined_launcher']
 
 # What should the bar height be?
 #   alternatives: 31, 37
 waybar_height: 37
 waybar_height_options: ['31', '37']
 
-# Which tab should --section domains open?
-#   alternatives: system, apps
-drawer_domains_section_tab: "system"
-drawer_domains_section_tab_options: ['system', 'apps']
+# What navigation shape should the compact drawer use?
+#   alternatives: machine_showcase_no_tabs, tabbed_vms_and_system
+drawer_navigation_shape: "machine_showcase_no_tabs"
+drawer_navigation_shape_options: ['machine_showcase_no_tabs', 'tabbed_vms_and_system']
 
 # Should the drawer list VMs or applications inside VMs, as Qubes does?
 #   alternatives: vm_only, guest_agent
