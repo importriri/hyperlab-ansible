@@ -44,3 +44,53 @@ works.
   is coherent.
 - **M13 — seamless guest applications:** future work and must not be described
   as providing Qubes OS security properties.
+
+## Canonical completion order
+
+The candidate is completed in dependency order so later security and performance
+work is measured against stable workloads rather than moving targets:
+
+1. finish `arch-dev-vfio`, including pre-login display recovery, input
+   isolation, physical audio proof, gaming stack readiness and idempotence;
+2. extract reusable workstation behavior from the VFIO-specific path;
+3. finish `arch-dev`;
+4. finish `arch-minimal-ssh`;
+5. seal and validate golden images, clone identity and clone lifecycle;
+6. finish VM lifecycle and the Control Center operational/recovery surfaces;
+7. freeze network security topology and the explicit allowed-flow matrix;
+8. finish the host-owned visual provenance and trust model;
+9. add endpoint HIDS with measured overhead and no hypervisor remote-command
+   plane;
+10. add passive NIDS without turning the sensor into an inline routing
+    dependency;
+11. correlate endpoint and network evidence in the HyperLab Security Plane;
+12. perform final gaming/performance tuning with the complete security plane
+    active;
+13. run release qualification, idempotence, reboot, cold-start, recovery and
+    hardware gates;
+14. finish wallpaper/polish, screenshots, video and release documentation;
+15. commit and push the proved milestone to `main`.
+
+Performance tuning comes after HIDS/NIDS so the final benchmark includes the
+monitoring cost. HIDS/NIDS come after the network and VM contracts so normal
+behavior is defined before anomaly detection is tuned.
+
+### Linux VFIO PRIMARY display decision
+
+The Nitro hardware campaign fixed the Linux VFIO PRIMARY connection contract:
+
+- `Looking Glass` is the normal user-facing action.
+- When the guest is at Ly, HyperLab uses an owned temporary `virt-viewer`
+  console for authentication, waits for the reviewed Hyprland capture output,
+  closes that temporary console, then opens Looking Glass automatically.
+- `Console` remains the explicit standalone `virt-viewer` recovery action.
+- `SSH` remains the administrative path.
+- The Looking Glass built-in SPICE display fallback is hardware-proven for
+  display diagnostics but rejected for PRIMARY authentication because its
+  pre-login input path was not reliable enough for the release contract.
+- The Linux sender lifetime is bound to Hyprland: closing the host client does
+  not end the guest session, while guest logout removes the sender.
+
+This decision is frozen for `arch-dev-vfio` completion. Do not reopen the
+single-window built-in fallback experiment unless the remaining input-security
+work explicitly requires it.

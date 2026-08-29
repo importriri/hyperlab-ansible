@@ -12,6 +12,7 @@ The ordered hardware procedure is in
 The current Nitro work has established:
 
 - the RTX 3060 and HDMI-audio functions are attached to the guest;
+- a separate managed ICH9 duplex device carries usable guest audio over SPICE;
 - the guest runs the reviewed Zen kernel and open NVIDIA driver;
 - nouveau is absent and NVIDIA DRM modesetting/fbdev are enabled;
 - the guest kvmfr device comes from the IVSHMEM function and is writable by the guest user;
@@ -41,16 +42,34 @@ The VFIO guest therefore creates `HEADLESS-0` once from `hyprland.start`; the
 existing monitor rule then owns mode, position and scale. Keeping creation and
 policy separate avoids timing loops and runtime-only monitor commands.
 
+The opt-in Linux Looking Glass role also installs a root-owned XDPH picker and
+points `~/.config/hypr/xdph.conf` at it. The picker refuses a missing or disabled
+`HEADLESS-0` and otherwise returns that exact output through the upstream
+`hyprland-share-picker` selection protocol. This removes the invisible portal
+prompt from a headless session without enabling the sender or creating a
+systemd unit. Because the picker grants screen capture without an interactive
+consent dialog, it is confined to the explicit Linux Looking Glass experiment.
+
 ## Remaining gates
 
 The following are still open and must stay described as such:
 
-- fresh-session proof that the managed headless output appears without a manual command;
-- permanent deterministic XDPH selection of that headless output;
 - Looking Glass keyboard and pointer return;
 - lock/unlock and guest reboot/reconnect observations after the persistence work;
 - the final post-reboot idempotent guest pass.
 
-SPICE remains configured for recovery/input plumbing, but it has not been a
-reliable video signal on this Nitro setup. Looking Glass frame production is the
-video proof.
+SPICE remains configured for recovery, input and audio plumbing, but it has not
+been a reliable video signal on this Nitro setup. Looking Glass frame production
+is the video proof; the virtual ICH9 device, rather than the disconnected NVIDIA
+HDMI path, is the guest playback contract.
+
+## Performance/security boundary
+
+Guest acceleration is subordinate to the host security contract. See
+[`performance-security-contract.md`](performance-security-contract.md) for the
+measurement policy, forbidden security regressions and the transactional Gaming
+Mode requirements.
+
+The host remains the security boundary. Guest kernels, schedulers and gaming
+runtime choices may be performance-oriented, but they do not justify weakening
+host mitigations, IOMMU/VFIO ownership, Secure Boot state or managed hardening.

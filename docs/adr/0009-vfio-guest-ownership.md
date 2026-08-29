@@ -37,8 +37,8 @@ GPU still being present.
 
 The rendered libvirt domain owns both reviewed PCI functions through managed
 `hostdev` elements. Looking Glass uses the kvmfr character device through a
-pinned QEMU command line; SPICE remains loopback-only on port 5900 for input and
-recovery. A VGA device remains until hardware acceptance proves the complete
+pinned QEMU command line; VFIO SPICE uses a private per-domain UNIX socket for
+input and recovery and does not expose a TCP listener. A VGA device remains until hardware acceptance proves the complete
 Looking Glass path. Linux guests may request the same IVSHMEM transport only
 through the explicit experimental mode; SPICE remains available throughout. VFIO domains use virtio keyboard and mouse, explicitly disable the Q35 PS/2
 controller so libvirt cannot synthesize duplicate legacy input devices, and

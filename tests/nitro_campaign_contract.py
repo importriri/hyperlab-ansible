@@ -18,14 +18,17 @@ def main() -> int:
         "`qemu:///system`",
         "`arch-dev-vfio`",
         "`arch-dev` remains",
-        "`balanced` (8 GiB)",
-        "`heavy`\n  (16 GiB)",
+        "`heavy`, 16 GiB",
+        "100 GiB",
         "guest `2,6,3,7`",
         "emulator `0,4`",
         "disk I/O `1,5`",
-        "loopback SPICE",
+        "private per-domain SPICE UNIX socket",
+        "ICH9 duplex device",
         "workstation_kernel_remove_fallback=false",
         "playbooks/guest-arch-dev-vfio.yml",
+        "playbooks/vm-resize-disk.yml",
+        "playbooks/vm-reconfigure.yml",
         "ARCH_DEV_VFIO_HOST_GATE_OK",
         "ARCH_DEV_VFIO_GUEST_GATE_OK",
         "playbooks/guest-visual-assets.yml",
@@ -44,6 +47,7 @@ def main() -> int:
 
     assert "playbooks/vm-destroy.yml" not in text
     assert "systemctl enable looking-glass-host" not in text
+    assert "loopback SPICE" not in text
 
     for fragment in (
         "share one IOMMU group",

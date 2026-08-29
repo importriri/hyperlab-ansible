@@ -100,6 +100,9 @@ The same playbooks serve standard and VFIO specs:
 - `vm-shutdown.yml`
 - `vm-stop.yml`
 - `vm-reset.yml`
+- `vm-resize-disk.yml`
+- `vm-reconfigure.yml`
+- `vm-guest-inventory.yml`
 - `vm-destroy.yml`
 
 Pass exactly one checked-in spec:
@@ -118,6 +121,21 @@ engine as every other guest.
 Creation remains separate from `lab.yml` because a rerun of the host target must
 never imply a workload lifecycle decision.
 
+After a managed Linux guest is running and QEMU Guest Agent is ready,
+`vm-guest-inventory.yml` resolves the unique address bound to the committed MAC
+inside the selected network and writes a strict, operator-owned inventory below
+`/run/user/UID`. Guest playbooks use both repository and runtime inventory so
+that checked-in `group_vars/all` remain loaded:
+
+```bash
+ansible-playbook -K playbooks/vm-guest-inventory.yml \
+  -e guest_spec=vm-specs/arch-dev-vfio.yml
+
+ansible-playbook -i inventory.ini \
+  -i /run/user/$UID/arch-dev-vfio.ini \
+  playbooks/guest-arch-dev-vfio.yml --check --diff
+```
+
 ### Arch development resource profiles
 
 `arch-dev` defaults to the reviewed `balanced` profile: 8 GiB and four vCPUs.
@@ -133,6 +151,32 @@ ansible-playbook -K playbooks/vm-create.yml \
 
 The selected profile is written into managed VM state. Validation therefore
 refuses a later run that silently selects different resources.
+
+Existing domains change profiles only while shut off through the explicit,
+exactly confirmed reconfiguration transaction. It preserves the disk, UUID,
+MAC, NVRAM and guest contents, resolves the new RAM allocation against the live
+host budget, validates the target XML, and rolls the previous definition back
+if the final contract does not validate:
+
+```bash
+ansible-playbook -K playbooks/vm-reconfigure.yml \
+  -e guest_spec=vm-specs/arch-dev-vfio.yml \
+  -e guest_confirm_reconfigure=arch-dev-vfio
+```
+
+Disk growth stays a separate irreversible transaction and must run before
+resource reconfiguration when both the checked-in disk size and profile change:
+
+```bash
+ansible-playbook -K playbooks/vm-resize-disk.yml \
+  -e guest_spec=vm-specs/arch-dev-vfio.yml \
+  -e guest_resource_profile=balanced \
+  -e guest_confirm_resize=arch-dev-vfio
+```
+
+The explicit source-profile override keeps disk expansion bound to the
+currently committed profile. The subsequent offline reconfiguration commits
+the spec's target profile and refreshes the managed device contract.
 
 ## Service lifecycle
 

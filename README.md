@@ -122,7 +122,12 @@ Operator and architecture references:
 - [`docs/hardware-profiles.md`](docs/hardware-profiles.md) — reviewed laptop boundaries;
 - [`docs/network-reconciliation.md`](docs/network-reconciliation.md) — network ownership and drift handling;
 - [`docs/arch-dev-acceleration.md`](docs/arch-dev-acceleration.md) — accelerated Arch guest policy;
+- [`docs/performance-security-contract.md`](docs/performance-security-contract.md) — performance tuning under a fixed host security floor;
+- [`docs/nitro-secure-boot-acceptance.md`](docs/nitro-secure-boot-acceptance.md) — Nitro Secure Boot enrollment, recovery and hardware acceptance;
+- [`docs/golden-image-control-center-contract.md`](docs/golden-image-control-center-contract.md) — golden-image discovery and Control Center lifecycle contract;
 - [`docs/nitro-control-backend.md`](docs/nitro-control-backend.md) — privileged Nitro broker boundary and runtime protocol;
+- [`docs/nitro-control-panel.md`](docs/nitro-control-panel.md) — normal-user Nitro Control Board and desktop-theme integration;
+- [`docs/visual-trust-contract.md`](docs/visual-trust-contract.md) — semantic trust colors and their separation from appearance themes;
 - [`docs/nitro-arch-dev-vfio-campaign.md`](docs/nitro-arch-dev-vfio-campaign.md) — ordered Nitro VFIO campaign;
 - [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — Windows image sealing;
 - [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md) — ISO-to-qcow2 handoff;
