@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Display-free structural validation of the compact resident drawer.
-
-The Nitro contract is intentionally small: one scrollable content column, two
-lightweight tabs, and an explicit escape hatch to the full Control Center.
-"""
+"""Display-free structural lock for the definitive compact machine drawer."""
 from __future__ import annotations
 
 import importlib.util
@@ -39,13 +35,28 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 class FakeModel:
     domains = [
-        {"name": "arch-dev-01", "network": "dev", "state": "running", "vfio": False},
-        {"name": "arch-lab-vfio", "network": "lab", "state": "running", "vfio": True},
+        {
+            "name": "arch-dev-01",
+            "network": "dev",
+            "state": "running",
+            "vfio": False,
+            "memory_mb": 4096,
+            "vcpus": 4,
+        },
+        {
+            "name": "arch-lab-vfio",
+            "network": "lab",
+            "state": "running",
+            "vfio": True,
+            "memory_mb": 8192,
+            "vcpus": 6,
+        },
     ]
-    catalog = [{"name": "arch", "sealed": True}]
+    catalog = [{"name": "arch", "id": "arch", "sealed": True}]
     problems: list = []
     load_errors: list = []
     specs: list = []
+    status: dict = {}
 
     @property
     def running_domains(self):
@@ -64,38 +75,46 @@ def build_drawer():
     window.current_section = "vms"
     window.drawer_tab = "apps"
     window.drawer_holder = None
+    window.header_status = None
+    window.selected_vm = None
+    window.create_widgets = {}
+    window._grid_columns = {}
     panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
     window._build_drawer_shell(panel)
     return window, panel
 
 
 def main() -> int:
-    print("=== compact drawer structure")
-    window, panel = build_drawer()
+    print("=== definitive compact drawer structure")
+    _window, panel = build_drawer()
+    widgets = list(panel.walk())
+    labels = [widget.label for widget in widgets if widget.label]
 
-    contents = [widget for widget in panel.walk()
-                if widget.has_css_class("drawer-content")]
-    check("the single drawer content column exists", len(contents) == 1,
-          f"found {len(contents)}")
-    check("the old three-column sidebar is gone",
-          not any(widget.has_css_class("drawer-sidebar") for widget in panel.walk()))
-    check("the old right status rail is gone",
-          not any(widget.has_css_class("drawer-status") for widget in panel.walk()))
+    check("the drawer title is exactly Machines", labels and labels[0] == "Machines", str(labels[:3]))
+    check("the running badge mirrors the showcase", "2 running" in labels, str(labels[:4]))
+    check("the legacy drawer tabs are absent",
+          not any(widget.has_css_class("nav-button") or widget.has_css_class("drawer-tabs")
+                  for widget in widgets))
+    check("the legacy drawer search is absent",
+          not any(widget.has_css_class("drawer-search") for widget in widgets))
+    check("the legacy drawer footer is absent",
+          not any(widget.has_css_class("drawer-footer") for widget in widgets))
 
-    tabs = [widget.label for widget in panel.walk()
-            if widget.has_css_class("nav-button") and widget.label]
-    check("two compact tabs are present", tabs == ["VMs", "System"], f"{tabs}")
+    tiles = [widget for widget in widgets if widget.has_css_class("vm-tile")]
+    check("the drawer renders the machine showcase", len(tiles) == 2, f"found {len(tiles)}")
 
-    labels = [widget.label for widget in panel.walk() if widget.label]
-    check("the full manager is an explicit drawer action",
-          "Full Control Center" in labels)
-    check("the initial VM list is built without a second surface",
-          "Virtual machines" in labels)
+    tile_grids = {tile.parent for tile in tiles if tile.parent is not None}
+    two_columns = bool(tile_grids)
+    for grid in tile_grids:
+        cells = grid.props.get("cells", [])
+        two_columns = two_columns and all(col in (0, 1) for col, _row, _w, _h in cells)
+    check("machine tiles are locked to the two-column drawer showcase", two_columns)
 
-    window._select_drawer_tab("system")
-    labels = [widget.label for widget in panel.walk() if widget.label]
-    for expected in ("System summary", "Host Health", "GPU Passthrough", "Trust & Network"):
-        check(f"system drawer shows {expected}", expected in labels)
+    check("the New machine escape hatch remains visible", "＋  New machine" in labels)
+    check("the old System drawer content is gone",
+          all(label not in labels for label in (
+              "System summary", "Host Health", "GPU Passthrough", "Trust & Network"
+          )))
 
     print(f"\n{'=' * 58}\npassed {len(PASSED)}, failed {len(FAILED)}")
     for name in FAILED:

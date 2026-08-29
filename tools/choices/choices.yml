@@ -25,15 +25,19 @@ choices:
       colour_and_shape: Colour plus a distinct cube border. This remains robust in every palette and for colour-vision differences.
   waybar_launcher_shape:
     question: How should HyperLab and trust status be arranged in the bar?
-    value: brand_and_trust_drawer
+    value: workspaces_brand_and_trust_drawer
     decided_by: sid
     affects:
       - roles/host_desktop_sway/files/waybar.jsonc
       - roles/host_desktop_sway/files/waybar.css
       - tests/render.yml
+      - tests/mockup_geometry_contract.py
     options:
-      brand_and_trust_drawer: HyperLab stays first on the left. TRUST follows it and reveals RAM, GPU and VM status on hover.
-      single_combined_launcher: One button contains both launcher and status. It uses less space but obscures the trust model.
+      workspaces_brand_and_trust_drawer: >-
+        Sway workspaces come first, followed by the HyperLab launcher and
+        adjacent trust status exactly as in the definitive mockup.
+      brand_and_trust_drawer: Keep HyperLab and trust first on the left without the workspace strip.
+      single_combined_launcher: One button contains both launcher and status; it uses less space but obscures the trust model.
   waybar_height:
     question: What should the bar height be?
     value: 37
@@ -43,15 +47,17 @@ choices:
     options:
       31: Compact, but too short for the current modules.
       37: The minimum height requested by Waybar 0.15.0 on the Nitro.
-  drawer_domains_section_tab:
-    question: Which tab should --section domains open?
-    value: system
+  drawer_navigation_shape:
+    question: What navigation shape should the compact drawer use?
+    value: machine_showcase_no_tabs
     decided_by: sid
     affects:
       - roles/host_desktop_sway/files/privatestack-hyperlab-domains.py
+      - tools/shell-tests/test_drawer.py
+      - tests/mockup_geometry_contract.py
     options:
-      system: Open the compact System tab with trust, network, and GPU status.
-      apps: Open VMs because the domain selector is already available in the drawer.
+      machine_showcase_no_tabs: Use the definitive two-column Machines showcase without the superseded VMs/System tabs, search field, or footer navigation.
+      tabbed_vms_and_system: Keep the legacy VMs/System tabbed drawer with its additional navigation surfaces.
   drawer_app_enumeration:
     question: Should the drawer list VMs or applications inside VMs, as Qubes does?
     value: vm_only

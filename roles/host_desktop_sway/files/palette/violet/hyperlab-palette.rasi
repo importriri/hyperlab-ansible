@@ -13,7 +13,7 @@
     hl-bad: #ff668f;
     hl-dom-clean: #72f2a5;
     hl-dom-dev: #5b8cff;
-    hl-dom-lab: #ff7ce5;
+    hl-dom-lab: #b184ff;
     hl-dom-dirty: #ff9d45;
     hl-dom-services: #35e4dd;
     background-color: transparent;

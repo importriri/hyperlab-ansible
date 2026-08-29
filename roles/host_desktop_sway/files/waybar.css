@@ -1,182 +1,182 @@
 @import url("palette.css");
-/* HyperLab Shell visual lock: transparent neon/Qubes-style Waybar. */
+/* Definitive HyperLab mockup translation: 37 px bar, three visual zones. */
 * {
-    font-family: "JetBrainsMono Nerd Font";
-    font-size: 12px;
-    font-weight: 700;
+    font-family: "Inter", "Adwaita Sans", "Cantarell", sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
     min-height: 0;
     border: none;
     border-radius: 0;
 }
 
 window#waybar {
-    min-height: 36px;
-    background-color: alpha(@hl_base, 0.99);
+    min-height: 37px;
+    background-color: @hl_base;
     color: @hl_text;
     opacity: 1;
 }
 window#waybar > box {
-    min-height: 36px;
+    min-height: 37px;
     margin: 0;
-    padding: 0 7px;
-    background-color: alpha(@hl_mantle, 0.985);
-    border-bottom: 1px solid alpha(@hl_accent, 0.13);
+    padding: 0 8px;
+    background-color: alpha(@hl_base, 0.98);
+    border-bottom: 1px solid alpha(#ffffff, 0.08);
     color: @hl_text;
-    box-shadow: 0 5px 18px alpha(#000000, 0.20);
 }
 
-#custom-brand {
-    color: @hl_base;
-    background: linear-gradient(90deg, @hl_accent, @hl_accent2);
-    margin: 3px 5px 3px 0;
-    padding: 0 11px;
-    border: 1px solid alpha(@hl_accent2, 0.62);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 800;
-}
-#custom-brand:hover {
-    color: @hl_base;
-    background: @hl_accent;
-    border-color: @hl_text;
-}
-#hyperlab {
-    margin: 0;
-    padding: 0;
-    background: transparent;
-}
-#hyperlab .trust-detail {
-    margin: 0;
-}
-
-#custom-hyperlab {
-    margin: 3px 8px 3px 0;
-    padding: 0 10px;
-    border-radius: 7px;
-    color: @hl_ok;
-    background: alpha(@hl_ok, 0.065);
-    border: 1px solid alpha(@hl_ok, 0.30);
-}
-#custom-hyperlab:hover {
-    color: @hl_text;
-    background: alpha(@hl_ok, 0.12);
-    border-color: alpha(@hl_ok, 0.52);
-}
-#custom-hyperlab.ok { color: @hl_ok; }
-#custom-hyperlab.warn {
-    color: @hl_warn;
-    background: alpha(@hl_warn, 0.08);
-    border-color: alpha(@hl_warn, 0.40);
-}
-#custom-hyperlab.error {
-    color: @hl_text;
-    background: alpha(@hl_bad, 0.22);
-    border-color: alpha(@hl_bad, 0.60);
-}
-
+/* Mockup left zone: workspace strip, then one visually continuous HyperLab pod. */
 #workspaces {
-    margin: 2px 5px;
-    padding: 0 2px;
+    margin: 0 8px 0 0;
+    padding: 0;
     background: transparent;
 }
 #workspaces button {
     min-width: 25px;
-    margin: 2px 1px;
+    font-size: 12px;
+    margin: 5px 1px;
     padding: 0 7px;
-    border-radius: 7px;
-    color: @hl_subtext;
-    background: alpha(@hl_mantle, 0.08);
+    border-radius: 6px;
+    color: alpha(@hl_text, 0.30);
+    background: transparent;
 }
 #workspaces button:hover {
-    color: @hl_text;
-    background: alpha(@hl_accent, 0.10);
+    color: alpha(@hl_text, 0.70);
+    background: alpha(#ffffff, 0.05);
 }
 #workspaces button.focused,
 #workspaces button.visible {
     color: @hl_text;
-    background: alpha(@hl_dom_lab, 0.22);
-    border: 1px solid alpha(@hl_dom_lab, 0.42);
+    background: alpha(#ffffff, 0.09);
 }
 #workspaces button.urgent {
     color: @hl_text;
-    background: alpha(@hl_bad, 0.28);
-    border: 1px solid alpha(@hl_bad, 0.58);
+    background: alpha(@hl_bad, 0.24);
 }
 
+#custom-brand {
+    margin: 5px 0;
+    padding: 0 9px;
+    border-radius: 9px 0 0 9px;
+    border: 1px solid alpha(#ffffff, 0.08);
+    border-right-width: 0;
+    color: @hl_text;
+    background: alpha(#ffffff, 0.055);
+    font-size: 12.5px;
+    font-weight: 700;
+}
+#custom-brand:hover { background: alpha(#ffffff, 0.10); }
+
+#hyperlab {
+    margin: 5px 8px 5px 0;
+    padding: 0;
+    border-radius: 0 9px 9px 0;
+    border: 1px solid alpha(#ffffff, 0.08);
+    border-left-width: 0;
+    background: alpha(#ffffff, 0.055);
+}
+#hyperlab .trust-detail { margin: 0; }
+#custom-hyperlab,
+#custom-hyperlab-ram,
+#custom-hyperlab-gpu,
+#custom-hyperlab-vms {
+    margin: 0;
+    padding: 0 7px;
+    background: transparent;
+    color: alpha(@hl_text, 0.46);
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+#custom-hyperlab { color: @hl_ok; }
+#custom-hyperlab-ram,
+#custom-hyperlab-gpu,
+#custom-hyperlab-vms { border-left: 1px solid alpha(#ffffff, 0.07); }
+#custom-hyperlab-vms { color: @hl_accent; }
+#custom-hyperlab-gpu { color: #b184ff; }
+#custom-hyperlab.ok,
+#custom-hyperlab-vms.ok,
+#custom-hyperlab-gpu.ok { color: @hl_ok; }
+#custom-hyperlab.warn,
+#custom-hyperlab-vms.warn,
+#custom-hyperlab-gpu.warn { color: @hl_warn; }
+#custom-hyperlab.error,
+#custom-hyperlab-vms.error,
+#custom-hyperlab-gpu.error { color: @hl_bad; }
 #mode {
-    margin: 3px 3px;
+    margin: 5px 3px;
     padding: 0 8px;
-    border-radius: 7px;
+    border-radius: 6px;
     color: @hl_base;
     background: @hl_warn;
 }
 
-#custom-hyperlab-vms,
-#custom-hyperlab-gpu,
-#custom-hyperlab-ram,
-#custom-wallpaper-mode,
-#custom-keyboard-layout,
-#custom-controls,
+/* Mockup center: the clock owns the true center without a capsule. */
+#clock {
+    margin: 0;
+    padding: 0 9px;
+    color: alpha(@hl_text, 0.44);
+    background: transparent;
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+}
+
+/* Mockup right zone: telemetry pod, controls pod. Existing runtime modules only. */
+#telemetry,
+#session {
+    margin: 5px 3px;
+    padding: 0 2px;
+    border-radius: 9px;
+    background: alpha(#ffffff, 0.055);
+    border: 1px solid alpha(#ffffff, 0.08);
+}
+#temperature,
 #network,
 #pulseaudio,
 #battery,
-#clock,
-#temperature {
-    margin: 2px 1px;
-    padding: 0 7px;
-    border-radius: 7px;
-    background: alpha(@hl_mantle, 0.08);
-    color: @hl_subtext;
+#custom-keyboard-layout,
+#custom-wallpaper-mode,
+#custom-controls {
+    margin: 0;
+    padding: 0 8px;
+    border-radius: 0;
+    background: transparent;
+    color: alpha(@hl_text, 0.58);
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11.5px;
+    font-weight: 600;
 }
-#custom-hyperlab-vms { color: @hl_accent; }
-#custom-hyperlab-gpu { color: @hl_dom_lab; }
-#custom-hyperlab-vms.ok,
-#custom-hyperlab-gpu.ok { color: @hl_ok; }
-#custom-hyperlab-vms.warn,
-#custom-hyperlab-gpu.warn { color: @hl_warn; }
-#custom-hyperlab-vms.error,
-#custom-hyperlab-gpu.error {
-    color: @hl_text;
-    background: alpha(@hl_bad, 0.22);
-}
+#network,
+#pulseaudio,
+#battery,
+#custom-wallpaper-mode,
+#custom-controls { border-left: 1px solid alpha(#ffffff, 0.07); }
+#temperature { color: @hl_warn; }
+#temperature.critical { color: @hl_bad; background: alpha(@hl_bad, 0.14); }
 #network { color: @hl_accent2; }
 #network.disconnected { color: @hl_bad; }
 #pulseaudio { color: @hl_accent; }
-#pulseaudio.muted { color: alpha(@hl_subtext, 0.55); }
+#pulseaudio.muted { color: alpha(@hl_text, 0.28); }
 #battery { color: @hl_ok; }
 #battery.warning:not(.charging) { color: @hl_warn; }
 #battery.critical:not(.charging) { color: @hl_bad; }
-#clock { color: @hl_text; padding-left: 10px; padding-right: 9px; }
-tooltip {
-    background: alpha(@hl_base, 0.94);
-    border: 1px solid alpha(@hl_accent, 0.24);
-    border-radius: 8px;
-}
-tooltip label {
-    color: @hl_text;
-    padding: 4px;
-}
-
+#custom-keyboard-layout { color: @hl_accent2; }
+#custom-keyboard-layout.ara { color: @hl_warn; }
 #custom-wallpaper-mode.public { color: @hl_ok; }
 #custom-wallpaper-mode.personal { color: @hl_accent2; }
 #custom-wallpaper-mode.fallback { color: @hl_warn; }
+#custom-controls { color: @hl_accent; }
+#custom-controls:hover,
+#custom-keyboard-layout:hover,
+#custom-wallpaper-mode:hover,
+#network:hover,
+#pulseaudio:hover,
+#battery:hover,
+#temperature:hover { color: @hl_text; background: alpha(#ffffff, 0.06); }
 
-#custom-keyboard-layout { color: @hl_accent2; }
-#custom-keyboard-layout.ara { color: @hl_warn; }
-#custom-keyboard-layout,
-#custom-controls,
-#custom-wallpaper-mode {
-    min-width: 34px;
-    margin-left: 3px;
-    margin-right: 3px;
-    padding-left: 9px;
-    padding-right: 9px;
+tooltip {
+    background: alpha(@hl_base, 0.96);
+    border: 1px solid alpha(#ffffff, 0.12);
+    border-radius: 8px;
 }
-#custom-controls {
-    color: @hl_accent;
-    min-width: 52px;
-    border: 1px solid alpha(@hl_accent, 0.22);
-}
-#custom-controls:hover { color: @hl_text; background: alpha(@hl_accent, 0.14); }
-#temperature { color: @hl_warn; }
-#temperature.critical { color: @hl_bad; background: alpha(@hl_bad, 0.18); }
+tooltip label { color: @hl_text; padding: 4px; }

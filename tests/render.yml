@@ -320,13 +320,10 @@
         - roles/host_desktop_sway/files/hyperlabctl-wrapper.sh
         - roles/host_desktop_sway/files/waybar.css
         - roles/host_desktop_sway/files/foot.ini
-        - roles/host_desktop_sway/files/superfile-config.toml
-        - roles/host_desktop_sway/files/superfile-theme.toml
         - roles/host_desktop_sway/files/hyperlab-control-center.svg
         - roles/host_desktop_sway/files/hyperlab-wallpaper.svg
         - roles/host_desktop_sway/files/hyperlab-gtk.css
         - roles/host_desktop_sway/files/privatestack-waybar.sh
-        - roles/host_desktop_sway/files/privatestack-superfile.sh
         - roles/host_desktop_sway/files/privatestack-opacity-toggle.sh
         - roles/host_desktop_sway/files/privatestack-theme.sh
         - roles/host_desktop_sway/files/privatestack-keyboard.sh
@@ -344,9 +341,31 @@
           - "'rofi-wayland' not in render_desk_pkgs"
           - "'fuzzel' not in render_desk_pkgs"
           - "'cava' not in render_desk_pkgs"
-          - "'superfile' in render_desk_pkgs"
+          - "'nemo' in render_desk_pkgs"
+          - "'superfile' not in render_desk_pkgs"
           - "'yazi' not in render_desk_pkgs"
-          - "render_desk_removed_pkgs == ['yazi', 'cava']"
+          - "render_desk_removed_pkgs == ['yazi', 'cava', 'superfile']"
+          - "'gvfs' in render_desk_pkgs"
+          - "'udisks2' in render_desk_pkgs"
+          - "'ffmpeg' in render_desk_pkgs"
+          - "'ffmpegthumbnailer' in render_desk_pkgs"
+          - "'mpv' in render_desk_pkgs"
+          - "'celluloid' in render_desk_pkgs"
+          - "'pavucontrol' in render_desk_pkgs"
+          - "'pipewire-audio' in render_desk_pkgs"
+          - "'pipewire-alsa' in render_desk_pkgs"
+          - "'gst-plugin-pipewire' in render_desk_pkgs"
+          - "'gst-plugins-good' in render_desk_pkgs"
+          - "'gst-plugins-bad' in render_desk_pkgs"
+          - "'gst-plugins-ugly' in render_desk_pkgs"
+          - "'gst-libav' in render_desk_pkgs"
+          - "'mesa' in render_desk_pkgs"
+          - "'vulkan-intel' in render_desk_pkgs"
+          - "'vulkan-tools' in render_desk_pkgs"
+          - "'intel-media-driver' in render_desk_pkgs"
+          - "'libva-utils' in render_desk_pkgs"
+          - "'jq' in render_desk_pkgs"
+          - "'wayland-utils' in render_desk_pkgs"
           - "'papirus-icon-theme' in render_desk_pkgs"
           - "'sddm' not in render_desk_pkgs"
           - "'gdm' not in render_desk_pkgs"
@@ -354,6 +373,10 @@
           - "render_desk_units == ['ly@tty2.service']"
           - "'emacs-wayland' in render_ide_pkgs"
           - "'emacs' not in render_ide_pkgs"
+          - >-
+            render_ide_emacs_pkgs ==
+            ['nerd-icons', 'doom-modeline', 'vertico', 'orderless',
+             'marginalia', 'consult', 'corfu', 'yaml-mode', 'magit', 'eat']
           - "render_desktop_hosts == 'hypervisor'"
           - "render_dev_hosts == 'workstations'"
           - "render_lab[0].import_playbook == 'foundation.yml'"
@@ -371,6 +394,8 @@
              | selectattr('key', 'equalto', 'ansible.builtin.systemd_service')
              | map(attribute='value.name') | list }}
         render_ide_pkgs: "{{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_packages }}"
+        render_ide_emacs_pkgs: >-
+          {{ (render_cockpit.results[2].content | b64decode | from_yaml).dev_ide_emacs_packages }}
         render_desktop_hosts: "{{ (render_cockpit.results[3].content | b64decode | from_yaml)[0].hosts }}"
         render_dev_hosts: "{{ (render_cockpit.results[4].content | b64decode | from_yaml)[0].hosts }}"
         render_lab: "{{ render_cockpit.results[5].content | b64decode | from_yaml }}"
@@ -390,7 +415,7 @@
           - "'backlight' not in render_waybar"
           - "'tray' not in render_waybar"
           - "'privatestack-waybar' in render_desk_dests"
-          - "'privatestack-superfile' in render_desk_dests"
+          - "'privatestack-superfile' not in render_desk_dests"
           - "'privatestack-opacity-toggle' in render_desk_dests"
           - "'privatestack-theme' in render_desk_dests"
           - "'privatestack-keyboard' in render_desk_dests"
@@ -400,21 +425,21 @@
           - "render_waybar['layer'] == 'top'"
           - "render_waybar['mode'] == 'dock'"
           - "render_waybar['height'] == 37"
-          - "'temperature' in render_waybar['modules-right']"
-          - "'custom/keyboard-layout' in render_waybar['modules-right']"
-          - "'custom/controls' in render_waybar['modules-right']"
+          - "render_waybar['modules-center'] == ['clock']"
+          - "render_waybar['modules-right'] == ['group/telemetry', 'group/session']"
+          - "render_waybar['group/telemetry']['modules'] == ['temperature', 'network', 'pulseaudio', 'battery']"
+          - "render_waybar['group/session']['modules'] == ['custom/keyboard-layout', 'custom/wallpaper-mode', 'custom/controls']"
           - "render_waybar['exclusive'] == true"
           - "render_waybar['ipc'] == false"
           - "'custom/cava' not in render_waybar['modules-left']"
           - "'/usr/local/bin/privatestack-powermenu' in render_sway"
-          - "'set $filemanager /usr/local/bin/privatestack-superfile' in render_sway"
+          - "'set $filemanager nemo' in render_sway"
+          - "'superfile' not in render_sway"
           - "'bindsym $mod+Shift+f exec $filemanager' in render_sway"
           - "'bindsym $mod+Shift+Left move left' in render_sway"
           - "'bindsym $mod+Shift+Down move down' in render_sway"
           - "'bindsym $mod+Shift+Up move up' in render_sway"
           - "'bindsym $mod+Shift+Right move right' in render_sway"
-          - "'for_window [app_id=\"^superfile$\"]            floating enable, resize set 1200 800, move position center' in render_sway"
-          - "'for_window [app_id=\"^superfile$\"] opacity 0.88' in render_sway"
           - "'bindsym $mod+f fullscreen toggle' in render_sway"
           - "'bindsym $mod+Shift+b exec /usr/local/bin/privatestack-waybar toggle' in render_sway"
           - "'bindsym $mod+Shift+t exec /usr/local/bin/privatestack-theme cycle' in render_sway"
@@ -431,21 +456,15 @@
           - "'waybar -l info -c' in render_waybar_launcher"
           - "'flock -n 9' in render_waybar_launcher"
           - "'9>&-' in render_waybar_launcher"
-          - "'--session' in render_superfile_launcher"
-          - "'stty size' in render_superfile_launcher"
           - "'opacity-${con_id}.state' in render_opacity_helper"
-          - "'superfile/config.toml' in render_desk_dests"
-          - "'superfile/theme/hyperlab.toml' in render_desk_dests"
+          - "'superfile/config.toml' not in render_desk_dests"
+          - "'superfile/theme/hyperlab.toml' not in render_desk_dests"
           - "'include=~/.config/hyperlab/palette-foot.ini' in render_foot"
           - "'[colors]' not in render_foot"
           - "'[cursor]' not in render_foot"
           - "'[colors-dark]' in render_foot_palette"
           - "'alpha=0.72' in render_foot_palette"
           - "render_foot_palette is search('(?m)^cursor=\\S+\\s+\\S+$')"
-          - "'transparent_background = true' in render_superfile_config"
-          - "'show_image_preview = false' in render_superfile_config"
-          - "'theme = \"hyperlab\"' in render_superfile_config"
-          - "'gradient_color = [\"#7ee787\", \"#35e4dd\"]' in render_superfile_theme"
           - "'<svg' in render_hyperlab_logo"
           - "'<svg' in render_hyperlab_wallpaper"
           - "'gtk-3.0/gtk.css' in render_desk_dests"
@@ -551,17 +570,14 @@
         render_foot_palette: >-
           {{ lookup('file', repo_root ~
              '/roles/host_desktop_sway/files/palette/green/hyperlab-palette-foot.ini') }}
-        render_superfile_config: "{{ render_cockpit.results[16].content | b64decode }}"
-        render_superfile_theme: "{{ render_cockpit.results[17].content | b64decode }}"
-        render_hyperlab_logo: "{{ render_cockpit.results[18].content | b64decode }}"
-        render_hyperlab_wallpaper: "{{ render_cockpit.results[19].content | b64decode }}"
-        render_hyperlab_gtk: "{{ render_cockpit.results[20].content | b64decode }}"
-        render_waybar_launcher: "{{ render_cockpit.results[21].content | b64decode }}"
-        render_superfile_launcher: "{{ render_cockpit.results[22].content | b64decode }}"
-        render_opacity_helper: "{{ render_cockpit.results[23].content | b64decode }}"
-        render_theme_helper: "{{ render_cockpit.results[24].content | b64decode }}"
-        render_swaylock_helper: "{{ render_cockpit.results[27].content | b64decode }}"
-        render_swaybar_status: "{{ render_cockpit.results[28].content | b64decode }}"
+        render_hyperlab_logo: "{{ render_cockpit.results[16].content | b64decode }}"
+        render_hyperlab_wallpaper: "{{ render_cockpit.results[17].content | b64decode }}"
+        render_hyperlab_gtk: "{{ render_cockpit.results[18].content | b64decode }}"
+        render_waybar_launcher: "{{ render_cockpit.results[19].content | b64decode }}"
+        render_opacity_helper: "{{ render_cockpit.results[20].content | b64decode }}"
+        render_theme_helper: "{{ render_cockpit.results[21].content | b64decode }}"
+        render_swaylock_helper: "{{ render_cockpit.results[24].content | b64decode }}"
+        render_swaybar_status: "{{ render_cockpit.results[25].content | b64decode }}"
         render_sway_window_types: >-
           {{ render_sway | regex_findall('window_type="([^"]*)"') }}
         render_sway_types_valid:
@@ -579,7 +595,7 @@
     - name: Cockpit control invariants (the bar may only offer what the CLI has)
       ansible.builtin.assert:
         that:
-          - "render_waybar['modules-left'][:2] == ['custom/brand', 'group/hyperlab']"
+          - "render_waybar['modules-left'][:3] == ['sway/workspaces', 'custom/brand', 'group/hyperlab']"
           - "render_waybar['group/hyperlab']['modules'] == ['custom/hyperlab', 'custom/hyperlab-ram', 'custom/hyperlab-gpu', 'custom/hyperlab-vms']"
           - "render_waybar['custom/brand']['format'] == '  HyperLab'"
           - "render_waybar['custom/brand']['on-click'] == '/usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms'"
@@ -587,10 +603,14 @@
           - "render_waybar['custom/brand']['on-click-middle'] == '/usr/local/bin/privatestack-hyperlab-domains --surface overlay --section vms'"
           - "render_waybar['custom/hyperlab']['format'] == 'TRUST {}'"
           - "render_waybar['group/hyperlab']['drawer']['reveal-delay'] == 40"
+          - "render_waybar['modules-center'] == ['clock']"
+          - "render_waybar['modules-right'] == ['group/telemetry', 'group/session']"
           - >-
-            render_waybar['modules-right'] ==
-            ['temperature', 'custom/keyboard-layout', 'custom/controls',
-            'custom/wallpaper-mode', 'network', 'pulseaudio', 'battery', 'clock']
+            render_waybar['group/telemetry']['modules'] ==
+            ['temperature', 'network', 'pulseaudio', 'battery']
+          - >-
+            render_waybar['group/session']['modules'] ==
+            ['custom/keyboard-layout', 'custom/wallpaper-mode', 'custom/controls']
           - "'custom/hyperlab-vms' not in render_waybar['modules-right']"
           - "'custom/hyperlab-gpu' not in render_waybar['modules-right']"
           - "render_hyper_modules | length == 4"
@@ -616,8 +636,8 @@
           - "render_palette_never_runs_privileged"
           - "'destroy' not in render_waybar | to_json"
         fail_msg: >-
-          A HyperLab Shell invariant broke. The first Waybar module must be the
-          HyperLab launcher followed by the hover trust drawer; direct UI routes
+          A HyperLab Shell invariant broke. The Waybar left zone must be workspaces followed by the
+          HyperLab launcher and its hover trust drawer; direct UI routes
           must reuse the resident Layer Shell manager. Operations inside the
           manager must never bypass hyperlabctl or poll
           faster than the recorded contract permits.
@@ -766,6 +786,12 @@
           - render_lg_rule is search('OWNER="' ~ looking_glass_qemu_user ~ '"')
           - render_lg_rule is search('TAG\+="uaccess"')
           - render_lg_handlers is search('--action=change')
+          - "'modprobe -r kvmfr' not in render_lg_handlers"
+          - "'looking_glass_kvmfr_size_tool' in render_lg_tasks"
+          - "'looking_glass_kvmfr_reload_required' in render_lg_tasks"
+          - "'modinfo' in render_lg_tasks"
+          - "'fuser' in render_lg_tasks"
+          - "'state: absent' in render_lg_tasks"
           - "'-DENABLE_X11=no' in render_lg_tasks"
           - looking_glass_packages | intersect(looking_glass_x11_deps) | length == 0
           - render_lg_hosts == 'hypervisor'
@@ -778,6 +804,9 @@
                | list | length > 0
           - "'ansible_processor_vcpus' not in render_lg_tasks"
           - "'--abbrev=10' in render_lg_tasks"
+          - "(render_lg_tasks | regex_search('input_patch_sha256:\\s+\\{\\{\\s+looking_glass_input_patch_sha256\\s+\\}\\}')) is not none"
+          - "'looking_glass_input_patch_target' in render_lg_tasks"
+          - looking_glass_input_patch_sha256 | length == 64
           - looking_glass_commit | length == 40
           - looking_glass_build is search(looking_glass_commit[0:10] ~ '$')
         quiet: true
@@ -807,6 +836,167 @@
     - name: Remove the Looking Glass rendering workspace
       ansible.builtin.file:
         path: "{{ render_lg_ws.path }}"
+        state: absent
+
+    - name: Load the Linux Looking Glass guest defaults as real variables
+      ansible.builtin.include_vars:
+        file: >-
+          {{ repo_root }}/roles/guest_looking_glass_linux/defaults/main.yml
+
+    - name: Make a Linux Looking Glass guest rendering workspace
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .guest-looking-glass-render
+      register: render_guest_lg_ws
+
+    - name: Render the deterministic XDPH selection files
+      ansible.builtin.template:
+        src: >-
+          {{ repo_root }}/roles/guest_looking_glass_linux/templates/{{ item.src }}
+        dest: "{{ render_guest_lg_ws.path }}/{{ item.dest }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - src: xdph-headless-picker.sh.j2
+          dest: xdph-headless-picker.sh
+          mode: "0755"
+        - src: xdph.conf.j2
+          dest: xdph.conf
+          mode: "0600"
+
+    - name: Shellcheck the rendered XDPH picker
+      ansible.builtin.command:
+        argv:
+          - shellcheck
+          - -s
+          - bash
+          - "{{ render_guest_lg_ws.path }}/xdph-headless-picker.sh"
+      changed_when: false
+
+    - name: Read the rendered XDPH selection files and role tasks
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ render_guest_lg_ws.path }}/xdph-headless-picker.sh"
+        - "{{ render_guest_lg_ws.path }}/xdph.conf"
+        - "{{ repo_root }}/roles/guest_looking_glass_linux/tasks/main.yml"
+      register: render_guest_lg
+
+    - name: Linux Looking Glass deterministic XDPH invariants
+      ansible.builtin.assert:
+        that:
+          - guest_looking_glass_linux_capture_output == 'HEADLESS-0'
+          - guest_looking_glass_linux_capture_max_fps | int == 144
+          - >-
+            guest_looking_glass_linux_xdph_picker ==
+            '/usr/local/bin/privatestack-looking-glass-xdph-picker'
+          - "'/usr/bin/hyprctl -j monitors' in render_guest_lg_picker"
+          - "'json.load(sys.stdin)' in render_guest_lg_picker"
+          - >-
+            "guest_looking_glass_linux_capture_output='HEADLESS-0'"
+            in render_guest_lg_picker
+          - "'[SELECTION]/screen:%s\\\\n' in render_guest_lg_picker"
+          - "'max_fps = 144' in render_guest_lg_config"
+          - >-
+            'custom_picker_binary = '
+            ~ guest_looking_glass_linux_xdph_picker
+            in render_guest_lg_config
+          - "'xdph-headless-picker.sh.j2' in render_guest_lg_tasks"
+          - "'xdph.conf.j2' in render_guest_lg_tasks"
+          - "'systemctl enable looking-glass-host' not in render_guest_lg_tasks"
+        fail_msg: >-
+          The Linux Looking Glass guest must select the managed HEADLESS-0
+          output without an invisible portal prompt, while the sender remains
+          manual and disabled by default.
+        quiet: true
+      vars:
+        render_guest_lg_picker: >-
+          {{ render_guest_lg.results[0].content | b64decode }}
+        render_guest_lg_config: >-
+          {{ render_guest_lg.results[1].content | b64decode }}
+        render_guest_lg_tasks: >-
+          {{ render_guest_lg.results[2].content | b64decode }}
+
+    - name: Remove the Linux Looking Glass guest rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_guest_lg_ws.path }}"
+        state: absent
+
+    - name: Load the guest NVIDIA defaults as real variables
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/guest_gpu_nvidia/defaults/main.yml"
+
+    - name: Make a guest NVIDIA rendering workspace
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .guest-nvidia-render
+      register: render_guest_nvidia_ws
+
+    - name: Render the persistent guest NVIDIA DRM alias rule
+      ansible.builtin.template:
+        src: >-
+          {{ repo_root }}/roles/guest_gpu_nvidia/templates/95-privatestack-nvidia-drm.rules.j2
+        dest: "{{ render_guest_nvidia_ws.path }}/95-privatestack-nvidia-drm.rules"
+        mode: "0644"
+      vars:
+        guest_gpu_nvidia_drm_pci_address: "0000:05:00.0"
+
+    - name: Read the guest NVIDIA alias rule and its role contract
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ render_guest_nvidia_ws.path }}/95-privatestack-nvidia-drm.rules"
+        - "{{ repo_root }}/roles/guest_gpu_nvidia/tasks/main.yml"
+        - "{{ repo_root }}/roles/guest_gpu_nvidia/handlers/main.yml"
+      register: render_guest_nvidia
+
+    - name: Guest NVIDIA persistent DRM alias invariants
+      ansible.builtin.assert:
+        that:
+          - >-
+            guest_gpu_nvidia_drm_alias ==
+            '/dev/dri/privatestack-nvidia'
+          - "'ENV{DEVTYPE}==\"drm_minor\"' in render_guest_nvidia_rule"
+          - "'KERNEL==\"card[0-9]*\"' in render_guest_nvidia_rule"
+          - "'KERNELS==\"0000:05:00.0\"' in render_guest_nvidia_rule"
+          - "'ATTRS{vendor}==\"0x10de\"' in render_guest_nvidia_rule"
+          - "'SYMLINK+=\"dri/privatestack-nvidia\"' in render_guest_nvidia_rule"
+          - "'TAG+=\"uaccess\"' in render_guest_nvidia_rule"
+          - >-
+            render_guest_nvidia_tasks.find(
+              'Identify the passed NVIDIA display controller') <
+            render_guest_nvidia_tasks.find(
+              'Persist the passed NVIDIA DRM alias')
+          - >-
+            render_guest_nvidia_tasks.find(
+              'Persist the passed NVIDIA DRM alias') <
+            render_guest_nvidia_tasks.find(
+              'Verify the persistent NVIDIA DRM alias rule')
+          - >-
+            render_guest_nvidia_tasks.find(
+              'Verify the persistent NVIDIA DRM alias rule') <
+            render_guest_nvidia_tasks.find(
+              'Complete pending NVIDIA initramfs work')
+          - "'guest_gpu_nvidia_drm_alias_canonical' in render_guest_nvidia_tasks"
+          - "'guest_gpu_nvidia_drm_by_path_canonical' in render_guest_nvidia_tasks"
+          - "'udevadm' in render_guest_nvidia_handlers"
+          - "'--subsystem-match=drm' in render_guest_nvidia_handlers"
+          - "'--action=change' in render_guest_nvidia_handlers"
+        fail_msg: >-
+          A guest NVIDIA invariant broke. The compositor alias must select the
+          single passed display controller by PCI identity, survive reboot,
+          retain active-seat access and be verified after the udev retrigger.
+        quiet: true
+      vars:
+        render_guest_nvidia_rule: >-
+          {{ render_guest_nvidia.results[0].content | b64decode }}
+        render_guest_nvidia_tasks: >-
+          {{ render_guest_nvidia.results[1].content | b64decode }}
+        render_guest_nvidia_handlers: >-
+          {{ render_guest_nvidia.results[2].content | b64decode }}
+
+    - name: Remove the guest NVIDIA rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_guest_nvidia_ws.path }}"
         state: absent
 
     - name: Load the Nitro Sense defaults as real variables

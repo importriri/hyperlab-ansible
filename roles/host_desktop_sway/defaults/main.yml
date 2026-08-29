@@ -35,8 +35,10 @@ host_desktop_sway_input_defaults:
 host_desktop_sway_removed_packages:
   - yazi
   - cava
+  - superfile
 
 host_desktop_sway_packages:
+  # Sway shell
   - sway
   - swaybg
   - swayidle
@@ -52,18 +54,57 @@ host_desktop_sway_packages:
   - grim
   - slurp
   - wl-clipboard
+
+  # File management and removable/network storage
+  - nemo
+  - gvfs
+  - gvfs-mtp
+  - gvfs-smb
+  - gvfs-nfs
+  - udisks2
+  - file-roller
+  - ffmpegthumbnailer
+
+  # Multimedia and PipeWire
+  - ffmpeg
+  - mpv
+  - celluloid
+  - pavucontrol
+  - pipewire
+  - pipewire-audio
+  - pipewire-alsa
+  - pipewire-pulse
+  - wireplumber
+  - gst-plugin-pipewire
+  - gst-plugins-base
+  - gst-plugins-good
+  - gst-plugins-bad
+  - gst-plugins-ugly
+  - gst-libav
+  - rtkit
+  - alsa-utils
+  - pamixer
+  - playerctl
+
+  # Intel iGPU userspace. The NVIDIA dGPU remains VFIO-owned.
+  - mesa
+  - vulkan-intel
+  - vulkan-tools
+  - intel-media-driver
+  - libva-utils
+
+  # Desktop integration
   - xdg-desktop-portal-wlr
+  - xdg-desktop-portal-gtk
   - xdg-user-dirs
   - brightnessctl
   - polkit
-  - pipewire
-  - pipewire-pulse
-  - wireplumber
-  - pamixer
   - papirus-icon-theme
   - ttf-jetbrains-mono-nerd
   - noto-fonts
   - ly
+
+  # Shell and diagnostics
   - starship
   - zoxide
   - fzf
@@ -71,7 +112,8 @@ host_desktop_sway_packages:
   - bat
   - ripgrep
   - fd
-  - superfile
+  - jq
+  - wayland-utils
   - btop
 
 # Files copied into both read-only runtime palette pools. The active theme is a
@@ -82,7 +124,6 @@ host_desktop_sway_palette_runtime_fragments:
   - hyperlab-palette.sway
   - hyperlab-palette.rasi
   - hyperlab-palette-foot.ini
-  - hyperlab-palette-superfile.toml
   - hyperlab-palette-swaylock.conf
 
 

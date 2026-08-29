@@ -41,7 +41,6 @@ print(node.get("id", ""), app)
 case ${app_id} in
   foot) opacity=0.82 ;;
   floatterm) opacity=0.80 ;;
-  superfile) opacity=0.88 ;;
   hyperlab-operation) opacity=0.84 ;;
   firefox|org.mozilla.firefox) opacity=0.90 ;;
   *) opacity=0.90 ;;

@@ -14,3 +14,5 @@
 #ffe9ef  text lightened toward red
 #fff0f4  text lightened toward pink
 #fff1f4  text lightened toward light red
+#b184ff	fixed violet GPU/status accent from the definitive mockup; not a desktop palette colour
+#ffffff	neutral alpha-compositor tint used only for translucent Waybar chrome and hover surfaces

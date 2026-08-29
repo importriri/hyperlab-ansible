@@ -2,10 +2,18 @@
 # Every variant must declare the same tokens; audit_palette.py enforces this.
 
 default: green
+domains:
+  # Trust identity is semantic, not a theme accent. Variants may change the
+  # desktop appearance but must never change what a domain colour means.
+  dom_clean: '#72f2a5'
+  dom_dev: '#5b8cff'
+  dom_lab: '#b184ff'
+  dom_dirty: '#ff9d45'
+  dom_services: '#35e4dd'
 variants:
   green:
     label: Green
-    note: Green primary accent, teal secondary accent, violet reserved for the Lab domain.
+    note: Green primary accent with teal secondary accent; trust-domain colours stay semantic.
     base: '#0c1512'
     mantle: '#111d18'
     surface: '#1a2b23'
@@ -17,14 +25,16 @@ variants:
     ok: '#72f2a5'
     warn: '#ffd275'
     bad: '#ff668f'
-    dom_clean: '#72f2a5'
-    dom_dev: '#5b8cff'
-    dom_lab: '#b184ff'
-    dom_dirty: '#ff9d45'
-    dom_services: '#35e4dd'
+    # ANSI slots belong to terminal appearance, not trust identity.
+    ansi4: '#5b8cff'
+    ansi5: '#b184ff'
+    ansi6: '#35e4dd'
+    ansi12: '#5b8cff'
+    ansi13: '#b184ff'
+    ansi14: '#35e4dd'
   violet:
     label: Violet
-    note: Violet ambience with cyan accents and magenta reserved for the Lab domain.
+    note: Violet ambience with cyan accents; trust-domain colours stay semantic.
     base: '#0a0a16'
     mantle: '#12122a'
     surface: '#1b1b3a'
@@ -36,14 +46,16 @@ variants:
     ok: '#72f2a5'
     warn: '#ffd275'
     bad: '#ff668f'
-    dom_clean: '#72f2a5'
-    dom_dev: '#5b8cff'
-    dom_lab: '#ff7ce5'
-    dom_dirty: '#ff9d45'
-    dom_services: '#35e4dd'
+    # ANSI slots belong to terminal appearance, not trust identity.
+    ansi4: '#5b8cff'
+    ansi5: '#ff7ce5'
+    ansi6: '#43d8ff'
+    ansi12: '#5b8cff'
+    ansi13: '#ff7ce5'
+    ansi14: '#35e4dd'
   blue:
     label: Blue
-    note: Deep blue with electric-blue and cyan accents; a cool high-contrast variant.
+    note: Deep blue with electric-blue and cyan accents; trust-domain colours stay semantic.
     base: '#08131f'
     mantle: '#0d1c2b'
     surface: '#142a3e'
@@ -55,14 +67,16 @@ variants:
     ok: '#62d9a6'
     warn: '#ffd166'
     bad: '#ff6b7a'
-    dom_clean: '#72f2a5'
-    dom_dev: '#ffd166'
-    dom_lab: '#c58cff'
-    dom_dirty: '#ff7a59'
-    dom_services: '#35d6d0'
+    # ANSI slots belong to terminal appearance, not trust identity.
+    ansi4: '#ffd166'
+    ansi5: '#c58cff'
+    ansi6: '#55d6ff'
+    ansi12: '#ffd166'
+    ansi13: '#c58cff'
+    ansi14: '#35d6d0'
   red:
     label: Red
-    note: Deep red with coral and amber accents while preserving trust-domain contrast.
+    note: Deep red with coral and amber accents; trust-domain colours stay semantic.
     base: '#180b0d'
     mantle: '#241013'
     surface: '#35171b'
@@ -74,8 +88,10 @@ variants:
     ok: '#72f2a5'
     warn: '#ffd166'
     bad: '#ff3d5a'
-    dom_clean: '#72f2a5'
-    dom_dev: '#5b8cff'
-    dom_lab: '#c58cff'
-    dom_dirty: '#ff9f43'
-    dom_services: '#35d6d0'
+    # ANSI slots belong to terminal appearance, not trust identity.
+    ansi4: '#5b8cff'
+    ansi5: '#c58cff'
+    ansi6: '#ff9f43'
+    ansi12: '#5b8cff'
+    ansi13: '#c58cff'
+    ansi14: '#35d6d0'

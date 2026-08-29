@@ -12,10 +12,10 @@
     hl-warn: #ffd166;
     hl-bad: #ff6b7a;
     hl-dom-clean: #72f2a5;
-    hl-dom-dev: #ffd166;
-    hl-dom-lab: #c58cff;
-    hl-dom-dirty: #ff7a59;
-    hl-dom-services: #35d6d0;
+    hl-dom-dev: #5b8cff;
+    hl-dom-lab: #b184ff;
+    hl-dom-dirty: #ff9d45;
+    hl-dom-services: #35e4dd;
     background-color: transparent;
     text-color:       @hl-text;
 }

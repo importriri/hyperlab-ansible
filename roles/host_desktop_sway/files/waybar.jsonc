@@ -11,9 +11,9 @@
     "on-sigusr1": "toggle",
     "on-sigusr2": "reload",
     "spacing": 0,
-    "modules-left": ["custom/brand", "group/hyperlab", "sway/workspaces", "sway/mode"],
-    "modules-center": [],
-    "modules-right": ["temperature", "custom/keyboard-layout", "custom/controls", "custom/wallpaper-mode", "network", "pulseaudio", "battery", "clock"],
+    "modules-left": ["sway/workspaces", "custom/brand", "group/hyperlab", "sway/mode"],
+    "modules-center": ["clock"],
+    "modules-right": ["group/telemetry", "group/session"],
 
     "custom/brand": {
         "format": "  HyperLab",
@@ -27,11 +27,9 @@
         "disable-scroll": true,
         "format": "{name}"
     },
-    // The HyperLab cockpit. Collapsed it is one pill: the trust level, because
-    // that is the only lab fact you cannot recover by looking. Hovering opens
-    // the drawer over the other three. Every pill is the same script with a
-    // different field, and every payload carries the same four keys, so one
-    // set of CSS rules covers all of them.
+    // Definitive mockup order: workspaces first, then the HyperLab pod. The trust
+    // stream stays attached to that pod so the bar keeps real runtime data rather
+    // than prototype counters.
     "group/hyperlab": {
         "orientation": "horizontal",
         "drawer": {
@@ -83,6 +81,15 @@
     },
 
 
+    "group/telemetry": {
+        "orientation": "horizontal",
+        "modules": ["temperature", "network", "pulseaudio", "battery"]
+    },
+    "group/session": {
+        "orientation": "horizontal",
+        "modules": ["custom/keyboard-layout", "custom/wallpaper-mode", "custom/controls"]
+    },
+
     "custom/keyboard-layout": {
         "exec": "/usr/local/bin/privatestack-keyboard status-json",
         "return-type": "json",
@@ -113,7 +120,7 @@
         "on-click": "/usr/local/bin/privatestack-theme mode-toggle"
     },
     "clock": {
-        "format": "  {:%a %d %b   %H:%M}",
+        "format": "{:%a %d %b  %H:%M}",
         "tooltip-format": "<tt>{calendar}</tt>"
     },
     // No hwmon-path: waybar falls back to thermal_zone0. Pin a zone here if
@@ -139,7 +146,8 @@
         "format": "{icon}  {volume}%",
         "format-muted": "󰝟  mute",
         "format-icons": { "default": ["", "", ""] },
-        "on-click": "pamixer -t",
+        "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "max-volume": 125,
         "scroll-step": 5
     }
 }

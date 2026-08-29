@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from render_palette import TOKENS  # noqa: E402
+from render_palette import SURFACE_TOKENS  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent.parent
 SURFACES = REPO / "roles/host_desktop_sway/files"
@@ -45,7 +45,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 def main(argv: list[str]) -> int:
     fragments = Path(argv[1]) if len(argv) > 1 else SURFACES / "palette"
-    known = {f"hl_{token}" for token in TOKENS}
+    known = {f"hl_{token}" for token in SURFACE_TOKENS}
 
     print("=== fragments define every token")
     variants = sorted(p.name for p in fragments.iterdir() if p.is_dir())
@@ -53,7 +53,7 @@ def main(argv: list[str]) -> int:
     for variant in variants:
         gtk = fragments / variant / "hyperlab-palette-gtk.css"
         defined = set(re.findall(r"@define-color\s+(hl_\w+)", gtk.read_text(encoding="utf-8")))
-        check(f"{variant}: {len(TOKENS)} tokens defined", defined == known,
+        check(f"{variant}: {len(SURFACE_TOKENS)} tokens defined", defined == known,
               f"missing {sorted(known - defined)}")
     shapes = {re.sub(r"#[0-9a-fA-F]{6}", "X",
                      (fragments / v / "hyperlab-palette-gtk.css").read_text())

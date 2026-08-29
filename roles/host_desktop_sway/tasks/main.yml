@@ -159,12 +159,12 @@
     - { src: privatestack-hyperlab-domains.py, dest: privatestack-hyperlab-domains }
     - { src: privatestack-hyperlab-session.sh, dest: privatestack-hyperlab-session }
     - { src: privatestack-waybar.sh, dest: privatestack-waybar }
-    - { src: privatestack-superfile.sh, dest: privatestack-superfile }
     - { src: privatestack-opacity-toggle.sh, dest: privatestack-opacity-toggle }
     - { src: privatestack-theme.sh, dest: privatestack-theme }
     - { src: privatestack-keyboard.sh, dest: privatestack-keyboard }
     - { src: privatestack-controls.sh, dest: privatestack-controls }
     - { src: privatestack-swaylock.sh, dest: privatestack-swaylock }
+    - { src: privatestack-screenshot.sh, dest: privatestack-screenshot }
     - { src: privatestack-swaybar-status.py, dest: privatestack-swaybar-status }
     - { src: hyperlabctl-wrapper.sh, dest: hyperlabctl }
 
@@ -175,6 +175,8 @@
   loop:
     - /usr/local/bin/privatestack-cava
     - /usr/local/bin/privatestack-fullscreen
+    - /usr/local/bin/privatestack-superfile
+    - "/home/{{ admin_user }}/.config/superfile"
     - "/home/{{ admin_user }}/.config/cava"
 
 - name: Deploy the HyperLab Control Center application entry
@@ -308,8 +310,6 @@
     - swaylock
     - gtk-3.0
     - gtk-4.0
-    - superfile
-    - superfile/theme
 
 - name: Deploy the HyperLab desktop shell
   ansible.builtin.copy:
@@ -323,7 +323,6 @@
     - { src: waybar.jsonc, dest: waybar/config.jsonc }
     - { src: waybar.css, dest: waybar/style.css }
     - { src: foot.ini, dest: foot/foot.ini }
-    - { src: superfile-config.toml, dest: superfile/config.toml }
     - { src: mako.conf, dest: mako/config }
     - { src: rofi-config.rasi, dest: rofi/config.rasi }
     - { src: rofi-mocha.rasi, dest: rofi/rofi-mocha.rasi }

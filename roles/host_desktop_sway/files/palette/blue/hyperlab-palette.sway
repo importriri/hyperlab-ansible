@@ -11,10 +11,10 @@ set $hl_ok #62d9a6
 set $hl_warn #ffd166
 set $hl_bad #ff6b7a
 set $hl_dom_clean #72f2a5
-set $hl_dom_dev #ffd166
-set $hl_dom_lab #c58cff
-set $hl_dom_dirty #ff7a59
-set $hl_dom_services #35d6d0
+set $hl_dom_dev #5b8cff
+set $hl_dom_lab #b184ff
+set $hl_dom_dirty #ff9d45
+set $hl_dom_services #35e4dd
 
 # focused / unfocused / urgent borders derived from the tokens
 client.focused          $hl_accent  $hl_mantle  $hl_text    $hl_accent  $hl_accent

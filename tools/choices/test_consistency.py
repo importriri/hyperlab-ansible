@@ -42,8 +42,17 @@ def main() -> int:
     else:
         check("waybar_height", doc["waybar_height"]["value"], bar.get("height"))
         shape = (
-            "brand_and_trust_drawer"
-            if left[:2] == ["custom/brand", "group/hyperlab"]
+            "workspaces_brand_and_trust_drawer"
+            if left[:3] == [
+                "sway/workspaces",
+                "custom/brand",
+                "group/hyperlab",
+            ]
+            else "brand_and_trust_drawer"
+            if left[:2] == [
+                "custom/brand",
+                "group/hyperlab",
+            ]
             else "single_combined_launcher"
             if "custom/hyperlab-launcher" in left
             else "unknown"
@@ -51,15 +60,29 @@ def main() -> int:
         check("waybar_launcher_shape", doc["waybar_launcher_shape"]["value"], shape)
 
     if source is not None:
-        mapping = re.search(
-            r'def _section_to_drawer_tab\(.*?\).*?'
-            r'if section in \{[^}]*"domains"[^}]*\}:\s*return "(\w+)"',
-            source,
-            re.DOTALL,
+        drawer_start = source.find("    def _build_drawer_shell")
+        drawer_end = source.find("    def _drawer_vm_row", drawer_start)
+        drawer_block = (
+            source[drawer_start:drawer_end]
+            if drawer_start >= 0 and drawer_end > drawer_start
+            else ""
         )
-        check("drawer_domains_section_tab",
-              doc["drawer_domains_section_tab"]["value"],
-              mapping.group(1) if mapping else "not found")
+        drawer_shape = (
+            "machine_showcase_no_tabs"
+            if (
+                "self._build_vm_showcase(columns=2, compact=True)"
+                in drawer_block
+                and "drawer-tabs" not in drawer_block
+                and "Gtk.SearchEntry" not in drawer_block
+                and "drawer-footer" not in drawer_block
+            )
+            else "tabbed_vms_and_system"
+        )
+        check(
+            "drawer_navigation_shape",
+            doc["drawer_navigation_shape"]["value"],
+            drawer_shape,
+        )
         snapshot = "disabled_until_m12" if "Snapshot & Backup stage" in source else "enabled"
         check("snapshot_actions", doc["snapshot_actions"]["value"], snapshot)
         enumeration = "vm_only" if "qrexec" not in source else "guest_agent"

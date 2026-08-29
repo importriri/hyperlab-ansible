@@ -66,6 +66,7 @@ def hue_gap(a: str, b: str) -> float:
 def audit(path: Path) -> int:
     doc = yaml.safe_load(path.read_text())
     variants = doc["variants"]
+    domains = doc.get("domains", {})
     failures: list[str] = []
     warnings: list[str] = []
 
@@ -85,6 +86,19 @@ def audit(path: Path) -> int:
         failures.append(f"default '{default}' is not a variant")
         print(f"  FAIL default '{default}' does not exist")
 
+    required_domains = set(DOMAINS)
+    if set(domains) != required_domains:
+        failures.append(
+            "canonical domains: missing %s, extra %s"
+            % (sorted(required_domains - set(domains)), sorted(set(domains) - required_domains))
+        )
+        print("  FAIL canonical domain token set")
+    for variant, tokens in variants.items():
+        leaked = sorted(set(tokens) & required_domains)
+        if leaked:
+            failures.append(f"{variant}: overrides canonical domain tokens {leaked}")
+            print(f"  FAIL {variant}: domain overrides {leaked}")
+
     print("\n=== 2. WCAG contrast (text on every background)")
     for variant, tokens in variants.items():
         print(f"  [{variant}]")
@@ -102,26 +116,34 @@ def audit(path: Path) -> int:
                 warnings.append(f"{variant}: {token} on mantle = {ratio:.2f}")
             print(f"    {mark} {token:8} on mantle   {ratio:5.2f}  (minimum {AA_LARGE})")
 
-    print("\n=== 3. five-domain separation")
-    for variant, tokens in variants.items():
-        print(f"  [{variant}]")
+    print("\n=== 3. canonical five-domain separation")
+    if required_domains.issubset(domains):
         worst = None
         for i, a in enumerate(DOMAINS):
             for b in DOMAINS[i + 1:]:
-                gap = hue_gap(tokens[a], tokens[b])
+                gap = hue_gap(domains[a], domains[b])
                 if worst is None or gap < worst[0]:
                     worst = (gap, a, b)
                 if gap < HUE_MIN:
-                    failures.append(f"{variant}: {a} e {b} are separated by {gap:.0f} degrees")
-                    print(f"    FAIL {a} vs {b}: {gap:.0f} degrees")
-        print(f"    closest pair: {worst[1]} / {worst[2]} a {worst[0]:.0f} degrees")
-        for domain in DOMAINS:
-            gap = hue_gap(tokens[domain], tokens["accent"])
-            if gap < ACCENT_HUE_MIN:
-                warnings.append(
-                    f"{variant}: {domain} is {gap:.0f} degrees from the accent; "
-                    "it needs a shape marker as well as colour")
-                print(f"    warn {domain} vs accent: {gap:.0f} degrees")
+                    failures.append(
+                        f"canonical domains: {a} and {b} are separated by {gap:.0f} degrees"
+                    )
+                    print(f"  FAIL {a} vs {b}: {gap:.0f} degrees")
+        if worst is not None:
+            print(
+                f"  closest pair: {worst[1]} / {worst[2]} at "
+                f"{worst[0]:.0f} degrees"
+            )
+        for variant, tokens in variants.items():
+            print(f"  [{variant} accent]")
+            for domain in DOMAINS:
+                gap = hue_gap(domains[domain], tokens["accent"])
+                if gap < ACCENT_HUE_MIN:
+                    warnings.append(
+                        f"{variant}: {domain} is {gap:.0f} degrees from the accent; "
+                        "it needs a shape marker as well as colour"
+                    )
+                    print(f"    warn {domain} vs accent: {gap:.0f} degrees")
 
     print("\n" + "=" * 62)
     for item in warnings:

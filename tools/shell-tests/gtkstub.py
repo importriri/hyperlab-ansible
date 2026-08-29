@@ -164,6 +164,18 @@ class Grid(Widget):
     def set_column_spacing(self, v): self.props["col_spacing"] = v
     def set_row_spacing(self, v): self.props["row_spacing"] = v
     def get_child_at(self, col, row): return None
+class FlowBox(Widget):
+    def set_column_spacing(self, value): self.props["column_spacing"] = value
+    def set_row_spacing(self, value): self.props["row_spacing"] = value
+    def set_max_children_per_line(self, value): self.props["max_children"] = value
+
+
+class Fixed(Widget):
+    def put(self, child, x, y):
+        self.props.setdefault("positions", []).append((child, x, y))
+        self.append(child)
+
+
 class Image(Widget):
     @staticmethod
     def new_from_file(path):
@@ -213,7 +225,11 @@ class SpinButton(Widget):
     def set_value(self, v): self.props["value"] = v
     def get_value(self): return self.props.get("value", 0)
     def get_value_as_int(self): return int(self.props.get("value", 0))
-class Revealer(Widget): pass
+class Revealer(Widget):
+    def set_transition_type(self, value): self.props["transition_type"] = value
+    def set_transition_duration(self, value): self.props["transition_duration"] = value
+    def set_reveal_child(self, value): self.props["reveal_child"] = value
+
 
 
 def install() -> None:
@@ -224,6 +240,9 @@ def install() -> None:
             setattr(gtk, name, value)
     gtk.Orientation = Orientation
     gtk.PolicyType = PolicyType
+    gtk.RevealerTransitionType = type(
+        "RevealerTransitionType", (), {"CROSSFADE": _Enum("CROSSFADE")}
+    )
     gtk.Align = Align
     gtk.INVALID_LIST_POSITION = 4294967295
     gtk.SelectionMode = type("SelectionMode", (), {
@@ -281,11 +300,11 @@ def install() -> None:
     layer = types.ModuleType("Gtk4LayerShell")
     for name in ("init_for_window", "set_layer", "set_anchor",
                  "set_keyboard_mode", "set_namespace", "set_margin",
-                 "auto_exclusive_zone_enable"):
+                 "set_exclusive_zone", "auto_exclusive_zone_enable"):
         setattr(layer, name, lambda *a, **k: None)
     layer.Layer = type("Layer", (), {"TOP": 1, "OVERLAY": 2})
     layer.Edge = type("Edge", (), {"TOP": 0, "BOTTOM": 1, "LEFT": 2, "RIGHT": 3})
-    layer.KeyboardMode = type("KeyboardMode", (), {"EXCLUSIVE": 1, "ON_DEMAND": 2})
+    layer.KeyboardMode = type("KeyboardMode", (), {"NONE": 0, "EXCLUSIVE": 1, "ON_DEMAND": 2})
 
     repository = types.ModuleType("gi.repository")
     for name, module in (("Gtk", gtk), ("Gdk", gdk), ("Gio", gio),

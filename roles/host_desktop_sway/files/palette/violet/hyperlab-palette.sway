@@ -12,7 +12,7 @@ set $hl_warn #ffd275
 set $hl_bad #ff668f
 set $hl_dom_clean #72f2a5
 set $hl_dom_dev #5b8cff
-set $hl_dom_lab #ff7ce5
+set $hl_dom_lab #b184ff
 set $hl_dom_dirty #ff9d45
 set $hl_dom_services #35e4dd
 

@@ -8,13 +8,14 @@ from pathlib import Path
 
 import yaml
 
-from render_palette import TOKENS, WRITERS
+from render_palette import TOKENS, WRITERS, resolved_colours
 
 
 def main(root: Path) -> int:
     doc = yaml.safe_load((Path(__file__).with_name("palette.yml")).read_text())
     failures: list[str] = []
-    for variant, colours in doc["variants"].items():
+    for variant in doc["variants"]:
+        colours = resolved_colours(doc, variant)
         allowed = {colours[t].lower() for t in TOKENS}
         allowed |= {v.lstrip("#") for v in allowed}
         outdir = root / variant

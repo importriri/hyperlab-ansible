@@ -127,7 +127,6 @@ install_active_palette() {
     copy_atomic "${source_dir}/hyperlab-palette-gtk.css" "${config_home}/gtk-3.0/hyperlab-palette.css"
     copy_atomic "${source_dir}/hyperlab-palette-gtk.css" "${config_home}/gtk-4.0/hyperlab-palette.css"
     copy_atomic "${source_dir}/hyperlab-palette-waybar.css" "${config_home}/waybar/palette.css"
-    copy_atomic "${source_dir}/hyperlab-palette-superfile.toml" "${config_home}/superfile/theme/hyperlab.toml"
     copy_atomic "${source_dir}/hyperlab-palette-swaylock.conf" "${config_home}/swaylock/config"
 }
 
@@ -141,7 +140,12 @@ set_desktop_wallpaper() {
 
 reload_palette_consumers() {
     pkill -USR2 -x waybar 2>/dev/null || true
-    /usr/local/bin/privatestack-hyperlab-domains --reload-theme >/dev/null 2>&1 || true
+    # A Control Center callback can own this transaction synchronously. Calling
+    # back into the same GApplication before that callback returns deadlocks the
+    # command-line handoff, so the owning process performs its own reload.
+    if [[ ${HYPERLAB_THEME_SKIP_CONTROL_CENTER_RELOAD:-0} != 1 ]]; then
+        /usr/local/bin/privatestack-hyperlab-domains --reload-theme >/dev/null 2>&1 || true
+    fi
 }
 
 signal_wallpaper_mode() { pkill -SIGRTMIN+9 -x waybar 2>/dev/null || true; }
@@ -167,7 +171,12 @@ set_theme() {
     reload_palette_consumers
     signal_wallpaper_mode
     signal_controls
-    swaymsg -q reload >/dev/null
+    # A Control Center-owned theme transaction keeps its visible surface alive.
+    # Sway reloads execute exec_always entries, including the resident manager
+    # supervisor, so the owning window flushes that reload only after dismissal.
+    if [[ ${HYPERLAB_THEME_DEFER_SWAY_RELOAD:-0} != 1 ]]; then
+        swaymsg -q reload >/dev/null
+    fi
     notify "Theme: ${theme^^}"
 }
 

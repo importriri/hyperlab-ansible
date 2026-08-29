@@ -242,11 +242,11 @@ def handle_event(event: dict[str, Any]) -> None:
         spawn(["foot", "--app-id=floatterm", "nmtui"])
     elif name == "volume":
         if button == 1:
-            spawn(["pamixer", "-t"])
+            spawn(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
         elif button == 4:
-            spawn(["pamixer", "-i", "5"])
+            spawn(["wpctl", "set-volume", "-l", "1.25", "@DEFAULT_AUDIO_SINK@", "5%+"])
         elif button == 5:
-            spawn(["pamixer", "-d", "5"])
+            spawn(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"])
 
 
 def event_reader(events: queue.SimpleQueue[dict[str, Any]]) -> None:

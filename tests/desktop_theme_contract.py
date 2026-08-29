@@ -38,8 +38,18 @@ def main() -> int:
         "active palette copies must not force the repository default",
     )
     require(
-        "superfile-theme.toml" not in host_tasks,
-        "superfile active theme must have only the palette task as owner",
+        "superfile" not in palette_tasks.lower(),
+        "retired Superfile palette still has active ownership",
+    )
+    require(
+        "superfile" not in theme.lower(),
+        "theme controller still copies retired Superfile assets",
+    )
+    require(
+        "hyperlab-palette-gtk.css" in palette_tasks
+        and "gtk-3.0/gtk.css" in host_tasks
+        and "gtk-4.0/gtk.css" in host_tasks,
+        "managed GTK palette is no longer the file-manager visual source of truth",
     )
 
     status = text("roles/host_desktop_sway/files/privatestack-swaybar-status.py")

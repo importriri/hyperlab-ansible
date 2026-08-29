@@ -11,7 +11,7 @@
 @define-color hl_warn #ffd166;
 @define-color hl_bad #ff6b7a;
 @define-color hl_dom_clean #72f2a5;
-@define-color hl_dom_dev #ffd166;
-@define-color hl_dom_lab #c58cff;
-@define-color hl_dom_dirty #ff7a59;
-@define-color hl_dom_services #35d6d0;
+@define-color hl_dom_dev #5b8cff;
+@define-color hl_dom_lab #b184ff;
+@define-color hl_dom_dirty #ff9d45;
+@define-color hl_dom_services #35e4dd;

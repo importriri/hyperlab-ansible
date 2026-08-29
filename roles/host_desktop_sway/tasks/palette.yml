@@ -102,5 +102,4 @@
     - { src: hyperlab-palette-gtk.css, dest: gtk-3.0/hyperlab-palette.css }
     - { src: hyperlab-palette-gtk.css, dest: gtk-4.0/hyperlab-palette.css }
     - { src: hyperlab-palette-waybar.css, dest: waybar/palette.css }
-    - { src: hyperlab-palette-superfile.toml, dest: superfile/theme/hyperlab.toml }
     - { src: hyperlab-palette-swaylock.conf, dest: swaylock/config }

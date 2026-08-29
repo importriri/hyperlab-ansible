@@ -27,22 +27,33 @@ def waybar() -> dict:
 
 def main() -> int:
     bar = waybar()
-    right = bar["modules-right"]
+    require(bar["modules-left"] == ["sway/workspaces", "custom/brand", "group/hyperlab", "sway/mode"],
+            "Waybar left zone must mirror the definitive mockup order")
+    require(bar["modules-center"] == ["clock"],
+            "clock must remain the only centered Waybar module")
+    require(bar["modules-right"] == ["group/telemetry", "group/session"],
+            "Waybar right side must be telemetry followed by session controls")
+    telemetry = bar["group/telemetry"]["modules"]
+    session = bar["group/session"]["modules"]
+    require(telemetry == ["temperature", "network", "pulseaudio", "battery"],
+            "telemetry pod order changed")
+    require(session == ["custom/keyboard-layout", "custom/wallpaper-mode", "custom/controls"],
+            "session-control pod order changed")
     for module in (
         "temperature",
         "custom/keyboard-layout",
         "custom/wallpaper-mode",
         "custom/controls",
     ):
-        require(module in right, f"Waybar module missing: {module}")
+        require(module in telemetry + session, f"Waybar module missing: {module}")
     require(bar["temperature"]["format"] == " {temperatureC}°C",
             "CPU temperature format is not visible")
     require(bar["custom/keyboard-layout"]["signal"] == 10,
             "keyboard status signal changed")
     require(bar["custom/controls"]["signal"] == 11,
             "controls status signal changed")
-    require(right.index("custom/controls") < right.index("custom/wallpaper-mode"),
-            "Controls must have a distinct hit target before wallpaper mode")
+    require(session.index("custom/wallpaper-mode") < session.index("custom/controls"),
+            "Controls must remain the final, distinct session hit target")
     for mouse_action in ("on-click", "on-click-right"):
         require("--surface drawer" in bar["custom/brand"][mouse_action],
                 f"brand {mouse_action} does not open the compact drawer")
@@ -110,6 +121,19 @@ def main() -> int:
             "keyboard controller still depends on a fragile layout index")
     require("bindsym $mod+Shift+$up move up" in sway,
             "Vim-style move-up binding was removed instead of resolving the collision")
+    require(
+        "wpctl set-volume -l 1.25 @DEFAULT_AUDIO_SINK@ 5%+" in sway,
+        "host volume-up must expose the reviewed 125 percent software ceiling",
+    )
+    require(
+        '["wpctl", "set-volume", "-l", "1.25", "@DEFAULT_AUDIO_SINK@", "5%+"]'
+        in text("roles/host_desktop_sway/files/privatestack-swaybar-status.py"),
+        "Swaybar volume scroll must share the reviewed software ceiling",
+    )
+    require(
+        '"max-volume": 125' in text("roles/host_desktop_sway/files/waybar.jsonc"),
+        "Waybar volume scroll must expose the reviewed software ceiling",
+    )
 
     for route in (
         "--surface drawer --section vms",
@@ -131,14 +155,15 @@ def main() -> int:
     require("Gtk.STYLE_PROVIDER_PRIORITY_USER + 1" in manager,
             "resident HyperLab surfaces cannot override the process-cached GTK user palette")
     for phrase in (
-        "Overview",
-        "Ready images",
-        "Manage VMs",
-        "Review images",
-        "Control Center session history",
-        "Problems, providers and technical tools",
+        "Machines",
+        "Create",
+        "Networks",
+        "GPU",
+        "GOLDEN IMAGE",
+        "SPEC PREVIEW",
+        "WHAT HAPPENS WHEN YOU CREATE",
     ):
-        require(phrase in manager, f"English control-plane text missing: {phrase}")
+        require(phrase in manager, f"definitive English mockup text missing: {phrase}")
 
     print("HyperLab desktop controls contract: OK")
     return 0
