@@ -1,0 +1,4 @@
+# Managed by hyperlab-ansible (roles/guest_gpu_nvidia). Do not hand-edit.
+# Select the passed display controller by PCI identity rather than its volatile
+# DRM card number. uaccess keeps device access with the active local seat.
+SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", KERNEL=="card[0-9]*", KERNELS=="{{ guest_gpu_nvidia_drm_pci_address }}", ATTRS{vendor}=="0x{{ guest_gpu_nvidia_vendor_id }}", SYMLINK+="{{ guest_gpu_nvidia_drm_alias | regex_replace('^/dev/', '') }}", TAG+="uaccess"

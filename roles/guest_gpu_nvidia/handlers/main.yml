@@ -5,3 +5,20 @@
       - /usr/bin/mkinitcpio
       - -P
   changed_when: true
+
+- name: Reload guest NVIDIA udev rules
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/udevadm
+      - control
+      - --reload
+  changed_when: true
+
+- name: Retrigger the guest NVIDIA DRM device
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/udevadm
+      - trigger
+      - --subsystem-match=drm
+      - --action=change
+  changed_when: true

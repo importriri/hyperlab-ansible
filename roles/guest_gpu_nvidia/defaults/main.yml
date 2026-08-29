@@ -14,6 +14,7 @@ guest_gpu_nvidia_packages:
   - vulkan-icd-loader
 
 guest_gpu_nvidia_vendor_id: "10de"
+guest_gpu_nvidia_drm_alias: /dev/dri/privatestack-nvidia
 guest_gpu_nvidia_modules:
   - nvidia
   - nvidia_modeset

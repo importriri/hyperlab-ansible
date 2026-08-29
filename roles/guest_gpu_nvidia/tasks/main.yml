@@ -8,6 +8,10 @@
       - ansible_facts['os_family'] == 'Archlinux'
       - "'-zen' in ansible_facts['kernel']"
       - guest_gpu_nvidia_vendor_id == '10de'
+      - guest_gpu_nvidia_drm_alias is string
+      - >-
+        guest_gpu_nvidia_drm_alias is
+        match('^/dev/dri/[A-Za-z0-9_.-]+$')
       - guest_gpu_nvidia_modules == ['nvidia', 'nvidia_modeset', 'nvidia_uvm', 'nvidia_drm']
     fail_msg: >-
       guest_gpu_nvidia is an Arch Zen workstation-guest brick for the reviewed
@@ -56,10 +60,58 @@
       GPU and audio functions through the VFIO VM transaction before applying
       guest_gpu_nvidia.
 
+- name: Identify the passed NVIDIA display controller
+  ansible.builtin.set_fact:
+    guest_gpu_nvidia_drm_pci_addresses: >-
+      {{
+        guest_gpu_nvidia_lspci.stdout
+        | regex_findall(
+            '^([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}[.][0-7])'
+            ~ '[ ]+03(?:00|02):[ ]+'
+            ~ guest_gpu_nvidia_vendor_id
+            ~ ':',
+            multiline=true,
+            ignorecase=true
+          )
+      }}
+
+- name: Require exactly one passed NVIDIA display controller
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_nvidia_drm_pci_addresses | length == 1
+    fail_msg: >-
+      The guest must expose exactly one NVIDIA VGA or 3D controller before a
+      deterministic DRM alias can be managed.
+
+- name: Select the passed NVIDIA display controller
+  ansible.builtin.set_fact:
+    guest_gpu_nvidia_drm_pci_address: >-
+      {{ guest_gpu_nvidia_drm_pci_addresses | first }}
+
 - name: Install the official NVIDIA Wayland guest stack
   community.general.pacman:
     name: "{{ guest_gpu_nvidia_packages }}"
     state: present
+
+- name: Persist the passed NVIDIA DRM alias
+  ansible.builtin.template:
+    src: 95-privatestack-nvidia-drm.rules.j2
+    dest: /etc/udev/rules.d/95-privatestack-nvidia-drm.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload guest NVIDIA udev rules
+    - Retrigger the guest NVIDIA DRM device
+
+- name: Verify the persistent NVIDIA DRM alias rule
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/udevadm
+      - verify
+      - /etc/udev/rules.d/95-privatestack-nvidia-drm.rules
+  changed_when: false
+  when: not ansible_check_mode
 
 - name: Load the NVIDIA module set at guest boot
   ansible.builtin.copy:
@@ -95,6 +147,43 @@
 
 - name: Complete pending NVIDIA initramfs work
   ansible.builtin.meta: flush_handlers
+
+- name: Resolve the managed NVIDIA DRM alias
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/readlink
+      - -f
+      - "{{ guest_gpu_nvidia_drm_alias }}"
+  register: guest_gpu_nvidia_drm_alias_canonical
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Resolve the PCI-derived NVIDIA DRM path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/readlink
+      - -f
+      - >-
+        /dev/dri/by-path/pci-{{ guest_gpu_nvidia_drm_pci_address }}-card
+  register: guest_gpu_nvidia_drm_by_path_canonical
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Require the persistent alias to select the passed NVIDIA card
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_nvidia_drm_alias_canonical.rc == 0
+      - guest_gpu_nvidia_drm_by_path_canonical.rc == 0
+      - guest_gpu_nvidia_drm_alias_canonical.stdout is match('^/dev/dri/card[0-9]+$')
+      - >-
+        guest_gpu_nvidia_drm_alias_canonical.stdout ==
+        guest_gpu_nvidia_drm_by_path_canonical.stdout
+    fail_msg: >-
+      The managed NVIDIA DRM alias was not created for the selected passed
+      display controller after reloading and retriggering udev.
+  when: not ansible_check_mode
 
 - name: Inspect the built NVIDIA kernel module
   ansible.builtin.command:
