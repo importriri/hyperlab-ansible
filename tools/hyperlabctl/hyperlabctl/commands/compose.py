@@ -4,7 +4,6 @@ from ..composer import (
     RESOURCE_PROFILES,
     build_spec,
     find_spec,
-    generated_specs,
     image_entry,
     remove_spec,
     write_spec,
@@ -12,6 +11,7 @@ from ..composer import (
 from ..config import load_yaml
 from ..errors import ContractError
 from ..inventory import domain_names
+from ..registry import target_choices
 from .base import Command
 
 
@@ -115,10 +115,15 @@ class ComposeCommand(Command):
 
     def _list(self, args, ctx):
         rows = []
-        for path in generated_specs(ctx.config.repo_root):
+        for path in target_choices("spec", ctx.config.repo_root):
+            spec = load_yaml(ctx.config.repo_root / path)
             rows.append({
                 "path": path,
-                "spec": load_yaml(ctx.config.repo_root / path),
+                "spec": spec,
+                "image": image_entry(
+                    ctx.config.repo_root,
+                    spec.get("image"),
+                ),
             })
         if args.json:
             print(json.dumps(rows, indent=2))

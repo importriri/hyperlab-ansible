@@ -111,6 +111,52 @@ def test_managed_destroy_uses_its_real_playbook_and_derives_confirmation():
     check("destroy_confirmation_derived", "guest_confirm_destroy=demo" in argv)
 
 
+def test_managed_resize_and_reconfigure_derive_exact_confirmations():
+    ctx = world.build(trust=None)
+    (ctx.config.repo_root / "playbooks").mkdir(exist_ok=True)
+    (ctx.config.repo_root / "playbooks/vm-resize-disk.yml").write_text("---\n")
+    (ctx.config.repo_root / "playbooks/vm-reconfigure.yml").write_text("---\n")
+    (ctx.config.repo_root / "vm-specs").mkdir()
+    (ctx.config.repo_root / "vm-specs/demo.yml").write_text("---\n")
+
+    resized = registry.resolve(
+        "vm.resize", repo_root=ctx.config.repo_root, spec="vm-specs/demo.yml"
+    )
+    equals("resize_playbook", resized[1], "playbooks/vm-resize-disk.yml")
+    check("resize_confirmation_derived", "guest_confirm_resize=demo" in resized)
+
+    reconfigured = registry.resolve(
+        "vm.reconfigure", repo_root=ctx.config.repo_root, spec="vm-specs/demo.yml"
+    )
+    equals("reconfigure_playbook", reconfigured[1], "playbooks/vm-reconfigure.yml")
+    check(
+        "reconfigure_confirmation_derived",
+        "guest_confirm_reconfigure=demo" in reconfigured,
+    )
+
+
+def test_managed_inventory_routes_through_the_unprivileged_cli():
+    ctx = world.build(trust=None)
+    (ctx.config.repo_root / "vm-specs").mkdir()
+    (ctx.config.repo_root / "vm-specs/demo.yml").write_text("---\n")
+
+    inventory = registry.resolve(
+        "vm.inventory",
+        repo_root=ctx.config.repo_root,
+        spec="vm-specs/demo.yml",
+    )
+    equals(
+        "inventory_cli_route",
+        inventory,
+        [
+            "hyperlabctl",
+            "vm",
+            "inventory",
+            "vm-specs/demo.yml",
+        ],
+    )
+
+
 def test_image_import_resolves_to_the_supported_prepare_transaction():
     ctx = world.build(trust=None)
     (ctx.config.repo_root / "playbooks").mkdir(exist_ok=True)
@@ -137,3 +183,34 @@ def test_target_choices_refuse_a_redirected_spec_directory():
         check("redirected_spec_dir_refused", True)
     else:
         check("redirected_spec_dir_refused", False)
+
+
+def test_managed_reboot_and_power_cycle_use_reviewed_playbooks():
+    ctx = world.build(trust=None)
+    (ctx.config.repo_root / "playbooks").mkdir(exist_ok=True)
+    (ctx.config.repo_root / "playbooks/vm-reboot.yml").write_text("---\n")
+    (ctx.config.repo_root / "playbooks/vm-power-cycle.yml").write_text("---\n")
+    (ctx.config.repo_root / "vm-specs").mkdir()
+    (ctx.config.repo_root / "vm-specs/demo.yml").write_text("---\n")
+
+    rebooted = registry.resolve(
+        "vm.managed-reboot",
+        repo_root=ctx.config.repo_root,
+        spec="vm-specs/demo.yml",
+    )
+    equals("reboot_playbook", rebooted[1], "playbooks/vm-reboot.yml")
+    check(
+        "reboot_has_no_force_confirmation",
+        not any("guest_confirm_" in part for part in rebooted),
+    )
+
+    cycled = registry.resolve(
+        "vm.power-cycle",
+        repo_root=ctx.config.repo_root,
+        spec="vm-specs/demo.yml",
+    )
+    equals("power_cycle_playbook", cycled[1], "playbooks/vm-power-cycle.yml")
+    check(
+        "power_cycle_confirmation_derived",
+        "guest_confirm_power_cycle=demo" in cycled,
+    )

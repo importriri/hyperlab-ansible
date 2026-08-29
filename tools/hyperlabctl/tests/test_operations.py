@@ -106,6 +106,23 @@ def test_managed_domain_cannot_bypass_the_m3_start_playbook():
           not any(call[-2:] == ("start", "debian-dev") for call in ctx.runner.calls))
 
 
+def test_pre_rename_managed_domain_cannot_bypass_the_m3_start_playbook():
+    ctx = world.build(domains=[{"name": "debian-dev", "state": "shut off",
+                                "memory_mb": 1024, "network": "dev"}], trust=None)
+    argv = ["/usr/bin/virsh", "-c", "qemu:///system", "-q", "dumpxml", "debian-dev"]
+    ctx.runner.register(argv, """<domain type='kvm'>
+      <name>debian-dev</name><memory unit='MiB'>1024</memory>
+      <metadata><hyperlab:instance xmlns:hyperlab='https://github.com/importriri/privatestack-ansible/hyperlab/1'
+        schema='1' lifecycle='permanent' device-profile='standard'/></metadata>
+      <devices><interface type='network'><source network='dev'/></interface></devices>
+    </domain>""")
+    outcome = operations.start(ctx, "debian-dev")
+    equals("legacy_managed_direct_start_refused", outcome.ok, False)
+    check("legacy_managed_direct_start_names_m3", "M3 lifecycle playbook" in outcome.message)
+    check("legacy_managed_direct_start_never_called",
+          not any(call[-2:] == ("start", "debian-dev") for call in ctx.runner.calls))
+
+
 def test_unguarded_vfio_domain_cannot_start_from_the_cockpit():
     ctx = world.build(domains=[{"name": "rogue-vfio", "state": "shut off",
                                 "memory_mb": 1024, "vfio": True}], trust=None)

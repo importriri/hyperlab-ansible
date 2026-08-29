@@ -156,3 +156,9 @@ def test_watch_stops_on_a_real_libvirt_error_instead_of_spinning():
     code, output = _run(["watch", "--max-cycles", "3"], ctx)
     equals("watch_real_error_exit", code, 2)
     equals("watch_real_error_single_emit", len(output.splitlines()), 1)
+
+def test_vm_inventory_refuses_an_unreviewed_spec():
+    ctx = world.build(trust=None)
+    (ctx.config.repo_root / "vm-specs").mkdir(exist_ok=True)
+    code, _ = _run(["vm", "inventory", "../../escape.yml"], ctx)
+    equals("inventory_unreviewed_spec_exit", code, 2)

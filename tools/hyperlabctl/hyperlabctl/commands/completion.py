@@ -11,7 +11,7 @@ _hyperlabctl() {
         return 0
     fi
     case ${COMP_WORDS[1]} in
-        vm)    mapfile -t COMPREPLY < <(compgen -W "list start stop inspect" -- "${COMP_WORDS[COMP_CWORD]}") ;;
+        vm)    mapfile -t COMPREPLY < <(compgen -W "list start stop inspect inventory" -- "${COMP_WORDS[COMP_CWORD]}") ;;
         net)   mapfile -t COMPREPLY < <(compgen -W "list start stop" -- "${COMP_WORDS[COMP_CWORD]}") ;;
         image) mapfile -t COMPREPLY < <(compgen -W "list" -- "${COMP_WORDS[COMP_CWORD]}") ;;
         waybar|watch)

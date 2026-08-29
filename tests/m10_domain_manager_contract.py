@@ -239,6 +239,7 @@ def main():
         for action_id in (
             "domain.manager",
             "vm.console",
+            "vm.ssh",
             "vm.looking-glass",
             "image.validate",
         ):
@@ -249,7 +250,8 @@ def main():
         for command in (
             '["hyperlabctl", "open", "manager"]',
             '["hyperlabctl", "open", "console", "{domain}"]',
-            '["hyperlabctl", "open", "looking-glass"]',
+            '["hyperlabctl", "open", "ssh", "{domain}"]',
+            '["hyperlabctl", "open", "looking-glass", "{domain}"]',
         ):
             assert_true(command in registry, "unprivileged action bypasses CLI")
 

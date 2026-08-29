@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from .errors import Unavailable
 
 HL = "https://github.com/importriri/hyperlab-ansible/hyperlab/1"
+HL_LEGACY = "https://github.com/importriri/privatestack-ansible/hyperlab/1"
+HL_NAMESPACES = (HL, HL_LEGACY)
 
 
 def _pci_address(node):
@@ -24,6 +26,17 @@ def _pci_address(node):
     if any(field is None for field in fields):
         return None
     return "%s:%s:%s.%s" % tuple(fields)
+
+
+def _managed_metadata(root):
+    matches = [
+        node
+        for namespace in HL_NAMESPACES
+        for node in root.findall("./metadata/{%s}instance" % namespace)
+    ]
+    if len(matches) > 1:
+        raise Unavailable("domain XML contains multiple supported HyperLab metadata instances")
+    return matches[0] if matches else None
 
 
 def parse_domain(xml_text):
@@ -59,7 +72,7 @@ def parse_domain(xml_text):
             hostdevs.append(address)
 
     name_node = root.find("name")
-    metadata = root.find("./metadata/{%s}instance" % HL)
+    metadata = _managed_metadata(root)
     return {
         "name": name_node.text if name_node is not None else None,
         "memory_mb": None if memory_kib is None else memory_kib // 1024,
