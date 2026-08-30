@@ -6,7 +6,7 @@ proof.
 
 - [`ansible-group-vars-outside-repo.md`](ansible-group-vars-outside-repo.md): a
   test playbook in `/tmp` lost repository `group_vars`.
-- [`hyprland-nvidia-headless-output.md`](hyprland-nvidia-headless-output.md) -
+- [`hyprland-nvidia-headless-output.md`](hyprland-nvidia-headless-output.md):
   NVIDIA-only Hyprland started with no output.
 - [`ly-login-environment.md`](ly-login-environment.md): compositor variables
   were configured but missing from the running session.
@@ -39,17 +39,85 @@ proof.
 - [`ansible-become-password-handoff.md`](ansible-become-password-handoff.md):
   a chained hardware gate needed one validated credential and a stable private
   handoff to each Ansible process.
+- [`guest-package-upgrade-recovery.md`](guest-package-upgrade-recovery.md): an
+  interrupted Arch upgrade required restoring the complete package/kernel
+  transaction before guest acceptance continued.
+- [`host-desktop-looking-glass-order.md`](host-desktop-looking-glass-order.md):
+  a clean rebuild proved that host desktop/session state must land before
+  Looking Glass integration.
+- [`looking-glass-input-isolation.md`](looking-glass-input-isolation.md): real
+  Linux guest video is proved, while host/guest input isolation remains a
+  separate open acceptance gate.
+
+- [`looking-glass-render-jinja-assertion.md`](looking-glass-render-jinja-assertion.md):
+  the render suite still fails on a Jinja-in-a-constant-string provenance
+  assertion; the verifier gate remains open.
+- [`control-center-single-surface-dismissal.md`](control-center-single-surface-dismissal.md):
+  click-outside dismissal moved from competing Layer Shell/focus paths to one
+  cockpit-owned `Gtk.Overlay`.
+- [`runtime-inventory-self-heal.md`](runtime-inventory-self-heal.md): ephemeral
+  guest inventory recovery must stay behind the authoritative CLI and strict
+  runtime-file validation; its final integration gate is still open.
+- [`waybar-render-contract-drift.md`](waybar-render-contract-drift.md): shell
+  tests now protect mounted modules and routes semantically instead of dead
+  hidden modules or positional render indexes.
+- [`ly-package-config-validation.md`](ly-package-config-validation.md): the
+  installed Ly rejected an assumed validation option, so the role now preserves
+  the package configuration and verifies only targeted edits.
+
+- [`trust-palette-theme-drift.md`](trust-palette-theme-drift.md): theme
+  variants changed security-domain colors while the Control Center treated
+  those colors as immutable semantics.
 - [`nitro-sense-led-capability-split.md`](nitro-sense-led-capability-split.md):
   one four-zone allowlist authorized both static colors and a distinct,
   unproved firmware-effect path.
+
+- [`palette-terminal-trust-coupling.md`](palette-terminal-trust-coupling.md):
+  Foot ANSI slots borrowed trust-domain tokens, so making trust semantic also
+  changed ordinary terminal appearance.
+
 - [`nitro-control-backend-check-mode-preview.md`](nitro-control-backend-check-mode-preview.md):
   the out-of-tree safety stop originally hid the runtime backend landing from
   check mode; the preview now renders files without starting services.
+
 - [`nitro-control-backend-runtime-validation.md`](nitro-control-backend-runtime-validation.md):
   physical end-to-end proof for the typed Nitro runtime privilege boundary.
 - [`nitro-keyboard-idle-timeout.md`](nitro-keyboard-idle-timeout.md):
   AN515-55 lighting can idle off and wake on keypress without an exposed timeout ABI.
+
+- [`control-center-trust-color-contract.md`](control-center-trust-color-contract.md):
+  geometry verifier followed stale manager literals after trust colors moved to shared palettes.
+
+- [`control-center-theme-reentrant-reload.md`](control-center-theme-reentrant-reload.md):
+  synchronous theme selection re-entered the resident GApplication and timed out.
+
+- [`control-center-theme-sway-reload-dismissal.md`](control-center-theme-sway-reload-dismissal.md):
+  Sway reload replaced the resident manager while an internal theme selection was still visible.
+
 - [`nitro-control-backend-extra-fields.md`](nitro-control-backend-extra-fields.md):
   the privileged JSON protocol originally ignored fields outside the reviewed operation schema.
+
+- [`documentation-navigation-orphans.md`](documentation-navigation-orphans.md):
+  four top-level operator and architecture contracts were added without inbound documentation links.
+- [`looking-glass-render-nested-jinja-contract.md`](looking-glass-render-nested-jinja-contract.md):
+  a render invariant embedded a role template inside another Jinja expression and searched for the expanded value.
+
+- [`looking-glass-launcher-path-ownership.md`](looking-glass-launcher-path-ownership.md):
+  the Control Center action chain reached the correct opener, but the final client executable was still selected through session PATH.
+- [`vfio-reboot-power-cycle-recovery.md`](vfio-reboot-power-cycle-recovery.md):
+  a guest-only reboot left the Nitro RTX 3060 path unhealthy while an explicit full-QEMU Power cycle restored QGA, networking, NVIDIA and Looking Glass readiness.
+
+- [`sbctl-export-enrolled-keys-landlock.md`](sbctl-export-enrolled-keys-landlock.md):
+  the read-only firmware-key export hit the upstream Landlock/output-directory
+  bug and now uses a narrow sandbox exception.
+- [`operator-shell-strict-mode-leak.md`](operator-shell-strict-mode-leak.md):
+  an interactive paste block leaked strict shell options and exited the
+  operator terminal on a later non-zero command.
+- [`secure-boot-enrollment-handoff.md`](secure-boot-enrollment-handoff.md):
+  signed boot artifacts were prepared while the real firmware enrollment and
+  runtime Secure Boot proof remained a hardware gate.
+- [`dkms-module-signing-trust.md`](dkms-module-signing-trust.md):
+  signed out-of-tree modules still lack a proved kernel trust path for a future
+  stricter lockdown/module-enforcement policy.
 
 Author: [importriri](https://github.com/importriri).

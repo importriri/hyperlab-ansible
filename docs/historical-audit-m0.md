@@ -19,7 +19,7 @@ anything was written.
 ## What the pipeline actually reaches
 
 The three-stage split holds and the boundaries are not blurred.
-`arch-bootstrap` produces an encrypted, Secure Boot host and stops.
+`arch-bootstrap` produces the encrypted host, prepares the Secure Boot key material and signed boot artifacts, and stops before the firmware enrollment hardware acceptance gate.
 `hyperlab-ansible` turns it into a segmented hypervisor.
 `arch-hypervisor-lab` records what was proven and what went wrong.
 
@@ -35,7 +35,7 @@ repositories creates, defines, starts or destroys a domain.
 
 | Area | State | Note |
 |---|---|---|
-| Encrypted base, Secure Boot, boot profiles | exists | |
+| Encrypted base, Secure Boot preparation, boot profiles | exists | Firmware enrollment and runtime proof remain a hardware acceptance gate. |
 | Hardware profile auto-selection | partial | `vfio_ids` only |
 | Five network domains, isolation, reconciliation | exists | |
 | Trust-ranked GPU handoff | exists | |

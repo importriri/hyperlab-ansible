@@ -55,9 +55,9 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     <h2>How should HyperLab and trust status be arranged in the bar?
       <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
     </h2>
-    <p class="key"><code>waybar_launcher_shape</code> = <b>brand_and_trust_drawer</b></p>
-    <ul class="opts"><li class="on"><code>brand_and_trust_drawer</code> <b>· active</b><p>HyperLab stays first on the left. TRUST follows it and reveals RAM, GPU and VM status on hover.</p></li><li class="off"><code>single_combined_launcher</code><p>One button contains both launcher and status. It uses less space but obscures the trust model.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/waybar.jsonc</code></li><li><code>roles/host_desktop_sway/files/waybar.css</code></li><li><code>tests/render.yml</code></li></ul></details>
+    <p class="key"><code>waybar_launcher_shape</code> = <b>workspaces_brand_and_trust_drawer</b></p>
+    <ul class="opts"><li class="on"><code>workspaces_brand_and_trust_drawer</code> <b>· active</b><p>Sway workspaces come first, followed by the HyperLab launcher and adjacent trust status exactly as in the definitive mockup.</p></li><li class="off"><code>brand_and_trust_drawer</code><p>Keep HyperLab and trust first on the left without the workspace strip.</p></li><li class="off"><code>single_combined_launcher</code><p>One button contains both launcher and status; it uses less space but obscures the trust model.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/waybar.jsonc</code></li><li><code>roles/host_desktop_sway/files/waybar.css</code></li><li><code>tests/render.yml</code></li><li><code>tests/mockup_geometry_contract.py</code></li></ul></details>
   </section>
   <section>
     <h2>What should the bar height be?
@@ -68,12 +68,12 @@ This page is generated from <code>choices.yml</code>; editing the HTML changes n
     <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/waybar.jsonc</code></li></ul></details>
   </section>
   <section>
-    <h2>Which tab should --section domains open?
+    <h2>What navigation shape should the compact drawer use?
       <span class="badge" style="border-color:#7ee787;color:#7ee787">Selected by Sid</span>
     </h2>
-    <p class="key"><code>drawer_domains_section_tab</code> = <b>system</b></p>
-    <ul class="opts"><li class="on"><code>system</code> <b>· active</b><p>Open the compact System tab with trust, network, and GPU status.</p></li><li class="off"><code>apps</code><p>Open VMs because the domain selector is already available in the drawer.</p></li></ul>
-    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li></ul></details>
+    <p class="key"><code>drawer_navigation_shape</code> = <b>machine_showcase_no_tabs</b></p>
+    <ul class="opts"><li class="on"><code>machine_showcase_no_tabs</code> <b>· active</b><p>Use the definitive two-column Machines showcase without the superseded VMs/System tabs, search field, or footer navigation.</p></li><li class="off"><code>tabbed_vms_and_system</code><p>Keep the legacy VMs/System tabbed drawer with its additional navigation surfaces.</p></li></ul>
+    <details><summary>Affected files</summary><ul class="files"><li><code>roles/host_desktop_sway/files/privatestack-hyperlab-domains.py</code></li><li><code>tools/shell-tests/test_drawer.py</code></li><li><code>tests/mockup_geometry_contract.py</code></li></ul></details>
   </section>
   <section>
     <h2>Should the drawer list VMs or applications inside VMs, as Qubes does?
