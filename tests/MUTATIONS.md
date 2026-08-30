@@ -481,6 +481,32 @@ of mutations; it is that each safety claim has a test capable of becoming red.
   documented by the pinned upstream source may receive a WMI-backed write.
 - Restore: `git checkout -- roles/nitro_sense/defaults/main.yml`
 
+## roles/guest_gpu_nvidia
+
+### 89. The persistent DRM alias becomes a volatile card number
+- Break: `sed -i 's#/dev/dri/privatestack-nvidia#/dev/dri/card1#' roles/guest_gpu_nvidia/defaults/main.yml`
+- Red: render suite, "A guest NVIDIA invariant broke". DRM card numbers may
+  change across boots; Hyprland must consume the udev alias bound to the passed
+  display controller's PCI identity.
+- Restore: `git checkout -- roles/guest_gpu_nvidia/defaults/main.yml`
+
+### 90. The NVIDIA PCI parser regains YAML-level double escaping
+- Break: replace `[.]` with `\\.` and `[ ]+` with `\\s+` in
+  `roles/guest_gpu_nvidia/tasks/main.yml`.
+- Red: `tests/guest_gpu_nvidia_contract.py`. The test evaluates the pattern
+  literals loaded from the role against the Nitro PCI probe and must still
+  select only `0000:05:00.0`, never its NVIDIA audio function.
+- Restore: `git checkout -- roles/guest_gpu_nvidia/tasks/main.yml`
+
+## roles/guest_looking_glass_linux
+
+### 91. The headless sender asks for an invisible portal selection again
+- Break: `sed -i '/custom_picker_binary/d' roles/guest_looking_glass_linux/templates/xdph.conf.j2`
+- Red: `tests/looking_glass_linux_contract.py` and the render suite. The
+  experimental sender runs on an output that SPICE cannot display, so an
+  interactive XDPH picker is a deadlock rather than a useful consent surface.
+- Restore: `git checkout -- roles/guest_looking_glass_linux/templates/xdph.conf.j2`
+
 
 ## Cockpit and M3 integration
 
@@ -527,6 +553,14 @@ red check.
   separately packaged `audio-spice.so` is a hard runtime dependency.
 - Restore: `git checkout -- group_vars/all/guest.yml`
 
+### A SPICE domain loses its guest sound device
+
+- Break: delete the `<sound model="ich9">` block from
+  `roles/guest/templates/domain.xml.j2`.
+- Red: `tests/static_contract.py` and `tests/contract_mutations.py`, "managed
+  SPICE domains must expose an ICH9 duplex sound device".
+- Restore: `git checkout -- roles/guest/templates/domain.xml.j2`
+
 ### A managed disk regains libvirt DAC relabel
 - Break: remove `<seclabel model="dac" relabel="no"/>` from the primary disk
   source in `roles/guest/templates/domain.xml.j2`.
@@ -535,6 +569,17 @@ red check.
   change the sealed backing image from `root:<qemu-group>` to the QEMU user and
   leave it that way after shutdown.
 - Restore: `git checkout -- roles/guest/templates/domain.xml.j2`
+
+### Runtime guest inventory allocates an SSH pseudo-TTY
+
+- Break: remove `'ansible_ssh_use_tty=false',` from
+  `playbooks/vm-guest-inventory.yml`.
+- Red: `tests/guest_inventory_contract.py` and
+  `tests/contract_mutations.py`, "runtime guest inventory must disable SSH
+  pseudo-TTY allocation". Allocating a pseudo-TTY allows terminal-control
+  output from the privilege-escalation session to appear after Ansible module
+  JSON and corrupt the module protocol boundary.
+- Restore: `git checkout -- playbooks/vm-guest-inventory.yml`
 
 ## Schema and asset contracts
 
@@ -591,3 +636,30 @@ red check.
 - Break: run `CROSS_REPO_REQUIRED=1 python tests/cross_repo_contract.py /tmp/absent`.
 - Red: the check fails instead of skipping. A single-repo clone may skip; the
   job that exists to compare the pair may not.
+
+### Looking Glass captured-input compatibility patch
+
+- Break: replace the grabbed-aware press gate in
+  `roles/looking_glass/files/client-captured-button-press.patch` with the
+  upstream `!g_cursor.inView` gate.
+- Red: `tests/looking_glass_client_input_contract.py` and
+  `tests/contract_mutations.py`. The production client must retain the
+  hardware-proven behavior without diagnostic logging, and the build stamp
+  must bind the installed binary to the exact reviewed patch bytes.
+
+### Looking Glass KVMFR reload guard
+
+Mutation: remove the runtime-size condition from the KVMFR unload task.
+
+Expected failure: the static contract rejects an unconditional KVMFR unload.
+The role must compare the live device size through the versioned ioctl probe,
+resolve the module for the running kernel, and refuse live device users before a
+real resize.
+
+### Performance/security regression guard
+
+- Break: add `mitigations=off` to the VFIO boot profile in
+  `roles/vfio_boot/defaults/main.yml`.
+- Red: `tests/performance_security_contract.py` rejects performance settings
+  that lower the host security floor.
+- Restore: remove the injected token and rerun the contract.

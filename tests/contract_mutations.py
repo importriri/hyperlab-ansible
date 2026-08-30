@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,6 +42,28 @@ class ContractMutationTests(unittest.TestCase):
 
     def test_baseline_is_green(self) -> None:
         self.assertEqual([], collect_errors(ROOT))
+
+    def test_looking_glass_kvmfr_reload_must_stay_runtime_guarded(self) -> None:
+        def mutation(root: Path) -> None:
+            path = root / "roles/looking_glass/tasks/main.yml"
+            source = path.read_text()
+            path.write_text(
+                source.replace(
+                    "when: looking_glass_kvmfr_reload_required | bool\n"
+                    "  community.general.modprobe:\n"
+                    "    name: kvmfr\n"
+                    "    state: absent",
+                    "community.general.modprobe:\n"
+                    "    name: kvmfr\n"
+                    "    state: absent",
+                    1,
+                )
+            )
+
+        self.assert_mutation_fails(
+            mutation,
+            "kvmfr reload must be explicit and runtime-gated",
+        )
 
     def test_looking_glass_needs_kvm_host(self) -> None:
         self.assert_mutation_fails(
@@ -110,6 +134,24 @@ class ContractMutationTests(unittest.TestCase):
             "SPICE guests require the complete split QEMU UI, chardev and audio modules",
         )
 
+    def test_spice_audio_needs_a_managed_guest_sound_device(self) -> None:
+        def mutation(root: Path) -> None:
+            path = root / "roles/guest/templates/domain.xml.j2"
+            path.write_text(
+                path.read_text().replace(
+                    '    <sound model="ich9">\n'
+                    '      <codec type="duplex"/>\n'
+                    '      <audio id="1"/>\n'
+                    '    </sound>\n',
+                    "",
+                )
+            )
+
+        self.assert_mutation_fails(
+            mutation,
+            "managed SPICE domains must expose an ICH9 duplex sound device",
+        )
+
     def test_managed_disk_must_refuse_dac_relabel(self) -> None:
         def mutation(root: Path) -> None:
             path = root / "roles/guest/templates/domain.xml.j2"
@@ -124,6 +166,111 @@ class ContractMutationTests(unittest.TestCase):
             mutation,
             "managed disks must refuse libvirt DAC relabel of sealed backing chains",
         )
+
+
+    def test_looking_glass_captured_press_fix_is_guarded(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="privatestack-contract-"
+        ) as tmp:
+            copy = Path(tmp) / "repo"
+            shutil.copytree(
+                ROOT,
+                copy,
+                ignore=shutil.ignore_patterns(
+                    ".git",
+                    ".ansible",
+                    "__pycache__",
+                ),
+            )
+
+            path = (
+                copy
+                / "roles/looking_glass/files/client-captured-button-press.patch"
+            )
+            source = path.read_text(encoding="utf-8")
+            fixed = (
+                "if (!core_inputEnabled() || "
+                "(!g_cursor.grab && !g_cursor.inView))"
+            )
+            self.assertIn(fixed, source)
+            path.write_text(
+                source.replace(
+                    fixed,
+                    "if (!core_inputEnabled() || !g_cursor.inView)",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "tests/looking_glass_client_input_contract.py",
+                ],
+                cwd=copy,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                "mutation unexpectedly passed",
+            )
+            self.assertIn(
+                "client input patch SHA-256 differs",
+                output,
+            )
+
+
+    def test_runtime_guest_inventory_must_disable_ssh_pseudo_tty(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="privatestack-contract-"
+        ) as tmp:
+            copy = Path(tmp) / "repo"
+            shutil.copytree(
+                ROOT,
+                copy,
+                ignore=shutil.ignore_patterns(
+                    ".git",
+                    ".ansible",
+                    "__pycache__",
+                ),
+            )
+
+            path = copy / "playbooks/vm-guest-inventory.yml"
+            source = path.read_text(encoding="utf-8")
+            marker = "              'ansible_ssh_use_tty=false',\n"
+            self.assertIn(marker, source)
+
+            path.write_text(
+                source.replace(marker, "", 1),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "tests/guest_inventory_contract.py",
+                ],
+                cwd=copy,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            output = result.stdout + result.stderr
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                "mutation unexpectedly passed",
+            )
+            self.assertIn(
+                "runtime guest inventory must disable SSH pseudo-TTY allocation",
+                output,
+            )
 
 
 if __name__ == "__main__":
