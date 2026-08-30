@@ -22,14 +22,18 @@ works.
 
 ## Release order
 
-1. finish repository cleanup without changing hardware claims;
-2. run the complete software verifiers and focused idempotence checks;
-3. make local candidate commits and freeze their exact identities without pushing;
+1. finish repository cleanup without changing hardware claims and publish each
+   software-verified integration milestone directly on `main`;
+2. run the complete software verifiers and focused idempotence checks on the final
+   clean automation trees;
+3. freeze the exact public `arch-bootstrap` and `hyperlab-ansible` `main` commits
+   in the release acceptance plan;
 4. run the remaining Nitro desktop and `arch-dev-vfio` hardware gates against
-   those clean commits;
-5. publish the reviewed automation commits and sanitized Nitro evidence only after
-   every required Nitro gate is green;
-6. replay Predator with the same `arch-bootstrap` and `hyperlab-ansible` commits;
+   those frozen commits;
+5. publish sanitized Nitro evidence and compatibility status only after every
+   required Nitro gate is green;
+6. replay Predator with the same frozen `arch-bootstrap` and `hyperlab-ansible`
+   commits;
 7. publish Predator evidence separately;
 8. start reusable workstation or golden-image work only after the host release is
    coherent.
@@ -69,7 +73,8 @@ work is measured against stable workloads rather than moving targets:
 13. run release qualification, idempotence, reboot, cold-start, recovery and
     hardware gates;
 14. finish wallpaper/polish, screenshots, video and release documentation;
-15. commit and push the proved milestone to `main`.
+15. seal the sanitized release evidence and record the exact public `main`
+    commits that were exercised on hardware.
 
 Performance tuning comes after HIDS/NIDS so the final benchmark includes the
 monitoring cost. HIDS/NIDS come after the network and VM contracts so normal

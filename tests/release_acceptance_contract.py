@@ -70,7 +70,7 @@ def scalar_for(field: str) -> Any:
         "second_apply_changed_zero",
         "exclusive_owner",
         "reboot_resets_trust",
-        "loopback_spice",
+        "spice_socket_private",
         "guest_health",
         "lan_http_health",
         "tcp_8096_only",
@@ -267,6 +267,17 @@ def test_plan_is_deterministic_and_orders_nitro_before_predator() -> None:
         "fsroot": "/",
         "subvolume": None,
     }
+    looking_glass = next(
+        gate for gate in first["gates"] if gate["id"] == "looking-glass"
+    )
+    assert looking_glass["required_evidence"] == [
+        "host_build",
+        "guest_build",
+        "kvmfr_identity",
+        "spice_socket_path",
+        "spice_socket_private",
+        "visual_proof_sha256",
+    ]
 
 
 def test_invalid_profile_commit_and_campaign_are_refused() -> None:

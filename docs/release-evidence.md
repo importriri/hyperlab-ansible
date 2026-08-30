@@ -9,9 +9,13 @@ published.
 
 ## Release line
 
-The project publishes from `main`. There is no parallel release branch or PR
-stack to reconcile later. Work is reviewed locally, hardware gates run against
-the exact candidate commit, and publication is an explicit final action.
+The project develops and publishes integration changes directly on `main`.
+There is no parallel release branch or PR stack to reconcile later. Software
+gates authorize ordinary `main` updates; a hardware release begins only when the
+acceptance plan freezes exact public `main` commits. Hardware evidence authorizes
+a compatibility or release claim, not the existence of the development commit
+itself. Any runtime change after that freeze changes the commit identity and
+reopens the affected hardware gates.
 
 The three repositories keep separate jobs:
 
@@ -161,9 +165,11 @@ The known PCIe power-management workaround stays part of the reviewed Nitro
 profile. Reintroducing a hard-freeze condition is not a useful routine test.
 
 For the current Linux VFIO guest, distinguish demonstrated video transport from
-still-open persistence/input work. Do not mark the Looking Glass gate complete
-until the release manifest's evidence fields and the current runbook agree with
-what was actually observed.
+still-open persistence/input work. The Looking Glass gate records the reviewed
+per-domain Unix SPICE socket path and whether that socket stayed private;
+`127.0.0.1:5900` remains a static client fallback default, not the VFIO transport
+authority. Do not mark the gate complete until the release manifest's evidence
+fields and the current runbook agree with what was actually observed.
 
 ## 7. Sanitize and seal
 
@@ -180,10 +186,15 @@ storage topology and ordered gate IDs; sealing does not publish anything.
 After the Nitro receipt is reviewed:
 
 1. add only sanitized evidence to `arch-hypervisor-lab`;
-2. update its compatibility record against the exact commits;
-3. commit and push each reviewed repository deliberately on `main`;
-4. create the Predator plan with those same commit identities;
+2. update its compatibility record against the frozen `arch-bootstrap` and
+   `hyperlab-ansible` commits;
+3. commit and push that reviewed evidence update on `main`;
+4. create the Predator plan with the same two frozen automation commit identities;
 5. replay the complete hardware path on Predator.
 
-A Predator-only code change creates a new candidate. It is not evidence for the
-already frozen Nitro result until Nitro is rerun against that new candidate.
+`arch-hypervisor-lab` is an evidence output, so its commit may advance when the
+Nitro report is published. Predator must reuse the same two automation commits;
+it does not need to reuse the pre-Nitro evidence-repository commit.
+
+A Predator-only automation change creates a new candidate. It is not evidence for
+the already frozen Nitro result until Nitro is rerun against that new candidate.

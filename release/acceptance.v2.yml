@@ -94,7 +94,8 @@ gates:
       - host_build
       - guest_build
       - kvmfr_identity
-      - loopback_spice
+      - spice_socket_path
+      - spice_socket_private
       - visual_proof_sha256
   - id: jellyfin-service
     order: 100
