@@ -2,6 +2,7 @@
 """Host-independent contracts for the Arch Hyprland workstation roles."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -150,6 +151,11 @@ def main() -> int:
     )
 
     guest_tasks = text("roles/guest_desktop_hyprland/tasks/main.yml")
+    autologin_exec = vfio_play["vars"]["guest_desktop_hyprland_autologin_exec"]
+    assert autologin_exec == "/usr/bin/Hyprland"
+    assert re.fullmatch(r"/\S+", autologin_exec)
+    assert "guest_desktop_hyprland_autologin_exec is match('^/\\\\S+$')" in guest_tasks
+    assert "guest_desktop_hyprland_autologin_exec is match('^/[^[:space:]]+$')" not in guest_tasks
     assert "'workstations' in group_names" in guest_tasks
     assert "'hypervisor' not in group_names" in guest_tasks
     assert "Remove legacy Sway and host-only guest packages" in guest_tasks
