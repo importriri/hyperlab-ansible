@@ -4,7 +4,7 @@
   become: true
   vars:
     guest_desktop_hyprland_autologin: true
-    guest_desktop_hyprland_autologin_exec: /usr/bin/Hyprland
+    guest_desktop_hyprland_autologin_exec: /usr/bin/start-hyprland
     guest_desktop_hyprland_nvidia_only: true
     guest_desktop_hyprland_headless_monitor: true
   roles:
