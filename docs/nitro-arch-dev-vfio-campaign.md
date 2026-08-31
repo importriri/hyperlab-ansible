@@ -84,24 +84,48 @@ manually from the Hyprland session. Do not create a systemd sender unit; capture
 frames, input return, lock/unlock, reconnect and UNIX-socket SPICE recovery as
 separate observations.
 
-## Remaining acceptance
+## Current acceptance state
 
-A fresh graphical session has proved that `HEADLESS-0` appears without a manual
-`hyprctl` command at `1920x1080@144`, scale `1`. The opt-in sender role now
-persists a deterministic XDPH picker for that exact output. The remaining
-observations are:
+The 2026-08-31 Nitro revalidation tied the guest to commit
+`d1b7b9fe175d45051d326854b9755a84f17ca15c` and closed the interactive
+Looking Glass lifecycle that had remained open:
 
-1. apply the picker and require a second guest pass with `changed=0`;
-2. run the Linux Looking Glass sender manually;
-3. confirm real frames on the physical-host client;
-4. check keyboard and pointer return separately from video;
-5. check lock/unlock and guest reboot/reconnect;
-6. retain sanitized logs and the final screenshot evidence.
-7. verify guest playback through SPICE and confirm host volume steps can reach
-   the reviewed 125 percent software ceiling without clipping.
+- the guest playbook completed a second pass with `changed=0`;
+- the read-only guest gate confirmed the passed RTX 3060 display and audio
+  functions, PCI-backed kvmfr, the pinned Looking Glass build, PipeWire capture,
+  the deterministic XDPH picker and `HEADLESS-0`;
+- the physical-host Looking Glass client received the live
+  `1920x1080@144` KVMFR feed;
+- keyboard and pointer input worked on the live guest desktop;
+- guest audio playback worked through the managed SPICE audio path;
+- the HyperLab lock screen accepted the guest password and returned to the
+  existing desktop;
+- closing only the host Looking Glass client left Hyprland and the exact sender
+  alive, and reopening the client resumed PipeWire capture without a temporary
+  SPICE console;
+- a clean Hyprland logout removed both Hyprland and the exact sender while Ly
+  remained active;
+- PRIMARY then opened the owned temporary `virt-viewer` Ly console, accepted
+  password input there, closed that console automatically, recreated Hyprland
+  and the sender, and replaced the launcher with the reviewed Looking Glass
+  client on the `1920x1080@144` headless output.
 
-The candidate is not a final compatibility result until those observations are
-closed.
+The PRIMARY handoff and sender lifecycle are therefore hardware-proven on this
+Nitro. The built-in Looking Glass pre-login fallback remains diagnostic only;
+authentication continues through the temporary standalone SPICE console.
+
+The candidate still has deliberately open acceptance work:
+
+1. perform a real guest reboot and prove reconnect plus the final post-reboot
+   idempotent guest pass;
+2. recheck the explicit standalone `hyperlabctl open console` recovery surface;
+3. verify the reviewed host volume steps through the 125 percent software
+   ceiling and listen for clipping;
+4. capture clean publication screenshots/video without browser or controller
+   overlays.
+
+The candidate is not a final compatibility result until the remaining runtime
+observations are closed.
 
 ## Performance and security acceptance
 

@@ -21,7 +21,9 @@ The current Nitro work has established:
 - PipeWire/XDPH capture produced real 1920×1080 frames;
 - the Linux Looking Glass sender transported those frames through kvmfr to the physical-host client.
 
-The sender remains manual. No persistent sender service is part of the role.
+The sender remains on-demand. No persistent sender service is part of the role.
+`hyperlabctl open looking-glass` owns its lifecycle and binds the exact sender
+to the active Hyprland compositor.
 
 ## VFIO group acceptance
 
@@ -52,16 +54,22 @@ consent dialog, it is confined to the explicit Linux Looking Glass experiment.
 
 ## Remaining gates
 
+Nitro hardware revalidation on 2026-08-31 closed keyboard/pointer return,
+lock/unlock, direct client reconnect, logout sender cleanup and the authenticated
+Ly-to-Looking-Glass PRIMARY handoff. Those observations are recorded in
+[`nitro-arch-dev-vfio-acceptance-2026-08-31.md`](nitro-arch-dev-vfio-acceptance-2026-08-31.md).
+
 The following are still open and must stay described as such:
 
-- Looking Glass keyboard and pointer return;
-- lock/unlock and guest reboot/reconnect observations after the persistence work;
-- the final post-reboot idempotent guest pass.
+- a real guest reboot followed by Looking Glass reconnect;
+- the final post-reboot idempotent guest pass;
+- a fresh check of the standalone SPICE recovery action;
+- the host 125 percent software-volume ceiling with an explicit no-clipping
+  listening check.
 
-SPICE remains configured for recovery, input and audio plumbing, but it has not
-been a reliable video signal on this Nitro setup. Looking Glass frame production
-is the video proof; the virtual ICH9 device, rather than the disconnected NVIDIA
-HDMI path, is the guest playback contract.
+SPICE remains configured for recovery, input and audio plumbing. Looking Glass
+frame production is the accelerated video proof; the virtual ICH9 device,
+rather than the disconnected NVIDIA HDMI path, is the guest playback contract.
 
 ## Performance/security boundary
 
