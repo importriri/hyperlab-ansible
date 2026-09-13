@@ -28,7 +28,8 @@ benchmark performed below this baseline is not release evidence.
 
 ## Performance mode
 
-A future HyperLab Gaming Mode may coordinate host and guest state.
+HyperLab Gaming Mode coordinates reviewed host state around one explicit
+workload while keeping the hardened baseline as the default.
 
 Accepted candidate operations include:
 
@@ -46,6 +47,32 @@ Accepted candidate operations include:
 Every temporary operation must be transactional: capture the previous value,
 apply the requested state, validate it, and restore the captured value when the
 workload exits or when the transition fails.
+
+
+### Accepted Nitro host policy
+
+The measured combined policy for `nitro-3060` is now accepted as the first
+`host_gaming_mode` runtime profile:
+
+- Intel P-state EPP changes from the baseline `balance_performance` to
+  `performance` only for the transaction;
+- `system.slice` and `user.slice` receive runtime `AllowedCPUs=0,1,4,5`;
+- `machine.slice` remains unrestricted, preserving the reviewed guest vCPU
+  topology `2,6,3,7`, emulator affinity `0,4` and I/O-thread affinity `1,5`;
+- no boot entry, kernel mitigation, IOMMU/VFIO setting, GPU clock or persistent
+  tuning daemon changes.
+
+The controlled repeat produced a 3.164% vkmark score spread and 3.157% average
+FPS spread. Against EPP-only it improved median score by 3.969%, average FPS by
+3.955%, 1% low by 1.808%, 0.1% low by 7.607% and p99 frame time by 1.776%,
+with no additional host thermal cost and a 2 C lower maximum guest GPU
+temperature in that run.
+
+The policy therefore remains **runtime-only and opt-in**. The installed client
+keeps the workload unprivileged; sudo starts a narrow root guard that validates
+the hardened security floor and exact VM affinity, captures prior EPP and CPU-set
+state, applies the measured policy and restores the captured values on normal
+exit, client loss, transition failure or explicit recovery.
 
 ## Security floor
 

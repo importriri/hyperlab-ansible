@@ -75,6 +75,21 @@ remain explicit transactions.
 - `nitro-sense.yml` — reconcile native Acer Nitro platform profiles or the
   explicitly enabled Linuwu-Sense replacement; it is never part of a broad
   target.
+- `host-gaming-mode.yml` — install the measured, opt-in host Gaming Mode
+  client and root transaction guard; it does not enable performance policy
+  persistently or join a broad host target.
+
+After the narrow playbook lands, wrap exactly one host-side gaming workload:
+
+```bash
+hyperlab-gaming-mode run -- looking-glass-client
+```
+
+The client asks for normal sudo authorization once, keeps the workload
+unprivileged, and keeps a root guard alive through a pipe. Closing the
+workload or losing the client closes that pipe and restores the captured EPP
+and CPU-set values. `hyperlab-gaming-mode status` is unprivileged;
+`hyperlab-gaming-mode recover` is the explicit stale-state recovery path.
 
 These playbooks are maintenance tools, not an alternative installation order.
 

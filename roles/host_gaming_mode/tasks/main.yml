@@ -1,0 +1,130 @@
+---
+- name: Keep host Gaming Mode inside the reviewed physical hypervisor
+  ansible.builtin.assert:
+    that:
+      - "'hypervisor' in group_names"
+      - "'workstations' not in group_names"
+      - ansible_facts['os_family'] == 'Archlinux'
+      - ansible_facts['processor_vcpus'] | int == 8
+      - host_gaming_mode_expected_host_profile == 'nitro-3060'
+      - host_gaming_mode_epp == 'performance'
+      - host_gaming_mode_allowed_cpus == '0,1,4,5'
+      - host_gaming_mode_system_effective_cpus == '0-1,4-5'
+      - host_gaming_mode_user_effective_cpus == '0-1,4-5'
+      - host_gaming_mode_machine_effective_cpus == '0-7'
+      - host_gaming_mode_expected_epp_cpu_count | int == 8
+      - "host_gaming_mode_vcpu_pins == {'0': '2', '1': '6', '2': '3', '3': '7'}"
+      - host_gaming_mode_emulator_pin == '0,4'
+      - host_gaming_mode_iothread_id | int == 1
+      - host_gaming_mode_iothread_pin == '1,5'
+    fail_msg: >-
+      host_gaming_mode is the measured Nitro AN515-55 policy. Refusing to
+      generalize its EPP, CPU isolation or VM affinity to another topology.
+
+- name: Inspect the persisted hardware profile report
+  ansible.builtin.stat:
+    path: "{{ host_gaming_mode_host_profile_report }}"
+  register: host_gaming_mode_profile_report_stat
+  changed_when: false
+
+- name: Require the hardware profile evidence
+  ansible.builtin.assert:
+    that:
+      - host_gaming_mode_profile_report_stat.stat.exists | default(false)
+      - host_gaming_mode_profile_report_stat.stat.isreg | default(false)
+      - not (host_gaming_mode_profile_report_stat.stat.islnk | default(false))
+      - host_gaming_mode_profile_report_stat.stat.pw_name == 'root'
+    fail_msg: >-
+      Gaming Mode requires the root-owned profile report produced by
+      playbooks/preflight.yml before it may install a measured host policy.
+
+- name: Read the persisted hardware profile report
+  ansible.builtin.slurp:
+    src: "{{ host_gaming_mode_host_profile_report }}"
+  register: host_gaming_mode_profile_report_slurp
+  changed_when: false
+
+- name: Parse the persisted hardware profile report
+  ansible.builtin.set_fact:
+    host_gaming_mode_profile_report_data: >-
+      {{ host_gaming_mode_profile_report_slurp.content | b64decode | from_yaml }}
+  changed_when: false
+
+- name: Refuse a host outside the measured Nitro topology
+  ansible.builtin.assert:
+    that:
+      - >-
+        host_gaming_mode_profile_report_data.host_profile ==
+        host_gaming_mode_expected_host_profile
+      - host_gaming_mode_profile_report_data.cpu_threads | int == 8
+    fail_msg: >-
+      Gaming Mode is currently accepted only for the measured nitro-3060
+      eight-thread host profile.
+
+- name: Create the managed Gaming Mode configuration directory
+  ansible.builtin.file:
+    path: "{{ host_gaming_mode_config | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the managed Gaming Mode helper directory
+  ansible.builtin.file:
+    path: "{{ host_gaming_mode_root_helper | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Publish the measured Gaming Mode policy
+  ansible.builtin.template:
+    src: host-gaming-mode.json.j2
+    dest: "{{ host_gaming_mode_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the root-owned transactional Gaming Mode guard
+  ansible.builtin.copy:
+    src: hyperlab-gaming-mode-root.py
+    dest: "{{ host_gaming_mode_root_helper }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the unprivileged Gaming Mode client
+  ansible.builtin.copy:
+    src: hyperlab-gaming-mode.py
+    dest: "{{ host_gaming_mode_client }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Prove the installed root helper configuration parser
+  ansible.builtin.command:
+    argv:
+      - "{{ host_gaming_mode_root_helper }}"
+      - self-test
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Prove the unprivileged Gaming Mode client contract
+  ansible.builtin.command:
+    argv:
+      - "{{ host_gaming_mode_client }}"
+      - self-test
+  become: true
+  become_user: "{{ host_gaming_mode_control_user }}"
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Record that the host_gaming_mode brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_gaming_mode
+  when: not ansible_check_mode

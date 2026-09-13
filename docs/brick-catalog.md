@@ -23,6 +23,13 @@ brick exists; task files remain the source for implementation details.
   sufficient and otherwise installs the pinned Linuwu-Sense replacement only
   after an explicit opt-in, an isolated build proof and a recoverable driver
   transition. It remains outside every broad host target.
+- **`host_gaming_mode`** installs the measured Nitro host performance policy
+  as an explicit runtime-only transaction. The unprivileged operator wraps
+  one workload with `hyperlab-gaming-mode run --`; a root guard captures EPP
+  and CPU-set state, validates the reviewed VM topology and security floor,
+  applies the policy, and restores the captured state on workload exit or
+  transition failure. It is never enabled at boot or mounted by a broad
+  target.
 
 ## Storage and provenance
 

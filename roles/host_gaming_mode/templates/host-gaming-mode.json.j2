@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "operator_user": {{ host_gaming_mode_control_user | to_json }},
+  "expected_host_profile": {{ host_gaming_mode_expected_host_profile | to_json }},
+  "host_profile_report": {{ host_gaming_mode_host_profile_report | to_json }},
+  "runtime_dir": {{ host_gaming_mode_runtime_dir | to_json }},
+  "epp": {{ host_gaming_mode_epp | to_json }},
+  "allowed_cpus": {{ host_gaming_mode_allowed_cpus | to_json }},
+  "system_effective_cpus": {{ host_gaming_mode_system_effective_cpus | to_json }},
+  "user_effective_cpus": {{ host_gaming_mode_user_effective_cpus | to_json }},
+  "machine_effective_cpus": {{ host_gaming_mode_machine_effective_cpus | to_json }},
+  "expected_epp_cpu_count": {{ host_gaming_mode_expected_epp_cpu_count | int }},
+  "domain": {{ host_gaming_mode_domain | to_json }},
+  "vcpu_pins": {{ host_gaming_mode_vcpu_pins | to_json }},
+  "emulator_pin": {{ host_gaming_mode_emulator_pin | to_json }},
+  "iothread_id": {{ host_gaming_mode_iothread_id | int }},
+  "iothread_pin": {{ host_gaming_mode_iothread_pin | to_json }}
+}

@@ -1,0 +1,27 @@
+---
+host_gaming_mode_control_user: "{{ admin_user }}"
+host_gaming_mode_expected_host_profile: nitro-3060
+host_gaming_mode_host_profile_report: "{{ host_profile_report_path }}"
+
+host_gaming_mode_client: /usr/local/bin/hyperlab-gaming-mode
+host_gaming_mode_root_helper: /usr/local/libexec/hyperlab-gaming-mode-root
+host_gaming_mode_config: /etc/privatestack/host-gaming-mode.json
+host_gaming_mode_runtime_dir: /run/hyperlab-gaming-mode
+
+# This is the measured Nitro AN515-55 policy. It is runtime-only and opt-in.
+host_gaming_mode_epp: performance
+host_gaming_mode_allowed_cpus: "0,1,4,5"
+host_gaming_mode_system_effective_cpus: "0-1,4-5"
+host_gaming_mode_user_effective_cpus: "0-1,4-5"
+host_gaming_mode_machine_effective_cpus: "0-7"
+host_gaming_mode_expected_epp_cpu_count: 8
+
+host_gaming_mode_domain: arch-dev-vfio
+host_gaming_mode_vcpu_pins:
+  "0": "2"
+  "1": "6"
+  "2": "3"
+  "3": "7"
+host_gaming_mode_emulator_pin: "0,4"
+host_gaming_mode_iothread_id: 1
+host_gaming_mode_iothread_pin: "1,5"
