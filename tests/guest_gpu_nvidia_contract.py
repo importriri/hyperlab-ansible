@@ -101,7 +101,8 @@ def main() -> None:
         "dev_ide",
         "guest_gpu_nvidia",
     ]
-    assert vfio_roles[5] == {
+    assert vfio_roles[5] == "guest_gaming_telemetry"
+    assert vfio_roles[6] == {
         "role": "guest_looking_glass_linux",
         "vars": {"guest_looking_glass_linux_experimental": True},
     }

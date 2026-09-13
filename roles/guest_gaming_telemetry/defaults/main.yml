@@ -1,0 +1,15 @@
+---
+guest_gaming_telemetry_packages:
+  - mangohud
+  - vkmark
+
+guest_gaming_telemetry_command: /usr/local/bin/hyperlab-gaming-telemetry
+guest_gaming_telemetry_config: /etc/privatestack/gaming-telemetry.json
+guest_gaming_telemetry_output_root: >-
+  /home/{{ admin_user }}/.local/state/hyperlab/gaming-telemetry
+
+# MangoHud log_interval=0 records at frame granularity instead of reducing the
+# dataset to a periodic sampling interval.
+guest_gaming_telemetry_log_interval_ms: 0
+guest_gaming_telemetry_autostart_seconds: 1
+guest_gaming_telemetry_min_samples: 120

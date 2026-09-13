@@ -59,6 +59,9 @@ brick exists; task files remain the source for implementation details.
   ephemeral controller and guest staging; no asset remains on the host.
 - **`guest_gpu_nvidia`** installs the official open NVIDIA DKMS and Wayland stack
   only after a passed NVIDIA PCI function is visible inside the guest.
+- **`guest_gaming_telemetry`** installs MangoHud, vkmark and the HyperLab
+  recorder that turns Vulkan per-frame logs into reproducible FPS-low and
+  frame-time evidence; it deliberately performs no gaming-mode tuning.
 - **`guest_looking_glass_linux`** builds the pinned upstream PipeWire sender as
   an explicit, disabled-by-default Linux experiment; hardware decides whether a
   fork is needed.

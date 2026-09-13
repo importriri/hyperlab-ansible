@@ -1,0 +1,72 @@
+---
+- name: Keep gaming telemetry inside accelerated Arch workstation guests
+  ansible.builtin.assert:
+    that:
+      - "'workstations' in group_names"
+      - "'hypervisor' not in group_names"
+      - ansible_facts['virtualization_role'] == 'guest'
+      - ansible_facts['os_family'] == 'Archlinux'
+      - "'-zen' in ansible_facts['kernel']"
+      - guest_gaming_telemetry_packages == ['mangohud', 'vkmark']
+      - guest_gaming_telemetry_command is match('^/usr/local/bin/[A-Za-z0-9_.-]+$')
+      - guest_gaming_telemetry_config is match('^/etc/privatestack/[A-Za-z0-9_.-]+$')
+      - guest_gaming_telemetry_output_root is match('^/home/[^/]+/.+')
+      - guest_gaming_telemetry_log_interval_ms == 0
+      - guest_gaming_telemetry_autostart_seconds | int >= 0
+      - guest_gaming_telemetry_min_samples | int >= 100
+    fail_msg: >-
+      guest_gaming_telemetry is only for the reviewed accelerated Arch
+      workstation guest. It must not install or tune anything on the physical
+      hypervisor.
+
+- name: Install the frame telemetry package
+  community.general.pacman:
+    name: "{{ guest_gaming_telemetry_packages }}"
+    state: present
+
+- name: Create the managed telemetry configuration root
+  ansible.builtin.file:
+    path: "{{ guest_gaming_telemetry_config | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Publish the managed gaming telemetry policy
+  ansible.builtin.template:
+    src: gaming-telemetry.json.j2
+    dest: "{{ guest_gaming_telemetry_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the workstation telemetry evidence root
+  ansible.builtin.file:
+    path: "{{ guest_gaming_telemetry_output_root }}"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"
+
+- name: Install the HyperLab gaming telemetry recorder
+  ansible.builtin.copy:
+    src: hyperlab-gaming-telemetry.py
+    dest: "{{ guest_gaming_telemetry_command }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Prove the installed telemetry parser against a synthetic frame stream
+  ansible.builtin.command:
+    argv:
+      - "{{ guest_gaming_telemetry_command }}"
+      - self-test
+  changed_when: false
+  check_mode: false
+
+- name: Record that the guest_gaming_telemetry brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_gaming_telemetry

@@ -198,6 +198,8 @@ identity is unambiguous.
 - `guest-arch-hyprland.yml` builds the reusable Arch Hyprland workstation.
 - `guest-arch-dev.yml` adds the development stack to that workstation.
 - `guest-gpu-nvidia.yml` is the narrow post-passthrough NVIDIA driver target.
+- `guest-gaming-telemetry.yml` installs MangoHud, the vkmark Vulkan workload
+  and the HyperLab percentile parser without changing performance policy.
 - `guest-looking-glass-linux.yml` builds the pinned experimental PipeWire sender
   but never starts or enables it.
 - `guest-arch-dev-vfio.yml` assembles the full accelerated development guest,
