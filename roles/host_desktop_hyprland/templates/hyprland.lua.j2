@@ -7,6 +7,7 @@
 -- HyperLab operational authority remains hyperlabctl/specs/contracts.
 
 local input = require("hyperlab_input")
+local palette = require("hyperlab_palette")
 local main_mod = "SUPER"
 
 hl.env("XCURSOR_SIZE", "24")
@@ -23,6 +24,11 @@ hl.config({
         resize_on_border = true,
         allow_tearing = false,
         layout = "dwindle",
+
+        col = {
+            active_border = palette.active_border,
+            inactive_border = palette.inactive_border,
+        },
     },
 
     input = {

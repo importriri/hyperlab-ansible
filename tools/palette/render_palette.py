@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render every desktop colour fragment from one palette source.
 
-GTK, Sway, Foot, Superfile, Waybar, Rofi and Swaylock use different formats,
+GTK, Sway, Hyprland, Foot, Waybar, Rofi and Swaylock use different formats,
 but every value comes from palette.yml.
 
   render_palette.py green  build/green
@@ -65,6 +65,29 @@ def sway_config(name: str, c: dict[str, str]) -> str:
         "client.urgent           $hl_bad     $hl_mantle  $hl_text    $hl_bad     $hl_bad",
     ]
     return "\n".join(lines) + "\n"
+
+
+def hyprland_lua(name: str, c: dict[str, str]) -> str:
+    """Emit a Lua module from the same reviewed host palette tokens."""
+
+    def raw(token: str) -> str:
+        return c[token].lstrip("#")
+
+    lines = [
+        f"-- {BANNER} palette: {name}",
+        "return {",
+    ]
+    lines += [
+        f'    {token} = "{c[token]}",'
+        for token in SURFACE_TOKENS
+    ]
+    lines += [
+        f'    active_border = "rgba({raw("accent")}ff)",',
+        f'    inactive_border = "rgba({raw("overlay")}ff)",',
+        f'    urgent_border = "rgba({raw("bad")}ff)",',
+        "}",
+    ]
+    return "\\n".join(lines) + "\\n"
 
 
 def rofi_rasi(name: str, c: dict[str, str]) -> str:
@@ -151,6 +174,7 @@ WRITERS = {
     "hyperlab-palette-gtk.css": gtk_css,
     "hyperlab-palette-waybar.css": waybar_css,
     "hyperlab-palette.sway": sway_config,
+    "hyperlab-palette-hyprland.lua": hyprland_lua,
     "hyperlab-palette.rasi": rofi_rasi,
     "hyperlab-palette-foot.ini": foot_ini,
     "hyperlab-palette-swaylock.conf": swaylock_conf,

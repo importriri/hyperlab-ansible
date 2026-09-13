@@ -122,6 +122,7 @@ host_desktop_sway_palette_runtime_fragments:
   - hyperlab-palette-gtk.css
   - hyperlab-palette-waybar.css
   - hyperlab-palette.sway
+  - hyperlab-palette-hyprland.lua
   - hyperlab-palette.rasi
   - hyperlab-palette-foot.ini
   - hyperlab-palette-swaylock.conf

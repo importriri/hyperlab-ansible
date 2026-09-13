@@ -33,6 +33,10 @@ def main() -> int:
     hypr_input = text(
         "roles/host_desktop_hyprland/templates/hyprland-input.lua.j2"
     )
+    adapter = text(
+        "roles/host_desktop_hyprland/files/"
+        "privatestack-compositor-adapter.sh"
+    )
 
     require(
         defaults["host_desktop_hyprland_phase"] == "static",
@@ -56,6 +60,7 @@ def main() -> int:
         "hyprland",
         "hypridle",
         "hyprlock",
+        "hyprpaper",
         "hyprpolkitagent",
         "xdg-desktop-portal-hyprland",
         "waybar",
@@ -244,6 +249,55 @@ def main() -> int:
         require(
             old_syntax not in hypr,
             f"deprecated hyprlang syntax remains: {old_syntax}",
+        )
+
+    for marker in (
+        'local palette = require("hyperlab_palette")',
+        "active_border = palette.active_border",
+        "inactive_border = palette.inactive_border",
+    ):
+        require(
+            marker in hypr,
+            f"single-source Hyprland palette marker missing: {marker}",
+        )
+
+    adapter_contract = defaults[
+        "host_desktop_hyprland_compositor_adapter"
+    ]
+    require(
+        adapter_contract["api_version"] == 1,
+        "compositor adapter API version changed",
+    )
+    require(
+        adapter_contract["future_installed_path"]
+        == "/usr/local/bin/privatestack-compositor-adapter",
+        "future compositor adapter path changed",
+    )
+    require(
+        adapter_contract["high_level_helpers_rewired"] is False,
+        "high-level helpers were rewired before adapter acceptance",
+    )
+
+    coupled = set(
+        defaults[
+            "host_desktop_hyprland_compositor_coupled_helpers"
+        ]
+    )
+    require(
+        "privatestack-opacity-toggle" in coupled,
+        "opacity helper coupling is no longer explicit",
+    )
+
+    for marker in (
+        "switchxkblayout",
+        "hyprpaper",
+        "hl.dsp.window.fullscreen",
+        "hl.dsp.window.set_prop",
+        "hl.dsp.dpms",
+    ):
+        require(
+            marker in adapter,
+            f"compositor adapter primitive missing: {marker}",
         )
 
     require(
