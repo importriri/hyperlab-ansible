@@ -367,6 +367,7 @@ def main() -> int:
         "/dev/kvmfr0",
         "0.0.12",
         "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2",
+        "47e5ded356d684362b1b488c53203263879f231d330727cd379f551e7357c239",
     )
     assert guest_module.load_expected_portal(ROOT) == (
         "HEADLESS-0",
@@ -439,6 +440,8 @@ def main() -> int:
     assert "stat.S_ISCHR" in guest_gate
     assert '"modinfo"' in guest_gate
     assert "compat_patch_sha256" in guest_gate
+    assert "runtime_patch_sha256" in guest_gate
+    assert "Linux sender runtime patch drift" in guest_gate
     assert "shmFile=" in guest_gate
     assert "load_expected_portal" in guest_gate
     assert "load_portal_config" in guest_gate

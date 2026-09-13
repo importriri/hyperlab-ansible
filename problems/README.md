@@ -12,6 +12,8 @@ proof.
   were configured but missing from the running session.
 - [`looking-glass-linux-gcc16.md`](looking-glass-linux-gcc16.md): the pinned
   Linux sender failed to build with GCC 16.
+- [`looking-glass-linux-pipewire-frame-lifetime.md`](looking-glass-linux-pipewire-frame-lifetime.md):
+  PipeWire frame lifetime and thread-loop locking caused a sender crash.
 - [`kvmfr-guest-device-sizing.md`](kvmfr-guest-device-sizing.md): host module
   sizing was incorrectly treated as guest policy.
 - [`libvirt-kvmfr-cgroup-acl.md`](libvirt-kvmfr-cgroup-acl.md): QEMU could see

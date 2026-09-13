@@ -1,0 +1,99 @@
+--- a/host/platform/Linux/capture/pipewire/src/pipewire.c
++++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
+@@ -334,8 +334,6 @@
+     goto fail;
+   }
+ 
+-  pw_thread_loop_unlock(this->threadLoop);
+-
+   while (!this->hasFormat)
+     pw_thread_loop_wait(this->threadLoop);
+ 
+@@ -343,12 +341,14 @@
+   {
+     DEBUG_ERROR("Unknown frame format");
+     pw_thread_loop_accept(this->threadLoop);
++    pw_thread_loop_unlock(this->threadLoop);
+     goto fail;
+   }
+ 
+   DEBUG_INFO("Frame size       : %dx%d", this->width, this->height);
+ 
+   pw_thread_loop_accept(this->threadLoop);
++  pw_thread_loop_unlock(this->threadLoop);
+ 
+   return true;
+ fail:
+@@ -358,13 +358,21 @@
+ 
+ static void pipewire_stop(void)
+ {
++  pw_thread_loop_lock(this->threadLoop);
+   this->stop = true;
+   pw_stream_disconnect(this->stream);
+   pw_thread_loop_signal(this->threadLoop, false);
++  pw_thread_loop_unlock(this->threadLoop);
+ }
+ 
+ static bool pipewire_deinit(void)
+ {
++  const bool lockLoop =
++    this->threadLoop && (this->stream || this->core);
++
++  if (lockLoop)
++    pw_thread_loop_lock(this->threadLoop);
++
+   if (this->stream)
+   {
+     pw_stream_disconnect(this->stream);
+@@ -379,6 +387,9 @@
+ 
+   if (this->threadLoop)
+   {
++    if (lockLoop)
++      pw_thread_loop_unlock(this->threadLoop);
++
+     pw_thread_loop_stop(this->threadLoop);
+     pw_thread_loop_destroy(this->threadLoop);
+     this->threadLoop = NULL;
+@@ -410,14 +421,22 @@
+ {
+   int result;
+ 
++  pw_thread_loop_lock(this->threadLoop);
++
+ restart:
+   result = pw_thread_loop_timed_wait(this->threadLoop, 1);
+ 
+   if (this->stop)
++  {
++    pw_thread_loop_unlock(this->threadLoop);
+     return CAPTURE_RESULT_REINIT;
++  }
+ 
+   if (result == ETIMEDOUT)
++  {
++    pw_thread_loop_unlock(this->threadLoop);
+     return CAPTURE_RESULT_TIMEOUT;
++  }
+ 
+   if (this->formatChanged)
+   {
+@@ -468,12 +487,17 @@
+   const size_t maxFrameSize)
+ {
+   if (this->stop || !this->frameData)
++  {
++    pw_thread_loop_accept(this->threadLoop);
++    pw_thread_loop_unlock(this->threadLoop);
+     return CAPTURE_RESULT_REINIT;
++  }
+ 
+   framebuffer_write(frame, this->frameData,
+       this->dataHeight * this->pitch);
+ 
+   pw_thread_loop_accept(this->threadLoop);
++  pw_thread_loop_unlock(this->threadLoop);
+   return CAPTURE_RESULT_OK;
+ }
+ 

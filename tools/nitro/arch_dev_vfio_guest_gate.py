@@ -66,7 +66,7 @@ def load_expected_pin(repo_root: Path) -> tuple[str, str]:
 
 def load_expected_transport(
     repo_root: Path,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     path = (
         repo_root
         / "roles/guest_looking_glass_linux/defaults/main.yml"
@@ -78,6 +78,9 @@ def load_expected_transport(
     patch_sha256 = data.get(
         "guest_looking_glass_linux_compat_patch_sha256"
     )
+    runtime_patch_sha256 = data.get(
+        "guest_looking_glass_linux_runtime_patch_sha256"
+    )
     require(isinstance(device, str) and device, "invalid guest kvmfr device")
     require(isinstance(version, str) and version, "invalid guest kvmfr version")
     require(
@@ -85,7 +88,12 @@ def load_expected_transport(
         and len(patch_sha256) == 64,
         "invalid sender compatibility patch hash",
     )
-    return device, version, patch_sha256
+    require(
+        isinstance(runtime_patch_sha256, str)
+        and len(runtime_patch_sha256) == 64,
+        "invalid sender runtime patch hash",
+    )
+    return device, version, patch_sha256, runtime_patch_sha256
 
 
 def load_expected_portal(repo_root: Path) -> tuple[str, int, str]:
@@ -216,6 +224,7 @@ def main() -> int:
             expected_kvmfr_device,
             expected_kvmfr_version,
             expected_patch_sha256,
+            expected_runtime_patch_sha256,
         ) = load_expected_transport(repo_root)
         (
             expected_capture_output,
@@ -303,6 +312,11 @@ def main() -> int:
             stamp.get("compat_patch_sha256") == expected_patch_sha256,
             "Linux sender compatibility patch drift",
         )
+        require(
+            stamp.get("runtime_patch_sha256")
+            == expected_runtime_patch_sha256,
+            "Linux sender runtime patch drift",
+        )
         require(stamp.get("capture") == "pipewire", "sender was not built for PipeWire")
         require(stamp.get("runtime_enabled") is False, "sender must remain manually gated")
     except (OSError, GateError, yaml.YAMLError) as error:
@@ -318,6 +332,7 @@ def main() -> int:
                 "kvmfr_device": expected_kvmfr_device,
                 "kvmfr_version": kvmfr_version,
                 "looking_glass_build": expected_build,
+                "runtime_patch_sha256": expected_runtime_patch_sha256,
                 "xdph_capture_output": expected_capture_output,
                 "xdph_capture_max_fps": expected_capture_max_fps,
             },

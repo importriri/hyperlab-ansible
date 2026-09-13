@@ -136,6 +136,13 @@ def main() -> int:
         / "roles/guest_looking_glass_linux/files/portal-gcc16-autoptr.patch"
     )
     patch_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+    runtime_patch_path = (
+        ROOT
+        / "roles/guest_looking_glass_linux/files/pipewire-thread-loop-runtime.patch"
+    )
+    runtime_patch_sha256 = hashlib.sha256(
+        runtime_patch_path.read_bytes()
+    ).hexdigest()
     graph = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
     assert defaults["guest_looking_glass_linux_experimental"] is False
     assert defaults["guest_looking_glass_linux_commit"] == (
@@ -159,13 +166,28 @@ def main() -> int:
     assert patch_sha256 == (
         "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2"
     )
+    assert defaults["guest_looking_glass_linux_runtime_patch"] == (
+        "pipewire-thread-loop-runtime.patch"
+    )
+    assert (
+        defaults["guest_looking_glass_linux_runtime_patch_sha256"]
+        == runtime_patch_sha256
+    )
+    assert runtime_patch_sha256 == (
+        "47e5ded356d684362b1b488c53203263879f231d330727cd379f551e7357c239"
+    )
     assert "guest_looking_glass_linux_compat_patch_sha256" in tasks
+    assert "guest_looking_glass_linux_runtime_patch_sha256" in tasks
+    assert "runtime_patch_sha256:" in tasks
     assert "compat_patch_sha256:" in tasks
     assert "--check" in tasks
     assert "checkout" in tasks
     assert "register: guest_looking_glass_linux_compat_patch_apply" in tasks
+    assert "register: guest_looking_glass_linux_runtime_patch_apply" in tasks
     assert "guest_looking_glass_linux_compat_patch_apply is defined" in tasks
+    assert "guest_looking_glass_linux_runtime_patch_apply is defined" in tasks
     assert "guest_looking_glass_linux_compat_patch_apply.rc" in tasks
+    assert "guest_looking_glass_linux_runtime_patch_apply.rc" in tasks
     assert "| default(1) == 0" in tasks
     assert "-Wno-error" not in tasks
     assert defaults["guest_looking_glass_linux_kvmfr_version"] == "0.0.12"

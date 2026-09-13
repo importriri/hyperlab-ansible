@@ -218,6 +218,8 @@
          guest_looking_glass_linux_build or
          guest_looking_glass_linux_stamp_data.compat_patch_sha256 | default('') !=
          guest_looking_glass_linux_compat_patch_sha256 or
+         guest_looking_glass_linux_stamp_data.runtime_patch_sha256 | default('') !=
+         guest_looking_glass_linux_runtime_patch_sha256 or
          not (guest_looking_glass_linux_existing_binary.stat.exists | default(false)) or
          not (guest_looking_glass_linux_existing_binary.stat.isreg | default(false)) or
          (guest_looking_glass_linux_existing_binary.stat.islnk | default(false)) or
@@ -226,9 +228,9 @@
 - name: Build the pinned PipeWire-only Linux sender
   when: guest_looking_glass_linux_build_needed | bool
   block:
-    - name: Build with the reviewed GCC compatibility patch
+    - name: Build with the reviewed Linux sender patches
       block:
-        - name: Require clean pinned portal source before patching
+        - name: Require clean pinned sender sources before patching
           ansible.builtin.command:
             argv:
               - /usr/bin/git
@@ -239,21 +241,30 @@
               - --untracked-files=no
               - --
               - "{{ guest_looking_glass_linux_compat_patch_target }}"
-          register: guest_looking_glass_linux_portal_status
+              - "{{ guest_looking_glass_linux_runtime_patch_target }}"
+          register: guest_looking_glass_linux_sender_source_status
           changed_when: false
 
-        - name: Refuse unexpected changes in the pinned portal source
+        - name: Refuse unexpected changes in the pinned sender sources
           ansible.builtin.assert:
             that:
-              - guest_looking_glass_linux_portal_status.stdout | trim | length == 0
+              - guest_looking_glass_linux_sender_source_status.stdout | trim | length == 0
             fail_msg: >-
-              The pinned PipeWire portal source has unreviewed local changes.
-              Preserve or review them before applying the GCC compatibility patch.
+              The pinned PipeWire sender sources have unreviewed local changes.
+              Preserve or review them before applying the reviewed build patches.
 
         - name: Stage the reviewed GCC compatibility patch for this rebuild
           ansible.builtin.copy:
             src: "{{ guest_looking_glass_linux_compat_patch }}"
             dest: "{{ guest_looking_glass_linux_compat_patch_remote }}"
+            owner: root
+            group: root
+            mode: "0600"
+
+        - name: Stage the reviewed PipeWire runtime patch for this rebuild
+          ansible.builtin.copy:
+            src: "{{ guest_looking_glass_linux_runtime_patch }}"
+            dest: "{{ guest_looking_glass_linux_runtime_patch_remote }}"
             owner: root
             group: root
             mode: "0600"
@@ -264,6 +275,12 @@
             checksum_algorithm: sha256
           register: guest_looking_glass_linux_compat_patch_stat
 
+        - name: Inspect the staged PipeWire runtime patch
+          ansible.builtin.stat:
+            path: "{{ guest_looking_glass_linux_runtime_patch_remote }}"
+            checksum_algorithm: sha256
+          register: guest_looking_glass_linux_runtime_patch_stat
+
         - name: Require the exact reviewed GCC compatibility patch
           ansible.builtin.assert:
             that:
@@ -273,6 +290,16 @@
             fail_msg: >-
               The staged GCC compatibility patch differs from the bytes
               validated against the pinned Looking Glass source.
+
+        - name: Require the exact reviewed PipeWire runtime patch
+          ansible.builtin.assert:
+            that:
+              - >-
+                guest_looking_glass_linux_runtime_patch_stat.stat.checksum ==
+                guest_looking_glass_linux_runtime_patch_sha256
+            fail_msg: >-
+              The staged PipeWire runtime patch differs from the bytes
+              validated by the Nitro runtime stress campaign.
 
         - name: Require the compatibility patch to match the pinned source
           ansible.builtin.command:
@@ -285,6 +312,17 @@
               - "{{ guest_looking_glass_linux_compat_patch_remote }}"
           changed_when: false
 
+        - name: Require the runtime patch to match the pinned source
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - apply
+              - --check
+              - "{{ guest_looking_glass_linux_runtime_patch_remote }}"
+          changed_when: false
+
         - name: Apply the reviewed GCC compatibility patch
           ansible.builtin.command:
             argv:
@@ -294,6 +332,17 @@
               - apply
               - "{{ guest_looking_glass_linux_compat_patch_remote }}"
           register: guest_looking_glass_linux_compat_patch_apply
+          changed_when: true
+
+        - name: Apply the reviewed PipeWire runtime patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - apply
+              - "{{ guest_looking_glass_linux_runtime_patch_remote }}"
+          register: guest_looking_glass_linux_runtime_patch_apply
           changed_when: true
 
         - name: Configure the upstream Linux host with PipeWire capture
@@ -346,9 +395,30 @@
               guest_looking_glass_linux_compat_patch_apply.rc
               | default(1) == 0
 
+        - name: Restore the pinned PipeWire source after the transient runtime patch
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/git
+              - -C
+              - "{{ guest_looking_glass_linux_source }}"
+              - checkout
+              - --
+              - "{{ guest_looking_glass_linux_runtime_patch_target }}"
+          changed_when: false
+          when:
+            - guest_looking_glass_linux_runtime_patch_apply is defined
+            - >-
+              guest_looking_glass_linux_runtime_patch_apply.rc
+              | default(1) == 0
+
         - name: Remove the transient GCC compatibility patch
           ansible.builtin.file:
             path: "{{ guest_looking_glass_linux_compat_patch_remote }}"
+            state: absent
+
+        - name: Remove the transient PipeWire runtime patch
+          ansible.builtin.file:
+            path: "{{ guest_looking_glass_linux_runtime_patch_remote }}"
             state: absent
 
     - name: Create the experimental sender stamp directory
@@ -365,6 +435,7 @@
           commit: {{ guest_looking_glass_linux_commit }}
           build: {{ guest_looking_glass_linux_build }}
           compat_patch_sha256: {{ guest_looking_glass_linux_compat_patch_sha256 }}
+          runtime_patch_sha256: {{ guest_looking_glass_linux_runtime_patch_sha256 }}
           capture: pipewire
           runtime_enabled: false
         dest: "{{ guest_looking_glass_linux_stamp }}"
