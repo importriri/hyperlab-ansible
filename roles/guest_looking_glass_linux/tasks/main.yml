@@ -229,6 +229,7 @@
   when: guest_looking_glass_linux_build_needed | bool
   block:
     - name: Build with the reviewed Linux sender patches
+      when: not ansible_check_mode
       block:
         - name: Require clean pinned sender sources before patching
           ansible.builtin.command:

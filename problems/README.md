@@ -14,6 +14,8 @@ proof.
   Linux sender failed to build with GCC 16.
 - [`looking-glass-linux-pipewire-frame-lifetime.md`](looking-glass-linux-pipewire-frame-lifetime.md):
   PipeWire frame lifetime and thread-loop locking caused a sender crash.
+- [`looking-glass-linux-pipewire-disconnect-lifetime.md`](looking-glass-linux-pipewire-disconnect-lifetime.md):
+  PipeWire stream teardown during a real client disconnect could crash the Linux sender.
 - [`kvmfr-guest-device-sizing.md`](kvmfr-guest-device-sizing.md): host module
   sizing was incorrectly treated as guest policy.
 - [`libvirt-kvmfr-cgroup-acl.md`](libvirt-kvmfr-cgroup-acl.md): QEMU could see

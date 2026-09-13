@@ -174,13 +174,18 @@ def main() -> int:
         == runtime_patch_sha256
     )
     assert runtime_patch_sha256 == (
-        "47e5ded356d684362b1b488c53203263879f231d330727cd379f551e7357c239"
+        "80c89e6a42902e7526916ac6d4879e4de13e0f55a8afba317ad531d410d0ee2f"
     )
     assert "guest_looking_glass_linux_compat_patch_sha256" in tasks
     assert "guest_looking_glass_linux_runtime_patch_sha256" in tasks
     assert "runtime_patch_sha256:" in tasks
     assert "compat_patch_sha256:" in tasks
     assert "--check" in tasks
+    assert (
+        "Build with the reviewed Linux sender patches\n"
+        "      when: not ansible_check_mode\n"
+        "      block:" in tasks
+    )
     assert "checkout" in tasks
     assert "register: guest_looking_glass_linux_compat_patch_apply" in tasks
     assert "register: guest_looking_glass_linux_runtime_patch_apply" in tasks

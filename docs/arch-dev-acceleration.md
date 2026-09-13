@@ -52,20 +52,33 @@ prompt from a headless session without enabling the sender or creating a
 systemd unit. Because the picker grants screen capture without an interactive
 consent dialog, it is confined to the explicit Linux Looking Glass experiment.
 
-## Remaining gates
+## Completion acceptance
 
 Nitro hardware revalidation on 2026-08-31 closed keyboard/pointer return,
 lock/unlock, direct client reconnect, logout sender cleanup and the authenticated
 Ly-to-Looking-Glass PRIMARY handoff. Those observations are recorded in
 [`nitro-arch-dev-vfio-acceptance-2026-08-31.md`](nitro-arch-dev-vfio-acceptance-2026-08-31.md).
 
-The following are still open and must stay described as such:
+The remaining `arch-dev-vfio` completion gates were closed on 2026-09-13:
 
-- a real guest reboot followed by Looking Glass reconnect;
-- the final post-reboot idempotent guest pass;
-- a fresh check of the standalone SPICE recovery action;
-- the host 125 percent software-volume ceiling with an explicit no-clipping
-  listening check.
+- a real guest reboot changed the boot ID, returned SSH, Hyprland,
+  `HEADLESS-0` at 1920x1080 at 144 Hz and the authoritative Looking Glass
+  PRIMARY path;
+- immediate post-reboot guest reconciliation completed with `changed=0`;
+- the corrected PipeWire disconnect-lifetime sender completed ten real
+  production client reconnect/disconnect cycles with one unchanged sender PID,
+  zero fatal regressions and zero wrong-context regressions;
+- standalone SPICE recovery opened while Looking Glass was closed, did not
+  create a Looking Glass streaming transition and closed cleanly;
+- production Looking Glass PRIMARY was restored after the standalone console;
+- the host software-volume ceiling was proven at 125 percent;
+- the same controlled guest audio signal was played at host 100 percent and
+  125 percent and the operator reported the 125 percent sample as clean, with
+  no audible clipping or distortion.
+
+The PipeWire client-disconnect failure, rejected narrow candidate, lifecycle-v2
+fix and production stress proof are documented in
+[`../problems/looking-glass-linux-pipewire-disconnect-lifetime.md`](../problems/looking-glass-linux-pipewire-disconnect-lifetime.md).
 
 SPICE remains configured for recovery, input and audio plumbing. Looking Glass
 frame production is the accelerated video proof; the virtual ICH9 device,

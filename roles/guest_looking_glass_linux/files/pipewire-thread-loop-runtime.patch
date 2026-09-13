@@ -1,6 +1,45 @@
+diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
+index de0211d..e4bd02e 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -334,8 +334,6 @@
+@@ -114,7 +114,8 @@ static bool startStream(struct pw_stream * stream, uint32_t node)
+ 
+ static void streamProcessCallback(void * opaque)
+ {
+-  if (!this->hasFormat)
++  struct pw_stream * stream = this->stream;
++  if (this->stop || !this->hasFormat || !stream)
+     return;
+ 
+   struct pw_buffer * pwBuffer = NULL;
+@@ -122,11 +123,11 @@ static void streamProcessCallback(void * opaque)
+   // dequeue all buffers to get the latest one
+   while (true)
+   {
+-    struct pw_buffer * tmp = pw_stream_dequeue_buffer(this->stream);
++    struct pw_buffer * tmp = pw_stream_dequeue_buffer(stream);
+     if (!tmp)
+       break;
+     if (pwBuffer)
+-      pw_stream_queue_buffer(this->stream, pwBuffer);
++      pw_stream_queue_buffer(stream, pwBuffer);
+     pwBuffer = tmp;
+   }
+ 
+@@ -143,7 +144,11 @@ static void streamProcessCallback(void * opaque)
+   this->frameData = buffer->datas[0].data;
+ 
+   pw_thread_loop_signal(this->threadLoop, true);
+-  pw_stream_queue_buffer(this->stream, pwBuffer);
++
++  if (this->stop || this->stream != stream)
++    return;
++
++  pw_stream_queue_buffer(stream, pwBuffer);
+ }
+ 
+ static CaptureFormat convertSpaFormat(enum spa_video_format spa)
+@@ -334,8 +339,6 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
      goto fail;
    }
  
@@ -9,7 +48,7 @@
    while (!this->hasFormat)
      pw_thread_loop_wait(this->threadLoop);
  
-@@ -343,12 +341,14 @@
+@@ -343,12 +346,14 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
    {
      DEBUG_ERROR("Unknown frame format");
      pw_thread_loop_accept(this->threadLoop);
@@ -24,39 +63,67 @@
  
    return true;
  fail:
-@@ -358,13 +358,21 @@
+@@ -358,16 +363,33 @@ fail:
  
  static void pipewire_stop(void)
  {
 +  pw_thread_loop_lock(this->threadLoop);
++
++  /*
++   * Do not disconnect a live stream from another thread while the PipeWire
++   * loop can still dispatch process/state callbacks. Mark capture stopped,
++   * wake any waiter, then let deinit join the PipeWire loop first.
++   */
    this->stop = true;
-   pw_stream_disconnect(this->stream);
+-  pw_stream_disconnect(this->stream);
++  this->hasFormat = false;
++  this->frameData = NULL;
    pw_thread_loop_signal(this->threadLoop, false);
++
 +  pw_thread_loop_unlock(this->threadLoop);
  }
  
  static bool pipewire_deinit(void)
  {
-+  const bool lockLoop =
-+    this->threadLoop && (this->stream || this->core);
-+
-+  if (lockLoop)
-+    pw_thread_loop_lock(this->threadLoop);
++  /*
++   * First stop/join the PipeWire thread. After this point no PipeWire event
++   * callback can race stream/core/context destruction.
++   */
++  if (this->threadLoop)
++    pw_thread_loop_stop(this->threadLoop);
 +
    if (this->stream)
    {
-     pw_stream_disconnect(this->stream);
-@@ -379,6 +387,9 @@
+-    pw_stream_disconnect(this->stream);
++    pw_stream_destroy(this->stream);
+     this->stream = NULL;
+   }
  
+@@ -377,13 +399,22 @@ static bool pipewire_deinit(void)
+     this->core = NULL;
+   }
+ 
++  if (this->context)
++  {
++    pw_context_destroy(this->context);
++    this->context = NULL;
++  }
++
    if (this->threadLoop)
    {
-+    if (lockLoop)
-+      pw_thread_loop_unlock(this->threadLoop);
-+
-     pw_thread_loop_stop(this->threadLoop);
+-    pw_thread_loop_stop(this->threadLoop);
      pw_thread_loop_destroy(this->threadLoop);
      this->threadLoop = NULL;
-@@ -410,14 +421,22 @@
+   }
+ 
++  this->hasFormat = false;
++  this->formatChanged = false;
++  this->frameData = NULL;
++
+   if (this->sessionHandle)
+     portal_destroySession(this->portal, &this->sessionHandle);
+ 
+@@ -410,14 +441,22 @@ static CaptureResult pipewire_capture(
  {
    int result;
  
@@ -79,7 +146,7 @@
  
    if (this->formatChanged)
    {
-@@ -468,12 +487,17 @@
+@@ -468,12 +507,17 @@ static CaptureResult pipewire_getFrame(
    const size_t maxFrameSize)
  {
    if (this->stop || !this->frameData)
