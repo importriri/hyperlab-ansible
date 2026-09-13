@@ -1008,9 +1008,9 @@ class HyperlabWindow(Gtk.Window):
         LayerShell.set_margin(self, LayerShell.Edge.BOTTOM, 0)
         LayerShell.set_margin(self, LayerShell.Edge.LEFT, 0)
         LayerShell.set_exclusive_zone(self, 0)
-        # HyperLab behaves like a desktop popover, not a lock surface.
-        # ON_DEMAND keeps keyboard ownership non-exclusive. Pointer dismissal
-        # is handled independently from compositor keyboard focus.
+        # Prebuilt hidden surfaces stay non-exclusive. route() promotes a
+        # surface before its first mapped commit so an already-focused client
+        # cannot keep keyboard ownership while the cockpit becomes visible.
         LayerShell.set_keyboard_mode(self, LayerShell.KeyboardMode.ON_DEMAND)
         self.model = Model()
         self.last_refresh_monotonic = 0.0
@@ -1031,10 +1031,17 @@ class HyperlabWindow(Gtk.Window):
         # Theme buttons may update GTK/Waybar immediately, but Sway's palette
         # reload is delayed until this visible surface is intentionally closed.
         self._theme_sway_reload_pending = False
+        self._dismiss_source_id = 0
+        self._visibility_generation = 0
+        self._destroyed = False
+        self.connect("destroy", self._on_destroyed)
         self._install_css()
         self._build_shell()
         self._install_shortcuts()
         self._install_close_capture()
+        # wlr-layer-shell resets surface state across unmap/remap. Reassert
+        # visible keyboard ownership on every GTK map, not only before show.
+        self.connect("map", self._on_surface_mapped)
         self.refresh()
 
     def _install_css(self) -> None:
@@ -1072,7 +1079,7 @@ class HyperlabWindow(Gtk.Window):
         catcher.add_css_class("hyperlab-backdrop-catcher")
         catcher.connect(
             "clicked",
-            lambda *_args: self.close_surface(),
+            lambda *_args: self._defer_input_dismissal(),
         )
         root.set_child(catcher)
 
@@ -1291,32 +1298,99 @@ class HyperlabWindow(Gtk.Window):
         if hasattr(app, "route"):
             GLib.idle_add(app.route, "overlay", section, False)
 
+    def _on_surface_mapped(self, *_args: object) -> None:
+        # route() requests EXCLUSIVE before the first mapped commit. Reassert it
+        # after map as a protocol-state guard, but never resurrect a destroyed
+        # surface from a late signal.
+        if not self._destroyed:
+            self._set_keyboard_capture(True)
+
+    def _on_destroyed(self, *_args: object) -> None:
+        self._destroyed = True
+        self._invalidate_pending_dismissal()
+
+    def _invalidate_pending_dismissal(self) -> None:
+        # A deferred input callback belongs to exactly one visible generation.
+        # Closing, reopening or destroying the surface invalidates that token.
+        self._visibility_generation += 1
+        source_id = self._dismiss_source_id
+        self._dismiss_source_id = 0
+        if source_id:
+            GLib.source_remove(source_id)
+
+    def _prepare_show(self) -> None:
+        # Reopen starts a new generation and cancels any idle callback queued by
+        # the previous presentation before keyboard ownership is requested.
+        self._invalidate_pending_dismissal()
+        self._set_keyboard_capture(True)
+
+    def _defer_input_dismissal(self) -> bool:
+        # Coalesce Escape and outside-click events. A late callback may not close
+        # a newly reopened surface or touch a destroyed drawer.
+        if self._destroyed or not self.get_visible():
+            return True
+        if self._dismiss_source_id:
+            return True
+        generation = self._visibility_generation
+        self._dismiss_source_id = GLib.idle_add(
+            self._finish_input_dismissal,
+            generation,
+        )
+        return True
+
+    def _finish_input_dismissal(self, generation: int) -> bool:
+        # A stale callback must never erase the source id of a newer dismissal.
+        if (
+            self._destroyed
+            or generation != self._visibility_generation
+            or not self.get_visible()
+        ):
+            return GLib.SOURCE_REMOVE
+        self._dismiss_source_id = 0
+        self.close_surface()
+        return GLib.SOURCE_REMOVE
+
+    def _set_keyboard_capture(self, enabled: bool) -> None:
+        LayerShell.set_keyboard_mode(
+            self,
+            LayerShell.KeyboardMode.EXCLUSIVE
+            if enabled
+            else LayerShell.KeyboardMode.ON_DEMAND,
+        )
+
     def close_surface(self) -> None:
-        # Keep the fully built window and model resident. Reopening only maps an
-        # existing surface instead of importing GTK and rebuilding every page.
+        # Repeated/stale callbacks are deliberately idempotent. Overlay windows
+        # remain cacheable; the compact drawer still gets a fresh layer surface
+        # on its next route.
+        if self._destroyed or not self.get_visible():
+            return
+        self._invalidate_pending_dismissal()
+        self._set_keyboard_capture(False)
         self.set_visible(False)
         self._flush_pending_theme_sway_reload()
         app = self.get_application()
         if hasattr(app, "surface_hidden"):
             app.surface_hidden()
+        if self.surface_mode == "drawer":
+            self.destroy()
 
     def _install_close_capture(self) -> None:
-        controller = Gtk.EventControllerKey()
-        controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        controller.connect("key-pressed", self._capture_key)
+        # Escape is an accelerator for the whole visible cockpit root. A child
+        # widget may own keyboard focus without taking ownership of dismissal.
+        controller = Gtk.ShortcutController()
+        controller.set_scope(Gtk.ShortcutScope.GLOBAL)
+        controller.add_shortcut(
+            Gtk.Shortcut.new(
+                Gtk.ShortcutTrigger.parse_string("Escape"),
+                Gtk.CallbackAction.new(
+                    lambda *_args: self._defer_escape_dismissal()
+                ),
+            )
+        )
         self.add_controller(controller)
 
-    def _capture_key(
-        self,
-        _controller: Gtk.EventControllerKey,
-        keyval: int,
-        _keycode: int,
-        _state: Gdk.ModifierType,
-    ) -> bool:
-        if keyval == Gdk.KEY_Escape:
-            self.close_surface()
-            return True
-        return False
+    def _defer_escape_dismissal(self) -> bool:
+        return self._defer_input_dismissal()
 
     def _install_shortcuts(self) -> None:
         controller = Gtk.ShortcutController()
@@ -2980,6 +3054,7 @@ class HyperlabWindow(Gtk.Window):
             status = run_nitro_json("status")
         except ControlError as exc:
             offline = card()
+            offline.append(text_label("Nitro controls", "card-title", wrap=False))
             offline.append(text_label("Runtime backend unavailable", "status-blocked", wrap=False))
             offline.append(text_label(str(exc), "caption"))
             offline.append(button("Retry", lambda _button: self.rebuild_current()))
@@ -3257,7 +3332,8 @@ class HyperlabApplication(Gtk.Application):
         return window
 
     def close_visible_surfaces(self) -> None:
-        for window in self.windows.values():
+        # Drawer close destroys its cached object, so iterate over a snapshot.
+        for window in list(self.windows.values()):
             if window.get_visible():
                 window.close_surface()
         self.surface_hidden()
@@ -3286,11 +3362,17 @@ class HyperlabApplication(Gtk.Application):
         if same and toggle:
             window.close_surface()
             return
-        for other_surface, other in self.windows.items():
+        # Closing a drawer removes it from self.windows via the destroy signal.
+        # Snapshot the mapping before any close can mutate it.
+        for other_surface, other in list(self.windows.items()):
             if other_surface != surface and other.get_visible():
                 other.close_surface()
         window.reload_theme()
         window.select_section(section)
+        # The first mapped commit must already request keyboard ownership.
+        # Promoting from ON_DEMAND in the map callback can be too late when an
+        # existing client such as a browser owns focus.
+        window._prepare_show()
         window.set_visible(True)
         window.present()
         # Present cached content immediately; refresh stale data afterwards.

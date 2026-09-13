@@ -28,13 +28,39 @@ def main() -> int:
     screenshot = text("roles/host_desktop_sway/files/privatestack-screenshot.sh")
     arch = yaml.safe_load(text("images/arch.yml"))
 
-    require("LayerShell.KeyboardMode.EXCLUSIVE" not in manager,
-            "HyperLab must not keep exclusive keyboard focus")
-    require("LayerShell.KeyboardMode.ON_DEMAND" in manager,
-            "interactive surface must use on-demand keyboard focus")
+    require("LayerShell.KeyboardMode.EXCLUSIVE" in manager and
+            "LayerShell.KeyboardMode.ON_DEMAND" in manager,
+            "interactive surface must acquire exclusive keyboard focus only while visible")
+    require('self.connect("map", self._on_surface_mapped)' in manager and
+            "self._set_keyboard_capture(False)" in manager and
+            "self._defer_input_dismissal()" in manager,
+            "visible cockpit does not acquire/release keyboard capture")
+    require(
+        '''        window._prepare_show()
+        window.set_visible(True)
+        window.present()
+''' in manager,
+        "cockpit does not request keyboard capture before its mapped commit",
+    )
     require(
         "notify::is-active" not in manager,
         "Layer Shell surfaces must not depend on compositor focus churn",
+    )
+    require(
+        "Gtk.ShortcutController()" in manager
+        and "Gtk.ShortcutScope.GLOBAL" in manager
+        and 'Gtk.ShortcutTrigger.parse_string("Escape")' in manager
+        and "def _defer_escape_dismissal(self)" in manager
+        and "self._defer_input_dismissal()" in manager
+        and "Gtk.EventControllerKey()" not in manager,
+        "Escape is not a root-scoped deferred dismissal accelerator",
+    )
+    require(
+        'if self.surface_mode == "drawer":' in manager
+        and "self.destroy()" in manager
+        and "for window in list(self.windows.values())" in manager
+        and "for other_surface, other in list(self.windows.items())" in manager,
+        "drawer dismissal can reuse a stale layer surface or mutate window iteration",
     )
     require(
         "class HyperlabBackdropWindow" not in manager
@@ -45,7 +71,7 @@ def main() -> int:
     require(
         "root = Gtk.Overlay()" in manager
         and "catcher = Gtk.Button()" in manager
-        and 'lambda *_args: self.close_surface()' in manager
+        and "self._defer_input_dismissal()" in manager
         and "root.add_overlay(panel)" in manager,
         "outside click is not owned by the active cockpit surface",
     )

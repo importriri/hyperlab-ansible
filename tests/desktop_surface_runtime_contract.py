@@ -94,6 +94,21 @@ def main() -> int:
         "known-bad Layer Shell focus-loss watcher returned",
     )
     require(
+        "LayerShell.KeyboardMode.EXCLUSIVE" in manager
+        and "LayerShell.KeyboardMode.ON_DEMAND" in manager
+        and 'self.connect("map", self._on_surface_mapped)' in manager
+        and "self._set_keyboard_capture(False)" in manager and
+            "self._defer_input_dismissal()" in manager,
+        "visible cockpit does not own Escape and release focus on close",
+    )
+    require(
+        '''        window._prepare_show()
+        window.set_visible(True)
+        window.present()
+''' in manager,
+        "visible cockpit maps before requesting keyboard ownership",
+    )
+    require(
         "class HyperlabBackdropWindow" not in manager
         and "backdrop.set_visible(True)" not in manager
         and "backdrop.present()" not in manager,

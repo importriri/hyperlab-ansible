@@ -214,3 +214,20 @@ def test_managed_reboot_and_power_cycle_use_reviewed_playbooks():
         "power_cycle_confirmation_derived",
         "guest_confirm_power_cycle=demo" in cycled,
     )
+
+
+def test_guest_fullscreen_is_a_typed_unprivileged_vm_action():
+    action = registry.by_id("vm.guest-fullscreen")
+    equals(
+        "guest_fullscreen_command",
+        action["command"],
+        ["hyperlabctl", "vm", "guest-fullscreen", "{domain}"],
+    )
+    equals("guest_fullscreen_privileged", action["privileged"], False)
+    equals("guest_fullscreen_destructive", action["destructive"], False)
+    equals("guest_fullscreen_target", action["target"], "domain")
+    equals(
+        "guest_fullscreen_resolve",
+        registry.resolve("vm.guest-fullscreen", domain="demo"),
+        ["hyperlabctl", "vm", "guest-fullscreen", "demo"],
+    )

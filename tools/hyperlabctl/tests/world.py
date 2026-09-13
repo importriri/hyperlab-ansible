@@ -1,6 +1,8 @@
 """A whole fake host in a temp directory: repo, sysfs, proc, run state, virsh."""
 
+import atexit
 import tempfile
+import shutil
 from pathlib import Path
 
 import sys
@@ -66,6 +68,7 @@ HOSTDEV = """<hostdev mode='subsystem' type='pci'>
 def build(domains=None, trust=None, memtotal_kb=7948000, drivers=None,
           networks_active=None, profile_report=True, images=None):
     root = Path(tempfile.mkdtemp(prefix="hyperlab-test-"))
+    atexit.register(shutil.rmtree, root, ignore_errors=True)
     repo = root / "repo"
     (repo / "group_vars" / "all").mkdir(parents=True)
     (repo / "roles").mkdir()

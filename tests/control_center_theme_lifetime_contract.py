@@ -36,8 +36,8 @@ assert '[[ ${HYPERLAB_THEME_DEFER_SWAY_RELOAD:-0} != 1 ]]' in theme
 assert "swaymsg -q reload" in theme
 assert "exec_always /usr/local/bin/privatestack-hyperlab-session" in sway
 
-# The panel itself still owns dismissal through the existing backdrop path.
-assert 'lambda *_args: self.close_surface()' in manager
+# The active cockpit surface still owns dismissal through its deferred catcher path.
+assert "self._defer_input_dismissal()" in manager
 assert "shell=True" not in manager
 assert "os.system" not in manager
 

@@ -98,6 +98,15 @@ ACTIONS = [
         "requires": None,
     },
     {
+        "id": "vm.guest-fullscreen",
+        "label": "Toggle true fullscreen inside one running managed guest",
+        "command": ["hyperlabctl", "vm", "guest-fullscreen", "{domain}"],
+        "privileged": False,
+        "destructive": False,
+        "target": "domain",
+        "requires": None,
+    },
+    {
         "id": "panel.open",
         "label": "Open the cockpit panel",
         "command": ["hyperlabctl", "panel"],

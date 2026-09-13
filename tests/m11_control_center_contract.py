@@ -38,6 +38,7 @@ def main():
         "LayerShell.init_for_window(self)",
         "LayerShell.Layer.OVERLAY",
         "LayerShell.KeyboardMode.ON_DEMAND",
+        "LayerShell.KeyboardMode.EXCLUSIVE",
     ):
         require(boundary in manager, "Layer Shell boundary missing: %s" % boundary)
     require("class HyperlabWindow(Gtk.Window)" in manager,
@@ -88,24 +89,32 @@ def main():
     require('header.append(text_label("Machines" if compact else "HyperLab", "mock-title"' in manager and
             'self.header_status = text_label("Loading…", "mock-badge"' in manager,
             "definitive minimal titlebar is missing")
-    require("Gtk.EventControllerKey()" in manager and
-            "Gtk.PropagationPhase.CAPTURE" in manager and
-            "keyval == Gdk.KEY_Escape" in manager,
-            "single-Escape close capture missing")
-    require("LayerShell.set_keyboard_mode(self, LayerShell.KeyboardMode.ON_DEMAND)" in manager and
+    require("Gtk.ShortcutController()" in manager and
+            "Gtk.ShortcutScope.GLOBAL" in manager and
+            'Gtk.ShortcutTrigger.parse_string("Escape")' in manager,
+            "root-scoped Escape close accelerator missing")
+    require("LayerShell.KeyboardMode.EXCLUSIVE" in manager and
+            "LayerShell.KeyboardMode.ON_DEMAND" in manager and
             "LayerShell.KeyboardMode.NONE" not in manager,
-            "HyperLab surface no longer preserves normal desktop keyboard focus")
+            "HyperLab keyboard-focus lifecycle is incomplete")
+    require('self.connect("map", self._on_surface_mapped)' in manager and
+            "window._prepare_show()" in manager and
+            "self._set_keyboard_capture(False)" in manager and
+            "self._defer_input_dismissal()" in manager,
+            "visible HyperLab surfaces do not acquire and release Escape capture")
     require("def close_visible_surfaces" in manager and
             "catcher = Gtk.Button()" in manager and
-            'lambda *_args: self.close_surface()' in manager,
+            "self._defer_input_dismissal()" in manager,
             "single-surface click-outside close path is missing")
-    require("self.set_visible(False)" in manager and
+    require('if self.surface_mode == "drawer":' in manager and
+            "self.destroy()" in manager and
             "def close_surface" in manager,
-            "resident hide/reopen close path missing")
-    require('for other_surface, other in self.windows.items()' in manager and
+            "drawer does not recreate its layer surface after dismissal")
+    require('for other_surface, other in list(self.windows.items())' in manager and
+            'for window in list(self.windows.values())' in manager and
             'window.present()' in manager and
             'GLib.timeout_add(120, self._refresh_visible_windows)' in manager,
-            "resident drawer/overlay switching is not immediate")
+            "drawer/overlay switching is not safe when drawer close destroys the surface")
     require('surface = "drawer"' in manager,
             "the no-argument HyperLab route is not the compact drawer")
     require("def _build_quick_actions" not in manager,
