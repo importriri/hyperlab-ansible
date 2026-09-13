@@ -1,0 +1,24 @@
+# HyperLab host input reference — Phase 1 static only.
+
+input {
+    kb_layout = {{ host_desktop_hyprland_input_defaults.keyboard_layout_cycle | join(',') }}
+    kb_variant = {{ host_desktop_hyprland_input_defaults.keyboard_variant }}
+    kb_options = {{ host_desktop_hyprland_input_defaults.keyboard_options }}
+
+    touchpad {
+        disable_while_typing = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.dwt == 'enabled' else 'false' }}
+        middle_button_emulation = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.middle_emulation == 'enabled' else 'false' }}
+        natural_scroll = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.natural_scroll == 'enabled' else 'false' }}
+        tap-to-click = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.tap == 'enabled' else 'false' }}
+    }
+}
+
+# Runtime layout switching is intentionally not wired in Phase 1 because the
+# existing persisted keyboard helper calls swaymsg directly.
+# HYPERLAB_PARITY_ADAPTER_REQUIRED: keyboard-cycle
+
+{% if host_desktop_hyprland_input_defaults.theme_cycle_binding %}
+# The machine-specific Nitro presentation key remains contract data, but the
+# Hyprland runtime adapter is introduced only after its route is verified.
+# HYPERLAB_MACHINE_THEME_KEY={{ host_desktop_hyprland_input_defaults.theme_cycle_binding.keysym }}
+{% endif %}

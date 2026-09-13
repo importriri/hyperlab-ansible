@@ -1,0 +1,66 @@
+---
+- name: Keep the Phase 1 host Hyprland role static and host-only
+  ansible.builtin.assert:
+    that:
+      - "'hypervisor' in group_names"
+      - "'workstations' not in group_names"
+      - admin_user is string
+      - admin_user | length > 0
+      - admin_user != 'root'
+      - host_desktop_hyprland_phase == 'static'
+      - not host_desktop_hyprland_runtime_enabled
+      - host_desktop_hyprland_preserve_sway_fallback
+      - host_desktop_hyprland_preserve_waybar_fallback
+    fail_msg: >-
+      Phase 1 may only describe the future physical-host Hyprland cockpit.
+      It must remain non-active and preserve the proven Sway/Waybar recovery
+      surfaces.
+
+- name: Validate the future official Hyprland integration contract
+  ansible.builtin.assert:
+    that:
+      - "'hyprland' in host_desktop_hyprland_future_packages"
+      - "'hypridle' in host_desktop_hyprland_future_packages"
+      - "'hyprlock' in host_desktop_hyprland_future_packages"
+      - "'hyprpolkitagent' in host_desktop_hyprland_future_packages"
+      - "'xdg-desktop-portal-hyprland' in host_desktop_hyprland_future_packages"
+      - "'waybar' in host_desktop_hyprland_future_packages"
+      - host_desktop_hyprland_input_defaults.keyboard_layout == 'it'
+      - >-
+        host_desktop_hyprland_input_defaults.keyboard_layout_cycle
+        == ['it', 'us', 'ara']
+    fail_msg: >-
+      The static host Hyprland contract no longer matches the reviewed desktop
+      integration or input baseline.
+
+- name: Validate host-owned trust semantics
+  ansible.builtin.assert:
+    that:
+      - host_desktop_hyprland_trust_contract.owner == 'host'
+      - not host_desktop_hyprland_trust_contract.guest_self_assignment
+      - host_desktop_hyprland_trust_contract.classes.clean.level == 3
+      - host_desktop_hyprland_trust_contract.classes.dev.level == 2
+      - host_desktop_hyprland_trust_contract.classes.dirty.level == 1
+      - host_desktop_hyprland_trust_contract.classes.lab.level == 0
+      - >-
+        not
+        host_desktop_hyprland_trust_contract.classes.services.gpu_trust_rung
+      - >-
+        host_desktop_hyprland_trust_contract
+        .dirty_seamless_window_requires_host_badge
+    fail_msg: >-
+      Host Hyprland presentation may consume trust identity but may not weaken,
+      redefine or delegate the HyperLab trust contract.
+
+- name: Validate the Quickshell boundary before implementation
+  ansible.builtin.assert:
+    that:
+      - host_desktop_hyprland_shell_target.primary == 'quickshell'
+      - host_desktop_hyprland_shell_target.phase == 2
+      - not host_desktop_hyprland_shell_target.fake_controls_allowed
+      - >-
+        host_desktop_hyprland_shell_target.backend_authority
+        == ['hyperlabctl', 'specs', 'contracts']
+    fail_msg: >-
+      Quickshell is a later presentation layer. It must not invent backend
+      state or become an operational authority.

@@ -1,0 +1,11 @@
+---
+# Phase 1 mount point for the physical-host Hyprland migration contract.
+#
+# This playbook is intentionally not imported by foundation.yml or lab.yml.
+# The role contains assertion-only tasks: invoking this playbook during Phase 1
+# validates migration policy but installs, writes, starts and stops nothing.
+- name: Validate the static host Hyprland migration contract
+  hosts: hypervisor
+  become: false
+  roles:
+    - host_desktop_hyprland

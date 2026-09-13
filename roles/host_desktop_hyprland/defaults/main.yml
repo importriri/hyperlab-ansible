@@ -1,0 +1,117 @@
+---
+# Phase 1 is deliberately static. Nothing in this role installs packages,
+# writes host configuration, changes Ly, starts Hyprland or replaces Sway.
+host_desktop_hyprland_phase: static
+host_desktop_hyprland_runtime_enabled: false
+
+# hyperlabctl remains the source of operational truth. Future host integration
+# must point at the same reviewed checkout contract used by the Sway cockpit.
+host_desktop_hyprland_hyperlab_checkout: "/home/{{ admin_user }}/hyperlab-ansible"
+
+# Sway and Waybar remain recovery surfaces throughout migration.
+host_desktop_hyprland_preserve_sway_fallback: true
+host_desktop_hyprland_preserve_waybar_fallback: true
+
+# Future official-repository stack. Phase 1 declares it but never installs it.
+host_desktop_hyprland_future_packages:
+  - hyprland
+  - hypridle
+  - hyprlock
+  - hyprpolkitagent
+  - xdg-desktop-portal
+  - xdg-desktop-portal-hyprland
+  - xdg-desktop-portal-gtk
+  - waybar
+  - mako
+  - foot
+  - rofi
+  - grim
+  - slurp
+  - wl-clipboard
+
+host_desktop_hyprland_input_defaults:
+  keyboard_layout: it
+  keyboard_layout_cycle:
+    - it
+    - us
+    - ara
+  keyboard_variant: ""
+  keyboard_options: ""
+  theme_cycle_binding: null
+  touchpad:
+    dwt: enabled
+    middle_emulation: enabled
+    natural_scroll: enabled
+    tap: enabled
+
+# Trust identity is host-owned. Presentation layers consume this contract;
+# neither a guest nor a cosmetic theme may redefine its security meaning.
+host_desktop_hyprland_trust_contract:
+  owner: host
+  guest_self_assignment: false
+  classes:
+    clean:
+      level: 3
+      gpu_trust_rung: true
+    dev:
+      level: 2
+      gpu_trust_rung: true
+    dirty:
+      level: 1
+      gpu_trust_rung: true
+    lab:
+      level: 0
+      gpu_trust_rung: true
+    services:
+      level: null
+      gpu_trust_rung: false
+  dirty_seamless_window_requires_host_badge: true
+
+# These existing helpers embed Sway-specific IPC and must not simply be copied
+# into the Hyprland session. Later milestones split common policy/state from
+# compositor-specific adapters.
+host_desktop_hyprland_compositor_coupled_helpers:
+  - privatestack-keyboard
+  - privatestack-theme
+  - privatestack-controls
+  - privatestack-swaylock
+  - privatestack-waybar
+
+# Phase 1 records the full parity target without pretending it is implemented.
+host_desktop_hyprland_required_parity:
+  - workspaces-1-9
+  - move-to-workspace
+  - focus-move-resize
+  - fullscreen
+  - floating
+  - terminal
+  - file-manager
+  - launcher
+  - power-menu
+  - hyperlab-drawer
+  - hyperlab-diagnostics
+  - hyperlab-control-center
+  - hyperlab-doctor
+  - looking-glass
+  - spice-console
+  - audio-125
+  - audio-mute
+  - brightness
+  - screenshot-full
+  - screenshot-region
+  - keyboard-cycle
+  - machine-theme-key
+  - theme-cycle
+  - wallpaper-mode
+  - wallpaper-daemon
+  - lock
+  - idle-dpms
+
+host_desktop_hyprland_shell_target:
+  primary: quickshell
+  phase: 2
+  fake_controls_allowed: false
+  backend_authority:
+    - hyperlabctl
+    - specs
+    - contracts
