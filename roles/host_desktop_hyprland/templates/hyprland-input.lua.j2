@@ -1,0 +1,22 @@
+-- Managed by hyperlab-ansible.
+-- Physical-host Hyprland input contract.
+-- Phase 1 remains static and this module is not installed yet.
+
+return {
+    keyboard_layout = "{{ host_desktop_hyprland_input_defaults.keyboard_layout_cycle | join(',') }}",
+    keyboard_variant = "{{ host_desktop_hyprland_input_defaults.keyboard_variant }}",
+    keyboard_options = "{{ host_desktop_hyprland_input_defaults.keyboard_options }}",
+
+    touchpad = {
+        disable_while_typing = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.dwt == 'enabled' else 'false' }},
+        middle_button_emulation = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.middle_emulation == 'enabled' else 'false' }},
+        natural_scroll = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.natural_scroll == 'enabled' else 'false' }},
+        tap_to_click = {{ 'true' if host_desktop_hyprland_input_defaults.touchpad.tap == 'enabled' else 'false' }},
+    },
+
+{% if host_desktop_hyprland_input_defaults.theme_cycle_binding %}
+    theme_cycle_key = "{{ host_desktop_hyprland_input_defaults.theme_cycle_binding.keysym }}",
+{% else %}
+    theme_cycle_key = nil,
+{% endif %}
+}

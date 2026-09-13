@@ -1,0 +1,370 @@
+-- Managed by hyperlab-ansible.
+-- Physical host only.
+--
+-- PHASE 1 STATIC CONTRACT:
+-- this file is not installed or started yet.
+-- Sway remains the proven host compositor and recovery path.
+-- HyperLab operational authority remains hyperlabctl/specs/contracts.
+
+local input = require("hyperlab_input")
+local main_mod = "SUPER"
+
+hl.env("XCURSOR_SIZE", "24")
+hl.env("HYPRCURSOR_SIZE", "24")
+hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
+hl.env("XDG_SESSION_DESKTOP", "Hyprland")
+hl.env("XDG_SESSION_TYPE", "wayland")
+
+hl.config({
+    general = {
+        gaps_in = 6,
+        gaps_out = 4,
+        border_size = 3,
+        resize_on_border = true,
+        allow_tearing = false,
+        layout = "dwindle",
+    },
+
+    input = {
+        kb_layout = input.keyboard_layout,
+        kb_variant = input.keyboard_variant,
+        kb_options = input.keyboard_options,
+        follow_mouse = 0,
+
+        touchpad = {
+            disable_while_typing =
+                input.touchpad.disable_while_typing,
+            middle_button_emulation =
+                input.touchpad.middle_button_emulation,
+            natural_scroll =
+                input.touchpad.natural_scroll,
+            tap_to_click =
+                input.touchpad.tap_to_click,
+        },
+    },
+
+    misc = {
+        force_default_wallpaper = 0,
+        disable_hyprland_logo = true,
+        focus_on_activate = true,
+    },
+})
+
+-- Basic workstation parity.
+hl.bind(
+    main_mod .. " + Return",
+    hl.dsp.exec_cmd("foot")
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + Return",
+    hl.dsp.exec_cmd("foot --app-id=floatterm")
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + F",
+    hl.dsp.exec_cmd("nemo")
+)
+
+hl.bind(
+    main_mod .. " + D",
+    hl.dsp.exec_cmd(
+        "rofi -show drun "
+        .. "-theme ~/.config/rofi/rofi-launcher.rasi"
+    )
+)
+
+hl.bind(
+    main_mod .. " + X",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-powermenu"
+    )
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + Q",
+    hl.dsp.window.close()
+)
+
+hl.bind(
+    main_mod .. " + F",
+    hl.dsp.window.fullscreen({
+        action = "toggle",
+        mode = "fullscreen",
+    })
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + SPACE",
+    hl.dsp.window.float({
+        action = "toggle",
+    })
+)
+
+-- Focus parity.
+hl.bind(
+    main_mod .. " + H",
+    hl.dsp.focus({ direction = "left" })
+)
+
+hl.bind(
+    main_mod .. " + J",
+    hl.dsp.focus({ direction = "down" })
+)
+
+hl.bind(
+    main_mod .. " + K",
+    hl.dsp.focus({ direction = "up" })
+)
+
+hl.bind(
+    main_mod .. " + L",
+    hl.dsp.focus({ direction = "right" })
+)
+
+-- Move parity.
+hl.bind(
+    main_mod .. " + SHIFT + H",
+    hl.dsp.window.move({ direction = "left" })
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + J",
+    hl.dsp.window.move({ direction = "down" })
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + K",
+    hl.dsp.window.move({ direction = "up" })
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + L",
+    hl.dsp.window.move({ direction = "right" })
+)
+
+-- Mouse move / resize parity.
+hl.bind(
+    main_mod .. " + mouse:272",
+    hl.dsp.window.drag(),
+    { mouse = true }
+)
+
+hl.bind(
+    main_mod .. " + mouse:273",
+    hl.dsp.window.resize(),
+    { mouse = true }
+)
+
+-- Keyboard resize submap.
+hl.bind(
+    main_mod .. " + R",
+    hl.dsp.submap("resize")
+)
+
+hl.define_submap("resize", function()
+    hl.bind(
+        "H",
+        hl.dsp.window.resize({
+            x = -10,
+            y = 0,
+            relative = true,
+        }),
+        { repeating = true }
+    )
+
+    hl.bind(
+        "J",
+        hl.dsp.window.resize({
+            x = 0,
+            y = 10,
+            relative = true,
+        }),
+        { repeating = true }
+    )
+
+    hl.bind(
+        "K",
+        hl.dsp.window.resize({
+            x = 0,
+            y = -10,
+            relative = true,
+        }),
+        { repeating = true }
+    )
+
+    hl.bind(
+        "L",
+        hl.dsp.window.resize({
+            x = 10,
+            y = 0,
+            relative = true,
+        }),
+        { repeating = true }
+    )
+
+    hl.bind(
+        "Return",
+        hl.dsp.submap("reset")
+    )
+
+    hl.bind(
+        "Escape",
+        hl.dsp.submap("reset")
+    )
+end)
+
+-- Workspaces 1-9.
+for workspace = 1, 9 do
+    local key = tostring(workspace)
+
+    hl.bind(
+        main_mod .. " + " .. key,
+        hl.dsp.focus({
+            workspace = workspace,
+        })
+    )
+
+    hl.bind(
+        main_mod .. " + SHIFT + " .. key,
+        hl.dsp.window.move({
+            workspace = workspace,
+        })
+    )
+end
+
+-- Proven compositor-neutral HyperLab surfaces.
+hl.bind(
+    main_mod .. " + F2",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-hyperlab-domains "
+        .. "--surface drawer --section diagnostics"
+    )
+)
+
+hl.bind(
+    main_mod .. " + F3",
+    hl.dsp.exec_cmd(
+        "foot --app-id=floatterm bash -lc "
+        .. "'hyperlabctl doctor; read -r _'"
+    )
+)
+
+hl.bind(
+    main_mod .. " + F4",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-hyperlab-domains "
+        .. "--surface overlay --section vms"
+    )
+)
+
+-- Required backend routes retained as explicit migration contracts.
+-- HYPERLAB_PARITY_ROUTE:
+-- /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms
+-- HYPERLAB_PARITY_ROUTE: hyperlabctl open looking-glass
+-- HYPERLAB_PARITY_ROUTE: hyperlabctl open console
+
+-- Reviewed physical-host audio ceiling.
+hl.bind(
+    "XF86AudioRaiseVolume",
+    hl.dsp.exec_cmd(
+        "wpctl set-volume -l 1.25 "
+        .. "@DEFAULT_AUDIO_SINK@ 5%+"
+    ),
+    {
+        locked = true,
+        repeating = true,
+    }
+)
+
+hl.bind(
+    "XF86AudioLowerVolume",
+    hl.dsp.exec_cmd(
+        "wpctl set-volume "
+        .. "@DEFAULT_AUDIO_SINK@ 5%-"
+    ),
+    {
+        locked = true,
+        repeating = true,
+    }
+)
+
+hl.bind(
+    "XF86AudioMute",
+    hl.dsp.exec_cmd(
+        "wpctl set-mute "
+        .. "@DEFAULT_AUDIO_SINK@ toggle"
+    ),
+    {
+        locked = true,
+    }
+)
+
+hl.bind(
+    "XF86MonBrightnessUp",
+    hl.dsp.exec_cmd(
+        "brightnessctl set +5%"
+    ),
+    {
+        locked = true,
+        repeating = true,
+    }
+)
+
+hl.bind(
+    "XF86MonBrightnessDown",
+    hl.dsp.exec_cmd(
+        "brightnessctl set 5%-"
+    ),
+    {
+        locked = true,
+        repeating = true,
+    }
+)
+
+-- Screenshot helper is already compositor-neutral.
+hl.bind(
+    "Print",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-screenshot full"
+    )
+)
+
+hl.bind(
+    "SHIFT + Print",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-screenshot region"
+    )
+)
+
+hl.bind(
+    "CTRL + Print",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-screenshot region choose"
+    )
+)
+
+-- Hyprlock is the selected host lock backend.
+hl.bind(
+    main_mod .. " + Escape",
+    hl.dsp.exec_cmd(
+        "pidof hyprlock || hyprlock"
+    )
+)
+
+-- These existing Sway helpers contain compositor IPC.
+-- The next milestone supplies a narrow Hyprland adapter instead of copying
+-- policy/state into Lua.
+--
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: keyboard-cycle
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: machine-theme-key
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: theme-cycle
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: wallpaper-mode
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: wallpaper-daemon
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: controls-menu
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: opacity-toggle
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: bar-toggle
+-- HYPERLAB_PARITY_ADAPTER_REQUIRED: idle-dpms
+
+-- Quickshell remains Phase 2.
+-- HYPERLAB_QUICKSHELL_PHASE=2
