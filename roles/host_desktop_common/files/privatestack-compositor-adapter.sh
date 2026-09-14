@@ -355,7 +355,7 @@ case ${operation} in
                 sway_mode=invisible
                 ;;
             toggle)
-                sway_mode=toggle
+                sway_mode=
                 ;;
             *)
                 usage
@@ -366,6 +366,43 @@ case ${operation} in
         # Hyprland has no native Sway bar equivalent. Waybar/Quickshell are
         # layer surfaces, so this fallback primitive is intentionally a no-op.
         if [[ ${backend} == sway ]]; then
+            if [[ ${action} == toggle ]]; then
+                current_mode="$(
+                    run_swaymsg \
+                        -r \
+                        -t \
+                        get_bar_config \
+                        bar-0 |
+                        python3 -c '
+import json
+import sys
+
+print(
+    json.load(sys.stdin).get(
+        "mode",
+        "",
+    )
+)
+'
+                )"
+
+                case ${current_mode} in
+                    dock)
+                        sway_mode=invisible
+                        ;;
+                    invisible)
+                        sway_mode=dock
+                        ;;
+                    *)
+                        printf \
+                            'cannot toggle Sway bar from unsupported mode: %s\n' \
+                            "${current_mode}" \
+                            >&2
+                        exit 2
+                        ;;
+                esac
+            fi
+
             run_swaymsg \
                 bar \
                 mode \

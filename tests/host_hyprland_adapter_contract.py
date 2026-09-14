@@ -162,6 +162,11 @@ if [[ "$*" == "-r -t get_tree" ]]; then
     printf '%s\\n' \
       '{"focused":false,"nodes":[{"focused":true,"id":42,"app_id":"foot"}]}'
 fi
+
+if [[ "$*" == "-r -t get_bar_config bar-0" ]]; then
+    printf '{"mode":"%s"}\\n' \
+      "${HYPERLAB_FAKE_BAR_MODE:-invisible}"
+fi
 """,
         )
 
@@ -457,6 +462,95 @@ fi
             ),
             bin_dir,
             log,
+        )
+
+        result, recorded = run_adapter(
+            "sway",
+            ["native-bar", "toggle"],
+            bin_dir,
+            log,
+            {
+                "HYPERLAB_FAKE_BAR_MODE": "invisible",
+            },
+        )
+
+        require(
+            result.returncode == 0,
+            (
+                "Sway native-bar toggle from "
+                "invisible failed"
+            ),
+        )
+
+        require(
+            recorded
+            == (
+                "swaymsg|-r|-t|get_bar_config|bar-0\n"
+                "swaymsg|bar|mode|dock|bar-0\n"
+            ),
+            (
+                "Sway invisible -> dock toggle "
+                "did not use explicit state"
+            ),
+        )
+
+        result, recorded = run_adapter(
+            "sway",
+            ["native-bar", "toggle"],
+            bin_dir,
+            log,
+            {
+                "HYPERLAB_FAKE_BAR_MODE": "dock",
+            },
+        )
+
+        require(
+            result.returncode == 0,
+            (
+                "Sway native-bar toggle from "
+                "dock failed"
+            ),
+        )
+
+        require(
+            recorded
+            == (
+                "swaymsg|-r|-t|get_bar_config|bar-0\n"
+                "swaymsg|bar|mode|invisible|bar-0\n"
+            ),
+            (
+                "Sway dock -> invisible toggle "
+                "did not use explicit state"
+            ),
+        )
+
+        result, recorded = run_adapter(
+            "sway",
+            ["native-bar", "toggle"],
+            bin_dir,
+            log,
+            {
+                "HYPERLAB_FAKE_BAR_MODE": "hide",
+            },
+        )
+
+        require(
+            result.returncode == 2,
+            (
+                "unexpected Sway bar mode was "
+                "accepted for toggle"
+            ),
+        )
+
+        require(
+            recorded
+            == (
+                "swaymsg|-r|-t|get_bar_config|bar-0\n"
+            ),
+            (
+                "unexpected Sway bar mode reached "
+                "a mutating bar command"
+            ),
         )
 
         result, recorded = run_adapter(
