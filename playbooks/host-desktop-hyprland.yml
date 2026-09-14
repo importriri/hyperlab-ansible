@@ -1,11 +1,11 @@
 ---
-# Side-by-side Host Hyprland prerequisite mount.
+# Side-by-side Host Hyprland non-active configuration mount.
 #
-# This playbook is deliberately not imported by foundation.yml, lab.yml or the
-# active Sway cockpit. It may install official prerequisite packages and record
-# its brick, but it may not write Hyprland user configuration, change Ly,
-# start Hyprland, or replace Sway.
-- name: Install Host Hyprland side-by-side prerequisites
+# This playbook remains outside foundation.yml, lab.yml and the active Sway
+# cockpit. It may install the reviewed user configuration and official
+# prerequisites, but it may not change Ly, start Hyprland, activate Hyprland
+# user services, or replace Sway.
+- name: Install Host Hyprland non-active configuration
   hosts: hypervisor
   become: true
   roles:

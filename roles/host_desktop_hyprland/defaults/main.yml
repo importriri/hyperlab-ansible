@@ -1,11 +1,39 @@
 ---
-# Phase 1b installs only the official Hyprland runtime prerequisites.
-# It does not write a Hyprland user configuration, change Ly, start Hyprland,
-# replace Sway, or activate compositor-specific user services.
-host_desktop_hyprland_phase: prerequisites
+# Phase 1c installs the reviewed Hyprland configuration side-by-side.
+# It still does not start Hyprland, change Ly, replace Sway, or activate
+# compositor-specific user services.
+host_desktop_hyprland_phase: non-active-config
+host_desktop_hyprland_config_install_enabled: true
 host_desktop_hyprland_runtime_enabled: false
 host_desktop_hyprland_session_activation_enabled: false
 host_desktop_hyprland_manage_ly: false
+
+host_desktop_hyprland_user_home: "/home/{{ admin_user }}"
+host_desktop_hyprland_config_dir: >-
+  {{ host_desktop_hyprland_user_home }}/.config/hypr
+
+host_desktop_hyprland_config_templates:
+  - src: hyprland.lua.j2
+    dest: hyprland.lua
+  - src: hyprland-input.lua.j2
+    dest: hyperlab_input.lua
+  - src: hypridle.conf.j2
+    dest: hypridle.conf
+  - src: hyprlock.conf.j2
+    dest: hyprlock.conf
+  - src: hyprpaper.conf.j2
+    dest: hyprpaper.conf
+
+host_desktop_hyprland_theme_state_file: >-
+  {{ host_desktop_hyprland_user_home }}/.config/hyperlab/theme
+
+host_desktop_hyprland_palette_root: /usr/share/hyperlab/palettes
+host_desktop_hyprland_palette_variants:
+  - green
+  - violet
+  - blue
+  - red
+host_desktop_hyprland_palette_fallback: green
 
 # hyperlabctl remains the source of operational truth. Future host integration
 # must point at the same reviewed checkout contract used by the Sway cockpit.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contract for Host Hyprland prerequisites and non-active config rendering."""
+"""Contract for Host Hyprland non-active configuration installation."""
 
 from __future__ import annotations
 
@@ -48,8 +48,14 @@ def main() -> int:
     )
 
     require(
-        defaults["host_desktop_hyprland_phase"] == "prerequisites",
-        "Host Hyprland phase is not prerequisite-only",
+        defaults["host_desktop_hyprland_phase"]
+        == "non-active-config",
+        "Host Hyprland phase is not non-active-config",
+    )
+    require(
+        defaults["host_desktop_hyprland_config_install_enabled"]
+        is True,
+        "non-active config installation is not enabled",
     )
     require(
         defaults["host_desktop_hyprland_runtime_enabled"] is False,
@@ -194,11 +200,9 @@ def main() -> int:
     )
 
     forbidden_task_modules = (
-        "ansible.builtin.copy:",
-        "ansible.builtin.template:",
-        "ansible.builtin.file:",
         "ansible.builtin.lineinfile:",
         "ansible.builtin.systemd_service:",
+        "ansible.builtin.service:",
         "ansible.builtin.command:",
         "ansible.builtin.shell:",
     )
@@ -217,6 +221,11 @@ def main() -> int:
         "ansible.builtin.package_facts:",
         "ansible.builtin.stat:",
         "ansible.builtin.assert:",
+        "ansible.builtin.slurp:",
+        "ansible.builtin.set_fact:",
+        "ansible.builtin.file:",
+        "ansible.builtin.template:",
+        "ansible.builtin.copy:",
     ):
         require(
             marker in tasks,
@@ -227,6 +236,22 @@ def main() -> int:
         "host_desktop_hyprland_prerequisite_packages" in tasks,
         "package installation is not driven by reviewed defaults",
     )
+
+    for marker in (
+        "Create the non-active Host Hyprland config directory",
+        "Render the non-active Host Hyprland user configuration",
+        "Install the active Host Hyprland palette module",
+        "Verify installed non-active Host Hyprland configuration",
+        "host_desktop_hyprland_config_templates",
+        "hyperlab_palette.lua",
+        'remote_src: true',
+        'mode: "0700"',
+        'mode: "0644"',
+    ):
+        require(
+            marker in tasks,
+            f"non-active config installation marker missing: {marker}",
+        )
 
     parsed_tasks = yaml.safe_load(tasks)
 
@@ -257,6 +282,53 @@ def main() -> int:
                 f"check-mode guarded: {name}"
             ),
         )
+
+    install_task_names = {
+        "Create the non-active Host Hyprland config directory",
+        "Render the non-active Host Hyprland user configuration",
+        "Install the active Host Hyprland palette module",
+        "Inspect installed non-active Host Hyprland configuration",
+        "Verify installed non-active Host Hyprland configuration",
+    }
+
+    require(
+        install_task_names <= parsed_by_name.keys(),
+        "non-active configuration installation task set changed",
+    )
+
+    template_task = parsed_by_name[
+        "Render the non-active Host Hyprland user configuration"
+    ]["ansible.builtin.template"]
+
+    require(
+        template_task["src"] == "{{ item.src }}"
+        and template_task["dest"]
+        == (
+            "{{ host_desktop_hyprland_config_dir }}/"
+            "{{ item.dest }}"
+        )
+        and template_task["owner"] == "{{ admin_user }}"
+        and template_task["group"] == "{{ admin_user }}"
+        and template_task["mode"] == "0644",
+        "non-active Hyprland template destination contract changed",
+    )
+
+    palette_task = parsed_by_name[
+        "Install the active Host Hyprland palette module"
+    ]["ansible.builtin.copy"]
+
+    require(
+        palette_task["remote_src"] is True
+        and palette_task["dest"]
+        == (
+            "{{ host_desktop_hyprland_config_dir }}/"
+            "hyperlab_palette.lua"
+        )
+        and palette_task["owner"] == "{{ admin_user }}"
+        and palette_task["group"] == "{{ admin_user }}"
+        and palette_task["mode"] == "0644",
+        "Hyprland palette installation contract changed",
+    )
 
     bricks = yaml.safe_load(text("group_vars/all/bricks.yml"))
 

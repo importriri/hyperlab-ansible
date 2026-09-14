@@ -1,5 +1,5 @@
 ---
-- name: Keep host Hyprland prerequisites side-by-side and inactive
+- name: Keep host Hyprland configuration side-by-side and inactive
   ansible.builtin.assert:
     that:
       - "'hypervisor' in group_names"
@@ -7,14 +7,15 @@
       - admin_user is string
       - admin_user | length > 0
       - admin_user != 'root'
-      - host_desktop_hyprland_phase == 'prerequisites'
+      - host_desktop_hyprland_phase == 'non-active-config'
+      - host_desktop_hyprland_config_install_enabled
       - not host_desktop_hyprland_runtime_enabled
       - not host_desktop_hyprland_session_activation_enabled
       - not host_desktop_hyprland_manage_ly
       - host_desktop_hyprland_preserve_sway_fallback
       - host_desktop_hyprland_preserve_waybar_fallback
     fail_msg: >-
-      The prerequisite phase may install the official Hyprland package stack
+      The non-active configuration phase may install reviewed user config
       only. It may not activate Hyprland, change Ly, or replace the proven
       Sway/Waybar recovery surfaces.
 
@@ -122,4 +123,135 @@
   loop: "{{ host_desktop_hyprland_prerequisite_path_stats.results }}"
   loop_control:
     label: "{{ item.item.path }}"
+  when: not ansible_check_mode
+
+- name: Inspect the Host Hyprland config directory before installation
+  ansible.builtin.stat:
+    path: "{{ host_desktop_hyprland_config_dir }}"
+    follow: false
+  register: host_desktop_hyprland_config_dir_before
+
+- name: Inspect the persisted HyperLab theme
+  ansible.builtin.stat:
+    path: "{{ host_desktop_hyprland_theme_state_file }}"
+    follow: false
+  register: host_desktop_hyprland_theme_state
+
+- name: Read the persisted HyperLab theme
+  ansible.builtin.slurp:
+    src: "{{ host_desktop_hyprland_theme_state_file }}"
+  register: host_desktop_hyprland_theme_content
+  when: host_desktop_hyprland_theme_state.stat.exists | default(false)
+
+- name: Resolve the active Host Hyprland palette
+  ansible.builtin.set_fact:
+    host_desktop_hyprland_active_theme: >-
+      {{
+        (
+          host_desktop_hyprland_theme_content.content
+          | b64decode
+          | trim
+        )
+        if
+          (host_desktop_hyprland_theme_state.stat.exists | default(false))
+        else
+          host_desktop_hyprland_palette_fallback
+      }}
+
+- name: Refuse an unknown persisted Host Hyprland palette
+  ansible.builtin.assert:
+    that:
+      - >-
+        host_desktop_hyprland_active_theme
+        in host_desktop_hyprland_palette_variants
+    fail_msg: >-
+      Persisted HyperLab theme
+      {{ host_desktop_hyprland_active_theme }}
+      is not a reviewed Host Hyprland palette.
+
+- name: Inspect the selected Host Hyprland palette source
+  ansible.builtin.stat:
+    path: >-
+      {{ host_desktop_hyprland_palette_root }}/{{ host_desktop_hyprland_active_theme }}/hyperlab-palette-hyprland.lua
+    follow: false
+  register: host_desktop_hyprland_palette_source
+
+- name: Require the selected Host Hyprland palette source
+  ansible.builtin.assert:
+    that:
+      - host_desktop_hyprland_palette_source.stat.exists | default(false)
+      - host_desktop_hyprland_palette_source.stat.isreg | default(false)
+      - host_desktop_hyprland_palette_source.stat.readable | default(false)
+    fail_msg: >-
+      The selected Host Hyprland palette source is missing or unreadable.
+
+- name: Create the non-active Host Hyprland config directory
+  ansible.builtin.file:
+    path: "{{ host_desktop_hyprland_config_dir }}"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0700"
+
+- name: Render the non-active Host Hyprland user configuration
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ host_desktop_hyprland_config_dir }}/{{ item.dest }}"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+  loop: "{{ host_desktop_hyprland_config_templates }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  when: >-
+    (not ansible_check_mode)
+    or
+    (host_desktop_hyprland_config_dir_before.stat.isdir | default(false))
+
+- name: Install the active Host Hyprland palette module
+  ansible.builtin.copy:
+    src: >-
+      {{ host_desktop_hyprland_palette_root }}/{{ host_desktop_hyprland_active_theme }}/hyperlab-palette-hyprland.lua
+    dest: "{{ host_desktop_hyprland_config_dir }}/hyperlab_palette.lua"
+    remote_src: true
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0644"
+  when: >-
+    (not ansible_check_mode)
+    or
+    (host_desktop_hyprland_config_dir_before.stat.isdir | default(false))
+
+- name: Inspect installed non-active Host Hyprland configuration
+  ansible.builtin.stat:
+    path: "{{ host_desktop_hyprland_config_dir }}/{{ item }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: host_desktop_hyprland_installed_config
+  loop: >-
+    {{
+      (
+        host_desktop_hyprland_config_templates
+        | map(attribute='dest')
+        | list
+      )
+      + ['hyperlab_palette.lua']
+    }}
+  when: not ansible_check_mode
+
+- name: Verify installed non-active Host Hyprland configuration
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+      - item.stat.pw_name == admin_user
+      - item.stat.gr_name == admin_user
+      - item.stat.mode == '0644'
+    fail_msg: >-
+      Installed non-active Host Hyprland config
+      {{ item.item }} has invalid ownership or mode.
+    quiet: true
+  loop: "{{ host_desktop_hyprland_installed_config.results }}"
+  loop_control:
+    label: "{{ item.item }}"
   when: not ansible_check_mode
