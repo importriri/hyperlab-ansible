@@ -85,6 +85,7 @@
 - name: Read installed package facts after prerequisite installation
   ansible.builtin.package_facts:
     manager: auto
+  when: not ansible_check_mode
 
 - name: Verify every Host Hyprland prerequisite package is installed
   ansible.builtin.assert:
@@ -94,6 +95,7 @@
       Required Host Hyprland prerequisite package {{ item }} is not installed.
     quiet: true
   loop: "{{ host_desktop_hyprland_prerequisite_packages }}"
+  when: not ansible_check_mode
 
 - name: Inspect package-owned Host Hyprland prerequisite artifacts
   ansible.builtin.stat:
@@ -103,6 +105,7 @@
   loop: "{{ host_desktop_hyprland_prerequisite_paths }}"
   loop_control:
     label: "{{ item.path }}"
+  when: not ansible_check_mode
 
 - name: Verify package-owned Host Hyprland prerequisite artifacts
   ansible.builtin.assert:
@@ -119,3 +122,4 @@
   loop: "{{ host_desktop_hyprland_prerequisite_path_stats.results }}"
   loop_control:
     label: "{{ item.item.path }}"
+  when: not ansible_check_mode

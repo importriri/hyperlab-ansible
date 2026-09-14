@@ -219,6 +219,36 @@ def main() -> int:
         "package installation is not driven by reviewed defaults",
     )
 
+    parsed_tasks = yaml.safe_load(tasks)
+
+    live_verification_names = {
+        "Read installed package facts after prerequisite installation",
+        "Verify every Host Hyprland prerequisite package is installed",
+        "Inspect package-owned Host Hyprland prerequisite artifacts",
+        "Verify package-owned Host Hyprland prerequisite artifacts",
+    }
+
+    parsed_by_name = {
+        item.get("name"): item
+        for item in parsed_tasks
+        if isinstance(item, dict)
+    }
+
+    require(
+        live_verification_names <= parsed_by_name.keys(),
+        "live prerequisite verification task set changed",
+    )
+
+    for name in sorted(live_verification_names):
+        require(
+            parsed_by_name[name].get("when")
+            == "not ansible_check_mode",
+            (
+                "live prerequisite verification is not "
+                f"check-mode guarded: {name}"
+            ),
+        )
+
     bricks = yaml.safe_load(text("group_vars/all/bricks.yml"))
 
     require(
