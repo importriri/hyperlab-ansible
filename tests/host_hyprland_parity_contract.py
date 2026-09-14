@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static contract for the non-active physical-host Hyprland migration."""
+"""Contract for the non-active physical-host Hyprland prerequisite phase."""
 
 from __future__ import annotations
 
@@ -39,12 +39,23 @@ def main() -> int:
     )
 
     require(
-        defaults["host_desktop_hyprland_phase"] == "static",
-        "Phase 1 must remain static",
+        defaults["host_desktop_hyprland_phase"] == "prerequisites",
+        "Host Hyprland phase is not prerequisite-only",
     )
     require(
         defaults["host_desktop_hyprland_runtime_enabled"] is False,
-        "Phase 1 unexpectedly enables runtime integration",
+        "prerequisite phase unexpectedly enables Hyprland runtime",
+    )
+    require(
+        defaults[
+            "host_desktop_hyprland_session_activation_enabled"
+        ]
+        is False,
+        "prerequisite phase unexpectedly activates a Hyprland session",
+    )
+    require(
+        defaults["host_desktop_hyprland_manage_ly"] is False,
+        "prerequisite phase unexpectedly manages Ly",
     )
     require(
         defaults["host_desktop_hyprland_preserve_sway_fallback"] is True,
@@ -55,19 +66,60 @@ def main() -> int:
         "Waybar fallback is no longer mandatory",
     )
 
-    packages = defaults["host_desktop_hyprland_future_packages"]
-    for package in (
-        "hyprland",
-        "hypridle",
-        "hyprlock",
-        "hyprpaper",
-        "hyprshutdown",
-        "hyprpolkitagent",
-        "xdg-desktop-portal-hyprland",
-        "waybar",
-        "mako",
-    ):
-        require(package in packages, f"future package missing: {package}")
+    packages = defaults[
+        "host_desktop_hyprland_prerequisite_packages"
+    ]
+    require(
+        packages
+        == [
+            "hyprland",
+            "hypridle",
+            "hyprlock",
+            "hyprpaper",
+            "hyprshutdown",
+            "hyprpolkitagent",
+            "xdg-desktop-portal",
+            "xdg-desktop-portal-hyprland",
+            "xdg-desktop-portal-gtk",
+        ],
+        "official prerequisite package set changed",
+    )
+    require(
+        "quickshell" not in packages,
+        "Quickshell leaked into the prerequisite phase",
+    )
+    require(
+        "uwsm" not in packages,
+        "uwsm was selected before session lifecycle review",
+    )
+
+    prerequisite_paths = {
+        item["path"]: item["executable"]
+        for item in defaults[
+            "host_desktop_hyprland_prerequisite_paths"
+        ]
+    }
+
+    require(
+        prerequisite_paths
+        == {
+            "/usr/bin/Hyprland": True,
+            "/usr/bin/hyprctl": True,
+            "/usr/bin/hypridle": True,
+            "/usr/bin/hyprlock": True,
+            "/usr/bin/hyprpaper": True,
+            "/usr/bin/hyprshutdown": True,
+            "/usr/lib/hyprpolkitagent/hyprpolkitagent": True,
+            "/usr/lib/xdg-desktop-portal-hyprland": True,
+            "/usr/share/wayland-sessions/hyprland.desktop": False,
+            "/usr/share/hypr/hyprland.lua": False,
+            (
+                "/usr/share/xdg-desktop-portal/"
+                "hyprland-portals.conf"
+            ): False,
+        },
+        "package-owned prerequisite artifact contract changed",
+    )
 
     input_defaults = defaults[
         "host_desktop_hyprland_input_defaults"
@@ -133,7 +185,6 @@ def main() -> int:
     )
 
     forbidden_task_modules = (
-        "community.general.pacman:",
         "ansible.builtin.copy:",
         "ansible.builtin.template:",
         "ansible.builtin.file:",
@@ -146,12 +197,26 @@ def main() -> int:
     for marker in forbidden_task_modules:
         require(
             marker not in tasks,
-            f"static role contains mutation module: {marker}",
+            (
+                "prerequisite phase contains forbidden "
+                f"mutation module: {marker}"
+            ),
+        )
+
+    for marker in (
+        "community.general.pacman:",
+        "ansible.builtin.package_facts:",
+        "ansible.builtin.stat:",
+        "ansible.builtin.assert:",
+    ):
+        require(
+            marker in tasks,
+            f"prerequisite role missing required module: {marker}",
         )
 
     require(
-        "ansible.builtin.assert:" in tasks,
-        "static role lost validation-only tasks",
+        "host_desktop_hyprland_prerequisite_packages" in tasks,
+        "package installation is not driven by reviewed defaults",
     )
 
     bricks = yaml.safe_load(text("group_vars/all/bricks.yml"))
@@ -170,7 +235,7 @@ def main() -> int:
     mount_path = ROOT / "playbooks/host-desktop-hyprland.yml"
     require(
         mount_path.is_file(),
-        "contract-only mount playbook is missing",
+        "targeted prerequisite mount playbook is missing",
     )
 
     mount = yaml.safe_load(
@@ -180,11 +245,24 @@ def main() -> int:
     require(
         len(mount) == 1
         and mount[0].get("hosts") == "hypervisor"
-        and mount[0].get("become") is False
-        and mount[0].get("roles")
-        == ["host_desktop_hyprland"],
-        "Phase 1 mount is not contract-only",
+        and mount[0].get("become") is True,
+        "prerequisite mount lost its privileged host-only boundary",
     )
+
+    mount_roles = mount[0].get("roles", [])
+
+    require(
+        len(mount_roles) == 2
+        and isinstance(mount_roles[0], dict)
+        and mount_roles[0].get("role") == "brick_guard"
+        and mount_roles[0].get("vars", {}).get(
+            "brick_guard_brick"
+        )
+        == "host_desktop_hyprland"
+        and mount_roles[1] == "host_desktop_hyprland",
+        "prerequisite playbook lost its brick guard or role order",
+    )
+
 
     for active_path in (
         "playbooks/foundation.yml",
@@ -193,7 +271,7 @@ def main() -> int:
     ):
         require(
             "host_desktop_hyprland" not in text(active_path),
-            f"Phase 1 leaked into active path: {active_path}",
+            f"Hyprland prerequisite role leaked into active path: {active_path}",
         )
 
     require(
@@ -402,7 +480,7 @@ def main() -> int:
     qml = list(role.rglob("*.qml"))
     require(
         not qml,
-        "Phase 1 unexpectedly contains Quickshell/QML",
+        "prerequisite phase unexpectedly contains Quickshell/QML",
     )
 
     print(

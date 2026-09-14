@@ -1,8 +1,11 @@
 ---
-# Phase 1 is deliberately static. Nothing in this role installs packages,
-# writes host configuration, changes Ly, starts Hyprland or replaces Sway.
-host_desktop_hyprland_phase: static
+# Phase 1b installs only the official Hyprland runtime prerequisites.
+# It does not write a Hyprland user configuration, change Ly, start Hyprland,
+# replace Sway, or activate compositor-specific user services.
+host_desktop_hyprland_phase: prerequisites
 host_desktop_hyprland_runtime_enabled: false
+host_desktop_hyprland_session_activation_enabled: false
+host_desktop_hyprland_manage_ly: false
 
 # hyperlabctl remains the source of operational truth. Future host integration
 # must point at the same reviewed checkout contract used by the Sway cockpit.
@@ -12,8 +15,11 @@ host_desktop_hyprland_hyperlab_checkout: "/home/{{ admin_user }}/hyperlab-ansibl
 host_desktop_hyprland_preserve_sway_fallback: true
 host_desktop_hyprland_preserve_waybar_fallback: true
 
-# Future official-repository stack. Phase 1 declares it but never installs it.
-host_desktop_hyprland_future_packages:
+# Official-repository prerequisite stack. Keep this deliberately narrow:
+# shared Sway/Waybar desktop utilities are already owned by host_desktop_sway.
+# Quickshell remains Phase 2 and uwsm remains a separate session-lifecycle
+# decision.
+host_desktop_hyprland_prerequisite_packages:
   - hyprland
   - hypridle
   - hyprlock
@@ -23,13 +29,32 @@ host_desktop_hyprland_future_packages:
   - xdg-desktop-portal
   - xdg-desktop-portal-hyprland
   - xdg-desktop-portal-gtk
-  - waybar
-  - mako
-  - foot
-  - rofi
-  - grim
-  - slurp
-  - wl-clipboard
+
+# Package-owned artifacts required before HyperLab writes any host Hyprland
+# configuration. Merely installing these files must not start a compositor.
+host_desktop_hyprland_prerequisite_paths:
+  - path: /usr/bin/Hyprland
+    executable: true
+  - path: /usr/bin/hyprctl
+    executable: true
+  - path: /usr/bin/hypridle
+    executable: true
+  - path: /usr/bin/hyprlock
+    executable: true
+  - path: /usr/bin/hyprpaper
+    executable: true
+  - path: /usr/bin/hyprshutdown
+    executable: true
+  - path: /usr/lib/hyprpolkitagent/hyprpolkitagent
+    executable: true
+  - path: /usr/lib/xdg-desktop-portal-hyprland
+    executable: true
+  - path: /usr/share/wayland-sessions/hyprland.desktop
+    executable: false
+  - path: /usr/share/hypr/hyprland.lua
+    executable: false
+  - path: /usr/share/xdg-desktop-portal/hyprland-portals.conf
+    executable: false
 
 host_desktop_hyprland_input_defaults:
   keyboard_layout: it

@@ -1,5 +1,5 @@
 ---
-- name: Keep the Phase 1 host Hyprland role static and host-only
+- name: Keep host Hyprland prerequisites side-by-side and inactive
   ansible.builtin.assert:
     that:
       - "'hypervisor' in group_names"
@@ -7,31 +7,43 @@
       - admin_user is string
       - admin_user | length > 0
       - admin_user != 'root'
-      - host_desktop_hyprland_phase == 'static'
+      - host_desktop_hyprland_phase == 'prerequisites'
       - not host_desktop_hyprland_runtime_enabled
+      - not host_desktop_hyprland_session_activation_enabled
+      - not host_desktop_hyprland_manage_ly
       - host_desktop_hyprland_preserve_sway_fallback
       - host_desktop_hyprland_preserve_waybar_fallback
     fail_msg: >-
-      Phase 1 may only describe the future physical-host Hyprland cockpit.
-      It must remain non-active and preserve the proven Sway/Waybar recovery
-      surfaces.
+      The prerequisite phase may install the official Hyprland package stack
+      only. It may not activate Hyprland, change Ly, or replace the proven
+      Sway/Waybar recovery surfaces.
 
-- name: Validate the future official Hyprland integration contract
+- name: Validate the official Hyprland prerequisite package contract
   ansible.builtin.assert:
     that:
-      - "'hyprland' in host_desktop_hyprland_future_packages"
-      - "'hypridle' in host_desktop_hyprland_future_packages"
-      - "'hyprlock' in host_desktop_hyprland_future_packages"
-      - "'hyprpolkitagent' in host_desktop_hyprland_future_packages"
-      - "'xdg-desktop-portal-hyprland' in host_desktop_hyprland_future_packages"
-      - "'waybar' in host_desktop_hyprland_future_packages"
+      - >-
+        host_desktop_hyprland_prerequisite_packages
+        ==
+        [
+          'hyprland',
+          'hypridle',
+          'hyprlock',
+          'hyprpaper',
+          'hyprshutdown',
+          'hyprpolkitagent',
+          'xdg-desktop-portal',
+          'xdg-desktop-portal-hyprland',
+          'xdg-desktop-portal-gtk'
+        ]
+      - "'quickshell' not in host_desktop_hyprland_prerequisite_packages"
+      - "'uwsm' not in host_desktop_hyprland_prerequisite_packages"
       - host_desktop_hyprland_input_defaults.keyboard_layout == 'it'
       - >-
         host_desktop_hyprland_input_defaults.keyboard_layout_cycle
         == ['it', 'us', 'ara']
     fail_msg: >-
-      The static host Hyprland contract no longer matches the reviewed desktop
-      integration or input baseline.
+      Host Hyprland prerequisites no longer match the reviewed official-package
+      and input baseline.
 
 - name: Validate host-owned trust semantics
   ansible.builtin.assert:
@@ -64,3 +76,46 @@
     fail_msg: >-
       Quickshell is a later presentation layer. It must not invent backend
       state or become an operational authority.
+
+- name: Install the official Host Hyprland prerequisite stack
+  community.general.pacman:
+    name: "{{ host_desktop_hyprland_prerequisite_packages }}"
+    state: present
+
+- name: Read installed package facts after prerequisite installation
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Verify every Host Hyprland prerequisite package is installed
+  ansible.builtin.assert:
+    that:
+      - item in ansible_facts.packages
+    fail_msg: >-
+      Required Host Hyprland prerequisite package {{ item }} is not installed.
+    quiet: true
+  loop: "{{ host_desktop_hyprland_prerequisite_packages }}"
+
+- name: Inspect package-owned Host Hyprland prerequisite artifacts
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  register: host_desktop_hyprland_prerequisite_path_stats
+  loop: "{{ host_desktop_hyprland_prerequisite_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Verify package-owned Host Hyprland prerequisite artifacts
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+      - >-
+        (not item.item.executable)
+        or (item.stat.executable | default(false))
+    fail_msg: >-
+      Required Host Hyprland package artifact {{ item.item.path }} is missing
+      or has an invalid executable contract.
+    quiet: true
+  loop: "{{ host_desktop_hyprland_prerequisite_path_stats.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"

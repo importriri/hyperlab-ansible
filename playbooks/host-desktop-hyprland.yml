@@ -1,11 +1,15 @@
 ---
-# Phase 1 mount point for the physical-host Hyprland migration contract.
+# Side-by-side Host Hyprland prerequisite mount.
 #
-# This playbook is intentionally not imported by foundation.yml or lab.yml.
-# The role contains assertion-only tasks: invoking this playbook during Phase 1
-# validates migration policy but installs, writes, starts and stops nothing.
-- name: Validate the static host Hyprland migration contract
+# This playbook is deliberately not imported by foundation.yml, lab.yml or the
+# active Sway cockpit. It may install official prerequisite packages and record
+# its brick, but it may not write Hyprland user configuration, change Ly,
+# start Hyprland, or replace Sway.
+- name: Install Host Hyprland side-by-side prerequisites
   hosts: hypervisor
-  become: false
+  become: true
   roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_desktop_hyprland
     - host_desktop_hyprland
