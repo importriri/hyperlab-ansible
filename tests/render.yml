@@ -749,6 +749,108 @@
                is not none
              ) }}
 
+    # --- roles/host_desktop_hyprland ----------------------------------------
+    # Render only into a disposable workspace. This intentionally proves the
+    # complete candidate graph without installing ~/.config/hypr or launching
+    # a compositor.
+    - name: Load the Host Hyprland defaults for offline rendering
+      ansible.builtin.include_vars:
+        file: "{{ repo_root }}/roles/host_desktop_hyprland/defaults/main.yml"
+
+    - name: Make the Host Hyprland offline rendering workspace
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .host-hyprland-render
+      register: render_host_hypr_ws
+
+    - name: Render every non-active Host Hyprland config candidate
+      ansible.builtin.template:
+        src: >-
+          {{ repo_root }}/roles/host_desktop_hyprland/templates/{{ item.src }}
+        dest: "{{ render_host_hypr_ws.path }}/{{ item.dest }}"
+        mode: "0600"
+      loop:
+        - src: hyprland.lua.j2
+          dest: hyprland.lua
+        - src: hyprland-input.lua.j2
+          dest: hyperlab_input.lua
+        - src: hypridle.conf.j2
+          dest: hypridle.conf
+        - src: hyprlock.conf.j2
+          dest: hyprlock.conf
+        - src: hyprpaper.conf.j2
+          dest: hyprpaper.conf
+
+    - name: Supply a generated palette module to the offline Lua graph
+      ansible.builtin.copy:
+        src: >-
+          {{ repo_root }}/roles/host_desktop_sway/files/palette/green/hyperlab-palette-hyprland.lua
+        dest: "{{ render_host_hypr_ws.path }}/hyperlab_palette.lua"
+        mode: "0600"
+
+    - name: Lua-compile every offline Host Hyprland module
+      ansible.builtin.command:
+        cmd: >-
+          /usr/bin/luac -p
+          {{ render_host_hypr_ws.path }}/{{ item }}
+      changed_when: false
+      loop:
+        - hyprland.lua
+        - hyperlab_input.lua
+        - hyperlab_palette.lua
+
+    - name: Read the rendered Host Hyprland candidates
+      ansible.builtin.slurp:
+        src: "{{ render_host_hypr_ws.path }}/{{ item }}"
+      register: render_host_hypr_files
+      loop:
+        - hyprland.lua
+        - hyperlab_input.lua
+        - hypridle.conf
+        - hyprlock.conf
+        - hyprpaper.conf
+
+    - name: Host Hyprland non-active render invariants
+      ansible.builtin.assert:
+        that:
+          - "'local input = require(\"hyperlab_input\")' in render_host_hypr_main"
+          - "'local palette = require(\"hyperlab_palette\")' in render_host_hypr_main"
+          - "'hl.monitor({' in render_host_hypr_main"
+          - "'mode = \"preferred\"' in render_host_hypr_main"
+          - "'hl.on(\"hyprland.start\"' not in render_host_hypr_main"
+          - "'keyboard_layout = \"it,us,ara\"' in render_host_hypr_input"
+          - "'lock_cmd = /usr/local/bin/privatestack-lock' in render_host_hypr_idle"
+          - "'timeout = 600' in render_host_hypr_idle"
+          - "'timeout = 900' in render_host_hypr_idle"
+          - "'privatestack-compositor-adapter dpms disable' in render_host_hypr_idle"
+          - "'privatestack-compositor-adapter dpms enable' in render_host_hypr_idle"
+          - "'hyprctl' not in render_host_hypr_idle"
+          - "'path = /usr/share/backgrounds/privatestack/lockscreen.png' in render_host_hypr_lock"
+          - "'text = HyperLab host' in render_host_hypr_lock"
+          - "'splash = false' in render_host_hypr_paper"
+          - "'ipc = true' in render_host_hypr_paper"
+          - "'wallpaper {' not in render_host_hypr_paper"
+        fail_msg: >-
+          The Host Hyprland candidate stopped being a non-active,
+          compositor-neutral render with the reviewed input/lock/idle/
+          wallpaper boundaries.
+      vars:
+        render_host_hypr_main: >-
+          {{ render_host_hypr_files.results[0].content | b64decode }}
+        render_host_hypr_input: >-
+          {{ render_host_hypr_files.results[1].content | b64decode }}
+        render_host_hypr_idle: >-
+          {{ render_host_hypr_files.results[2].content | b64decode }}
+        render_host_hypr_lock: >-
+          {{ render_host_hypr_files.results[3].content | b64decode }}
+        render_host_hypr_paper: >-
+          {{ render_host_hypr_files.results[4].content | b64decode }}
+
+    - name: Remove the Host Hyprland offline rendering workspace
+      ansible.builtin.file:
+        path: "{{ render_host_hypr_ws.path }}"
+        state: absent
+
     - name: Load the Looking Glass defaults as real variables
       ansible.builtin.include_vars:
         file: "{{ repo_root }}/roles/looking_glass/defaults/main.yml"

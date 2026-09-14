@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contract for the non-active physical-host Hyprland prerequisite phase."""
+"""Contract for Host Hyprland prerequisites and non-active config rendering."""
 
 from __future__ import annotations
 
@@ -32,6 +32,15 @@ def main() -> int:
     )
     hypr_input = text(
         "roles/host_desktop_hyprland/templates/hyprland-input.lua.j2"
+    )
+    hypr_idle = text(
+        "roles/host_desktop_hyprland/templates/hypridle.conf.j2"
+    )
+    hypr_lock = text(
+        "roles/host_desktop_hyprland/templates/hyprlock.conf.j2"
+    )
+    hypr_paper = text(
+        "roles/host_desktop_hyprland/templates/hyprpaper.conf.j2"
     )
     adapter = text(
         "roles/host_desktop_common/files/"
@@ -331,7 +340,28 @@ def main() -> int:
         "deprecated host hyprlang input returned",
     )
 
+    for template_name in (
+        "hyprland.lua.j2",
+        "hyprland-input.lua.j2",
+        "hypridle.conf.j2",
+        "hyprlock.conf.j2",
+        "hyprpaper.conf.j2",
+    ):
+        require(
+            (
+                role
+                / "templates"
+                / template_name
+            ).is_file(),
+            f"non-active render candidate missing: {template_name}",
+        )
+
     for marker in (
+        "hl.monitor({",
+        'output = ""',
+        'mode = "preferred"',
+        'position = "auto"',
+        'scale = "auto"',
         "hl.config({",
         "hl.bind(",
         "hl.dsp.exec_cmd(",
@@ -369,6 +399,95 @@ def main() -> int:
             marker in hypr,
             f"single-source Hyprland palette marker missing: {marker}",
         )
+
+    require(
+        'hl.on("hyprland.start"' not in hypr,
+        "non-active candidate gained Hyprland startup actions",
+    )
+
+    for marker in (
+        "HYPERLAB_NON_ACTIVE_RENDER: hyprpaper",
+        "HYPERLAB_NON_ACTIVE_RENDER: hypridle",
+        "HYPERLAB_NON_ACTIVE_RENDER: hyprpolkitagent",
+    ):
+        require(
+            marker in hypr,
+            f"non-active lifecycle marker missing: {marker}",
+        )
+
+    for marker in (
+        "lock_cmd = /usr/local/bin/privatestack-lock",
+        "timeout = 600",
+        "timeout = 900",
+        (
+            "on-timeout = /usr/local/bin/"
+            "privatestack-compositor-adapter dpms disable"
+        ),
+        (
+            "on-resume = /usr/local/bin/"
+            "privatestack-compositor-adapter dpms enable"
+        ),
+    ):
+        require(
+            marker in hypr_idle,
+            f"hypridle render contract missing: {marker}",
+        )
+
+    require(
+        "hyprctl" not in hypr_idle,
+        "hypridle regained direct Hyprland IPC",
+    )
+
+    for marker in (
+        "hide_cursor = true",
+        "immediate_render = true",
+        (
+            "path = /usr/share/backgrounds/"
+            "privatestack/lockscreen.png"
+        ),
+        "text = HyperLab host",
+    ):
+        require(
+            marker in hypr_lock,
+            f"hyprlock render contract missing: {marker}",
+        )
+
+    require(
+        "swaylock" not in hypr_lock,
+        "Hyprland lock candidate depends on swaylock",
+    )
+
+    require(
+        "splash = false" in hypr_paper
+        and "ipc = true" in hypr_paper,
+        "hyprpaper IPC-only candidate changed",
+    )
+    require(
+        "wallpaper {" not in hypr_paper
+        and "preload =" not in hypr_paper,
+        "hyprpaper candidate stole dynamic wallpaper policy",
+    )
+
+    theme_helper = text(
+        "roles/host_desktop_sway/files/privatestack-theme.sh"
+    )
+    require(
+        "hyperlab-palette-hyprland.lua" in theme_helper
+        and "hyperlab_palette.lua" in theme_helper,
+        "theme controller no longer publishes the active Hyprland palette",
+    )
+
+    sway_tasks = text(
+        "roles/host_desktop_sway/tasks/main.yml"
+    )
+    require(
+        (
+            "dest: "
+            "/usr/share/backgrounds/privatestack/lockscreen.png"
+        )
+        in sway_tasks,
+        "Hyprlock candidate references an unmanaged lockscreen asset",
+    )
 
     adapter_contract = defaults[
         "host_desktop_hyprland_compositor_adapter"

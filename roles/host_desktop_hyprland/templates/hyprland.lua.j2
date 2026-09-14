@@ -1,14 +1,24 @@
 -- Managed by hyperlab-ansible.
 -- Physical host only.
 --
--- PHASE 1 STATIC CONTRACT:
--- this file is not installed or started yet.
--- Sway remains the proven host compositor and recovery path.
+-- NON-ACTIVE RENDER CONTRACT:
+-- this candidate is rendered and syntax-validated before installation.
+-- It must not start Hyprland, mutate Ly, or replace the live Sway session.
+-- Runtime daemons remain a later controlled activation gate.
 -- HyperLab operational authority remains hyperlabctl/specs/contracts.
 
 local input = require("hyperlab_input")
 local palette = require("hyperlab_palette")
 local main_mod = "SUPER"
+
+-- Physical-host output discovery stays generic for the first controlled
+-- launch. The internal panel remains owned by the host iGPU.
+hl.monitor({
+    output = "",
+    mode = "preferred",
+    position = "auto",
+    scale = "auto",
+})
 
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
@@ -419,6 +429,10 @@ end
 -- HYPERLAB_PARITY_ADAPTER_READY: bar-toggle
 
 -- Session lifecycle remains a later runtime gate.
+-- These config candidates exist, but nothing autostarts them yet.
+-- HYPERLAB_NON_ACTIVE_RENDER: hyprpaper
+-- HYPERLAB_NON_ACTIVE_RENDER: hypridle
+-- HYPERLAB_NON_ACTIVE_RENDER: hyprpolkitagent
 -- HYPERLAB_PARITY_ADAPTER_REQUIRED: wallpaper-daemon
 -- HYPERLAB_PARITY_ADAPTER_REQUIRED: idle-dpms
 

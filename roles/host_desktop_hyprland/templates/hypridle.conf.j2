@@ -1,0 +1,19 @@
+# Managed by hyperlab-ansible.
+# Physical-host candidate only. Not activated by the render gate.
+
+general {
+    lock_cmd = /usr/local/bin/privatestack-lock
+    before_sleep_cmd = loginctl lock-session
+    after_sleep_cmd = /usr/local/bin/privatestack-compositor-adapter dpms enable
+}
+
+listener {
+    timeout = 600
+    on-timeout = loginctl lock-session
+}
+
+listener {
+    timeout = 900
+    on-timeout = /usr/local/bin/privatestack-compositor-adapter dpms disable
+    on-resume = /usr/local/bin/privatestack-compositor-adapter dpms enable
+}
