@@ -9,6 +9,10 @@
   become: true
   gather_facts: true
   roles:
+    - host_desktop_common
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_desktop_sway
     - host_desktop_sway
     - role: brick_guard
       vars:

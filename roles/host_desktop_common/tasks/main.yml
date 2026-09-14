@@ -1,0 +1,15 @@
+---
+- name: Install the shared host compositor adapter
+  ansible.builtin.copy:
+    src: privatestack-compositor-adapter.sh
+    dest: /usr/local/bin/privatestack-compositor-adapter
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record that the host_desktop_common brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_desktop_common

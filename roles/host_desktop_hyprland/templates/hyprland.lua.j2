@@ -350,26 +350,76 @@ hl.bind(
     )
 )
 
--- Hyprlock is the selected host lock backend.
+-- The public helper command names are compositor-neutral. Their policy/state
+-- remains outside Lua and the shared adapter translates only compositor IPC.
 hl.bind(
     main_mod .. " + Escape",
     hl.dsp.exec_cmd(
-        "pidof hyprlock || hyprlock"
+        "/usr/local/bin/privatestack-lock"
     )
 )
 
--- These existing Sway helpers contain compositor IPC.
--- The next milestone supplies a narrow Hyprland adapter instead of copying
--- policy/state into Lua.
---
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: keyboard-cycle
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: machine-theme-key
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: theme-cycle
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: wallpaper-mode
+hl.bind(
+    main_mod .. " + SHIFT + T",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-theme cycle"
+    )
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + W",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-theme mode-toggle"
+    )
+)
+
+hl.bind(
+    main_mod .. " + CTRL + Space",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-keyboard cycle"
+    )
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + P",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-controls"
+    )
+)
+
+hl.bind(
+    main_mod .. " + O",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-opacity-toggle"
+    )
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + B",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-waybar toggle"
+    )
+)
+
+if input.theme_cycle_key then
+    hl.bind(
+        input.theme_cycle_key,
+        hl.dsp.exec_cmd(
+            "/usr/local/bin/privatestack-theme cycle"
+        )
+    )
+end
+
+-- HYPERLAB_PARITY_ADAPTER_READY: keyboard-cycle
+-- HYPERLAB_PARITY_ADAPTER_READY: machine-theme-key
+-- HYPERLAB_PARITY_ADAPTER_READY: theme-cycle
+-- HYPERLAB_PARITY_ADAPTER_READY: wallpaper-mode
+-- HYPERLAB_PARITY_ADAPTER_READY: controls-menu
+-- HYPERLAB_PARITY_ADAPTER_READY: opacity-toggle
+-- HYPERLAB_PARITY_ADAPTER_READY: bar-toggle
+
+-- Session lifecycle remains a later runtime gate.
 -- HYPERLAB_PARITY_ADAPTER_REQUIRED: wallpaper-daemon
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: controls-menu
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: opacity-toggle
--- HYPERLAB_PARITY_ADAPTER_REQUIRED: bar-toggle
 -- HYPERLAB_PARITY_ADAPTER_REQUIRED: idle-dpms
 
 -- Quickshell remains Phase 2.

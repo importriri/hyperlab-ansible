@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image=$(/usr/local/bin/privatestack-theme lock-image)
-exec swaylock \
-    --config "${XDG_CONFIG_HOME:-${HOME}/.config}/swaylock/config" \
-    --image "${image}" \
-    --scaling fill \
-    "$@"
+# Compatibility entry point retained for old keybindings and recovery notes.
+exec /usr/local/bin/privatestack-lock "$@"

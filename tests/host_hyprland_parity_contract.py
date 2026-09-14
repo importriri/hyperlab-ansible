@@ -34,7 +34,7 @@ def main() -> int:
         "roles/host_desktop_hyprland/templates/hyprland-input.lua.j2"
     )
     adapter = text(
-        "roles/host_desktop_hyprland/files/"
+        "roles/host_desktop_common/files/"
         "privatestack-compositor-adapter.sh"
     )
 
@@ -61,6 +61,7 @@ def main() -> int:
         "hypridle",
         "hyprlock",
         "hyprpaper",
+        "hyprshutdown",
         "hyprpolkitagent",
         "xdg-desktop-portal-hyprland",
         "waybar",
@@ -274,18 +275,13 @@ def main() -> int:
         "future compositor adapter path changed",
     )
     require(
-        adapter_contract["high_level_helpers_rewired"] is False,
-        "high-level helpers were rewired before adapter acceptance",
+        adapter_contract["high_level_helpers_rewired"] is True,
+        "accepted high-level helper rewire disappeared",
     )
 
-    coupled = set(
-        defaults[
-            "host_desktop_hyprland_compositor_coupled_helpers"
-        ]
-    )
     require(
-        "privatestack-opacity-toggle" in coupled,
-        "opacity helper coupling is no longer explicit",
+        defaults["host_desktop_hyprland_compositor_coupled_helpers"] == [],
+        "accepted helpers regained direct compositor coupling",
     )
 
     for marker in (
@@ -294,6 +290,8 @@ def main() -> int:
         "hl.dsp.window.fullscreen",
         "hl.dsp.window.set_prop",
         "hl.dsp.dpms",
+        "focused-window",
+        "hyprshutdown",
     ):
         require(
             marker in adapter,
@@ -325,7 +323,7 @@ def main() -> int:
         "brightnessctl set +5%",
         "privatestack-screenshot full",
         "privatestack-screenshot region",
-        "pidof hyprlock || hyprlock",
+        "/usr/local/bin/privatestack-lock",
         "HYPERLAB_QUICKSHELL_PHASE=2",
     ):
         require(
@@ -333,74 +331,72 @@ def main() -> int:
             f"Hyprland parity marker missing: {marker}",
         )
 
-    for adapter in (
+    for boundary in (
         "keyboard-cycle",
         "machine-theme-key",
         "theme-cycle",
         "wallpaper-mode",
-        "wallpaper-daemon",
         "controls-menu",
         "opacity-toggle",
         "bar-toggle",
+    ):
+        require(
+            f"HYPERLAB_PARITY_ADAPTER_READY: {boundary}"
+            in hypr,
+            f"accepted adapter route missing: {boundary}",
+        )
+
+    for boundary in (
+        "wallpaper-daemon",
         "idle-dpms",
     ):
         require(
-            f"HYPERLAB_PARITY_ADAPTER_REQUIRED: {adapter}"
+            f"HYPERLAB_PARITY_ADAPTER_REQUIRED: {boundary}"
             in hypr,
-            f"missing adapter boundary: {adapter}",
+            f"pending runtime adapter gate disappeared: {boundary}",
         )
 
-    # Existing helpers really are compositor-coupled where documented.
-    keyboard = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-keyboard.sh"
-    )
-    theme = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-theme.sh"
-    )
-    controls = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-controls.sh"
-    )
-    opacity = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-opacity-toggle.sh"
-    )
-    waybar = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-waybar.sh"
-    )
-    screenshot = text(
-        "roles/host_desktop_sway/files/"
-        "privatestack-screenshot.sh"
-    )
+    # High-level policy helpers must no longer own compositor IPC.
+    helper_sources = {
+        "keyboard": text(
+            "roles/host_desktop_sway/files/privatestack-keyboard.sh"
+        ),
+        "theme": text(
+            "roles/host_desktop_sway/files/privatestack-theme.sh"
+        ),
+        "controls": text(
+            "roles/host_desktop_sway/files/privatestack-controls.sh"
+        ),
+        "opacity": text(
+            "roles/host_desktop_sway/files/privatestack-opacity-toggle.sh"
+        ),
+        "waybar": text(
+            "roles/host_desktop_sway/files/privatestack-waybar.sh"
+        ),
+        "power": text(
+            "roles/host_desktop_sway/files/privatestack-powermenu.sh"
+        ),
+    }
 
-    require(
-        "swaymsg" in keyboard,
-        "keyboard helper coupling changed",
-    )
-    require(
-        "swaymsg" in theme and "SWAYSOCK" in theme,
-        "theme helper coupling changed",
-    )
-    require(
-        "swaymsg" in controls,
-        "controls helper coupling changed",
-    )
-    require(
-        "swaymsg" in opacity,
-        "opacity helper coupling changed",
-    )
-    require(
-        "swaymsg" in waybar,
-        "Waybar supervisor coupling changed",
-    )
+    for name, source in helper_sources.items():
+        require(
+            "swaymsg" not in source and "hyprctl" not in source,
+            f"{name} regained direct compositor IPC",
+        )
 
+    legacy_lock = text(
+        "roles/host_desktop_sway/files/privatestack-swaylock.sh"
+    )
+    generic_lock = text(
+        "roles/host_desktop_sway/files/privatestack-lock.sh"
+    )
     require(
-        "swaymsg" not in screenshot
-        and "SWAYSOCK" not in screenshot,
-        "screenshot helper unexpectedly became compositor-coupled",
+        "privatestack-lock" in legacy_lock,
+        "Sway lock compatibility route disappeared",
+    )
+    require(
+        "swaylock" in generic_lock and "hyprlock" in generic_lock,
+        "generic lock lost one compositor backend",
     )
 
     qml = list(role.rglob("*.qml"))

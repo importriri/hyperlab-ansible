@@ -18,6 +18,7 @@ host_desktop_hyprland_future_packages:
   - hypridle
   - hyprlock
   - hyprpaper
+  - hyprshutdown
   - hyprpolkitagent
   - xdg-desktop-portal
   - xdg-desktop-portal-hyprland
@@ -71,13 +72,7 @@ host_desktop_hyprland_trust_contract:
 # These existing helpers embed Sway-specific IPC and must not simply be copied
 # into the Hyprland session. Later milestones split common policy/state from
 # compositor-specific adapters.
-host_desktop_hyprland_compositor_coupled_helpers:
-  - privatestack-keyboard
-  - privatestack-theme
-  - privatestack-controls
-  - privatestack-opacity-toggle
-  - privatestack-swaylock
-  - privatestack-waybar
+host_desktop_hyprland_compositor_coupled_helpers: []
 
 # Narrow backend adapter. High-level theme/input/trust policy remains outside
 # this interface and the existing public helper command names are not rewired
@@ -85,7 +80,7 @@ host_desktop_hyprland_compositor_coupled_helpers:
 host_desktop_hyprland_compositor_adapter:
   api_version: 1
   future_installed_path: /usr/local/bin/privatestack-compositor-adapter
-  high_level_helpers_rewired: false
+  high_level_helpers_rewired: true
 
 # Phase 1 records the full parity target without pretending it is implemented.
 host_desktop_hyprland_required_parity:

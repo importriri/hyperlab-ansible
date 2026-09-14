@@ -1,37 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# HyperLab compositor adapter.
+# HyperLab host compositor adapter.
 #
-# This file owns only compositor IPC translation. It deliberately does not own
-# theme names, keyboard-layout order, wallpaper selection, trust classes or any
-# other HyperLab policy.
+# Owns compositor IPC translation only.
+# Theme order, keyboard policy, trust, wallpaper selection and application
+# opacity policy deliberately remain in their high-level controllers.
+
+readonly backend_timeout=${HYPERLAB_COMPOSITOR_TIMEOUT_SECONDS:-5}
 
 usage() {
     cat >&2 <<'EOF'
 usage:
   privatestack-compositor-adapter backend
-  privatestack-compositor-adapter keyboard-set LAYOUT INDEX
+  privatestack-compositor-adapter keyboard-set LAYOUT INDEX ORDER_CSV
   privatestack-compositor-adapter wallpaper-set ABSOLUTE_IMAGE
   privatestack-compositor-adapter reload
   privatestack-compositor-adapter fullscreen-toggle
+  privatestack-compositor-adapter focused-window
   privatestack-compositor-adapter opacity-set VALUE
   privatestack-compositor-adapter dpms enable|disable
   privatestack-compositor-adapter native-bar show|hide|toggle
+  privatestack-compositor-adapter session-exit
 EOF
 }
 
 detect_backend() {
     case ${HYPERLAB_COMPOSITOR_BACKEND:-} in
         sway|hyprland)
-            printf '%s\n' "${HYPERLAB_COMPOSITOR_BACKEND}"
+            printf '%s\n' \
+                "${HYPERLAB_COMPOSITOR_BACKEND}"
             return 0
             ;;
         "")
             ;;
         *)
-            printf 'unsupported HYPERLAB_COMPOSITOR_BACKEND=%s\n' \
-                "${HYPERLAB_COMPOSITOR_BACKEND}" >&2
+            printf \
+                'unsupported HYPERLAB_COMPOSITOR_BACKEND=%s\n' \
+                "${HYPERLAB_COMPOSITOR_BACKEND}" \
+                >&2
             return 2
             ;;
     esac
@@ -46,19 +53,95 @@ detect_backend() {
         return 0
     fi
 
-    printf 'cannot determine active compositor backend\n' >&2
+    printf \
+        'cannot determine active compositor backend\n' \
+        >&2
     return 3
 }
 
 run_swaymsg() {
-    command swaymsg "$@"
+    command timeout \
+        --signal=TERM \
+        --kill-after=1s \
+        "${backend_timeout}s" \
+        swaymsg \
+        "$@"
 }
 
 run_hyprctl() {
-    command hyprctl "$@"
+    command timeout \
+        --signal=TERM \
+        --kill-after=1s \
+        "${backend_timeout}s" \
+        hyprctl \
+        "$@"
 }
 
-backend="$(detect_backend)" || exit $?
+run_hyprshutdown() {
+    command timeout \
+        --signal=TERM \
+        --kill-after=1s \
+        "${backend_timeout}s" \
+        hyprshutdown
+}
+
+focused_sway() {
+    run_swaymsg -r -t get_tree |
+        python3 -c '
+import json
+import sys
+
+
+def find(node):
+    if node.get("focused"):
+        return node
+
+    for key in ("nodes", "floating_nodes"):
+        for child in node.get(key, []):
+            result = find(child)
+
+            if result is not None:
+                return result
+
+    return None
+
+
+node = find(json.load(sys.stdin)) or {}
+identity = node.get("id", "")
+app = (
+    node.get("app_id")
+    or (node.get("window_properties") or {}).get("class")
+    or ""
+)
+
+if identity != "":
+    print(f"{identity}\t{app}")
+'
+}
+
+focused_hyprland() {
+    run_hyprctl activewindow -j |
+        python3 -c '
+import json
+import sys
+
+
+node = json.load(sys.stdin)
+identity = node.get("address") or ""
+app = (
+    node.get("class")
+    or node.get("initialClass")
+    or ""
+)
+
+if identity:
+    print(f"{identity}\t{app}")
+'
+}
+
+backend="$(detect_backend)" ||
+    exit $?
+
 operation=${1:-}
 
 case ${operation} in
@@ -69,6 +152,7 @@ case ${operation} in
     keyboard-set)
         layout=${2:-}
         index=${3:-}
+        order_csv=${4:-}
 
         [[ -n ${layout} ]] || {
             usage
@@ -76,9 +160,33 @@ case ${operation} in
         }
 
         [[ ${index} =~ ^[0-9]+$ ]] || {
-            printf 'keyboard index must be a non-negative integer\n' >&2
+            printf \
+                'keyboard index must be a non-negative integer\n' \
+                >&2
             exit 2
         }
+
+        [[ -n ${order_csv} ]] || {
+            printf \
+                'keyboard layout order must be explicit\n' \
+                >&2
+            exit 2
+        }
+
+        IFS=',' read -r -a declared_layouts \
+            <<<"${order_csv}"
+
+        if (( index >= ${#declared_layouts[@]} )) ||
+           [[ ${declared_layouts[index]} != "${layout}" ]]
+        then
+            printf \
+                'keyboard layout/index mismatch: layout=%s index=%s order=%s\n' \
+                "${layout}" \
+                "${index}" \
+                "${order_csv}" \
+                >&2
+            exit 2
+        fi
 
         case ${backend} in
             sway)
@@ -89,7 +197,11 @@ case ${operation} in
                     xkb_layout \
                     "${layout}"
                 ;;
+
             hyprland)
+                # Hyprland switches by configured index. The caller must provide
+                # the explicit ordered layout contract and we fail closed above
+                # if LAYOUT and INDEX disagree with it.
                 run_hyprctl \
                     switchxkblayout \
                     all \
@@ -102,12 +214,17 @@ case ${operation} in
         image=${2:-}
 
         [[ ${image} == /* ]] || {
-            printf 'wallpaper path must be absolute\n' >&2
+            printf \
+                'wallpaper path must be absolute\n' \
+                >&2
             exit 2
         }
 
         [[ -r ${image} ]] || {
-            printf 'wallpaper is not readable: %s\n' "${image}" >&2
+            printf \
+                'wallpaper is not readable: %s\n' \
+                "${image}" \
+                >&2
             exit 2
         }
 
@@ -121,6 +238,7 @@ case ${operation} in
                     "${image}" \
                     fill
                 ;;
+
             hyprland)
                 run_hyprctl \
                     hyprpaper \
@@ -144,7 +262,9 @@ case ${operation} in
     fullscreen-toggle)
         case ${backend} in
             sway)
-                run_swaymsg -q "fullscreen toggle"
+                run_swaymsg \
+                    -q \
+                    "fullscreen toggle"
                 ;;
             hyprland)
                 run_hyprctl \
@@ -154,11 +274,24 @@ case ${operation} in
         esac
         ;;
 
+    focused-window)
+        case ${backend} in
+            sway)
+                focused_sway
+                ;;
+            hyprland)
+                focused_hyprland
+                ;;
+        esac
+        ;;
+
     opacity-set)
         value=${2:-}
 
         [[ ${value} =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] || {
-            printf 'opacity must be a value from 0 through 1\n' >&2
+            printf \
+                'opacity must be a value from 0 through 1\n' \
+                >&2
             exit 2
         }
 
@@ -168,6 +301,7 @@ case ${operation} in
                     -q \
                     "opacity set ${value}"
                 ;;
+
             hyprland)
                 run_hyprctl \
                     dispatch \
@@ -201,6 +335,7 @@ case ${operation} in
                     dpms \
                     "${sway_action}"
                 ;;
+
             hyprland)
                 run_hyprctl \
                     dispatch \
@@ -228,8 +363,8 @@ case ${operation} in
                 ;;
         esac
 
-        # Hyprland has no native Swaybar recovery surface. The command is an
-        # intentional no-op there; Waybar/Quickshell own layer-shell surfaces.
+        # Hyprland has no native Sway bar equivalent. Waybar/Quickshell are
+        # layer surfaces, so this fallback primitive is intentionally a no-op.
         if [[ ${backend} == sway ]]; then
             run_swaymsg \
                 bar \
@@ -237,6 +372,17 @@ case ${operation} in
                 "${sway_mode}" \
                 bar-0
         fi
+        ;;
+
+    session-exit)
+        case ${backend} in
+            sway)
+                run_swaymsg exit
+                ;;
+            hyprland)
+                run_hyprshutdown
+                ;;
+        esac
         ;;
 
     *)

@@ -16,12 +16,13 @@ readonly theme_file=${config_dir}/theme
 readonly wallpaper_mode_file=${config_dir}/wallpaper-mode
 readonly desktop_index_file=${state_dir}/wallpaper-index
 readonly desktop_path_file=${state_dir}/desktop-wallpaper
-readonly sway_socket=${SWAYSOCK:-}
-readonly daemon_key=${sway_socket##*/}
-readonly daemon_lock=${XDG_RUNTIME_DIR:-${state_dir}}/hyperlab-wallpaper-${daemon_key:-sway}.lock
+readonly compositor_session=${HYPRLAND_INSTANCE_SIGNATURE:-${SWAYSOCK:-${WAYLAND_DISPLAY:-wayland}}}
+readonly daemon_key=${compositor_session//\//_}
+readonly daemon_lock=${XDG_RUNTIME_DIR:-${state_dir}}/hyperlab-wallpaper-${daemon_key:-wayland}.lock
 readonly public_wallpaper_count=20
 readonly rotation_seconds=${HYPERLAB_WALLPAPER_INTERVAL:-60}
 readonly themes=(green violet blue red)
+readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privatestack-compositor-adapter}
 
 mkdir -p "${config_dir}" "${state_dir}" "${personal_wallpaper_root}"
 
@@ -122,6 +123,7 @@ wallpaper_path() {
 install_active_palette() {
     local theme=$1 source_dir=${palette_root}/$1
     copy_atomic "${source_dir}/hyperlab-palette.sway" "${config_dir}/palette.sway"
+    copy_atomic "${source_dir}/hyperlab-palette-hyprland.lua" "${config_home}/hypr/hyperlab_palette.lua"
     copy_atomic "${source_dir}/hyperlab-palette.rasi" "${config_dir}/palette.rasi"
     copy_atomic "${source_dir}/hyperlab-palette-foot.ini" "${config_dir}/palette-foot.ini"
     copy_atomic "${source_dir}/hyperlab-palette-gtk.css" "${config_home}/gtk-3.0/hyperlab-palette.css"
@@ -135,7 +137,7 @@ set_desktop_wallpaper() {
     image=$(wallpaper_path "${theme}" "${index}")
     write_atomic "${desktop_index_file}" "${index}"
     write_atomic "${desktop_path_file}" "${image}"
-    swaymsg -q output '*' bg "${image}" fill >/dev/null
+    "${compositor_adapter}" wallpaper-set "${image}" >/dev/null
 }
 
 reload_palette_consumers() {
@@ -171,11 +173,12 @@ set_theme() {
     reload_palette_consumers
     signal_wallpaper_mode
     signal_controls
-    # A Control Center-owned theme transaction keeps its visible surface alive.
-    # Sway reloads execute exec_always entries, including the resident manager
-    # supervisor, so the owning window flushes that reload only after dismissal.
-    if [[ ${HYPERLAB_THEME_DEFER_SWAY_RELOAD:-0} != 1 ]]; then
-        swaymsg -q reload >/dev/null
+    # A Control Center-owned transaction keeps its visible surface alive and
+    # flushes the compositor reload only after dismissal. The old environment
+    # name remains a compatibility fallback during the Sway migration.
+    defer_reload=${HYPERLAB_THEME_DEFER_COMPOSITOR_RELOAD:-${HYPERLAB_THEME_DEFER_SWAY_RELOAD:-0}}
+    if [[ ${defer_reload} != 1 ]]; then
+        "${compositor_adapter}" reload >/dev/null
     fi
     notify "Theme: ${theme^^}"
 }

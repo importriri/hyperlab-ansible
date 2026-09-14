@@ -11,13 +11,14 @@ pid_file=${XDG_RUNTIME_DIR:-/tmp}/privatestack-waybar-supervisor.pid
 lock_file=${XDG_RUNTIME_DIR:-/tmp}/privatestack-waybar-supervisor.lock
 child_pid=""
 stopping=0
+compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privatestack-compositor-adapter}
 
 native_bar() {
-    swaymsg bar mode dock bar-0 >/dev/null 2>&1 || true
+    "${compositor_adapter}" native-bar show >/dev/null 2>&1 || true
 }
 
 hide_native_bar() {
-    swaymsg bar mode invisible bar-0 >/dev/null 2>&1 || true
+    "${compositor_adapter}" native-bar hide >/dev/null 2>&1 || true
 }
 
 owns_pid_file() {
@@ -133,7 +134,7 @@ start() {
             native_bar
             if command -v notify-send >/dev/null 2>&1; then
                 notify-send -u critical 'HyperLab bar' \
-                    'Waybar is unstable; the native Swaybar fallback was restored automatically.'
+                    'Waybar is unstable; the compositor fallback was restored where available.'
             fi
             return 0
         fi
@@ -145,7 +146,7 @@ toggle() {
     if pgrep -x waybar >/dev/null 2>&1; then
         pkill -x -USR1 waybar
     else
-        swaymsg bar mode toggle bar-0 >/dev/null 2>&1 || true
+        "${compositor_adapter}" native-bar toggle >/dev/null 2>&1 || true
     fi
 }
 

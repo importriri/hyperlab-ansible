@@ -41,6 +41,7 @@ APP_ID = "io.github.importriri.HyperlabControlCenter"
 CLI = "/usr/local/bin/hyperlabctl"
 NITRO_CONTROL = "/usr/local/bin/hyperlab-nitro-control"
 THEME_CONTROL = "/usr/local/bin/privatestack-theme"
+COMPOSITOR_ADAPTER = "/usr/local/bin/privatestack-compositor-adapter"
 DESKTOP_THEMES = ("green", "violet", "blue", "red")
 FOOT = "foot"
 PYTHON = "/usr/bin/python"
@@ -824,6 +825,7 @@ def run_theme(*args: str) -> str:
     env["HYPERLAB_THEME_SKIP_CONTROL_CENTER_RELOAD"] = "1"
     # A synchronous Sway reload would execute the resident-session supervisor
     # while this GTK callback is still active and replace the visible surface.
+    env["HYPERLAB_THEME_DEFER_COMPOSITOR_RELOAD"] = "1"
     env["HYPERLAB_THEME_DEFER_SWAY_RELOAD"] = "1"
     try:
         result = subprocess.run(
@@ -2905,7 +2907,7 @@ class HyperlabWindow(Gtk.Window):
         # surface has already been hidden by close_surface().
         try:
             subprocess.Popen(
-                ["/usr/bin/swaymsg", "-q", "reload"],
+                [COMPOSITOR_ADAPTER, "reload"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

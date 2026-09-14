@@ -131,6 +131,8 @@ guest_desktop_hyprland_legacy_system_paths:
   - /usr/local/bin/privatestack-theme
   - /usr/local/bin/privatestack-keyboard
   - /usr/local/bin/privatestack-controls
+  - /usr/local/bin/privatestack-lock
+  - /usr/local/bin/privatestack-compositor-adapter
   - /usr/local/bin/privatestack-swaylock
   - /usr/local/bin/privatestack-swaybar-status
   - /usr/share/applications/hyperlab-control-center.desktop

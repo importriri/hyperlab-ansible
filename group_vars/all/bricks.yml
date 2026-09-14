@@ -23,7 +23,8 @@ brick_requires:
   service_registry: [image_store, network_domains]
   service_exposure: [service_registry]
   jellyfin: []
-  host_desktop_sway: []
+  host_desktop_common: []
+  host_desktop_sway: [host_desktop_common]
   host_desktop_hyprland: [host_desktop_sway]
   workstation_kernel: []
   workstation_access: []
@@ -54,6 +55,7 @@ brick_playbooks:
   service_registry: playbooks/service-register.yml
   service_exposure: playbooks/jellyfin.yml
   jellyfin: playbooks/jellyfin.yml
+  host_desktop_common: playbooks/host-desktop-common.yml
   host_desktop_sway: playbooks/host-desktop-sway.yml
   host_desktop_hyprland: playbooks/host-desktop-hyprland.yml
   workstation_kernel: playbooks/guest-arch-hyprland.yml

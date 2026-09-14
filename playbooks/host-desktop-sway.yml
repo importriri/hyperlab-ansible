@@ -1,8 +1,12 @@
 ---
-# Targeted reconciliation for the physical host cockpit. Guest desktops are
-# assembled only by the guest Hyprland playbooks.
+# Targeted reconciliation for the physical host cockpit. The shared desktop
+# primitive lands first; Sway remains the proven production/recovery compositor.
 - name: Mount the host Sway cockpit
   hosts: hypervisor
   become: true
   roles:
+    - host_desktop_common
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_desktop_sway
     - host_desktop_sway

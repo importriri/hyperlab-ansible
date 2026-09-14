@@ -15,11 +15,13 @@ sway = SWAY.read_text(encoding="utf-8")
 compile(manager, str(MANAGER), "exec")
 
 assert 'env["HYPERLAB_THEME_SKIP_CONTROL_CENTER_RELOAD"] = "1"' in manager
+assert 'env["HYPERLAB_THEME_DEFER_COMPOSITOR_RELOAD"] = "1"' in manager
 assert 'env["HYPERLAB_THEME_DEFER_SWAY_RELOAD"] = "1"' in manager
 assert "self._theme_sway_reload_pending = False" in manager
 assert "self._theme_sway_reload_pending = True" in manager
 assert "def _flush_pending_theme_sway_reload(self) -> None:" in manager
-assert '["/usr/bin/swaymsg", "-q", "reload"]' in manager
+assert '[COMPOSITOR_ADAPTER, "reload"]' in manager
+assert '/usr/bin/swaymsg' not in manager
 assert "start_new_session=True" in manager
 
 close_start = manager.index("    def close_surface(")
@@ -32,8 +34,9 @@ assert close_block.index("self.set_visible(False)") < close_block.index(
 )
 
 assert "HYPERLAB_THEME_DEFER_SWAY_RELOAD" in theme
-assert '[[ ${HYPERLAB_THEME_DEFER_SWAY_RELOAD:-0} != 1 ]]' in theme
-assert "swaymsg -q reload" in theme
+assert "HYPERLAB_THEME_DEFER_COMPOSITOR_RELOAD" in theme
+assert '"${compositor_adapter}" reload' in theme
+assert "swaymsg" not in theme
 assert "exec_always /usr/local/bin/privatestack-hyperlab-session" in sway
 
 # The active cockpit surface still owns dismissal through its deferred catcher path.

@@ -1,0 +1,8 @@
+---
+# Shared physical-host desktop primitives. This brick owns only compositor-
+# neutral entry points and the narrow Sway/Hyprland IPC adapter.
+- name: Mount shared host desktop primitives
+  hosts: hypervisor
+  become: true
+  roles:
+    - host_desktop_common

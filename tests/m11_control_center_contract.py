@@ -199,7 +199,7 @@ def main():
         "privatestack-waybar.sh",
         "privatestack-theme.sh",
         "privatestack-keyboard.sh", "privatestack-controls.sh",
-        "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
+        "privatestack-lock.sh", "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
     ):
         require(deployed in tasks, "visual-lock asset not deployed: %s" % deployed)
     require("superfile-config.toml" not in tasks and
@@ -290,9 +290,13 @@ def main():
             "lock_index=$(( (desktop_index + 3) % count ))" in theme_helper and
             "HYPERLAB_WALLPAPER_INTERVAL" in theme_helper,
             "theme helper lacks four themes, source mode, rotation or lock separation")
+    lock_helper = text("roles/host_desktop_sway/files/privatestack-lock.sh")
     swaylock_helper = text("roles/host_desktop_sway/files/privatestack-swaylock.sh")
-    require("privatestack-theme lock-image" in swaylock_helper,
-            "swaylock does not request a distinct theme-aware image")
+    require("privatestack-theme lock-image" in lock_helper and
+            "swaylock" in lock_helper and "hyprlock" in lock_helper,
+            "generic lock lost theme-aware Sway or Hyprland behavior")
+    require("privatestack-lock" in swaylock_helper,
+            "legacy swaylock helper is not a compatibility wrapper")
 
     waybar = text("roles/host_desktop_sway/files/waybar.jsonc")
     require('"height": 37' in waybar, "Nitro-compatible Waybar height missing")

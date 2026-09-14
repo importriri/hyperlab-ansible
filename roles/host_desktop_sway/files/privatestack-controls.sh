@@ -7,6 +7,7 @@ set -euo pipefail
 readonly rofi_theme=${XDG_CONFIG_HOME:-"${HOME}/.config"}/rofi/rofi-hyperlab.rasi
 readonly theme_ctl=/usr/local/bin/privatestack-theme
 readonly keyboard_ctl=/usr/local/bin/privatestack-keyboard
+readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privatestack-compositor-adapter}
 
 menu() {
     local prompt=$1
@@ -91,9 +92,9 @@ open_menu() {
         'Wallpaper · '*) ${theme_ctl} mode-toggle ;;
         'Keyboard · '*) choose_keyboard ;;
         'Terminal opacity · Toggle') /usr/local/bin/privatestack-opacity-toggle ;;
-        'Current window fullscreen · Toggle') swaymsg -q fullscreen toggle >/dev/null ;;
+        'Current window fullscreen · Toggle') ${compositor_adapter} fullscreen-toggle >/dev/null ;;
         'Bar visibility · Toggle') /usr/local/bin/privatestack-waybar toggle ;;
-        'Lock screen') /usr/local/bin/privatestack-swaylock ;;
+        'Lock screen') /usr/local/bin/privatestack-lock ;;
         'HyperLab quick VM drawer') /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms ;;
         'HyperLab quick diagnostics') /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section diagnostics ;;
         'HyperLab full Control Center') /usr/local/bin/privatestack-hyperlab-domains --surface overlay --section vms ;;

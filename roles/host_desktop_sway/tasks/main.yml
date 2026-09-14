@@ -163,6 +163,7 @@
     - { src: privatestack-theme.sh, dest: privatestack-theme }
     - { src: privatestack-keyboard.sh, dest: privatestack-keyboard }
     - { src: privatestack-controls.sh, dest: privatestack-controls }
+    - { src: privatestack-lock.sh, dest: privatestack-lock }
     - { src: privatestack-swaylock.sh, dest: privatestack-swaylock }
     - { src: privatestack-screenshot.sh, dest: privatestack-screenshot }
     - { src: privatestack-swaybar-status.py, dest: privatestack-swaybar-status }

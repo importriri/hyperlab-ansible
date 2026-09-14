@@ -87,7 +87,7 @@ def hyprland_lua(name: str, c: dict[str, str]) -> str:
         f'    urgent_border = "rgba({raw("bad")}ff)",',
         "}",
     ]
-    return "\\n".join(lines) + "\\n"
+    return "\n".join(lines) + "\n"
 
 
 def rofi_rasi(name: str, c: dict[str, str]) -> str:

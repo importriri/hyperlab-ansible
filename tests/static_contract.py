@@ -141,8 +141,36 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     )
     lab = yaml.safe_load((ROOT / "playbooks/lab.yml").read_text())
     check(lab[0].get("import_playbook") == "foundation.yml", "lab must import the complete foundation first")
-    lab_roles = [role_name(x) for x in lab[1]["roles"]]
-    check(lab_roles == ["host_desktop_sway", "brick_guard", "looking_glass"], "lab cockpit role order drift")
+    lab_entries = lab[1]["roles"]
+    lab_roles = [role_name(x) for x in lab_entries]
+
+    check(
+        lab_roles
+        == [
+            "host_desktop_common",
+            "brick_guard",
+            "host_desktop_sway",
+            "brick_guard",
+            "looking_glass",
+        ],
+        "lab cockpit role order drift",
+    )
+
+    check(
+        isinstance(lab_entries[1], dict)
+        and lab_entries[1].get("role") == "brick_guard"
+        and lab_entries[1].get("vars", {}).get("brick_guard_brick")
+        == "host_desktop_sway",
+        "lab Sway prerequisite guard drift",
+    )
+
+    check(
+        isinstance(lab_entries[3], dict)
+        and lab_entries[3].get("role") == "brick_guard"
+        and lab_entries[3].get("vars", {}).get("brick_guard_brick")
+        == "looking_glass",
+        "lab Looking Glass prerequisite guard drift",
+    )
 
     vfio_defaults = (ROOT / "roles/vfio_boot/defaults/main.yml").read_text()
     vfio_tasks = (ROOT / "roles/vfio_boot/tasks/main.yml").read_text()

@@ -86,11 +86,41 @@ def main() -> int:
     keyboard = text("roles/host_desktop_sway/files/privatestack-keyboard.sh")
     for marker in (
         "readonly layouts=(it us ara)",
-        'xkb_layout "${layout}"',
+        "layout_order",
+        '"${compositor_adapter}"',
+        "keyboard-set",
+        '"${layout}"',
+        '"${index}"',
+        '"${layout_order}"',
         "status-json",
         "Keyboard layout:",
     ):
-        require(marker in keyboard, f"keyboard controller missing: {marker}")
+        require(
+            marker in keyboard,
+            f"keyboard controller missing: {marker}",
+        )
+
+    require(
+        "swaymsg" not in keyboard
+        and "hyprctl" not in keyboard,
+        "keyboard controller regained compositor IPC",
+    )
+
+    adapter = text(
+        "roles/host_desktop_common/files/"
+        "privatestack-compositor-adapter.sh"
+    )
+
+    for marker in (
+        "xkb_layout",
+        "switchxkblayout",
+        "keyboard layout/index mismatch",
+        "ORDER_CSV",
+    ):
+        require(
+            marker in adapter,
+            f"shared adapter keyboard contract missing: {marker}",
+        )
 
     controls = text("roles/host_desktop_sway/files/privatestack-controls.sh")
     for marker in (
