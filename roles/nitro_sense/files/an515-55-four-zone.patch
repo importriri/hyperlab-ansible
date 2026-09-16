@@ -152,3 +152,33 @@
   static ssize_t per_zoned_rgb_kb_show(struct device *dev, struct device_attribute *attr,char *buf){
       struct per_zone_color output;
       acpi_status status;
+
+--- a/src/linuwu_sense.c
++++ b/src/linuwu_sense.c
+@@ -3302,7 +3302,7 @@
+      char *token;
+      char* input_ptr = input;
+      size_t len = min(count, sizeof(input) - 1);
+-     strncpy(input, buf, len);
++     memcpy(input, buf, len);
+  
+      if(input[len-1] == '\n'){
+          input[len-1] = '\0';
+@@ -3753,7 +3753,7 @@
+      char *input_ptr = input_buf;
+      size_t len = min(count, sizeof(input_buf) - 1);
+  
+-     strncpy(input_buf, buf, len);
++     memcpy(input_buf, buf, len);
+  
+      if(input_buf[len-1] == '\n'){
+          input_buf[len-1] = '\0';
+@@ -3991,7 +3991,7 @@
+      struct per_zone_color colors;
+      char *input_ptr = str_buf;
+      len = min(count, sizeof(str_buf) - 1);
+-     strncpy(str_buf, buf, len);
++     memcpy(str_buf, buf, len);
+      if(str_buf[len-1] == '\n'){
+          str_buf[len-1] = '\0';
+      } else {

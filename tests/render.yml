@@ -1227,6 +1227,19 @@
           - "nitro_sense_led_effect_path in render_ns_helper"
           - "'Required documented sysfs node is missing' in render_ns_helper"
           - "'After=systemd-modules-load.service' in render_ns_unit"
+          - "'nitro_sense_apply_service_state' in render_ns_configure"
+          - "'nitro_sense_module_transition_needed' in render_ns_configure"
+          - "'state: restarted' in render_ns_configure"
+          - >-
+            render_ns_configure.find(
+              'Enable and start the settings service') <
+            render_ns_configure.find(
+              'Reapply persistent settings after a platform-driver transition')
+          - >-
+            render_ns_configure.find(
+              'Reapply persistent settings after a platform-driver transition') <
+            render_ns_configure.find(
+              'Apply changed settings before validating them')
           - "'AUTOINSTALL=\"yes\"' in render_ns_dkms"
           - "'BUILT_MODULE_LOCATION[0]=\"src\"' in render_ns_dkms"
           - "'${kernelver}' in render_ns_dkms"

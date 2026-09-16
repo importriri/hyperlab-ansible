@@ -39,6 +39,17 @@
     enabled: true
     state: started
     daemon_reload: true
+  register: nitro_sense_apply_service_state
+
+- name: Reapply persistent settings after a platform-driver transition
+  ansible.builtin.systemd_service:
+    name: "{{ nitro_sense_apply_service }}"
+    state: restarted
+  when:
+    - not ansible_check_mode
+    - nitro_sense_use_out_of_tree | bool
+    - nitro_sense_module_transition_needed | default(false) | bool
+    - not (nitro_sense_apply_service_state.changed | bool)
 
 - name: Apply changed settings before validating them
   ansible.builtin.meta: flush_handlers

@@ -11,8 +11,8 @@ nitro_sense_use_out_of_tree: false
 nitro_sense_repo: https://github.com/0x7375646F/Linuwu-Sense.git
 nitro_sense_commit: 73a25ec243a44ba2b1703e8d0a76fa2735062506
 nitro_sense_source_patch: an515-55-four-zone.patch
-nitro_sense_source_patch_sha256: 1a53b4709330ae86dcae16f2efd55ce9468e2cd2d850b48d0f6902641457a778
-nitro_sense_dkms_version: 6b45d4439e68
+nitro_sense_source_patch_sha256: 97d5fed8532c613be0f2827be9e21486fb24b99cd14b9ab744d08a1fca8edb79
+nitro_sense_dkms_version: d9f64038c0f3
 nitro_sense_module_name: linuwu_sense
 nitro_sense_in_tree_module_name: acer_wmi
 nitro_sense_source_dir: /usr/local/src/linuwu-sense
