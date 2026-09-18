@@ -11,7 +11,7 @@ works.
 - **Host KVM, networks and VFIO:** live Nitro validation passed.
 - **Sway host desktop:** functional and idempotent on Nitro. The corrected drawer
   placement needs one visual recheck after cleanup.
-- **Host Hyprland migration:** the controlled first launch, managed Ly/session lifecycle and dedicated HyperLab Gate login theme are accepted on Nitro. HyperLab Sway remains the recovery session; Quickshell remains a later presentation gate.
+- **Host desktop / Hyprland migration:** the controlled first launch, managed Ly/session lifecycle and dedicated HyperLab Gate login theme are accepted on Nitro. The dual-compositor product contract is frozen: Hyprland is preferred, Sway is first-class and the recovery compositor, and Quickshell is the shared shell target with mandatory feature parity.
 - **Windows workshop:** the workflow exists; private master evidence stays local.
 - **Arch standard guest:** Nitro lifecycle gate passed.
 - **Arch VFIO guest:** NVIDIA, kvmfr and Looking Glass video are proven. Final

@@ -26,6 +26,23 @@ def main() -> int:
     defaults = yaml.safe_load(
         text("roles/host_desktop_hyprland/defaults/main.yml")
     )
+    shared = yaml.safe_load(
+        text("group_vars/all/host-desktop.yml")
+    )
+
+    require(
+        "host_desktop_hyprland_trust_contract" not in defaults,
+        "Hyprland regained private ownership of trust semantics",
+    )
+    require(
+        "host_desktop_hyprland_required_parity" not in defaults,
+        "Hyprland regained a private product parity contract",
+    )
+    require(
+        "host_desktop_hyprland_shell_target" not in defaults,
+        "Hyprland regained private ownership of the HyperLab Shell",
+    )
+
     tasks = text("roles/host_desktop_hyprland/tasks/main.yml")
     hypr = text(
         "roles/host_desktop_hyprland/templates/hyprland.lua.j2"
@@ -148,7 +165,7 @@ def main() -> int:
         "keyboard cycle changed",
     )
 
-    trust = defaults["host_desktop_hyprland_trust_contract"]
+    trust = shared["host_desktop_common_trust_contract"]
     require(
         trust["owner"] == "host",
         "trust identity is not host-owned",
@@ -180,7 +197,25 @@ def main() -> int:
         "dirty seamless windows lost host-owned identity",
     )
 
-    shell = defaults["host_desktop_hyprland_shell_target"]
+    product = shared["host_desktop_common_product_contract"]
+    shell = product["shell"]
+
+    require(
+        product["preferred_compositor"] == "hyprland",
+        "Hyprland is no longer the preferred HyperLab compositor",
+    )
+    require(
+        product["supported_compositors"] == ["hyprland", "sway"],
+        "HyperLab compositor support contract changed",
+    )
+    require(
+        product["recovery_compositor"] == "sway",
+        "Sway recovery ownership disappeared",
+    )
+    require(
+        product["parity_required"] is True,
+        "Hyprland/Sway product parity became optional",
+    )
     require(
         shell["primary"] == "quickshell",
         "Quickshell is no longer the target shell",
@@ -188,6 +223,10 @@ def main() -> int:
     require(
         shell["phase"] == 2,
         "Quickshell moved into Phase 1",
+    )
+    require(
+        shell["scope"] == "shared",
+        "Quickshell became a Hyprland-only shell",
     )
     require(
         shell["fake_controls_allowed"] is False,

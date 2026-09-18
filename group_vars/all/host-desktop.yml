@@ -1,0 +1,89 @@
+---
+# HyperLab is one desktop product with two first-class compositor backends.
+# Hyprland is the preferred experience; Sway remains fully supported and is
+# also the recovery compositor. Product semantics must never fork by backend.
+host_desktop_common_product_contract:
+  preferred_compositor: hyprland
+  supported_compositors:
+    - hyprland
+    - sway
+  recovery_compositor: sway
+  parity_required: true
+  trust_compositor_independent: true
+  themes_compositor_independent: true
+  shell:
+    primary: quickshell
+    phase: 2
+    scope: shared
+    fake_controls_allowed: false
+    backend_authority:
+      - hyperlabctl
+      - specs
+      - contracts
+  shared_surfaces:
+    - trust-model
+    - themes
+    - hyperlab-shell
+    - control-center
+    - drawers
+    - vm-workflows
+    - wallpaper-policy
+    - keyboard-policy
+    - lock-policy
+    - power-controls
+    - security-semantics
+
+# Trust identity belongs to the host and is independent from compositor and
+# appearance theme.
+host_desktop_common_trust_contract:
+  owner: host
+  guest_self_assignment: false
+  classes:
+    clean:
+      level: 3
+      gpu_trust_rung: true
+    dev:
+      level: 2
+      gpu_trust_rung: true
+    dirty:
+      level: 1
+      gpu_trust_rung: true
+    lab:
+      level: 0
+      gpu_trust_rung: true
+    services:
+      level: null
+      gpu_trust_rung: false
+  dirty_seamless_window_requires_host_badge: true
+
+# A HyperLab feature is not complete until both supported compositors provide
+# the same product behavior. Only compositor-native implementation primitives
+# may differ behind the shared adapter boundary.
+host_desktop_common_required_parity:
+  - workspaces-1-9
+  - move-to-workspace
+  - focus-move-resize
+  - fullscreen
+  - floating
+  - terminal
+  - file-manager
+  - launcher
+  - power-menu
+  - hyperlab-drawer
+  - hyperlab-diagnostics
+  - hyperlab-control-center
+  - hyperlab-doctor
+  - looking-glass
+  - spice-console
+  - audio-125
+  - audio-mute
+  - brightness
+  - screenshot-full
+  - screenshot-region
+  - keyboard-cycle
+  - machine-theme-key
+  - theme-cycle
+  - wallpaper-mode
+  - wallpaper-daemon
+  - lock
+  - idle-dpms

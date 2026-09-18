@@ -22,6 +22,125 @@ def text(path: str) -> str:
 
 def main() -> int:
     graph = yaml.safe_load(text("group_vars/all/bricks.yml"))
+    shared = yaml.safe_load(
+        text("group_vars/all/host-desktop.yml")
+    )
+
+    product = shared["host_desktop_common_product_contract"]
+    trust = shared["host_desktop_common_trust_contract"]
+    parity = shared["host_desktop_common_required_parity"]
+
+    require(
+        product["preferred_compositor"] == "hyprland",
+        "Hyprland is no longer the preferred compositor",
+    )
+    require(
+        product["supported_compositors"] == ["hyprland", "sway"],
+        "supported compositor set or order changed",
+    )
+    require(
+        product["recovery_compositor"] == "sway",
+        "Sway is no longer the recovery compositor",
+    )
+    require(
+        product["parity_required"] is True,
+        "cross-compositor product parity became optional",
+    )
+    require(
+        product["trust_compositor_independent"] is True
+        and product["themes_compositor_independent"] is True,
+        "trust or themes became compositor-specific",
+    )
+    require(
+        product["shell"]
+        == {
+            "primary": "quickshell",
+            "phase": 2,
+            "scope": "shared",
+            "fake_controls_allowed": False,
+            "backend_authority": [
+                "hyperlabctl",
+                "specs",
+                "contracts",
+            ],
+        },
+        "shared HyperLab Shell contract changed",
+    )
+    require(
+        product["shared_surfaces"]
+        == [
+            "trust-model",
+            "themes",
+            "hyperlab-shell",
+            "control-center",
+            "drawers",
+            "vm-workflows",
+            "wallpaper-policy",
+            "keyboard-policy",
+            "lock-policy",
+            "power-controls",
+            "security-semantics",
+        ],
+        "shared product surface set changed",
+    )
+
+    require(
+        trust["owner"] == "host"
+        and trust["guest_self_assignment"] is False,
+        "trust authority left the host",
+    )
+    require(
+        {
+            name: value["level"]
+            for name, value in trust["classes"].items()
+            if name != "services"
+        }
+        == {
+            "clean": 3,
+            "dev": 2,
+            "dirty": 1,
+            "lab": 0,
+        },
+        "shared trust ladder changed",
+    )
+    require(
+        trust["classes"]["services"]["gpu_trust_rung"] is False,
+        "services became a GPU trust rung",
+    )
+
+    require(
+        parity
+        == [
+            "workspaces-1-9",
+            "move-to-workspace",
+            "focus-move-resize",
+            "fullscreen",
+            "floating",
+            "terminal",
+            "file-manager",
+            "launcher",
+            "power-menu",
+            "hyperlab-drawer",
+            "hyperlab-diagnostics",
+            "hyperlab-control-center",
+            "hyperlab-doctor",
+            "looking-glass",
+            "spice-console",
+            "audio-125",
+            "audio-mute",
+            "brightness",
+            "screenshot-full",
+            "screenshot-region",
+            "keyboard-cycle",
+            "machine-theme-key",
+            "theme-cycle",
+            "wallpaper-mode",
+            "wallpaper-daemon",
+            "lock",
+            "idle-dpms",
+        ],
+        "required compositor parity set changed",
+    )
 
     require(
         graph["brick_requires"]["host_desktop_common"] == [],

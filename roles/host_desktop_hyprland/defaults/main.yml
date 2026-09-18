@@ -111,28 +111,8 @@ host_desktop_hyprland_input_defaults:
     natural_scroll: enabled
     tap: enabled
 
-# Trust identity is host-owned. Presentation layers consume this contract;
-# neither a guest nor a cosmetic theme may redefine its security meaning.
-host_desktop_hyprland_trust_contract:
-  owner: host
-  guest_self_assignment: false
-  classes:
-    clean:
-      level: 3
-      gpu_trust_rung: true
-    dev:
-      level: 2
-      gpu_trust_rung: true
-    dirty:
-      level: 1
-      gpu_trust_rung: true
-    lab:
-      level: 0
-      gpu_trust_rung: true
-    services:
-      level: null
-      gpu_trust_rung: false
-  dirty_seamless_window_requires_host_badge: true
+# Trust semantics are product-level state owned by host_desktop_common
+# through group_vars/all/host-desktop.yml. This role only consumes them.
 
 # These existing helpers embed Sway-specific IPC and must not simply be copied
 # into the Hyprland session. Later milestones split common policy/state from
@@ -147,41 +127,5 @@ host_desktop_hyprland_compositor_adapter:
   future_installed_path: /usr/local/bin/privatestack-compositor-adapter
   high_level_helpers_rewired: true
 
-# Phase 1 records the full parity target without pretending it is implemented.
-host_desktop_hyprland_required_parity:
-  - workspaces-1-9
-  - move-to-workspace
-  - focus-move-resize
-  - fullscreen
-  - floating
-  - terminal
-  - file-manager
-  - launcher
-  - power-menu
-  - hyperlab-drawer
-  - hyperlab-diagnostics
-  - hyperlab-control-center
-  - hyperlab-doctor
-  - looking-glass
-  - spice-console
-  - audio-125
-  - audio-mute
-  - brightness
-  - screenshot-full
-  - screenshot-region
-  - keyboard-cycle
-  - machine-theme-key
-  - theme-cycle
-  - wallpaper-mode
-  - wallpaper-daemon
-  - lock
-  - idle-dpms
-
-host_desktop_hyprland_shell_target:
-  primary: quickshell
-  phase: 2
-  fake_controls_allowed: false
-  backend_authority:
-    - hyperlabctl
-    - specs
-    - contracts
+# Shell ownership and product parity are shared HyperLab contracts owned
+# by host_desktop_common, not by the Hyprland backend.

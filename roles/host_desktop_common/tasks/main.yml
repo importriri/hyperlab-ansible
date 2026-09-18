@@ -1,4 +1,39 @@
 ---
+- name: Validate the shared HyperLab desktop product contract
+  ansible.builtin.assert:
+    that:
+      - host_desktop_common_product_contract.preferred_compositor == 'hyprland'
+      - >-
+        host_desktop_common_product_contract.supported_compositors
+        == ['hyprland', 'sway']
+      - host_desktop_common_product_contract.recovery_compositor == 'sway'
+      - host_desktop_common_product_contract.parity_required
+      - host_desktop_common_product_contract.trust_compositor_independent
+      - host_desktop_common_product_contract.themes_compositor_independent
+      - host_desktop_common_product_contract.shell.primary == 'quickshell'
+      - host_desktop_common_product_contract.shell.phase == 2
+      - host_desktop_common_product_contract.shell.scope == 'shared'
+      - not host_desktop_common_product_contract.shell.fake_controls_allowed
+      - >-
+        host_desktop_common_product_contract.shell.backend_authority
+        == ['hyperlabctl', 'specs', 'contracts']
+      - host_desktop_common_trust_contract.owner == 'host'
+      - not host_desktop_common_trust_contract.guest_self_assignment
+      - host_desktop_common_trust_contract.classes.clean.level == 3
+      - host_desktop_common_trust_contract.classes.dev.level == 2
+      - host_desktop_common_trust_contract.classes.dirty.level == 1
+      - host_desktop_common_trust_contract.classes.lab.level == 0
+      - >-
+        not host_desktop_common_trust_contract
+        .classes.services.gpu_trust_rung
+      - >-
+        host_desktop_common_trust_contract
+        .dirty_seamless_window_requires_host_badge
+    fail_msg: >-
+      HyperLab must remain one compositor-independent desktop product.
+      Hyprland is preferred and Sway is the recovery compositor, but trust,
+      themes, shell surfaces and product behavior must remain equivalent.
+
 - name: Install the shared host compositor adapter
   ansible.builtin.copy:
     src: privatestack-compositor-adapter.sh

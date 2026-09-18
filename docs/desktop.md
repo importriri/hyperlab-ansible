@@ -120,4 +120,23 @@ The Gate was applied twice on the Nitro host with the second pass at
 Detailed evidence and the validation-harness note are recorded in
 [`host-ly-gate-acceptance-2026-09-18.md`](host-ly-gate-acceptance-2026-09-18.md).
 
-Quickshell remains a later presentation gate.
+## Dual-compositor product contract
+
+HyperLab is one desktop product with two first-class compositor backends.
+Hyprland is the preferred day-to-day compositor, while Sway remains fully
+supported and is also the recovery compositor.
+
+Choosing `HyperLab Hyprland` or `HyperLab Sway` must preserve the same HyperLab
+product semantics: trust model, themes, HyperLab Shell, Control Center, drawers,
+VM workflows, wallpaper policy, keyboard policy, lock/power controls and
+security meaning. Only compositor-native implementation primitives may differ
+behind the shared adapter.
+
+A feature is not complete when it works only on Hyprland. Cross-compositor
+parity is a release contract. Sway may expose a compositor limitation through a
+different truthful presentation, but it must not silently lose the HyperLab
+function.
+
+Quickshell is the shared HyperLab Shell target for both compositors. It is not a
+Hyprland-specific shell and it does not become an operational authority;
+`hyperlabctl`, reviewed specifications and contracts remain authoritative.
