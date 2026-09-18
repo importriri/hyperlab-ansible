@@ -29,36 +29,39 @@
     name: "{{ host_desktop_sway_removed_packages }}"
     state: absent
 
-- name: Validate the selected Ly palette
+- name: Validate the dedicated HyperLab Gate theme
   ansible.builtin.assert:
     that:
-      - desktop_palette in host_desktop_sway_ly_palettes
       - ly_theming == 'now'
-      - host_desktop_sway_ly_palettes[desktop_palette].bg is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].fg is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].border_fg is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].error_bg is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].error_fg is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].accent2 is match('^0x[0-9A-F]{8}$')
-      - host_desktop_sway_ly_palettes[desktop_palette].box_title is match('^[A-Za-z0-9 _-]{1,64}$')
+      - host_desktop_sway_ly_gate_theme.bg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.border_fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.error_bg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.error_fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.matrix_fg is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.matrix_head_col is match('^0x[0-9A-F]{8}$')
+      - host_desktop_sway_ly_gate_theme.box_title is match('^[A-Za-z0-9 _-]{1,64}$')
+      - host_desktop_sway_ly_gate_theme.initial_info_text is match('^[A-Za-z0-9 _-]{1,64}$')
     fail_msg: >-
-      Ly theming requires a declared palette with strict 24-bit colour values,
-      a safe title, and the explicit `now` choice in tools/choices/choices.yml.
+      HyperLab Gate requires strict Ly colour values and safe presentation
+      strings. The login surface must remain independent from desktop_palette.
     quiet: true
 
-- name: Assemble the selected Ly palette entries
+- name: Assemble the dedicated HyperLab Gate entries
   ansible.builtin.set_fact:
     host_desktop_sway_ly_managed_entries:
       - { key: full_color, value: "true" }
-      - { key: bg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].bg }}" }
-      - { key: fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].fg }}" }
-      - { key: border_fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg }}" }
-      - { key: error_bg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].error_bg }}" }
-      - { key: error_fg, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].error_fg }}" }
-      - { key: box_title, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].box_title }}" }
-      - { key: animation, value: "colormix" }
-      - { key: animation_frame_delay, value: "24" }
+      - { key: bg, value: "{{ host_desktop_sway_ly_gate_theme.bg }}" }
+      - { key: fg, value: "{{ host_desktop_sway_ly_gate_theme.fg }}" }
+      - { key: border_fg, value: "{{ host_desktop_sway_ly_gate_theme.border_fg }}" }
+      - { key: error_bg, value: "{{ host_desktop_sway_ly_gate_theme.error_bg }}" }
+      - { key: error_fg, value: "{{ host_desktop_sway_ly_gate_theme.error_fg }}" }
+      - { key: box_title, value: "{{ host_desktop_sway_ly_gate_theme.box_title }}" }
+      - { key: animation, value: "matrix" }
+      - { key: animation_frame_delay, value: "25" }
       - { key: animation_timeout_sec, value: "0" }
+      - { key: cmatrix_fg, value: "{{ host_desktop_sway_ly_gate_theme.matrix_fg }}" }
+      - { key: cmatrix_head_col, value: "{{ host_desktop_sway_ly_gate_theme.matrix_head_col }}" }
       - { key: bigclock, value: "en" }
       - { key: bigclock_12hr, value: "false" }
       - { key: bigclock_seconds, value: "false" }
@@ -66,7 +69,7 @@
       - { key: clear_password, value: "true" }
       - { key: default_input, value: "login" }
       - { key: hide_version_string, value: "true" }
-      - { key: initial_info_text, value: "HyperLab secure console" }
+      - { key: initial_info_text, value: "{{ host_desktop_sway_ly_gate_theme.initial_info_text }}" }
       - { key: input_len, value: "36" }
       - { key: margin_box_h, value: "3" }
       - { key: margin_box_v, value: "1" }
@@ -75,9 +78,6 @@
       - { key: text_in_center, value: "true" }
       - { key: asterisk, value: "0x2022" }
       - { key: clock, value: "%a %d %b %H:%M" }
-      - { key: colormix_col1, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg }}" }
-      - { key: colormix_col2, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 }}" }
-      - { key: colormix_col3, value: "{{ host_desktop_sway_ly_palettes[desktop_palette].bg }}" }
   changed_when: false
 
 - name: Deploy the HyperLab Ly terminal-palette hook

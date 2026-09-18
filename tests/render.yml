@@ -480,7 +480,7 @@
           - "'image=' not in render_swaylock"
           - "'Deploy every public nature-only wallpaper pool' in (render_cockpit.results[1].content | b64decode)"
           - "'Deploy the HyperLab Ly terminal-palette hook' in (render_cockpit.results[1].content | b64decode)"
-          - "'animation, value: \"colormix\"' in (render_cockpit.results[1].content | b64decode)"
+          - "'animation, value: \"matrix\"' in (render_cockpit.results[1].content | b64decode)"
           - "'start_cmd, value: \"/etc/ly/hyperlab-startup.sh\"' in (render_cockpit.results[1].content | b64decode)"
           - "'src: \"wallpapers/' in (render_cockpit.results[1].content | b64decode)"
           - "'dest: \"/usr/share/backgrounds/privatestack/public/' in (render_cockpit.results[1].content | b64decode)"

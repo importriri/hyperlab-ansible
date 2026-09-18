@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Linux virtual-terminal OSC palette. Ly runs this before taking control of the
-# TTY, so the outer screen, animation and login box share one HyperLab palette.
-printf '\033]P0{{ host_desktop_sway_ly_palettes[desktop_palette].bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P1{{ host_desktop_sway_ly_palettes[desktop_palette].error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P2{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P3{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P4{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P5{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P6{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P7{{ host_desktop_sway_ly_palettes[desktop_palette].fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P8{{ host_desktop_sway_ly_palettes[desktop_palette].error_bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]P9{{ host_desktop_sway_ly_palettes[desktop_palette].error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PA{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PB{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PC{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PD{{ host_desktop_sway_ly_palettes[desktop_palette].border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PE{{ host_desktop_sway_ly_palettes[desktop_palette].accent2 | regex_replace("^0x[0-9A-F]{2}", "") }}'
-printf '\033]PF{{ host_desktop_sway_ly_palettes[desktop_palette].fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+# HyperLab // Gate owns a stable virtual-terminal palette independently from
+# the runtime desktop palette.
+printf '\033]P0{{ host_desktop_sway_ly_gate_theme.bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P1{{ host_desktop_sway_ly_gate_theme.error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P2{{ host_desktop_sway_ly_gate_theme.matrix_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P3{{ host_desktop_sway_ly_gate_theme.border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P4{{ host_desktop_sway_ly_gate_theme.matrix_head_col | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P5{{ host_desktop_sway_ly_gate_theme.border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P6{{ host_desktop_sway_ly_gate_theme.matrix_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P7{{ host_desktop_sway_ly_gate_theme.fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P8{{ host_desktop_sway_ly_gate_theme.error_bg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]P9{{ host_desktop_sway_ly_gate_theme.error_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PA{{ host_desktop_sway_ly_gate_theme.border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PB{{ host_desktop_sway_ly_gate_theme.matrix_head_col | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PC{{ host_desktop_sway_ly_gate_theme.matrix_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PD{{ host_desktop_sway_ly_gate_theme.border_fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PE{{ host_desktop_sway_ly_gate_theme.matrix_head_col | regex_replace("^0x[0-9A-F]{2}", "") }}'
+printf '\033]PF{{ host_desktop_sway_ly_gate_theme.fg | regex_replace("^0x[0-9A-F]{2}", "") }}'
 printf '\033[2J\033[H'

@@ -99,6 +99,25 @@ A physical Sway → Hyprland → Sway round-trip passed managed environment,
 target ownership, teardown, helper and IPC checks. The real closeout re-apply
 was idempotent at `changed=0`.
 
-Sway remains the recovery compositor. Quickshell and the final Ly visual theme
-remain later presentation gates. Detailed evidence is recorded in
-`host-hyprland-session-lifecycle-acceptance-2026-09-18.md`.
+Sway remains the recovery compositor. Detailed session-lifecycle evidence is
+recorded in
+[`host-hyprland-session-lifecycle-acceptance-2026-09-18.md`](host-hyprland-session-lifecycle-acceptance-2026-09-18.md).
+
+## HyperLab Gate
+
+The Nitro host login surface now has a dedicated HyperLab identity rather than
+following the selected Green, Violet, Blue or Red desktop palette. Ly renders a
+near-black Gate with a crimson Matrix animation, cool neutral text and the
+`HyperLab Gate` login box. The Matrix frame delay is 25 ms after physical visual
+tuning on the Nitro host.
+
+The Gate changes presentation only. Session provenance, authentication,
+compositor ownership and the curated `HyperLab Hyprland` / `HyperLab Sway`
+catalog remain owned by the session-lifecycle contract.
+
+The Gate was applied twice on the Nitro host with the second pass at
+`changed=0`, then exercised through a real logout and return to managed Sway.
+Detailed evidence and the validation-harness note are recorded in
+[`host-ly-gate-acceptance-2026-09-18.md`](host-ly-gate-acceptance-2026-09-18.md).
+
+Quickshell remains a later presentation gate.

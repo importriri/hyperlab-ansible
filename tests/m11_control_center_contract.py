@@ -413,9 +413,11 @@ def main():
                 f"{rofi_path} contains a stale hard-coded Violet surface")
 
     for ly_marker in (
-        'animation, value: "colormix"',
+        'animation, value: "matrix"',
+        "cmatrix_fg",
+        "cmatrix_head_col",
+        "host_desktop_sway_ly_gate_theme",
         'bigclock, value: "en"',
-        'initial_info_text, value: "HyperLab secure console"',
         'start_cmd, value: "/etc/ly/hyperlab-startup.sh"',
         "ly-hyperlab-startup.sh.j2",
     ):
@@ -423,6 +425,9 @@ def main():
     ly_startup = text("roles/host_desktop_sway/templates/ly-hyperlab-startup.sh.j2")
     require("\\033]P0" in ly_startup and "\\033]PF" in ly_startup,
             "Ly virtual-terminal palette hook is incomplete")
+    require("host_desktop_sway_ly_gate_theme" in ly_startup and
+            "desktop_palette" not in ly_startup,
+            "Ly virtual-terminal palette is not dedicated to HyperLab Gate")
 
     require("set $filemanager nemo" in sway,
             "Nemo is not the canonical host file manager")
