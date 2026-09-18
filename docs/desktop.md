@@ -74,3 +74,24 @@ The structural contract checks the Layer Shell boundary, surface sizes, routing,
 left/top attachment, palette integration and dead-helper removal. The Nitro gate
 still has to confirm the result visually and run the desktop role twice with the
 second pass at `changed=0`.
+
+## Host Hyprland migration
+
+The first controlled physical-host Hyprland launch passed on the Nitro
+validation host on 2026-09-18. The launch used a dedicated TTY while the
+established Sway session remained available as the recovery surface.
+
+The internal `eDP-1` panel was acquired through the Intel `i915` host GPU at
+1920×1080 and approximately 144 Hz. The NVIDIA GPU remained on the VFIO
+boundary. Hyprland exited cleanly and Sway IPC remained functional after
+recovery.
+
+The recovery bridge retained a `WAYLAND_DISPLAY=wayland-2` value even though
+the active compositor adapter resolved Sway and no Hyprland instance remained.
+Session-environment restoration is therefore a required part of the next
+session-lifecycle milestone.
+
+This acceptance does not change the default login session. Ly activation,
+daemon lifecycle integration and the Phase 2 Quickshell shell remain separate
+gates. Detailed evidence is recorded in
+`host-hyprland-first-launch-acceptance-2026-09-18.md`.
