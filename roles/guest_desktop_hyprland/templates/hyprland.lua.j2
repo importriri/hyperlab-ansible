@@ -3,7 +3,9 @@
 
 require("theme")
 
-local main_mod = "SUPER"
+-- Guest compositor namespace is deliberately different from the host.
+-- Host = SUPER; guest = ALT. Looking Glass keeps RIGHTCTRL for transport escape.
+local main_mod = "ALT"
 
 {% if guest_desktop_hyprland_headless_monitor %}
 hl.monitor({
@@ -186,14 +188,14 @@ hl.bind(
 )
 
 hl.bind(
-    main_mod .. " + ALT + T",
+    main_mod .. " + SHIFT + T",
     hl.dsp.exec_cmd(
         "privatestack-guest-theme next"
     )
 )
 
 hl.bind(
-    main_mod .. " + ALT + W",
+    main_mod .. " + SHIFT + W",
     hl.dsp.exec_cmd(
         "privatestack-guest-theme wallpaper-next"
     )
@@ -326,7 +328,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioRaiseVolume",
+    main_mod .. " + XF86AudioRaiseVolume",
     hl.dsp.exec_cmd(
         "wpctl set-volume -l 1 "
         .. "@DEFAULT_AUDIO_SINK@ 5%+"
@@ -338,7 +340,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioLowerVolume",
+    main_mod .. " + XF86AudioLowerVolume",
     hl.dsp.exec_cmd(
         "wpctl set-volume "
         .. "@DEFAULT_AUDIO_SINK@ 5%-"
@@ -350,7 +352,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioMute",
+    main_mod .. " + XF86AudioMute",
     hl.dsp.exec_cmd(
         "wpctl set-mute "
         .. "@DEFAULT_AUDIO_SINK@ toggle"
@@ -361,7 +363,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioPlay",
+    main_mod .. " + XF86AudioPlay",
     hl.dsp.exec_cmd("playerctl play-pause"),
     {
         locked = true,
@@ -369,7 +371,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioNext",
+    main_mod .. " + XF86AudioNext",
     hl.dsp.exec_cmd("playerctl next"),
     {
         locked = true,
@@ -377,7 +379,7 @@ hl.bind(
 )
 
 hl.bind(
-    "XF86AudioPrev",
+    main_mod .. " + XF86AudioPrev",
     hl.dsp.exec_cmd("playerctl previous"),
     {
         locked = true,

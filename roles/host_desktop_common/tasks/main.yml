@@ -44,6 +44,54 @@
         not
         host_desktop_common_shell_stage
         .compositor_specific_imports_allowed
+      - >-
+        host_desktop_common_input_security.host_primary_modifier
+        == 'SUPER'
+      - >-
+        host_desktop_common_input_security.guest_primary_modifier
+        == 'ALT'
+      - host_desktop_common_input_security.modifiers_must_differ
+      - >-
+        host_desktop_common_input_security.host_primary_modifier
+        != host_desktop_common_input_security.guest_primary_modifier
+      - >-
+        host_desktop_common_input_security.looking_glass_escape_key
+        == 'KEY_RIGHTCTRL'
+      - >-
+        host_desktop_common_input_security.guest_exposure_default
+        == 'deny'
+      - >-
+        host_desktop_common_input_security.guest_allowed_exposure
+        == ['guest-local', 'transport-safe']
+      - >-
+        host_desktop_common_input_security.guest_forbidden_exposure
+        ==
+        [
+          'host-only',
+          'privileged',
+          'recovery-sensitive',
+          'hypervisor-internal'
+        ]
+      - >-
+        not
+        host_desktop_common_input_security
+        .guest_may_receive_host_inventory
+      - >-
+        not
+        host_desktop_common_input_security
+        .guest_may_receive_other_domain_inventory
+      - >-
+        not
+        host_desktop_common_input_security
+        .guest_may_receive_host_paths
+      - >-
+        not
+        host_desktop_common_input_security
+        .guest_may_receive_host_network_topology
+      - >-
+        not
+        host_desktop_common_input_security
+        .guest_may_receive_hypervisor_control_routes
     fail_msg: >-
       HyperLab must remain one compositor-independent desktop product.
       Hyprland is preferred and Sway is the recovery compositor, but trust,

@@ -101,3 +101,28 @@ host_desktop_common_shell_stage:
   waybar_fallback_required: true
   gtk_surface_fallback_required: true
   compositor_specific_imports_allowed: false
+
+# Keyboard ownership is a security boundary. Host and guest compositor
+# namespaces are deliberately disjoint so focus/capture mistakes cannot turn
+# one product shortcut into an unintended action on the other side.
+host_desktop_common_input_security:
+  host_primary_modifier: SUPER
+  guest_primary_modifier: ALT
+  modifiers_must_differ: true
+  looking_glass_escape_key: KEY_RIGHTCTRL
+
+  guest_exposure_default: deny
+  guest_allowed_exposure:
+    - guest-local
+    - transport-safe
+  guest_forbidden_exposure:
+    - host-only
+    - privileged
+    - recovery-sensitive
+    - hypervisor-internal
+
+  guest_may_receive_host_inventory: false
+  guest_may_receive_other_domain_inventory: false
+  guest_may_receive_host_paths: false
+  guest_may_receive_host_network_topology: false
+  guest_may_receive_hypervisor_control_routes: false

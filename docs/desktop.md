@@ -159,3 +159,16 @@ validation under both managed Hyprland and managed Sway sessions.
 No placeholder control is allowed to impersonate a working HyperLab action.
 Operational controls move only when they are wired to the existing reviewed
 backend authority.
+
+## Keybinding security boundary
+
+Host and guest compositor shortcuts use deliberately different namespaces:
+`SUPER` belongs to the managed host desktop and `ALT` belongs to managed Linux
+guests. Looking Glass keeps `RightCtrl` as its transport escape key.
+
+This is a defence-in-depth rule in addition to captured-input isolation.
+Guest-facing cheatsheets are complete only inside their authorized scope and
+must never expose the host or hypervisor control plane.
+
+See [`keybinding-security.md`](keybinding-security.md) for the binding,
+collision and information-disclosure contract.
