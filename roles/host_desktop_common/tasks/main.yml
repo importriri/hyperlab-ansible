@@ -29,10 +29,105 @@
       - >-
         host_desktop_common_trust_contract
         .dirty_seamless_window_requires_host_badge
+      - host_desktop_common_shell_stage.implementation == 'quickshell'
+      - host_desktop_common_shell_stage.config_name == 'hyperlab'
+      - >-
+        host_desktop_common_shell_stage.config_root
+        == '/etc/xdg/quickshell/hyperlab'
+      - host_desktop_common_shell_stage.package == 'quickshell'
+      - host_desktop_common_shell_stage.reviewed_api_series == '0.3'
+      - not host_desktop_common_shell_stage.runtime_enabled
+      - not host_desktop_common_shell_stage.replacement_enabled
+      - host_desktop_common_shell_stage.waybar_fallback_required
+      - host_desktop_common_shell_stage.gtk_surface_fallback_required
+      - >-
+        not
+        host_desktop_common_shell_stage
+        .compositor_specific_imports_allowed
     fail_msg: >-
       HyperLab must remain one compositor-independent desktop product.
       Hyprland is preferred and Sway is the recovery compositor, but trust,
       themes, shell surfaces and product behavior must remain equivalent.
+
+- name: Install the reviewed shared Quickshell runtime
+  community.general.pacman:
+    name: "{{ host_desktop_common_shell_stage.package }}"
+    state: present
+
+- name: Read package facts after shared shell runtime installation
+  ansible.builtin.package_facts:
+    manager: auto
+  when: not ansible_check_mode
+
+- name: Verify the reviewed Quickshell API series
+  ansible.builtin.assert:
+    that:
+      - >-
+        host_desktop_common_shell_stage.package
+        in ansible_facts.packages
+      - >-
+        ansible_facts.packages[
+          host_desktop_common_shell_stage.package
+        ][0].version
+        is match('^0\\.3\\.')
+    fail_msg: >-
+      HyperLab Phase 2A supports the reviewed Quickshell 0.3 API series.
+      A different upstream API series requires contract review before the
+      shared shell can be installed.
+  when: not ansible_check_mode
+
+- name: Create the shared HyperLab Quickshell config directory
+  ansible.builtin.file:
+    path: "{{ host_desktop_common_shell_stage.config_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the non-active shared HyperLab Quickshell source
+  ansible.builtin.copy:
+    src: quickshell/hyperlab/
+    dest: "{{ host_desktop_common_shell_stage.config_root }}/"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Inspect installed shared HyperLab Quickshell files
+  ansible.builtin.stat:
+    path: "{{ host_desktop_common_shell_stage.config_root }}/{{ item }}"
+    follow: false
+  register: host_desktop_common_shell_installed
+  loop:
+    - shell.qml
+    - HyperLabBar.qml
+  when: not ansible_check_mode
+
+- name: Verify installed shared HyperLab Quickshell files
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+      - item.stat.mode == '0644'
+    fail_msg: >-
+      Installed HyperLab shared shell source has invalid ownership or mode.
+  loop: "{{ host_desktop_common_shell_installed.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not ansible_check_mode
+
+- name: Preserve recovery surfaces while Quickshell remains non-active
+  ansible.builtin.assert:
+    that:
+      - not host_desktop_common_shell_stage.runtime_enabled
+      - not host_desktop_common_shell_stage.replacement_enabled
+      - host_desktop_common_shell_stage.waybar_fallback_required
+      - host_desktop_common_shell_stage.gtk_surface_fallback_required
+    fail_msg: >-
+      Phase 2A may stage Quickshell only. Waybar and the existing GTK
+      HyperLab surfaces remain authoritative until physical compositor parity
+      is proven.
 
 - name: Install the shared host compositor adapter
   ansible.builtin.copy:

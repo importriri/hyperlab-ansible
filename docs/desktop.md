@@ -140,3 +140,22 @@ function.
 Quickshell is the shared HyperLab Shell target for both compositors. It is not a
 Hyprland-specific shell and it does not become an operational authority;
 `hyperlabctl`, reviewed specifications and contracts remain authoritative.
+
+
+### Shared shell migration
+
+Phase 2A stages the first compositor-neutral Quickshell source under
+`/etc/xdg/quickshell/hyperlab`.
+
+The stage is deliberately non-active. It installs the reviewed Quickshell 0.3
+runtime and a generic 37-pixel Layer Shell foundation, but does not launch it,
+replace Waybar, replace the resident GTK HyperLab surfaces, or introduce
+compositor-specific imports.
+
+Waybar and the GTK drawer/Control Center remain the authoritative live surfaces
+until the Quickshell implementation reaches functional parity and passes real
+validation under both managed Hyprland and managed Sway sessions.
+
+No placeholder control is allowed to impersonate a working HyperLab action.
+Operational controls move only when they are wired to the existing reviewed
+backend authority.

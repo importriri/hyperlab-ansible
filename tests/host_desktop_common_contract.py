@@ -66,6 +66,34 @@ def main() -> int:
         },
         "shared HyperLab Shell contract changed",
     )
+
+    stage = shared["host_desktop_common_shell_stage"]
+
+    require(
+        stage["implementation"] == "quickshell"
+        and stage["config_name"] == "hyperlab"
+        and stage["config_root"]
+        == "/etc/xdg/quickshell/hyperlab",
+        "shared shell deployment identity changed",
+    )
+    require(
+        stage["reviewed_api_series"] == "0.3",
+        "reviewed Quickshell API series changed",
+    )
+    require(
+        stage["runtime_enabled"] is False
+        and stage["replacement_enabled"] is False,
+        "Phase 2A unexpectedly activates the shared shell",
+    )
+    require(
+        stage["waybar_fallback_required"] is True
+        and stage["gtk_surface_fallback_required"] is True,
+        "Phase 2A recovery surfaces became optional",
+    )
+    require(
+        stage["compositor_specific_imports_allowed"] is False,
+        "shared shell may import a compositor-specific API",
+    )
     require(
         product["shared_surfaces"]
         == [

@@ -87,3 +87,17 @@ host_desktop_common_required_parity:
   - wallpaper-daemon
   - lock
   - idle-dpms
+
+# Phase 2A installs the shared HyperLab Shell source and its reviewed runtime,
+# but deliberately does not launch it or replace the proven recovery surfaces.
+host_desktop_common_shell_stage:
+  implementation: quickshell
+  config_name: hyperlab
+  config_root: /etc/xdg/quickshell/hyperlab
+  package: quickshell
+  reviewed_api_series: "0.3"
+  runtime_enabled: false
+  replacement_enabled: false
+  waybar_fallback_required: true
+  gtk_surface_fallback_required: true
+  compositor_specific_imports_allowed: false
