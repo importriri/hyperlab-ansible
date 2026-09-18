@@ -417,6 +417,11 @@ print(
                 run_swaymsg exit
                 ;;
             hyprland)
+                if [[ ${HYPERLAB_SESSION_LIFECYCLE_MANAGED:-0} == 1 ]]; then
+                    systemctl --user stop \
+                        hyperlab-hyprland-session.target
+                fi
+
                 run_hyprshutdown
                 ;;
         esac

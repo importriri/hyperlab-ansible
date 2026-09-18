@@ -86,12 +86,19 @@ The internal `eDP-1` panel was acquired through the Intel `i915` host GPU at
 boundary. Hyprland exited cleanly and Sway IPC remained functional after
 recovery.
 
-The recovery bridge retained a `WAYLAND_DISPLAY=wayland-2` value even though
-the active compositor adapter resolved Sway and no Hyprland instance remained.
-Session-environment restoration is therefore a required part of the next
-session-lifecycle milestone.
+The follow-up session-lifecycle milestone is accepted on the Nitro host.
+HyperLab now owns compositor-specific user targets for Hyprland and Sway,
+publishes and clears compositor environment through the lifecycle wrapper, and
+publishes the IPC socket belonging to the exact active Sway PID.
 
-This acceptance does not change the default login session. Ly activation,
-daemon lifecycle integration and the Phase 2 Quickshell shell remain separate
-gates. Detailed evidence is recorded in
-`host-hyprland-first-launch-acceptance-2026-09-18.md`.
+Ly exposes only the managed `HyperLab Hyprland` and `HyperLab Sway` entries.
+Native package session files remain installed but cannot bypass the HyperLab
+wrapper from Ly.
+
+A physical Sway → Hyprland → Sway round-trip passed managed environment,
+target ownership, teardown, helper and IPC checks. The real closeout re-apply
+was idempotent at `changed=0`.
+
+Sway remains the recovery compositor. Quickshell and the final Ly visual theme
+remain later presentation gates. Detailed evidence is recorded in
+`host-hyprland-session-lifecycle-acceptance-2026-09-18.md`.

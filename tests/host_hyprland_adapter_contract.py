@@ -80,6 +80,15 @@ def run_adapter(
     )
 
     env = os.environ.copy()
+
+    # Contract cases must not inherit the lifecycle state of the real
+    # desktop running the test suite. Managed-mode coverage opts in
+    # explicitly through extra_env below.
+    env.pop(
+        "HYPERLAB_SESSION_LIFECYCLE_MANAGED",
+        None,
+    )
+
     env["PATH"] = (
         f"{bin_dir}:{env['PATH']}"
     )
@@ -184,6 +193,10 @@ fi
 
         fake_command(
             bin_dir / "hyprshutdown"
+        )
+
+        fake_command(
+            bin_dir / "systemctl"
         )
 
         log = root / "commands.log"
@@ -587,6 +600,39 @@ fi
             "hyprshutdown",
             bin_dir,
             log,
+        )
+
+        result, recorded = run_adapter(
+            "hyprland",
+            ["session-exit"],
+            bin_dir,
+            log,
+            {
+                "HYPERLAB_SESSION_LIFECYCLE_MANAGED": "1",
+            },
+        )
+
+        require(
+            result.returncode == 0,
+            (
+                "managed Hyprland session-exit "
+                f"returned {result.returncode}: "
+                f"{result.stderr}"
+            ),
+        )
+
+        require(
+            recorded
+            == (
+                "systemctl|--user|stop|"
+                "hyperlab-hyprland-session.target\n"
+                "hyprshutdown\n"
+            ),
+            (
+                "managed Hyprland teardown must "
+                "stop session helpers before "
+                "hyprshutdown"
+            ),
         )
 
         result, recorded = run_adapter(

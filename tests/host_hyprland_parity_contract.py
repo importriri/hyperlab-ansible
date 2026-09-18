@@ -200,7 +200,6 @@ def main() -> int:
     )
 
     forbidden_task_modules = (
-        "ansible.builtin.lineinfile:",
         "ansible.builtin.systemd_service:",
         "ansible.builtin.service:",
         "ansible.builtin.command:",
@@ -267,6 +266,90 @@ def main() -> int:
         for item in parsed_tasks
         if isinstance(item, dict)
     }
+
+    # LY_LIFECYCLE_POLICY_CONTRACT_V1
+    lineinfile_tasks = [
+        item
+        for item in parsed_tasks
+        if isinstance(item, dict)
+        and "ansible.builtin.lineinfile" in item
+    ]
+
+    require(
+        len(lineinfile_tasks) == 1,
+        (
+            "session lifecycle must contain exactly one "
+            "reviewed lineinfile mutation"
+        ),
+    )
+
+    ly_policy_task = lineinfile_tasks[0]
+
+    require(
+        ly_policy_task.get("name")
+        == (
+            "Restrict Ly discovery to the managed "
+            "HyperLab session catalog"
+        ),
+        "unexpected lineinfile mutation entered the role",
+    )
+
+    require(
+        ly_policy_task.get("when")
+        == "host_desktop_hyprland_session_lifecycle_enabled",
+        "Ly discovery policy is not lifecycle-gated",
+    )
+
+    ly_policy = ly_policy_task["ansible.builtin.lineinfile"]
+
+    require(
+        ly_policy.get("path") == "/etc/ly/config.ini",
+        "Ly discovery policy targets an unexpected file",
+    )
+
+    require(
+        ly_policy.get("regexp")
+        == "^{{ item.key | regex_escape }}\\s*=",
+        "Ly discovery policy lost targeted replacement",
+    )
+
+    require(
+        ly_policy.get("line")
+        == "{{ item.key }} = {{ item.value }}",
+        "Ly discovery policy line rendering changed",
+    )
+
+    require(
+        ly_policy.get("backup") is False,
+        "Ly discovery policy unexpectedly creates backups",
+    )
+
+    require(
+        ly_policy_task.get("loop")
+        == [
+            {
+                "key": "custom_sessions",
+                "value": "/etc/ly/hyperlab-sessions",
+            },
+            {
+                "key": "waylandsessions",
+                "value": "null",
+            },
+            {
+                "key": "xsessions",
+                "value": "null",
+            },
+            {
+                "key": "xinitrc",
+                "value": "null",
+            },
+            {
+                "key": "shell",
+                "value": "false",
+            },
+        ],
+        "Ly discovery policy set changed",
+    )
 
     require(
         live_verification_names <= parsed_by_name.keys(),

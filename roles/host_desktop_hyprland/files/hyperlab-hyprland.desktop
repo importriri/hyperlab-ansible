@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=HyperLab Hyprland
+Comment=HyperLab primary managed host session
+Exec=/usr/local/bin/privatestack-session-lifecycle launch hyprland
+TryExec=/usr/local/bin/privatestack-session-lifecycle
+Type=Application
+DesktopNames=Hyprland

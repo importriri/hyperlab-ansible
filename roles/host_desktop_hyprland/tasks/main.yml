@@ -255,3 +255,183 @@
   loop_control:
     label: "{{ item.item }}"
   when: not ansible_check_mode
+
+- name: Validate the optional Host Hyprland session lifecycle boundary
+  ansible.builtin.assert:
+    that:
+      - not host_desktop_hyprland_session_activation_enabled
+      - not host_desktop_hyprland_manage_ly
+      - host_desktop_hyprland_preserve_sway_fallback
+      - host_desktop_hyprland_preserve_waybar_fallback
+      - >-
+        host_desktop_hyprland_session_entries
+        == ['hyperlab-hyprland.desktop', 'hyperlab-sway.desktop']
+      - >-
+        host_desktop_hyprland_session_services
+        ==
+        [
+          'hyperlab-hypridle.service',
+          'hyperlab-hyprpaper.service',
+          'hyperlab-mako.service'
+        ]
+    fail_msg: >-
+      Lifecycle staging may add selectable sessions but may not select a Ly
+      default, remove Sway or alter the reviewed helper set.
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Inspect Host session lifecycle prerequisites
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  register: host_desktop_hyprland_session_prerequisites
+  loop:
+    - /usr/lib/systemd/user/graphical-session.target
+    - /usr/lib/systemd/user/hyprpolkitagent.service
+    - /usr/bin/start-hyprland
+    - /usr/bin/sway
+    - /usr/bin/dbus-update-activation-environment
+    - /usr/bin/jq
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Require Host session lifecycle prerequisites
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - item.stat.isreg | default(false)
+    fail_msg: >-
+      Required lifecycle artifact {{ item.item }} is missing.
+    quiet: true
+  loop: "{{ host_desktop_hyprland_session_prerequisites.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install the shared session controller for lifecycle staging
+  ansible.builtin.copy:
+    src: >-
+      {{ role_path }}/../host_desktop_common/files/privatestack-session-lifecycle.sh
+    dest: /usr/local/bin/privatestack-session-lifecycle
+    owner: root
+    group: root
+    mode: "0755"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install selectable HyperLab host sessions
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/share/wayland-sessions/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ host_desktop_hyprland_session_entries }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Create the private HyperLab Ly session catalog
+  ansible.builtin.file:
+    path: /etc/ly/hyperlab-sessions
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install only managed HyperLab sessions into the Ly catalog
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/ly/hyperlab-sessions/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ host_desktop_hyprland_session_entries }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Restrict Ly discovery to the managed HyperLab session catalog
+  ansible.builtin.lineinfile:
+    path: /etc/ly/config.ini
+    regexp: '^{{ item.key | regex_escape }}\s*='
+    line: "{{ item.key }} = {{ item.value }}"
+    backup: false
+  loop:
+    - { key: custom_sessions, value: "/etc/ly/hyperlab-sessions" }
+    - { key: waylandsessions, value: "null" }
+    - { key: xsessions, value: "null" }
+    - { key: xinitrc, value: "null" }
+    - { key: shell, value: "false" }
+  loop_control:
+    label: "{{ item.key }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install the HyperLab Hyprland session target
+  ansible.builtin.copy:
+    src: hyperlab-hyprland-session.target
+    dest: /etc/systemd/user/hyperlab-hyprland-session.target
+    owner: root
+    group: root
+    mode: "0644"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install the HyperLab Sway session target
+  ansible.builtin.copy:
+    src: hyperlab-sway-session.target
+    dest: /etc/systemd/user/hyperlab-sway-session.target
+    owner: root
+    group: root
+    mode: "0644"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Install HyperLab Hyprland lifecycle services
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/user/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ host_desktop_hyprland_session_services }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Create HyperLab Hyprland target wants directory
+  ansible.builtin.file:
+    path: /etc/systemd/user/hyperlab-hyprland-session.target.wants
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Couple HyperLab helpers to the managed Hyprland target
+  ansible.builtin.file:
+    src: "/etc/systemd/user/{{ item }}"
+    dest: >-
+      /etc/systemd/user/hyperlab-hyprland-session.target.wants/{{ item }}
+    state: link
+    force: true
+  loop: "{{ host_desktop_hyprland_session_services }}"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Create hyprpolkitagent lifecycle drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/user/hyprpolkitagent.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Bind package polkit agent to HyperLab Hyprland lifecycle
+  ansible.builtin.copy:
+    src: hyprpolkitagent-partof.conf
+    dest: >-
+      /etc/systemd/user/hyprpolkitagent.service.d/50-hyperlab-session.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: host_desktop_hyprland_session_lifecycle_enabled
+
+- name: Couple package polkit agent to managed Hyprland target
+  ansible.builtin.file:
+    src: /usr/lib/systemd/user/hyprpolkitagent.service
+    dest: >-
+      /etc/systemd/user/hyperlab-hyprland-session.target.wants/hyprpolkitagent.service
+    state: link
+    force: true
+  when: host_desktop_hyprland_session_lifecycle_enabled

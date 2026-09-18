@@ -1,0 +1,10 @@
+[Unit]
+Description=HyperLab Hyprland wallpaper daemon
+PartOf=hyperlab-hyprland-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hyprpaper
+Restart=on-failure
+RestartSec=1

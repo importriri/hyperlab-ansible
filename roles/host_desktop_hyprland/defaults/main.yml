@@ -8,6 +8,18 @@ host_desktop_hyprland_runtime_enabled: false
 host_desktop_hyprland_session_activation_enabled: false
 host_desktop_hyprland_manage_ly: false
 
+# Session lifecycle staging is explicit and remains off by default.
+host_desktop_hyprland_session_lifecycle_enabled: false
+
+host_desktop_hyprland_session_entries:
+  - hyperlab-hyprland.desktop
+  - hyperlab-sway.desktop
+
+host_desktop_hyprland_session_services:
+  - hyperlab-hypridle.service
+  - hyperlab-hyprpaper.service
+  - hyperlab-mako.service
+
 host_desktop_hyprland_user_home: "/home/{{ admin_user }}"
 host_desktop_hyprland_config_dir: >-
   {{ host_desktop_hyprland_user_home }}/.config/hypr

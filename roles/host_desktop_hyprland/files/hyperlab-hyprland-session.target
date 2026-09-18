@@ -1,0 +1,5 @@
+[Unit]
+Description=HyperLab managed Hyprland session helpers
+Requires=graphical-session.target
+After=graphical-session.target
+PartOf=graphical-session.target

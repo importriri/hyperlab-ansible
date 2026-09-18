@@ -7,6 +7,14 @@
     group: root
     mode: "0755"
 
+- name: Install the shared host session lifecycle controller
+  ansible.builtin.copy:
+    src: privatestack-session-lifecycle.sh
+    dest: /usr/local/bin/privatestack-session-lifecycle
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Record that the host_desktop_common brick landed
   ansible.builtin.include_role:
     name: brick_guard
