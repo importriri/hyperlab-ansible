@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Normal-user client for the HyperLab Nitro runtime broker."""
 from __future__ import annotations
 
 import argparse
@@ -17,31 +16,50 @@ def request(payload: dict[str, Any]) -> dict[str, Any]:
 
     conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     conn.settimeout(3.0)
+
     try:
         conn.connect(SOCKET_PATH)
         conn.sendall(wire)
+
         chunks = bytearray()
+
         while len(chunks) <= MAX_RESPONSE_BYTES:
-            part = conn.recv(min(2048, MAX_RESPONSE_BYTES + 1 - len(chunks)))
+            part = conn.recv(
+                min(2048, MAX_RESPONSE_BYTES + 1 - len(chunks))
+            )
+
             if not part:
                 break
+
             chunks.extend(part)
+
             if b"\n" in part:
                 break
     finally:
         conn.close()
 
     if not chunks or len(chunks) > MAX_RESPONSE_BYTES:
-        raise RuntimeError("Nitro broker returned an empty or oversized response")
+        raise RuntimeError("invalid broker response")
 
-    first_line, _separator, trailing = bytes(chunks).partition(b"\n")
+    line, _, trailing = bytes(chunks).partition(b"\n")
+
     if trailing.strip():
-        raise RuntimeError("Nitro broker returned more than one response")
+        raise RuntimeError("broker returned multiple responses")
 
-    response = json.loads(first_line.decode("utf-8"))
+    response = json.loads(line.decode())
+
     if not isinstance(response, dict) or type(response.get("ok")) is not bool:
-        raise RuntimeError("Nitro broker returned an invalid response")
+        raise RuntimeError("invalid broker response")
+
     return response
+
+
+def add_scope(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--scope",
+        choices=("runtime", "persistent"),
+        default="runtime",
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,9 +71,11 @@ def parse_args() -> argparse.Namespace:
     fan = sub.add_parser("fan")
     fan.add_argument("cpu", type=int)
     fan.add_argument("gpu", type=int)
+    add_scope(fan)
 
     battery = sub.add_parser("battery")
     battery.add_argument("state", choices=("on", "off"))
+    add_scope(battery)
 
     rgb = sub.add_parser("rgb")
     rgb.add_argument("brightness", type=int)
@@ -63,6 +83,13 @@ def parse_args() -> argparse.Namespace:
     rgb.add_argument("zone2")
     rgb.add_argument("zone3")
     rgb.add_argument("zone4")
+    add_scope(rgb)
+
+    clear = sub.add_parser("clear")
+    clear.add_argument(
+        "target",
+        choices=("all", "fan", "battery", "rgb"),
+    )
 
     return parser.parse_args()
 
@@ -70,17 +97,42 @@ def parse_args() -> argparse.Namespace:
 def payload(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "status":
         return {"op": "status"}
+
     if args.command == "fan":
-        return {"op": "set_fan", "cpu": args.cpu, "gpu": args.gpu}
+        return {
+            "op": "set_fan",
+            "cpu": args.cpu,
+            "gpu": args.gpu,
+            "scope": args.scope,
+        }
+
     if args.command == "battery":
-        return {"op": "set_battery_limiter", "enabled": args.state == "on"}
+        return {
+            "op": "set_battery_limiter",
+            "enabled": args.state == "on",
+            "scope": args.scope,
+        }
+
     if args.command == "rgb":
         return {
             "op": "set_rgb",
             "brightness": args.brightness,
-            "zones": [args.zone1, args.zone2, args.zone3, args.zone4],
+            "zones": [
+                args.zone1,
+                args.zone2,
+                args.zone3,
+                args.zone4,
+            ],
+            "scope": args.scope,
         }
-    raise AssertionError("unreachable command")
+
+    if args.command == "clear":
+        return {
+            "op": "clear_persistent",
+            "target": args.target,
+        }
+
+    raise AssertionError("unreachable")
 
 
 def main() -> int:

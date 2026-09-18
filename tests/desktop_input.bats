@@ -92,13 +92,21 @@ for name, profile in hardware.items():
     rendered_profiles[name] = rendered
     assert "xkb_layout it,us,ara" in rendered
 
-nitro_binding = (
-    "bindsym --no-repeat "
-    "--input-device=1:1:AT_Translated_Set_2_keyboard "
-    "XF86Presentation exec /usr/local/bin/privatestack-theme cycle"
-)
-assert rendered_profiles["nitro-3060"].count(nitro_binding) == 1
+assert "theme_cycle_binding" not in hardware["nitro-3060"]["desktop"]
+assert "XF86Presentation" not in rendered_profiles["nitro-3060"]
 assert "XF86Presentation" not in rendered_profiles["predator-3070"]
+
+sway = (root / "roles/host_desktop_sway/files/sway.config").read_text()
+assert (
+    "bindsym $mod+Shift+t exec /usr/local/bin/privatestack-theme cycle"
+    in sway
+)
+assert (
+    "bindcode --release 433 exec "
+    "/usr/local/bin/privatestack-hyperlab-domains "
+    "--surface overlay --section nitro"
+    in sway
+)
 PY
   [ "$status" -eq 0 ]
 }

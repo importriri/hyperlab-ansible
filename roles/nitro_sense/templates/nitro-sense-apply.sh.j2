@@ -15,6 +15,8 @@ led_effect_path={{ nitro_sense_led_effect_path | to_json }}
 led_per_zone_value={{ (nitro_sense_led_zone_colors | map('lower') | join(',') ~ ',' ~ nitro_sense_led_brightness_percent | string) | to_json }}
 led_effect_value={{ (nitro_sense_led_effect.mode | string ~ ',' ~ nitro_sense_led_effect.speed | string ~ ',' ~ nitro_sense_led_brightness_percent | string ~ ',' ~ nitro_sense_led_effect.direction | string ~ ',' ~ nitro_sense_led_effect.red | string ~ ',' ~ nitro_sense_led_effect.green | string ~ ',' ~ nitro_sense_led_effect.blue | string) | to_json }}
 
+persistent_state_path={{ nitro_sense_control_state_path | to_json }}
+
 fail_missing() {
     printf 'Required documented sysfs node is missing: %s\n' "$1" >&2
     exit 1
@@ -37,6 +39,106 @@ write_and_verify() {
         exit 1
     }
 }
+
+if [[ -e $persistent_state_path ]]; then
+    persistent_dump="$(
+        /usr/bin/python - "$persistent_state_path" <<'PY_STATE'
+import json
+import re
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+entry = path.lstat()
+
+if not stat.S_ISREG(entry.st_mode):
+    raise SystemExit("persistent Nitro state is not a regular file")
+if entry.st_uid != 0:
+    raise SystemExit("persistent Nitro state is not root-owned")
+if stat.S_IMODE(entry.st_mode) != 0o600:
+    raise SystemExit("persistent Nitro state must be mode 0600")
+
+data = json.loads(path.read_text())
+
+if not isinstance(data, dict) or data.get("version") != 1:
+    raise SystemExit("invalid persistent Nitro state")
+
+if set(data) - {"version", "fan", "battery_limiter", "per_zone"}:
+    raise SystemExit("unknown persistent Nitro state fields")
+
+fan = data.get("fan")
+if fan is not None:
+    parts = fan.split(",") if isinstance(fan, str) else []
+    if len(parts) != 2:
+        raise SystemExit("invalid persistent fan state")
+
+    cpu, gpu = [int(value) for value in parts]
+
+    if not (0 <= cpu <= 100 and 0 <= gpu <= 100):
+        raise SystemExit("invalid persistent fan state")
+
+    canonical = f"{cpu},{gpu}"
+
+    if fan != canonical:
+        raise SystemExit("non-canonical persistent fan state")
+
+    print(f"fan={canonical}")
+
+battery = data.get("battery_limiter")
+if battery is not None:
+    if type(battery) is not bool:
+        raise SystemExit("invalid persistent battery state")
+    print("battery=" + ("1" if battery else "0"))
+
+rgb = data.get("per_zone")
+if rgb is not None:
+    parts = rgb.split(",") if isinstance(rgb, str) else []
+
+    if len(parts) != 5:
+        raise SystemExit("invalid persistent RGB state")
+
+    if any(
+        re.fullmatch(r"[0-9a-fA-F]{6}", value) is None
+        for value in parts[:4]
+    ):
+        raise SystemExit("invalid persistent RGB colour")
+
+    brightness = int(parts[4])
+
+    if not 0 <= brightness <= 100:
+        raise SystemExit("invalid persistent RGB brightness")
+
+    canonical = (
+        ",".join(value.lower() for value in parts[:4])
+        + f",{brightness}"
+    )
+
+    print(f"rgb={canonical}")
+PY_STATE
+    )"
+
+    while IFS= read -r item; do
+        [[ -n $item ]] || continue
+
+        case $item in
+            fan=*)
+                fan_value=${item#fan=}
+                ;;
+            battery=*)
+                battery_limiter_value=${item#battery=}
+                ;;
+            rgb=*)
+                led_mode=per_zone
+                led_per_zone_value=${item#rgb=}
+                ;;
+            *)
+                printf 'Unknown persistent Nitro parser record: %s\n' "$item" >&2
+                exit 1
+                ;;
+        esac
+    done <<<"$persistent_dump"
+fi
 
 if [[ -f $profile_path && -f $profile_choices_path ]]; then
     tr ' ' '\n' <"$profile_choices_path" | grep -Fxq -- "$profile" || {

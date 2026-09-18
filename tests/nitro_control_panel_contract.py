@@ -19,8 +19,13 @@ for marker in (
     "def run_theme(",
     "def _nitro_set_theme(",
     "def _nitro_theme_card(",
+    "def _nitro_scope(",
+    "def _nitro_clear_persistent(",
     "def _build_nitro(",
     '"Nitro Control Board"',
+    '"Runtime / Persistent"',
+    '"Restore Ansible baseline"',
+    '"Persistent overrides: none"',
     '"Apply fan values"',
     '"Apply battery limiter"',
     '"Apply four-zone RGB"',
@@ -39,6 +44,14 @@ nitro_end = manager.index("    def _build_activity(", nitro_start)
 nitro = manager[nitro_start:nitro_end]
 
 assert "run_nitro_json(*args)" in nitro
+assert '["clear", "all"]' in nitro
+assert '"--scope"' in nitro
+assert "self._nitro_scope()" in nitro
+assert 'persistence = status.get("persistence")' in nitro
+assert 'saved = persistence.get("saved")' in nitro
+assert 'overrides = persistence.get("overrides")' in nitro
+assert '"Persistent overrides: %s"' in nitro
+assert "clear_overrides.set_sensitive(bool(overrides))" in nitro
 assert 'run_theme("set", theme)' in nitro
 assert 'run_theme("status")' in nitro
 assert 'capabilities.get("fan") is True' in nitro
@@ -58,4 +71,4 @@ theme_helper = (
 assert 'readonly themes=(green violet blue red)' in theme_helper
 assert 'set) set_theme "${2:-}"' in theme_helper
 
-print("Nitro Control Board v2 contract: OK")
+print("Nitro Control Board v3 persistence contract: OK")

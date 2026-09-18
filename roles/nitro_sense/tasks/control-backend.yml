@@ -84,7 +84,10 @@
         nitro_sense_control_status_data.status.capabilities.per_zone | bool ==
         (nitro_sense_dmi_product in nitro_sense_led_per_zone_models)
       - not nitro_sense_control_status_data.status.capabilities.effect | bool
-      - nitro_sense_control_status_data.status.persistence == 'runtime-only'
+      - nitro_sense_control_status_data.status.persistence.supported | bool
+      - nitro_sense_control_status_data.status.persistence.scope_default == 'runtime'
+      - nitro_sense_control_status_data.status.persistence.saved is mapping
+      - nitro_sense_control_status_data.status.persistence.overrides is sequence
     fail_msg: >-
       The Nitro runtime broker did not preserve the reviewed model,
       per-zone-only and runtime-only privilege boundary.

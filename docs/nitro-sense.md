@@ -123,6 +123,66 @@ Keyboard lighting is not forced by the normal settings helper merely because
 the model exposes RGB. RGB persistence belongs to an explicit control policy,
 not to detection.
 
+## Runtime and persistent operator controls
+
+The normal-user HyperLab Control Center talks only to the typed
+`/usr/local/bin/hyperlab-nitro-control` client. It does not use `sudo`,
+`pkexec`, caller-supplied sysfs paths or a generic root execution primitive.
+
+The Nitro control scope is explicit:
+
+- `Runtime` applies the selected fan, battery-limiter or static four-zone RGB
+  value to current hardware only. It does not create a machine override.
+- `Persistent` applies the value immediately and records a machine-local
+  override for the same control.
+- Ansible remains the declarative baseline. The GUI never rewrites repository
+  defaults.
+
+Persistent operator state is separate from Git policy and is stored in
+`/var/lib/hyperlab-nitro/persistent.json`. The root-owned broker keeps this file
+at mode `0600`.
+
+At boot, `nitro-sense-apply.service` starts from the Ansible baseline and then
+applies validated persistent overrides. Status reports current runtime values
+separately from saved persistent values.
+
+The same effective-policy reconciliation runs on every real Nitro Ansible run.
+A `Runtime` change is intentionally temporary: the next Ansible reconciliation
+starts from the declarative baseline again. A `Persistent` override survives
+that reconciliation and is applied on top of the baseline.
+
+`nitro-sense-apply` is the single authority for calculating baseline plus
+persistent overrides and verifies the resulting hardware readback itself.
+Subsequent role validation compares independent hardware readback with the
+broker's observation of that reconciled runtime instead of assuming that the
+pure baseline must always be live.
+
+`Restore Ansible baseline` removes saved overrides and returns declarative
+ownership to Ansible. Controls with a concrete Ansible-managed hardware value
+are restored immediately.
+
+RGB has an additional ownership boundary. The broker restores static RGB only
+when the Ansible baseline explicitly selects `nitro_sense_led_mode: per_zone`.
+When `nitro_sense_led_mode: disabled`, clearing an RGB override removes its
+persistent machine policy without writing a synthetic colour to the keyboard.
+The current live RGB value is left untouched because the declarative baseline
+explicitly does not own it.
+
+`clear all` therefore always restores the concrete fan and battery baselines,
+and restores static RGB only when that RGB baseline is actually managed.
+
+The restore operation is transactional. A failed hardware or state update must
+not silently leave a partially cleared policy.
+
+For the reviewed AN515-55, the current declared hardware baseline is fan
+`100,100` with the battery limiter enabled. RGB policy is currently `disabled`;
+`nitro_sense_led_zone_colors` and `nitro_sense_led_brightness_percent` become
+active baseline values only when static `per_zone` management is selected.
+
+Concrete baseline values and the RGB managed-policy flag reach the privileged
+broker only through the root-owned managed systemd unit. They are never
+supplied by the unprivileged client.
+
 ## RGB acceptance boundary
 
 Static AN515-55 RGB is hardware-validated for:

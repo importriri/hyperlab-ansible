@@ -39,6 +39,8 @@
       - nitro_sense_control_client == '/usr/local/bin/hyperlab-nitro-control'
       - nitro_sense_control_unit == '/etc/systemd/system/hyperlab-nitro-control.service'
       - nitro_sense_control_service == 'hyperlab-nitro-control.service'
+      - nitro_sense_control_state_dir == '/var/lib/hyperlab-nitro'
+      - nitro_sense_control_state_path == '/var/lib/hyperlab-nitro/persistent.json'
       - nitro_sense_control_rgb_min_interval_ms | int >= 100
       - nitro_sense_control_rgb_min_interval_ms | int <= 1000
       - nitro_sense_control_max_request_bytes | int >= 1024

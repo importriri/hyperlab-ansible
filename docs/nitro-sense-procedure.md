@@ -176,7 +176,39 @@ For the AN515-55 static path, hardware validation has already proved independent
 zone colors and brightness values `10`, `30`, `100`. Do not use those results to
 declare untested animated firmware effects supported.
 
-## 10. Reboot and persistence gate
+## 10. Exercise runtime and persistent operator controls
+
+Before the reboot proof, validate the normal operator path through the
+HyperLab Control Center or the typed client.
+
+Verify all of these properties:
+
+1. `Runtime` changes the live control without creating a persistent override.
+2. `Persistent` changes the live control and records the same saved value.
+3. status reports runtime and saved persistent values separately.
+4. the normal user performs these operations without `sudo` or `pkexec`.
+5. `Restore Ansible baseline` removes the saved override and immediately
+   restores controls that have a concrete Ansible-managed hardware baseline.
+   If Ansible RGB policy is `disabled`, clearing RGB returns policy ownership
+   to Ansible without synthesizing a colour write.
+6. restoring all controls always returns fan and battery limiter to their
+   declared baseline; static RGB is restored only when the Ansible baseline
+   explicitly manages `per_zone` RGB.
+
+The persistent state file is machine-local root-owned state, not repository
+configuration.
+
+A subsequent real Ansible run reconciles the effective policy before acceptance
+checks. Runtime-only drift is replaced by the Ansible baseline, while validated
+persistent overrides remain effective. The reconciliation task uses
+`changed_when: false`, so an already-converged real run can still satisfy the
+`changed=0` idempotence gate.
+
+A failed restore invalidates the acceptance run. Diagnose the exact broker or
+hardware failure instead of treating deletion of the JSON override alone as a
+successful baseline restore.
+
+## 11. Reboot and persistence gate
 
 After a controlled reboot, repeat the boot-argument check, module identity,
 build stamp, service, fan, battery and function-key checks.
@@ -184,7 +216,7 @@ build stamp, service, fan, battery and function-key checks.
 RGB persistence must match the explicit configured RGB policy. Detection of a
 four-zone keyboard alone must not cause a boot-time color write.
 
-## 11. Exercise rollback before publication
+## 12. Exercise rollback before publication
 
 ```bash
 ansible-playbook -K playbooks/nitro-sense.yml \
@@ -201,7 +233,7 @@ Any runtime fix after evidence collection invalidates the affected sequence.
 Freeze the exact candidate before screenshots, video and sanitized publication
 evidence.
 
-## 12. Accepted AN515-55 lifecycle result
+## 13. Accepted AN515-55 lifecycle result
 
 The final hardware transaction for the reviewed source and overlay completed
 with these recaps:

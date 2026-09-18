@@ -510,15 +510,16 @@
       register: nitro_sense_applied_fan_raw
       changed_when: false
 
-    - name: Require the configured fan setting
+    - name: Require fan hardware and broker observation to agree
       ansible.builtin.assert:
         that:
           - >-
             nitro_sense_applied_fan_raw.content | b64decode | trim ==
-            (nitro_sense_fan_cpu_percent | string ~ ',' ~
-             nitro_sense_fan_gpu_percent | string)
+            nitro_sense_control_status_data.status.runtime.fan
         fail_msg: >-
-          The documented fan interface did not retain the requested value.
+          The documented fan interface diverged from the reconciled runtime
+          state observed by the Nitro broker.
+
   rescue:
     - name: Roll back the failed platform-driver transaction
       ansible.builtin.include_tasks: rollback.yml

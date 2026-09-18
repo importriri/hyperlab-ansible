@@ -9,8 +9,10 @@ User=root
 Group={{ nitro_sense_control_group }}
 RuntimeDirectory=hyperlab-nitro
 RuntimeDirectoryMode=0750
+StateDirectory=hyperlab-nitro
+StateDirectoryMode=0700
 UMask=0077
-ExecStart={{ nitro_sense_control_daemon }} --socket {{ nitro_sense_control_socket }} --user {{ nitro_sense_control_user }} --model {{ nitro_sense_dmi_product | quote }} --fan-path {{ nitro_sense_fan_speed_path }} --battery-path {{ nitro_sense_battery_limiter_path }} --rgb-path {{ nitro_sense_led_per_zone_path }} {% if nitro_sense_dmi_product in nitro_sense_led_per_zone_models %}--per-zone-enabled {% endif %}--rgb-min-interval-ms {{ nitro_sense_control_rgb_min_interval_ms }} --max-request-bytes {{ nitro_sense_control_max_request_bytes }}
+ExecStart={{ nitro_sense_control_daemon }} --socket {{ nitro_sense_control_socket }} --user {{ nitro_sense_control_user }} --model {{ nitro_sense_dmi_product | quote }} --fan-path {{ nitro_sense_fan_speed_path }} --battery-path {{ nitro_sense_battery_limiter_path }} --rgb-path {{ nitro_sense_led_per_zone_path }} --state-path {{ nitro_sense_control_state_path }} --baseline-fan {{ nitro_sense_fan_cpu_percent }},{{ nitro_sense_fan_gpu_percent }} --baseline-battery {{ nitro_sense_battery_limiter_enabled | ternary('1', '0') }} --baseline-rgb {{ nitro_sense_led_zone_colors | join(',') }},{{ nitro_sense_led_brightness_percent }} {% if nitro_sense_led_mode == 'per_zone' %}--baseline-rgb-managed {% endif %}{% if nitro_sense_dmi_product in nitro_sense_led_per_zone_models %}--per-zone-enabled {% endif %}--rgb-min-interval-ms {{ nitro_sense_control_rgb_min_interval_ms }} --max-request-bytes {{ nitro_sense_control_max_request_bytes }}
 Restart=on-failure
 RestartSec=1
 NoNewPrivileges=yes

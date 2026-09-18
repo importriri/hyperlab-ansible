@@ -112,5 +112,11 @@ nitro_sense_control_unit: /etc/systemd/system/hyperlab-nitro-control.service
 nitro_sense_control_service: hyperlab-nitro-control.service
 nitro_sense_control_rgb_min_interval_ms: 200
 nitro_sense_control_max_request_bytes: 4096
+
+# Mutable operator preferences are separate from the reviewed Ansible baseline.
+# Runtime writes affect only the current module instance. Persistent writes are
+# stored root-only and reapplied by nitro-sense-apply.service.
+nitro_sense_control_state_dir: /var/lib/hyperlab-nitro
+nitro_sense_control_state_path: "{{ nitro_sense_control_state_dir }}/persistent.json"
 nitro_sense_modules_load_path: /etc/modules-load.d/linuwu_sense.conf
 nitro_sense_blacklist_path: /etc/modprobe.d/nitro-sense-blacklist-acer_wmi.conf

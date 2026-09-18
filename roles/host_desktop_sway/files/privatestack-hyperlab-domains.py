@@ -447,6 +447,10 @@ window.hyperlab-surface {
     border-left: 1px solid alpha(#ffffff, .09);
     background: transparent;
 }
+
+.mock-inspect.nitro-inspect {
+    min-width: 240px;
+}
 .mock-kick {
     font-size: 10px;
     font-weight: 700;
@@ -719,6 +723,48 @@ window.hyperlab-dismiss-surface {
 }
 window.hyperlab-dismiss-surface .shell-panel {
     background: @hl_base;
+}
+
+/* Nitro enterprise control surface */
+.nitro-quick-card {
+    background-color: alpha(@hl_surface, 0.46);
+    border-color: alpha(@hl_accent, 0.34);
+}
+
+.nitro-policy-card {
+    background-color: alpha(@hl_base, 0.30);
+    border-color: alpha(@hl_overlay, 0.78);
+}
+
+.nitro-mode-actions {
+    background-color: alpha(@hl_mantle, 0.24);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+.nitro-mode-button {
+    min-height: 38px;
+    font-weight: 700;
+    background-color: alpha(@hl_surface, 0.30);
+}
+
+.nitro-mode-button:hover {
+    background-color: alpha(@hl_surface, 0.56);
+    border-color: alpha(@hl_accent, 0.48);
+}
+
+.nitro-mode-button.active {
+    background-color: alpha(@hl_accent, 0.24);
+    border-color: alpha(@hl_accent, 0.78);
+    color: @hl_text;
+}
+
+.nitro-mode-state {
+    font-weight: 700;
+}
+
+.nitro-appearance-card {
+    margin-top: 4px;
 }
 """
 
@@ -1436,6 +1482,13 @@ class HyperlabWindow(Gtk.Window):
         self.current_section = section
         if self.inspect_holder is not None:
             self.inspect_holder.set_visible(section != "policies")
+
+            if section == "nitro":
+                self.inspect_holder.add_css_class("nitro-inspect")
+                self.inspect_holder.set_size_request(240, -1)
+            else:
+                self.inspect_holder.remove_css_class("nitro-inspect")
+                self.inspect_holder.set_size_request(300, -1)
         for name, nav in self.nav_buttons.items():
             if name == section:
                 nav.add_css_class("active")
@@ -2895,6 +2948,18 @@ class HyperlabWindow(Gtk.Window):
         )
         self.rebuild_current()
 
+    def _nitro_scope(self) -> str:
+        selector = self.nitro_widgets.get("scope")
+        if not isinstance(selector, Gtk.DropDown):
+            return "runtime"
+        return "persistent" if selector.get_selected() == 1 else "runtime"
+
+    def _nitro_clear_persistent(self) -> None:
+        self._nitro_write(
+            ["clear", "all"],
+            "Nitro persistent overrides cleared",
+        )
+
 
 
     def _flush_pending_theme_sway_reload(self) -> None:
@@ -2998,6 +3063,22 @@ class HyperlabWindow(Gtk.Window):
         item.append(choices)
         return item
 
+    def _nitro_apply_quick_fan(
+        self,
+        percentage: int,
+        label: str,
+    ) -> None:
+        self._nitro_write(
+            [
+                "fan",
+                str(percentage),
+                str(percentage),
+                "--scope",
+                "runtime",
+            ],
+            "Nitro quick mode: %s" % label,
+        )
+
     def _nitro_apply_fans(self) -> None:
         cpu = self.nitro_widgets.get("fan_cpu")
         gpu = self.nitro_widgets.get("fan_gpu")
@@ -3005,7 +3086,13 @@ class HyperlabWindow(Gtk.Window):
             self.show_error("Nitro fan controls are unavailable.")
             return
         self._nitro_write(
-            ["fan", str(cpu.get_value_as_int()), str(gpu.get_value_as_int())],
+            [
+                "fan",
+                str(cpu.get_value_as_int()),
+                str(gpu.get_value_as_int()),
+                "--scope",
+                self._nitro_scope(),
+            ],
             "Nitro fan policy",
         )
 
@@ -3015,7 +3102,12 @@ class HyperlabWindow(Gtk.Window):
             self.show_error("Nitro battery control is unavailable.")
             return
         self._nitro_write(
-            ["battery", "on" if limiter.get_active() else "off"],
+            [
+                "battery",
+                "on" if limiter.get_active() else "off",
+                "--scope",
+                self._nitro_scope(),
+            ],
             "Nitro battery limiter",
         )
 
@@ -3040,7 +3132,13 @@ class HyperlabWindow(Gtk.Window):
             return
 
         self._nitro_write(
-            ["rgb", str(brightness.get_value_as_int()), *zones],
+            [
+                "rgb",
+                str(brightness.get_value_as_int()),
+                *zones,
+                "--scope",
+                self._nitro_scope(),
+            ],
             "Nitro four-zone RGB",
         )
 
@@ -3050,7 +3148,6 @@ class HyperlabWindow(Gtk.Window):
             "Laptop hardware and desktop appearance in one normal-user control surface.",
         )
         self.nitro_widgets = {}
-        content.append(self._nitro_theme_card())
 
         try:
             status = run_nitro_json("status")
@@ -3065,26 +3162,231 @@ class HyperlabWindow(Gtk.Window):
 
         capabilities = status.get("capabilities")
         runtime = status.get("runtime")
+        persistence = status.get("persistence")
         capabilities = capabilities if isinstance(capabilities, dict) else {}
         runtime = runtime if isinstance(runtime, dict) else {}
+        persistence = persistence if isinstance(persistence, dict) else {}
+
+        saved = persistence.get("saved")
+        overrides = persistence.get("overrides")
+        saved = saved if isinstance(saved, dict) else {}
+        overrides = overrides if isinstance(overrides, list) else []
+
+        fan = str(runtime.get("fan") or "")
+        fan_parts = fan.split(",")
+        fan_valid = (
+            len(fan_parts) == 2
+            and all(
+                part.isdigit() and 0 <= int(part) <= 100
+                for part in fan_parts
+            )
+        )
+
+        if fan == "0,0":
+            fan_mode = "Quiet"
+        elif fan == "100,100":
+            fan_mode = "Gaming"
+        else:
+            fan_mode = "Custom"
+
+        if capabilities.get("fan") is True:
+            quick = card()
+            quick.add_css_class("nitro-quick-card")
+
+            quick_header = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=10,
+            )
+
+            quick_title = text_label(
+                "Quick mode",
+                "section-title",
+                "card-title",
+                wrap=False,
+            )
+            quick_title.set_hexpand(True)
+            quick_header.append(quick_title)
+
+            quick_header.append(
+                text_label(
+                    fan_mode.upper(),
+                    "mock-badge",
+                    "nitro-mode-state",
+                    wrap=False,
+                )
+            )
+
+            quick.append(quick_header)
+
+            quick.append(
+                text_label(
+                    "One-click runtime cooling profile. Quick modes never "
+                    "modify the saved persistent policy.",
+                    "caption",
+                )
+            )
+
+            mode_actions = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=8,
+            )
+            mode_actions.add_css_class("nitro-mode-actions")
+
+            quiet = button(
+                "Quiet · 0%",
+                lambda _button: self._nitro_apply_quick_fan(
+                    0,
+                    "Quiet",
+                ),
+            )
+            quiet.add_css_class("nitro-mode-button")
+            quiet.set_hexpand(True)
+            quiet.set_sensitive(fan_valid)
+
+            gaming = button(
+                "Gaming · 100%",
+                lambda _button: self._nitro_apply_quick_fan(
+                    100,
+                    "Gaming",
+                ),
+            )
+            gaming.add_css_class("nitro-mode-button")
+            gaming.set_hexpand(True)
+            gaming.set_sensitive(fan_valid)
+
+            if fan_mode == "Quiet":
+                quiet.add_css_class("active")
+            elif fan_mode == "Gaming":
+                gaming.add_css_class("active")
+
+            mode_actions.append(quiet)
+            mode_actions.append(gaming)
+            quick.append(mode_actions)
+
+            if fan_mode == "Custom":
+                quick.append(
+                    text_label(
+                        "Custom fan values are active. Choose Quiet or Gaming "
+                        "to replace them with a reviewed quick profile.",
+                        "caption",
+                    )
+                )
+
+            content.append(quick)
 
         summary = card()
-        summary.append(text_label(str(status.get("model") or "Acer Nitro"), "card-title", wrap=False))
-        summary.append(text_label("Runtime backend online", "status-ready", wrap=False))
+        summary.add_css_class("nitro-policy-card")
+
+        policy_header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+
+        model_label = text_label(
+            str(status.get("model") or "Acer Nitro"),
+            "card-title",
+            wrap=False,
+        )
+        model_label.set_hexpand(True)
+        policy_header.append(model_label)
+
+        policy_header.append(
+            text_label(
+                "BROKER ONLINE",
+                "mock-badge",
+                "status-ready",
+                wrap=False,
+            )
+        )
+
+        summary.append(policy_header)
+
+        summary.append(
+            text_label(
+                "Policy lifecycle",
+                "section-title",
+                wrap=False,
+            )
+        )
+
+        summary.append(
+            text_label(
+                "Choose whether manual hardware changes apply only to the "
+                "current runtime or become a saved Nitro override.",
+                "caption",
+            )
+        )
+
+        scope_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+        scope_label = text_label(
+            "Runtime / Persistent",
+            "card-title",
+            wrap=False,
+        )
+        scope_label.set_hexpand(True)
+        scope_row.append(scope_label)
+
+        scope = Gtk.DropDown.new_from_strings(
+            ["Runtime", "Persistent"]
+        )
+        scope.set_selected(
+            1
+            if str(persistence.get("scope_default") or "runtime")
+            == "persistent"
+            else 0
+        )
+        scope_row.append(scope)
+        summary.append(scope_row)
+        self.nitro_widgets["scope"] = scope
+
+        if overrides:
+            summary.append(text_label(
+                "Persistent overrides: %s"
+                % ", ".join(str(item) for item in overrides),
+                "status-ready",
+            ))
+        else:
+            summary.append(text_label(
+                "Persistent overrides: none",
+                "caption",
+            ))
+
+        saved_parts = []
+        for name in ("fan", "battery_limiter", "per_zone"):
+            value = saved.get(name)
+            if value is not None:
+                saved_parts.append("%s=%s" % (name, value))
+
+        if saved_parts:
+            summary.append(text_label(
+                "Saved: " + " · ".join(saved_parts),
+                "caption",
+            ))
+
+        clear_overrides = button(
+            "Restore Ansible baseline",
+            lambda _button: self._nitro_clear_persistent(),
+        )
+        clear_overrides.set_tooltip_text(
+            "No persistent override is active; the Ansible baseline already owns boot policy."
+            if not overrides
+            else "Remove saved Nitro overrides. Managed controls return to the "
+                "Ansible baseline; unmanaged RGB is left untouched."
+        )
+        clear_overrides.set_sensitive(bool(overrides))
+        summary.append(clear_overrides)
+
         summary.append(text_label(
-            "Changes are runtime-only; Ansible still owns boot policy.",
+            "Runtime leaves the saved baseline unchanged. Persistent saves the "
+            "selected value for later Nitro policy reapplication.",
             "caption",
         ))
         content.append(summary)
 
         if capabilities.get("fan") is True:
-            fan = str(runtime.get("fan") or "")
-            fan_parts = fan.split(",")
-            fan_valid = (
-                len(fan_parts) == 2
-                and all(part.isdigit() and 0 <= int(part) <= 100 for part in fan_parts)
-            )
-
             cooling = card()
             cooling.append(text_label("Cooling", "section-title", wrap=False))
             cooling.append(text_label(
@@ -3197,6 +3499,10 @@ class HyperlabWindow(Gtk.Window):
                 ))
             content.append(keyboard)
 
+        appearance = self._nitro_theme_card()
+        appearance.add_css_class("nitro-appearance-card")
+        content.append(appearance)
+
         if not any(
             capabilities.get(name) is True
             for name in ("fan", "battery_limiter", "per_zone")
@@ -3209,43 +3515,56 @@ class HyperlabWindow(Gtk.Window):
         inspect_holder = getattr(self, "inspect_holder", None)
         if inspect_holder is not None:
             clear_box(inspect_holder)
-            inspect_holder.append(text_label("NITRO CONTROL BOARD", "mock-kick", wrap=False))
-            inspect_holder.append(text_label(
-                str(status.get("model") or "Acer Nitro"),
-                "inspect-title",
-                wrap=False,
-            ))
-            inspect_holder.append(text_label(
-                "normal-user control boundary",
-                "inspect-subtitle",
-            ))
-            details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-            self._append_kv(details, "backend", "online")
-            self._append_kv(
-                details,
-                "persistence",
-                str(status.get("persistence") or "unknown"),
+
+            inspect_holder.append(
+                text_label(
+                    "NITRO",
+                    "mock-kick",
+                    wrap=False,
+                )
             )
-            self._append_kv(
-                details,
-                "fan",
-                "available" if capabilities.get("fan") is True else "hidden",
+            inspect_holder.append(
+                text_label(
+                    str(status.get("model") or "Acer Nitro"),
+                    "inspect-title",
+                    wrap=False,
+                )
             )
-            self._append_kv(
-                details,
-                "battery",
-                "available" if capabilities.get("battery_limiter") is True else "hidden",
+
+            active_controls = []
+            if capabilities.get("fan") is True:
+                active_controls.append("Fan")
+            if capabilities.get("battery_limiter") is True:
+                active_controls.append("Battery")
+            if capabilities.get("per_zone") is True:
+                active_controls.append("RGB")
+
+            saved_fan = saved.get("fan")
+            if saved_fan is not None:
+                policy_value = (
+                    "Persistent · fan %s"
+                    % str(saved_fan).replace(",", "/")
+                )
+            elif overrides:
+                policy_value = "Persistent"
+            else:
+                policy_value = "Ansible baseline"
+
+            details = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=0,
             )
+            self._append_kv(details, "broker", "online")
+            self._append_kv(details, "mode", fan_mode)
+            self._append_kv(details, "policy", policy_value)
             self._append_kv(
                 details,
-                "four-zone RGB",
-                "available" if capabilities.get("per_zone") is True else "hidden",
+                "controls",
+                " · ".join(active_controls)
+                if active_controls
+                else "none",
             )
             inspect_holder.append(details)
-            inspect_holder.append(text_label(
-                "Only capabilities advertised by the broker become controls.",
-                "mock-why",
-            ))
 
         return scroll
 
@@ -3394,6 +3713,7 @@ class HyperlabApplication(Gtk.Application):
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         arguments = list(command_line.get_arguments())[1:]
         surface = "drawer"
+        surface_explicit = False
         section = "vms"
         warm_only = False
         reload_theme_only = False
@@ -3410,6 +3730,7 @@ class HyperlabApplication(Gtk.Application):
                 continue
             if value == "--surface" and index + 1 < len(arguments):
                 surface = arguments[index + 1]
+                surface_explicit = True
                 index += 2
                 continue
             if value == "--section" and index + 1 < len(arguments):
@@ -3418,6 +3739,9 @@ class HyperlabApplication(Gtk.Application):
                 continue
             command_line.printerr("unknown argument %s\n" % value)
             return 2
+        if section == "nitro" and not surface_explicit:
+            surface = "overlay"
+
         if warm_only:
             self.keep_warm()
             return 0

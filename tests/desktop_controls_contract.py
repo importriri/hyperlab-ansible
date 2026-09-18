@@ -69,13 +69,24 @@ def main() -> int:
             "generic hosts must not inherit the Nitro theme key")
 
     hardware = yaml.safe_load(text("group_vars/all/hardware.yml"))["host_profiles"]
-    nitro_binding = hardware["nitro-3060"]["desktop"]["theme_cycle_binding"]
-    require(nitro_binding == {
-        "input_device": "1:1:AT_Translated_Set_2_keyboard",
-        "keysym": "XF86Presentation",
-    }, "Nitro theme key does not match the hardware gate")
+    require("theme_cycle_binding" not in hardware["nitro-3060"]["desktop"],
+            "NitroSense must be dedicated to the Nitro Control Center")
     require("theme_cycle_binding" not in hardware["predator-3070"]["desktop"],
-            "unverified Predator profile inherited the Nitro theme key")
+            "unverified Predator profile inherited a theme hotkey")
+
+    sway_config = text("roles/host_desktop_sway/files/sway.config")
+    require(
+        "bindsym $mod+Shift+t exec /usr/local/bin/privatestack-theme cycle"
+        in sway_config,
+        "Mod+Shift+T must remain the explicit theme-cycle shortcut",
+    )
+    require(
+        "bindcode --release 433 exec "
+        "/usr/local/bin/privatestack-hyperlab-domains "
+        "--surface overlay --section nitro"
+        in sway_config,
+        "physical NitroSense must route directly to Control Center / Nitro",
+    )
 
     template = text("roles/host_desktop_sway/templates/sway-input.conf.j2")
     require("keyboard_layout_cycle | join(',')" in template,

@@ -26,9 +26,9 @@ button:hover {
     border-color: alpha(@hl_accent, 0.50);
 }
 button:disabled {
-    background-color: alpha(@hl_mantle, 0.18);
-    color: alpha(@hl_subtext, 0.62);
-    border-color: alpha(@hl_accent, 0.09);
+    background-color: alpha(@hl_mantle, 0.30);
+    color: alpha(@hl_subtext, 0.82);
+    border-color: alpha(@hl_accent, 0.18);
 }
 entry,
 textview,
@@ -48,6 +48,100 @@ selection,
     background-color: alpha(@hl_accent, 0.40);
     color: @hl_text;
 }
+
+/*
+ * GtkDropDown renders its popup through a popover containing a listview.
+ * Theme every level explicitly so the system GTK theme cannot reintroduce
+ * a light list background inside the HyperLab dark control surface.
+ */
+dropdown {
+    color: @hl_text;
+}
+
+dropdown button {
+    background-color: alpha(@hl_surface, 0.36);
+    color: @hl_text;
+    border-color: @hl_overlay;
+}
+
+dropdown arrow {
+    color: @hl_text;
+}
+
+popover contents {
+    background-color: @hl_base;
+    color: @hl_text;
+}
+
+popover listview {
+    background-color: @hl_base;
+    color: @hl_text;
+}
+
+popover listview row {
+    background-color: @hl_base;
+    color: @hl_text;
+}
+
+popover listview row label {
+    color: @hl_text;
+}
+
+popover listview row:hover {
+    background-color: alpha(@hl_surface, 0.78);
+    color: @hl_text;
+}
+
+popover listview row:selected {
+    background-color: alpha(@hl_accent, 0.40);
+    color: @hl_text;
+}
+
+popover listview row:selected label {
+    color: @hl_text;
+}
 label.dim-label {
     color: @hl_subtext;
+}
+
+/* HyperLab Nitro enterprise control surface */
+.nitro-quick-card {
+    background-color: alpha(@hl_surface, 0.46);
+    border-color: alpha(@hl_accent, 0.34);
+}
+
+.nitro-policy-card {
+    background-color: alpha(@hl_base, 0.30);
+    border-color: alpha(@hl_overlay, 0.78);
+}
+
+.nitro-mode-actions {
+    background-color: alpha(@hl_mantle, 0.24);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+button.nitro-mode-button {
+    min-height: 38px;
+    font-weight: 700;
+    background-color: alpha(@hl_surface, 0.30);
+}
+
+button.nitro-mode-button:hover {
+    background-color: alpha(@hl_surface, 0.56);
+    border-color: alpha(@hl_accent, 0.48);
+}
+
+button.nitro-mode-button.active {
+    background-color: alpha(@hl_accent, 0.24);
+    border-color: alpha(@hl_accent, 0.78);
+    color: @hl_text;
+}
+
+.nitro-mode-state {
+    font-weight: 700;
+}
+
+.nitro-appearance-card {
+    margin-top: 4px;
 }

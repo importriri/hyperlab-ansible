@@ -1335,11 +1335,8 @@
           - "'xkb_layout it,us,ara' in render_input_nitro"
           - "'XF86Presentation' not in render_input_fallback"
           - "'XF86Presentation' not in render_input_optional"
-          - >-
-            render_input_nitro | select(
-              'equalto',
-              'bindsym --no-repeat --input-device=1:1:AT_Translated_Set_2_keyboard XF86Presentation exec /usr/local/bin/privatestack-theme cycle')
-            | list | length == 1
+          - "'XF86Presentation' not in render_input_nitro"
+          - "'theme_cycle_binding' not in render_hw_profiles['nitro-3060'].desktop"
           - render_hw_profiles | dict2items | rejectattr('value.desktop', 'defined') | list | length == 0
         quiet: true
       vars:
