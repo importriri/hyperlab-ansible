@@ -19,6 +19,7 @@ host_desktop_hyprland_session_services:
   - hyperlab-hypridle.service
   - hyperlab-hyprpaper.service
   - hyperlab-mako.service
+  - hyperlab-quickshell.service
 
 host_desktop_hyprland_user_home: "/home/{{ admin_user }}"
 host_desktop_hyprland_config_dir: >-

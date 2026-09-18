@@ -1,0 +1,10 @@
+[Unit]
+Description=HyperLab shared Quickshell presentation for Hyprland
+PartOf=hyperlab-hyprland-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qs -c hyperlab
+Restart=on-failure
+RestartSec=1

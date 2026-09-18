@@ -281,7 +281,8 @@
         [
           'hyperlab-hypridle.service',
           'hyperlab-hyprpaper.service',
-          'hyperlab-mako.service'
+          'hyperlab-mako.service',
+          'hyperlab-quickshell.service'
         ]
     fail_msg: >-
       Lifecycle staging may add selectable sessions but may not select a Ly

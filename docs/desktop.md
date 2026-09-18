@@ -172,3 +172,20 @@ must never expose the host or hypervisor control plane.
 
 See [`keybinding-security.md`](keybinding-security.md) for the binding,
 collision and information-disclosure contract.
+
+### Hyprland-first shell pilot
+
+HyperLab is migrating to Quickshell on the preferred Hyprland backend first so
+the validated Nitro host can move to Hyprland as its daily desktop without
+waiting for the later Sway parity campaign.
+
+The Quickshell source remains owned by `host_desktop_common`. Hyprland owns only
+the session-lifecycle unit that starts the shared `hyperlab` configuration after
+the managed Hyprland runtime has published its Wayland environment.
+
+The pilot is bound to `hyperlab-hyprland-session.target`; it is not globally
+enabled and cannot start as a generic user service. Sway remains the recovery
+desktop and its Waybar/GTK surfaces are preserved.
+
+This is an implementation order, not a product split. Sway parity remains a
+release requirement after the Hyprland daily-driver cutover.
