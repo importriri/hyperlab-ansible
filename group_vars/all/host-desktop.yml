@@ -118,6 +118,13 @@ host_desktop_common_shell_stage:
     - network
     - audio
     - battery
+  session_controls_enabled: true
+  session_action_bridge: /usr/local/bin/privatestack-shell-actions
+  session_state_transport: file-watch
+  session_actions:
+    - keyboard-cycle
+    - wallpaper-mode-toggle
+    - controls-open
 
 # Keyboard ownership is a security boundary. Host and guest compositor
 # namespaces are deliberately disjoint so focus/capture mistakes cannot turn

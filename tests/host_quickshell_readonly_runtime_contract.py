@@ -91,7 +91,6 @@ def main() -> int:
         '["sh", "-c"',
         '["bash", "-c"',
         "MouseArea",
-        "TapHandler",
     ):
         require(
             forbidden not in bar,

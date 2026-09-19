@@ -82,6 +82,16 @@ def main() -> int:
                 "audio",
                 "battery",
             ],
+            "session_controls_enabled": True,
+            "session_action_bridge": (
+                "/usr/local/bin/privatestack-shell-actions"
+            ),
+            "session_state_transport": "file-watch",
+            "session_actions": [
+                "keyboard-cycle",
+                "wallpaper-mode-toggle",
+                "controls-open",
+            ],
         },
         "Phase 2A deployment contract changed",
     )
@@ -151,7 +161,6 @@ def main() -> int:
         "swaymsg",
         "execDetached",
         "MouseArea",
-        "TapHandler",
         "ShellCommand",
         '["sh", "-c"',
     ):

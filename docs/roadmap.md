@@ -114,6 +114,8 @@ work explicitly requires it.
 - [x] theme semantic palette migration
 - [x] host telemetry migration
 - [ ] reviewed interactive HyperLab controls
+  - [x] keyboard / wallpaper / Controls session surface
+  - [ ] HyperLab / trust / VM / audio action routing
 - [ ] drawer / Control Center migration
 - [ ] complete keybinding cheatsheet surface
 - [ ] Sway physical parity acceptance

@@ -17,6 +17,12 @@ PanelWindow {
     readonly property string telemetryBridge:
         "/usr/local/bin/privatestack-telemetry"
 
+    readonly property string actionBridge:
+        "/usr/local/bin/privatestack-shell-actions"
+
+    property string keyboardLayout: "it"
+    property string wallpaperMode: "public"
+
     property var palette: ({
         "name": "fallback",
         "base": "black",
@@ -271,6 +277,46 @@ PanelWindow {
         }
     }
 
+    function applyKeyboardLayout(raw) {
+        const candidate = String(raw).trim();
+
+        if (
+            candidate === "it"
+            || candidate === "us"
+            || candidate === "ara"
+        ) {
+            root.keyboardLayout = candidate;
+        }
+    }
+
+    function applyWallpaperMode(raw) {
+        const candidate = String(raw).trim();
+
+        if (
+            candidate === "public"
+            || candidate === "personal"
+        ) {
+            root.wallpaperMode = candidate;
+        }
+    }
+
+    function keyboardLabel() {
+        switch (root.keyboardLayout) {
+        case "us":
+            return "EN";
+        case "ara":
+            return "AR";
+        default:
+            return "IT";
+        }
+    }
+
+    function wallpaperLabel() {
+        return root.wallpaperMode === "personal"
+            ? "PVT"
+            : "PUB";
+    }
+
     function semanticStatusColor(statusClass) {
         switch (String(statusClass)) {
         case "ok":
@@ -330,6 +376,14 @@ PanelWindow {
         root.applyPalette(
             paletteFile.text()
         );
+
+        root.applyKeyboardLayout(
+            keyboardStateFile.text()
+        );
+
+        root.applyWallpaperMode(
+            wallpaperModeStateFile.text()
+        );
     }
 
     FileView {
@@ -347,6 +401,44 @@ PanelWindow {
 
         onTextChanged: {
             root.applyPalette(
+                this.text()
+            );
+        }
+    }
+
+    FileView {
+        id: keyboardStateFile
+
+        path:
+            Quickshell.env("HOME")
+            + "/.config/hyperlab/"
+            + "keyboard-layout"
+
+        watchChanges: true
+
+        onFileChanged: reload()
+
+        onTextChanged: {
+            root.applyKeyboardLayout(
+                this.text()
+            );
+        }
+    }
+
+    FileView {
+        id: wallpaperModeStateFile
+
+        path:
+            Quickshell.env("HOME")
+            + "/.config/hyperlab/"
+            + "wallpaper-mode"
+
+        watchChanges: true
+
+        onFileChanged: reload()
+
+        onTextChanged: {
+            root.applyWallpaperMode(
                 this.text()
             );
         }
@@ -489,6 +581,43 @@ PanelWindow {
                 root.applyTelemetryPayload(this.text);
             }
         }
+    }
+
+    Process {
+        id: keyboardActionProcess
+
+        command: [
+            root.actionBridge,
+            "keyboard-cycle"
+        ]
+
+        onRunningChanged: {
+            if (!running)
+                keyboardStateFile.reload();
+        }
+    }
+
+    Process {
+        id: wallpaperActionProcess
+
+        command: [
+            root.actionBridge,
+            "wallpaper-mode-toggle"
+        ]
+
+        onRunningChanged: {
+            if (!running)
+                wallpaperModeStateFile.reload();
+        }
+    }
+
+    Process {
+        id: controlsActionProcess
+
+        command: [
+            root.actionBridge,
+            "controls-open"
+        ]
     }
 
     Timer {
@@ -756,6 +885,108 @@ PanelWindow {
                     )
 
                 font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 14
+                color: root.palette.overlay
+            }
+
+            Rectangle {
+                Layout.preferredHeight: 23
+                Layout.preferredWidth:
+                    keyboardControlText.implicitWidth + 14
+
+                radius: 6
+                color: root.palette.mantle
+
+                border.width: 1
+                border.color: root.palette.overlay
+
+                Text {
+                    id: keyboardControlText
+
+                    anchors.centerIn: parent
+
+                    text:
+                        "KEY "
+                        + root.keyboardLabel()
+
+                    color: root.palette.text
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                TapHandler {
+                    onTapped: {
+                        if (!keyboardActionProcess.running)
+                            keyboardActionProcess.running = true;
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.preferredHeight: 23
+                Layout.preferredWidth:
+                    wallpaperControlText.implicitWidth + 14
+
+                radius: 6
+                color: root.palette.mantle
+
+                border.width: 1
+                border.color: root.palette.overlay
+
+                Text {
+                    id: wallpaperControlText
+
+                    anchors.centerIn: parent
+
+                    text:
+                        "WALL "
+                        + root.wallpaperLabel()
+
+                    color: root.palette.text
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                TapHandler {
+                    onTapped: {
+                        if (!wallpaperActionProcess.running)
+                            wallpaperActionProcess.running = true;
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.preferredHeight: 23
+                Layout.preferredWidth:
+                    controlsText.implicitWidth + 14
+
+                radius: 6
+                color: root.palette.surface
+
+                border.width: 1
+                border.color: root.palette.accent
+
+                Text {
+                    id: controlsText
+
+                    anchors.centerIn: parent
+                    text: "CTL"
+
+                    color: root.palette.text
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                TapHandler {
+                    onTapped: {
+                        if (!controlsActionProcess.running)
+                            controlsActionProcess.running = true;
+                    }
+                }
             }
 
             Rectangle {

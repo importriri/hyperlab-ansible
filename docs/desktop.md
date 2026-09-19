@@ -224,8 +224,9 @@ reviewed `privatestack-hyperlab` presentation bridge. RAM, GPU and VM summaries
 retain the existing 30-second slow cadence.
 
 Shared QML does not call `hyprctl`, `swaymsg`, privileged helpers, arbitrary
-shells or hypervisor internals. Operational controls remain closed until their
-reviewed `hyperlabctl` actions are migrated separately.
+shells or hypervisor internals. Session-level keyboard, wallpaper and Controls
+actions cross one typed allowlisted host-action bridge; domain and privileged
+operations remain outside this QML boundary.
 
 This stage is shared source for both Hyprland and Sway even though Hyprland is
 the first physical runtime acceptance target.
@@ -265,3 +266,19 @@ write operation.
 Telemetry follows the existing slow 30-second shell cadence. Critical
 temperature and low-battery states use the semantic warning/error palette while
 ordinary values remain visually subordinate to trust state.
+
+### Shared interactive session controls
+
+The Hyprland-first shared shell now exposes the existing session controls for
+keyboard layout, wallpaper mode and the HyperLab Controls menu.
+
+Quickshell never receives an arbitrary command line. It calls only
+`/usr/local/bin/privatestack-shell-actions` with one fixed action identifier.
+The bridge accepts exactly `keyboard-cycle`, `wallpaper-mode-toggle` and
+`controls-open`, rejects every other identifier, and executes only reviewed
+root-owned helpers that are not writable by the desktop session.
+
+Keyboard and wallpaper state are not polled. Quickshell watches the existing
+user state files and validates their enum values before presenting them. This
+keeps presentation reactive while compositor mutation remains behind the
+existing reviewed helpers and shared compositor adapter.

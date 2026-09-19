@@ -224,7 +224,6 @@ def main() -> int:
         "pkexec",
         "/sys/",
         "MouseArea",
-        "TapHandler",
     ):
         require(
             forbidden not in bar,

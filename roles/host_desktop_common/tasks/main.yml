@@ -71,6 +71,21 @@
       - >-
         host_desktop_common_shell_stage.telemetry_fields
         == ['temperature', 'network', 'audio', 'battery']
+      - host_desktop_common_shell_stage.session_controls_enabled
+      - >-
+        host_desktop_common_shell_stage.session_action_bridge
+        == '/usr/local/bin/privatestack-shell-actions'
+      - >-
+        host_desktop_common_shell_stage.session_state_transport
+        == 'file-watch'
+      - >-
+        host_desktop_common_shell_stage.session_actions
+        ==
+        [
+          'keyboard-cycle',
+          'wallpaper-mode-toggle',
+          'controls-open'
+        ]
       - >-
         host_desktop_common_input_security.host_primary_modifier
         == 'SUPER'
@@ -216,6 +231,14 @@
   ansible.builtin.copy:
     src: privatestack-telemetry.py
     dest: /usr/local/bin/privatestack-telemetry
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the typed shared shell action bridge
+  ansible.builtin.copy:
+    src: privatestack-shell-actions.py
+    dest: /usr/local/bin/privatestack-shell-actions
     owner: root
     group: root
     mode: "0755"
