@@ -201,6 +201,11 @@ def main() -> int:
     shell = product["shell"]
 
     require(
+        defaults["host_desktop_hyprland_monitor_scale"] == 1.0,
+        "reviewed physical-host Hyprland scale changed",
+    )
+
+    require(
         product["preferred_compositor"] == "hyprland",
         "Hyprland is no longer the preferred HyperLab compositor",
     )
@@ -555,7 +560,10 @@ def main() -> int:
         'output = ""',
         'mode = "preferred"',
         'position = "auto"',
-        'scale = "auto"',
+        (
+            "scale = "
+            "{{ host_desktop_hyprland_monitor_scale }},"
+        ),
         "hl.config({",
         "hl.bind(",
         "hl.dsp.exec_cmd(",

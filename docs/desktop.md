@@ -189,3 +189,16 @@ desktop and its Waybar/GTK surfaces are preserved.
 
 This is an implementation order, not a product split. Sway parity remains a
 release requirement after the Hyprland daily-driver cutover.
+
+### Hyprland display scale
+
+The Nitro physical-host Hyprland session uses display scale `1.0`.
+
+The initial generic `auto` setting selected scale `1.5` on the internal
+1920x1080@144 panel, which reduced the effective desktop workspace too much for
+the HyperLab daily-driver layout. A live Lua-provider test changed the active
+`eDP-1` output from `1.5` to `1.0` successfully.
+
+The role keeps the value as an overridable HyperLab variable rather than binding
+the configuration to the Nitro output name, so another reviewed hardware
+profile can select a different scale without forking the Hyprland template.
