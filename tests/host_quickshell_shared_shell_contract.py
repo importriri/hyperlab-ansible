@@ -100,6 +100,18 @@ def main() -> int:
             f"shared bar foundation marker missing: {marker}",
         )
 
+    require(
+        "property var modelData" in bar,
+        "Variants delegate lost its modelData injection property",
+    )
+    require(
+        "required property var modelData" not in bar,
+        (
+            "Quickshell 0.3 runtime-incompatible required modelData "
+            "contract returned"
+        ),
+    )
+
     combined = shell + "\n" + bar
 
     for forbidden in (

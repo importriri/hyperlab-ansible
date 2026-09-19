@@ -202,3 +202,14 @@ the HyperLab daily-driver layout. A live Lua-provider test changed the active
 The role keeps the value as an overridable HyperLab variable rather than binding
 the configuration to the Nitro output name, so another reviewed hardware
 profile can select a different scale without forking the Hyprland template.
+
+### Quickshell Variants runtime compatibility
+
+The first physical Hyprland pilot exposed a Quickshell 0.3.1 runtime issue in
+the shared per-screen bar delegate. The service remained active, but a
+`required property var modelData` declaration caused variant construction to
+fail before the screen value could be injected.
+
+The shared bar therefore uses the Quickshell 0.3 model-data injection contract
+with a normal `property var modelData`. Runtime acceptance requires the panel
+to instantiate successfully and reserve its configured 37-pixel top zone.

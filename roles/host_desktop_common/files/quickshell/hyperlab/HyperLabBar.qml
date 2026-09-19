@@ -5,7 +5,7 @@ import QtQuick.Layouts
 PanelWindow {
     id: root
 
-    required property var modelData
+    property var modelData
 
     screen: modelData
 
