@@ -213,3 +213,19 @@ fail before the screen value could be injected.
 The shared bar therefore uses the Quickshell 0.3 model-data injection contract
 with a normal `property var modelData`. Runtime acceptance requires the panel
 to instantiate successfully and reserve its configured 37-pixel top zone.
+
+### Shared Quickshell read-only status core
+
+The first real HyperLab Shell data surface is compositor-neutral and read-only.
+
+It presents the product identity, host-owned trust state, RAM/GPU/VM summary and
+clock. Trust uses the existing event-driven `hyperlabctl` stream through the
+reviewed `privatestack-hyperlab` presentation bridge. RAM, GPU and VM summaries
+retain the existing 30-second slow cadence.
+
+Shared QML does not call `hyprctl`, `swaymsg`, privileged helpers, arbitrary
+shells or hypervisor internals. Operational controls remain closed until their
+reviewed `hyperlabctl` actions are migrated separately.
+
+This stage is shared source for both Hyprland and Sway even though Hyprland is
+the first physical runtime acceptance target.

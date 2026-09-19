@@ -101,6 +101,10 @@ host_desktop_common_shell_stage:
   waybar_fallback_required: true
   gtk_surface_fallback_required: true
   compositor_specific_imports_allowed: false
+  read_only_runtime_data_enabled: true
+  read_only_status_bridge: /usr/local/bin/privatestack-hyperlab
+  trust_update_transport: event-stream
+  slow_poll_seconds: 30
 
 # Keyboard ownership is a security boundary. Host and guest compositor
 # namespaces are deliberately disjoint so focus/capture mistakes cannot turn

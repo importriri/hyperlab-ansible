@@ -143,8 +143,8 @@ def main() -> int:
         )
 
     require(
-        'text: "Hyprland · Sway"' in bar,
-        "shared product presentation lost dual-compositor identity",
+        product["supported_compositors"] == ["hyprland", "sway"],
+        "shared product compositor identity changed",
     )
 
     sway_role = ROOT / "roles/host_desktop_sway"

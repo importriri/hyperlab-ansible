@@ -56,6 +56,12 @@ def main() -> int:
             "waybar_fallback_required": True,
             "gtk_surface_fallback_required": True,
             "compositor_specific_imports_allowed": False,
+            "read_only_runtime_data_enabled": True,
+            "read_only_status_bridge": (
+                "/usr/local/bin/privatestack-hyperlab"
+            ),
+            "trust_update_transport": "event-stream",
+            "slow_poll_seconds": 30,
         },
         "Phase 2A deployment contract changed",
     )
@@ -92,8 +98,11 @@ def main() -> int:
         "top: true",
         "left: true",
         "right: true",
-        'text: "HYPERLAB"',
-        'text: "Hyprland · Sway"',
+        'text: "◆  HYPERLAB"',
+        'text: "◆  HYPERLAB"',
+        'text: "TRUST " + root.trustPayload.text',
+        "SystemClock",
+        "import Quickshell.Io",
     ):
         require(
             marker in bar,
@@ -120,7 +129,6 @@ def main() -> int:
         "hyprctl",
         "swaymsg",
         "execDetached",
-        "Process {",
         "MouseArea",
         "TapHandler",
         "ShellCommand",

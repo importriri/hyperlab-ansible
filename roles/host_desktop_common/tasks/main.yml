@@ -44,6 +44,14 @@
         not
         host_desktop_common_shell_stage
         .compositor_specific_imports_allowed
+      - host_desktop_common_shell_stage.read_only_runtime_data_enabled
+      - >-
+        host_desktop_common_shell_stage.read_only_status_bridge
+        == '/usr/local/bin/privatestack-hyperlab'
+      - >-
+        host_desktop_common_shell_stage.trust_update_transport
+        == 'event-stream'
+      - host_desktop_common_shell_stage.slow_poll_seconds == 30
       - >-
         host_desktop_common_input_security.host_primary_modifier
         == 'SUPER'

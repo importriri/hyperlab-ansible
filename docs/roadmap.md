@@ -100,3 +100,20 @@ The Nitro hardware campaign fixed the Linux VFIO PRIMARY connection contract:
 This decision is frozen for `arch-dev-vfio` completion. Do not reopen the
 single-window built-in fallback experiment unless the remaining input-security
 work explicitly requires it.
+
+<!-- HYPERLAB_QUICKSHELL_READONLY_CORE_V1 -->
+### HyperLab Shell Phase 2B — read-only core
+
+- [x] physical Quickshell per-screen panel creation
+- [x] 37px exclusive-zone acceptance on Hyprland
+- [x] event-driven trust transport
+- [x] slow RAM/GPU/VM status surface
+- [x] native Quickshell clock
+- [x] compositor-neutral shared QML boundary
+- [ ] compositor-neutral workspace data adapter
+- [ ] theme semantic palette migration
+- [ ] host telemetry migration
+- [ ] reviewed interactive HyperLab controls
+- [ ] drawer / Control Center migration
+- [ ] complete keybinding cheatsheet surface
+- [ ] Sway physical parity acceptance
