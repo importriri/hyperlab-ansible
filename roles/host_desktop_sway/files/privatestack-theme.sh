@@ -123,6 +123,7 @@ wallpaper_path() {
 install_active_palette() {
     local theme=$1 source_dir=${palette_root}/$1
     copy_atomic "${source_dir}/hyperlab-palette.sway" "${config_dir}/palette.sway"
+    copy_atomic "${source_dir}/hyperlab-palette-quickshell.json" "${config_dir}/palette-quickshell.json"
     copy_atomic "${source_dir}/hyperlab-palette-hyprland.lua" "${config_home}/hypr/hyperlab_palette.lua"
     copy_atomic "${source_dir}/hyperlab-palette.rasi" "${config_dir}/palette.rasi"
     copy_atomic "${source_dir}/hyperlab-palette-foot.ini" "${config_dir}/palette-foot.ini"

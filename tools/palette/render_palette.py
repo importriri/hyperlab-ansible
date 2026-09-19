@@ -11,6 +11,7 @@ but every value comes from palette.yml.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -88,6 +89,30 @@ def hyprland_lua(name: str, c: dict[str, str]) -> str:
         "}",
     ]
     return "\n".join(lines) + "\n"
+
+
+def quickshell_json(
+    name: str,
+    c: dict[str, str],
+) -> str:
+    """Emit the shared HyperLab Shell semantic colour contract."""
+
+    payload = {
+        "name": name,
+        **{
+            token: c[token]
+            for token in SURFACE_TOKENS
+        },
+    }
+
+    return (
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
 
 
 def rofi_rasi(name: str, c: dict[str, str]) -> str:
@@ -175,6 +200,7 @@ WRITERS = {
     "hyperlab-palette-waybar.css": waybar_css,
     "hyperlab-palette.sway": sway_config,
     "hyperlab-palette-hyprland.lua": hyprland_lua,
+    "hyperlab-palette-quickshell.json": quickshell_json,
     "hyperlab-palette.rasi": rofi_rasi,
     "hyperlab-palette-foot.ini": foot_ini,
     "hyperlab-palette-swaylock.conf": swaylock_conf,

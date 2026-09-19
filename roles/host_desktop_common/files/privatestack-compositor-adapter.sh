@@ -13,6 +13,8 @@ usage() {
     cat >&2 <<'EOF'
 usage:
   privatestack-compositor-adapter backend
+  privatestack-compositor-adapter workspaces-json
+  privatestack-compositor-adapter workspace-watch
   privatestack-compositor-adapter keyboard-set LAYOUT INDEX ORDER_CSV
   privatestack-compositor-adapter wallpaper-set ABSOLUTE_IMAGE
   privatestack-compositor-adapter reload
@@ -139,6 +141,225 @@ if identity:
 '
 }
 
+workspace_snapshot_sway() {
+    local payload
+
+    payload="$(run_swaymsg -r -t get_workspaces)"
+
+    python3 - "${payload}" <<'PY_INNER'
+import json
+import sys
+
+items = json.loads(sys.argv[1])
+
+active = 0
+occupied = []
+urgent = []
+
+for item in items:
+    number = item.get("num")
+
+    if (
+        not isinstance(number, int)
+        or isinstance(number, bool)
+        or number < 1
+        or number > 9
+    ):
+        continue
+
+    occupied.append(number)
+
+    if item.get("focused"):
+        active = number
+
+    if item.get("urgent"):
+        urgent.append(number)
+
+print(
+    json.dumps(
+        {
+            "active": active,
+            "occupied": sorted(set(occupied)),
+            "urgent": sorted(set(urgent)),
+        },
+        separators=(",", ":"),
+    )
+)
+PY_INNER
+}
+
+workspace_snapshot_hyprland() {
+    local workspaces active clients
+
+    workspaces="$(run_hyprctl workspaces -j)"
+    active="$(run_hyprctl activeworkspace -j)"
+    clients="$(run_hyprctl clients -j)"
+
+    python3 - \
+        "${workspaces}" \
+        "${active}" \
+        "${clients}" <<'PY_INNER'
+import json
+import sys
+
+workspaces = json.loads(sys.argv[1])
+active_workspace = json.loads(sys.argv[2])
+clients = json.loads(sys.argv[3])
+
+active = active_workspace.get("id", 0)
+
+if (
+    not isinstance(active, int)
+    or isinstance(active, bool)
+    or active < 1
+    or active > 9
+):
+    active = 0
+
+occupied = set()
+
+for item in workspaces:
+    number = item.get("id")
+
+    if (
+        isinstance(number, int)
+        and not isinstance(number, bool)
+        and 1 <= number <= 9
+    ):
+        occupied.add(number)
+
+urgent = set()
+
+for client in clients:
+    if not client.get("urgent"):
+        continue
+
+    workspace = client.get("workspace") or {}
+    number = workspace.get("id")
+
+    if (
+        isinstance(number, int)
+        and not isinstance(number, bool)
+        and 1 <= number <= 9
+    ):
+        urgent.add(number)
+
+print(
+    json.dumps(
+        {
+            "active": active,
+            "occupied": sorted(occupied),
+            "urgent": sorted(urgent),
+        },
+        separators=(",", ":"),
+    )
+)
+PY_INNER
+}
+
+workspace_snapshot() {
+    case ${backend} in
+        sway)
+            workspace_snapshot_sway
+            ;;
+        hyprland)
+            workspace_snapshot_hyprland
+            ;;
+    esac
+}
+
+workspace_watch_sway() {
+    workspace_snapshot_sway
+
+    while IFS= read -r _event; do
+        workspace_snapshot_sway
+    done < <(
+        command swaymsg \
+            -m \
+            -t subscribe \
+            '["workspace"]'
+    )
+}
+
+workspace_watch_hyprland() {
+    local runtime_dir socket_path
+
+    workspace_snapshot_hyprland
+
+    runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+    socket_path="${runtime_dir}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+
+    [[ -S ${socket_path} ]] || {
+        printf \
+            'Hyprland event socket is unavailable: %s\n' \
+            "${socket_path}" \
+            >&2
+        return 4
+    }
+
+    while IFS= read -r event; do
+        case ${event} in
+            workspace\>\>*|\
+            workspacev2\>\>*|\
+            focusedmon\>\>*|\
+            createworkspace\>\>*|\
+            createworkspacev2\>\>*|\
+            destroyworkspace\>\>*|\
+            destroyworkspacev2\>\>*|\
+            moveworkspace\>\>*|\
+            moveworkspacev2\>\>*|\
+            movewindow\>\>*|\
+            movewindowv2\>\>*|\
+            openwindow\>\>*|\
+            closewindow\>\>*|\
+            urgent\>\>*)
+                workspace_snapshot_hyprland
+                ;;
+        esac
+    done < <(
+        python3 - "${socket_path}" <<'PY_INNER'
+import socket
+import sys
+
+path = sys.argv[1]
+
+connection = socket.socket(
+    socket.AF_UNIX,
+    socket.SOCK_STREAM,
+)
+connection.connect(path)
+
+buffer = ""
+
+while True:
+    chunk = connection.recv(4096)
+
+    if not chunk:
+        break
+
+    buffer += chunk.decode(
+        "utf-8",
+        errors="replace",
+    )
+
+    while "\n" in buffer:
+        line, buffer = buffer.split("\n", 1)
+        print(line, flush=True)
+PY_INNER
+    )
+}
+
+workspace_watch() {
+    case ${backend} in
+        sway)
+            workspace_watch_sway
+            ;;
+        hyprland)
+            workspace_watch_hyprland
+            ;;
+    esac
+}
+
 backend="$(detect_backend)" ||
     exit $?
 
@@ -147,6 +368,14 @@ operation=${1:-}
 case ${operation} in
     backend)
         printf '%s\n' "${backend}"
+        ;;
+
+    workspaces-json)
+        workspace_snapshot
+        ;;
+
+    workspace-watch)
+        workspace_watch
         ;;
 
     keyboard-set)

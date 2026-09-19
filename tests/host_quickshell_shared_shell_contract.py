@@ -62,6 +62,15 @@ def main() -> int:
             ),
             "trust_update_transport": "event-stream",
             "slow_poll_seconds": 30,
+            "workspace_state_enabled": True,
+            "workspace_state_bridge": (
+                "/usr/local/bin/privatestack-compositor-adapter"
+            ),
+            "workspace_update_transport": "event-stream",
+            "semantic_palette_enabled": True,
+            "semantic_palette_user_path": (
+                ".config/hyperlab/palette-quickshell.json"
+            ),
         },
         "Phase 2A deployment contract changed",
     )
@@ -100,7 +109,8 @@ def main() -> int:
         "right: true",
         'text: "◆  HYPERLAB"',
         'text: "◆  HYPERLAB"',
-        'text: "TRUST " + root.trustPayload.text',
+        '"TRUST "',
+        "root.trustPayload.text",
         "SystemClock",
         "import Quickshell.Io",
     ):

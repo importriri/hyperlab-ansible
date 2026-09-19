@@ -97,6 +97,7 @@
     mode: "0644"
   loop:
     - { src: hyperlab-palette.sway, dest: hyperlab/palette.sway }
+    - { src: hyperlab-palette-quickshell.json, dest: hyperlab/palette-quickshell.json }
     - { src: hyperlab-palette.rasi, dest: hyperlab/palette.rasi }
     - { src: hyperlab-palette-foot.ini, dest: hyperlab/palette-foot.ini }
     - { src: hyperlab-palette-gtk.css, dest: gtk-3.0/hyperlab-palette.css }

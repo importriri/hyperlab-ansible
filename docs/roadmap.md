@@ -110,8 +110,8 @@ work explicitly requires it.
 - [x] slow RAM/GPU/VM status surface
 - [x] native Quickshell clock
 - [x] compositor-neutral shared QML boundary
-- [ ] compositor-neutral workspace data adapter
-- [ ] theme semantic palette migration
+- [x] compositor-neutral workspace data adapter
+- [x] theme semantic palette migration
 - [ ] host telemetry migration
 - [ ] reviewed interactive HyperLab controls
 - [ ] drawer / Control Center migration

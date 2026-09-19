@@ -1,0 +1,19 @@
+{
+  "accent": "#4da3ff",
+  "accent2": "#55d6ff",
+  "bad": "#ff6b7a",
+  "base": "#08131f",
+  "dom_clean": "#72f2a5",
+  "dom_dev": "#5b8cff",
+  "dom_dirty": "#ff9d45",
+  "dom_lab": "#b184ff",
+  "dom_services": "#35e4dd",
+  "mantle": "#0d1c2b",
+  "name": "blue",
+  "ok": "#62d9a6",
+  "overlay": "#254866",
+  "subtext": "#8eacc4",
+  "surface": "#142a3e",
+  "text": "#deefff",
+  "warn": "#ffd166"
+}

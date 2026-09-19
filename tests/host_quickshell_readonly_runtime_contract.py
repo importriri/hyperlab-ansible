@@ -62,10 +62,14 @@ def main() -> int:
         '"vms"',
         "interval: 30000",
         'text: "◆  HYPERLAB"',
-        'text: "TRUST " + root.trustPayload.text',
-        'text: "RAM " + root.ramPayload.text',
-        'text: "GPU " + root.gpuPayload.text',
-        'text: "VM " + root.vmPayload.text',
+        '"TRUST "',
+        "root.trustPayload.text",
+        '"RAM "',
+        "root.ramPayload.text",
+        '"GPU "',
+        "root.gpuPayload.text",
+        '"VM "',
+        "root.vmPayload.text",
     ):
         require(
             marker in bar,

@@ -105,6 +105,11 @@ host_desktop_common_shell_stage:
   read_only_status_bridge: /usr/local/bin/privatestack-hyperlab
   trust_update_transport: event-stream
   slow_poll_seconds: 30
+  workspace_state_enabled: true
+  workspace_state_bridge: /usr/local/bin/privatestack-compositor-adapter
+  workspace_update_transport: event-stream
+  semantic_palette_enabled: true
+  semantic_palette_user_path: .config/hyperlab/palette-quickshell.json
 
 # Keyboard ownership is a security boundary. Host and guest compositor
 # namespaces are deliberately disjoint so focus/capture mistakes cannot turn

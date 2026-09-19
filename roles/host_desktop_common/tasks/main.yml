@@ -52,6 +52,17 @@
         host_desktop_common_shell_stage.trust_update_transport
         == 'event-stream'
       - host_desktop_common_shell_stage.slow_poll_seconds == 30
+      - host_desktop_common_shell_stage.workspace_state_enabled
+      - >-
+        host_desktop_common_shell_stage.workspace_state_bridge
+        == '/usr/local/bin/privatestack-compositor-adapter'
+      - >-
+        host_desktop_common_shell_stage.workspace_update_transport
+        == 'event-stream'
+      - host_desktop_common_shell_stage.semantic_palette_enabled
+      - >-
+        host_desktop_common_shell_stage.semantic_palette_user_path
+        == '.config/hyperlab/palette-quickshell.json'
       - >-
         host_desktop_common_input_security.host_primary_modifier
         == 'SUPER'
