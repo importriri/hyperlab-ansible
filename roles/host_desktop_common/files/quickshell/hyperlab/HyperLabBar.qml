@@ -14,6 +14,9 @@ PanelWindow {
     readonly property string compositorAdapter:
         "/usr/local/bin/privatestack-compositor-adapter"
 
+    readonly property string telemetryBridge:
+        "/usr/local/bin/privatestack-telemetry"
+
     property var palette: ({
         "name": "fallback",
         "base": "black",
@@ -54,6 +57,30 @@ PanelWindow {
     })
 
     property var vmPayload: ({
+        "text": "…",
+        "tooltip": "",
+        "class": ""
+    })
+
+    property var temperaturePayload: ({
+        "text": "…",
+        "tooltip": "",
+        "class": ""
+    })
+
+    property var networkPayload: ({
+        "text": "…",
+        "tooltip": "",
+        "class": ""
+    })
+
+    property var audioPayload: ({
+        "text": "…",
+        "tooltip": "",
+        "class": ""
+    })
+
+    property var batteryPayload: ({
         "text": "…",
         "tooltip": "",
         "class": ""
@@ -176,6 +203,74 @@ PanelWindow {
         }
     }
 
+    function normalizeStatusPayload(candidate, fallbackText) {
+        if (
+            candidate === undefined
+            || candidate === null
+            || typeof candidate !== "object"
+        ) {
+            return {
+                "text": fallbackText,
+                "tooltip": "",
+                "class": "unavailable"
+            };
+        }
+
+        return {
+            "text":
+                candidate.text !== undefined
+                ? String(candidate.text)
+                : fallbackText,
+            "tooltip":
+                candidate.tooltip !== undefined
+                ? String(candidate.tooltip)
+                : "",
+            "class":
+                candidate.class !== undefined
+                ? String(candidate.class)
+                : ""
+        };
+    }
+
+    function applyTelemetryPayload(raw) {
+        const source = String(raw).trim();
+
+        if (source.length === 0)
+            return;
+
+        try {
+            const parsed = JSON.parse(source);
+
+            root.temperaturePayload =
+                root.normalizeStatusPayload(
+                    parsed.temperature,
+                    "—"
+                );
+
+            root.networkPayload =
+                root.normalizeStatusPayload(
+                    parsed.network,
+                    "—"
+                );
+
+            root.audioPayload =
+                root.normalizeStatusPayload(
+                    parsed.audio,
+                    "—"
+                );
+
+            root.batteryPayload =
+                root.normalizeStatusPayload(
+                    parsed.battery,
+                    "—"
+                );
+        } catch (error) {
+            console.warn(
+                "HyperLab telemetry payload parse failed"
+            );
+        }
+    }
+
     function semanticStatusColor(statusClass) {
         switch (String(statusClass)) {
         case "ok":
@@ -192,6 +287,19 @@ PanelWindow {
         }
     }
 
+    function telemetryTextColor(candidate) {
+        const statusClass = String(candidate.class);
+
+        if (
+            statusClass.length === 0
+            || statusClass === "unavailable"
+        ) {
+            return root.palette.subtext;
+        }
+
+        return root.semanticStatusColor(statusClass);
+    }
+
     function refreshSlowMetrics() {
         if (!ramProcess.running)
             ramProcess.running = true;
@@ -201,6 +309,9 @@ PanelWindow {
 
         if (!vmProcess.running)
             vmProcess.running = true;
+
+        if (!telemetryProcess.running)
+            telemetryProcess.running = true;
     }
 
     screen: modelData
@@ -361,6 +472,21 @@ PanelWindow {
             onStreamFinished: {
                 root.vmPayload =
                     root.parsePayload(this.text, "?");
+            }
+        }
+    }
+
+    Process {
+        id: telemetryProcess
+
+        command: [
+            root.telemetryBridge,
+            "snapshot"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.applyTelemetryPayload(this.text);
             }
         }
     }
@@ -553,6 +679,82 @@ PanelWindow {
                     + root.vmPayload.text
 
                 color: root.palette.subtext
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 14
+                color: root.palette.overlay
+            }
+
+            Text {
+                text:
+                    "TEMP "
+                    + root.temperaturePayload.text
+
+                color:
+                    root.telemetryTextColor(
+                        root.temperaturePayload
+                    )
+
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 14
+                color: root.palette.overlay
+            }
+
+            Text {
+                text:
+                    "NET "
+                    + root.networkPayload.text
+
+                color:
+                    root.telemetryTextColor(
+                        root.networkPayload
+                    )
+
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 14
+                color: root.palette.overlay
+            }
+
+            Text {
+                text:
+                    "VOL "
+                    + root.audioPayload.text
+
+                color:
+                    root.telemetryTextColor(
+                        root.audioPayload
+                    )
+
+                font.pixelSize: 11
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 14
+                color: root.palette.overlay
+            }
+
+            Text {
+                text:
+                    "BAT "
+                    + root.batteryPayload.text
+
+                color:
+                    root.telemetryTextColor(
+                        root.batteryPayload
+                    )
+
                 font.pixelSize: 11
             }
 

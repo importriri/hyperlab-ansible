@@ -249,3 +249,19 @@ The active user copy is
 Quickshell watches that file directly. A theme change therefore updates the
 shared shell without a polling loop and without duplicating colour constants
 inside QML. Semantic domain colours remain invariant across appearance themes.
+
+### Shared host telemetry
+
+The shared HyperLab Shell presents temperature, network state, default audio
+volume and battery state through one reviewed read-only bridge:
+`/usr/local/bin/privatestack-telemetry`.
+
+Quickshell does not read kernel telemetry paths or invoke audio/network tooling
+directly. The bridge owns that boundary and emits one narrow JSON snapshot.
+Temperature, network and battery state are read from host-local kernel status
+surfaces; audio uses `wpctl` without a shell. The bridge has no privileged or
+write operation.
+
+Telemetry follows the existing slow 30-second shell cadence. Critical
+temperature and low-battery states use the semantic warning/error palette while
+ordinary values remain visually subordinate to trust state.

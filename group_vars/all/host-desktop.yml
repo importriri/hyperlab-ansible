@@ -110,6 +110,14 @@ host_desktop_common_shell_stage:
   workspace_update_transport: event-stream
   semantic_palette_enabled: true
   semantic_palette_user_path: .config/hyperlab/palette-quickshell.json
+  telemetry_enabled: true
+  telemetry_bridge: /usr/local/bin/privatestack-telemetry
+  telemetry_poll_seconds: 30
+  telemetry_fields:
+    - temperature
+    - network
+    - audio
+    - battery
 
 # Keyboard ownership is a security boundary. Host and guest compositor
 # namespaces are deliberately disjoint so focus/capture mistakes cannot turn

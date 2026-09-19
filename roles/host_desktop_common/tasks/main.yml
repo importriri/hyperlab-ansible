@@ -63,6 +63,14 @@
       - >-
         host_desktop_common_shell_stage.semantic_palette_user_path
         == '.config/hyperlab/palette-quickshell.json'
+      - host_desktop_common_shell_stage.telemetry_enabled
+      - >-
+        host_desktop_common_shell_stage.telemetry_bridge
+        == '/usr/local/bin/privatestack-telemetry'
+      - host_desktop_common_shell_stage.telemetry_poll_seconds == 30
+      - >-
+        host_desktop_common_shell_stage.telemetry_fields
+        == ['temperature', 'network', 'audio', 'battery']
       - >-
         host_desktop_common_input_security.host_primary_modifier
         == 'SUPER'
@@ -200,6 +208,14 @@
   ansible.builtin.copy:
     src: privatestack-compositor-adapter.sh
     dest: /usr/local/bin/privatestack-compositor-adapter
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the shared read-only host telemetry bridge
+  ansible.builtin.copy:
+    src: privatestack-telemetry.py
+    dest: /usr/local/bin/privatestack-telemetry
     owner: root
     group: root
     mode: "0755"

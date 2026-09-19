@@ -112,7 +112,7 @@ work explicitly requires it.
 - [x] compositor-neutral shared QML boundary
 - [x] compositor-neutral workspace data adapter
 - [x] theme semantic palette migration
-- [ ] host telemetry migration
+- [x] host telemetry migration
 - [ ] reviewed interactive HyperLab controls
 - [ ] drawer / Control Center migration
 - [ ] complete keybinding cheatsheet surface

@@ -71,6 +71,17 @@ def main() -> int:
             "semantic_palette_user_path": (
                 ".config/hyperlab/palette-quickshell.json"
             ),
+            "telemetry_enabled": True,
+            "telemetry_bridge": (
+                "/usr/local/bin/privatestack-telemetry"
+            ),
+            "telemetry_poll_seconds": 30,
+            "telemetry_fields": [
+                "temperature",
+                "network",
+                "audio",
+                "battery",
+            ],
         },
         "Phase 2A deployment contract changed",
     )
