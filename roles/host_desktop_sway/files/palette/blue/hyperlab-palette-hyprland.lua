@@ -11,6 +11,7 @@ return {
     ok = "#62d9a6",
     warn = "#ffd166",
     bad = "#ff6b7a",
+    dom_host = "#8b949e",
     dom_clean = "#72f2a5",
     dom_dev = "#5b8cff",
     dom_lab = "#b184ff",

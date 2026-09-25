@@ -71,11 +71,20 @@ def parse_domain(xml_text):
         if address:
             hostdevs.append(address)
 
+    vcpus = None
+    vcpu_node = root.find("vcpu")
+    if vcpu_node is not None and vcpu_node.text:
+        try:
+            vcpus = int(vcpu_node.text)
+        except ValueError:
+            vcpus = None
+
     name_node = root.find("name")
     metadata = _managed_metadata(root)
     return {
         "name": name_node.text if name_node is not None else None,
         "memory_mb": None if memory_kib is None else memory_kib // 1024,
+        "vcpus": vcpus,
         "networks": networks,
         "hostdevs": hostdevs,
         "vfio": bool(hostdevs),

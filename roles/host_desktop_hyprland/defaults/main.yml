@@ -52,6 +52,7 @@ host_desktop_hyprland_palette_variants:
   - violet
   - blue
   - red
+  - trust-model
 host_desktop_hyprland_palette_fallback: green
 
 # hyperlabctl remains the source of operational truth. Future host integration

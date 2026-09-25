@@ -9,12 +9,14 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+QML = "roles/host_desktop_common/files/quickshell/hyperlab/"
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(
-            f"HyperLab Quickshell telemetry contract: {message}"
+            "HyperLab Quickshell telemetry contract: "
+            + message
         )
 
 
@@ -52,10 +54,17 @@ def main() -> int:
         "telemetry field contract changed",
     )
 
-    bar = text(
-        "roles/host_desktop_common/files/"
-        "quickshell/hyperlab/HyperLabBar.qml"
+    state = text(QML + "ShellState.qml")
+    bar = text(QML + "HyperLabBar.qml")
+    panel = text(QML + "SystemPanel.qml")
+    osd = text(QML + "OsdSurface.qml")
+    system = text(QML + "SystemCluster.qml")
+
+    shared_qml = "\n".join(
+        text(QML + name)
+        for name in stage["surface_files"]
     )
+
     helper_path = (
         ROOT
         / "roles/host_desktop_common/files/"
@@ -72,15 +81,92 @@ def main() -> int:
         "networkPayload",
         "audioPayload",
         "batteryPayload",
-        '"TEMP "',
-        '"NET "',
-        '"VOL "',
-        '"BAT "',
         "interval: 30000",
     ):
         require(
+            marker in state,
+            f"shared telemetry runtime marker missing: {marker}",
+        )
+
+    for marker in (
+        "audioPayload: bar.shellState.audioPayload",
+        "batteryPayload: bar.shellState.batteryPayload",
+        "networkPayload: bar.shellState.networkPayload",
+    ):
+        require(
             marker in bar,
-            f"shared telemetry marker missing: {marker}",
+            f"rail telemetry wiring missing: {marker}",
+        )
+
+    for marker in (
+        "cluster.audioPayload",
+        "cluster.batteryPayload",
+        "cluster.networkPayload",
+        "cluster.attentionClass",
+    ):
+        require(
+            marker in system,
+            f"system telemetry marker missing: {marker}",
+        )
+
+    for marker in (
+        "panel.shellState.networkPayload",
+        "panel.shellState.audioPayload",
+        "panel.shellState.batteryPayload",
+        "panel.shellState.temperaturePayload",
+    ):
+        require(
+            marker in panel,
+            f"system panel telemetry marker missing: {marker}",
+        )
+
+    require(
+        "osd.shellState.audioLevel" in osd
+        and "function show(" not in osd
+        and "IpcHandler" not in osd,
+        "OSD accepts caller values",
+    )
+
+    # Audio is a number from the host, not a percentage parsed back out of
+    # display text, so a localized or changed label cannot alter behaviour.
+    for marker in (
+        "audioLevel",
+        '"percent"',
+        '"muted"',
+        '"maximum"',
+        '"present"',
+        "batteryPresence",
+    ):
+        require(
+            marker in state,
+            f"structured telemetry marker missing: {marker}",
+        )
+
+    for forbidden in (
+        'indexOf("mute")',
+        "match(/(",
+        'text === "0%"',
+        'indexOf("wifi")',
+        'text === "offline"',
+    ):
+        require(
+            forbidden not in shared_qml,
+            f"telemetry display text became a state machine input: {forbidden}",
+        )
+
+    for marker in (
+        "percent=percent",
+        "muted=True",
+        "muted=False",
+        "present=False",
+        "present=True",
+        "AUDIO_MAXIMUM",
+        'kind="offline"',
+        "kind=link",
+    ):
+        require(
+            marker in helper,
+            f"structured telemetry bridge marker missing: {marker}",
         )
 
     for forbidden in (
@@ -98,7 +184,7 @@ def main() -> int:
         "shell=True",
     ):
         require(
-            forbidden not in bar,
+            forbidden not in shared_qml,
             f"QML crossed telemetry boundary: {forbidden}",
         )
 
@@ -149,9 +235,7 @@ def main() -> int:
             f"telemetry deployment marker missing: {marker}",
         )
 
-    print(
-        "HyperLab shared host telemetry contract: OK"
-    )
+    print("HyperLab shared host telemetry contract: OK")
     return 0
 
 

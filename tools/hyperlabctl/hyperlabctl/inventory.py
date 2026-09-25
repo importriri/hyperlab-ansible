@@ -46,9 +46,15 @@ def domains(ctx):
                 collected.append(domain_detail(ctx, name))
             except Unavailable:
                 collected.append(
+                    # None is not []: an unreadable domain has unknown
+                    # networks, while [] means the domain really declares none.
+                    # Likewise managed/vfio are unknown here, not False: an
+                    # unreadable domain is neither external nor VFIO-free.
                     {"name": name, "state": "unknown", "memory_mb": None,
-                     "networks": [], "hostdevs": [], "vfio": False,
-                     "managed": False, "device_profile": None, "lifecycle": None}
+                     "vcpus": None,
+                     "networks": None, "hostdevs": [], "vfio": None,
+                     "managed": None, "device_profile": None,
+                     "lifecycle": None}
                 )
         ctx.cache["inventory.domains"] = collected
     return ctx.cache["inventory.domains"]

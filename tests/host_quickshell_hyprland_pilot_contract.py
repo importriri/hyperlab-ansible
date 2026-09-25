@@ -116,15 +116,28 @@ def main() -> int:
         and "HyperLabBar" in root,
         "shared shell root disappeared",
     )
+    tokens = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/Tokens.qml"
+    )
+
     require(
         "PanelWindow" in bar
-        and "implicitHeight: 37" in bar,
+        and "readonly property int barHeight: 37" in tokens
+        and "implicitHeight: bar.tokens.barHeight" in bar
+        and "exclusiveZone: bar.tokens.barHeight" in bar,
         "shared shell bar foundation changed",
     )
 
     # Shared QML remains compositor-neutral even though Hyprland is the
     # first compositor that will physically exercise it.
-    combined = root + "\n" + bar
+    combined = "\n".join(
+        text(
+            "roles/host_desktop_common/files/"
+            "quickshell/hyperlab/" + name
+        )
+        for name in stage["surface_files"]
+    )
 
     # Human-facing compositor names are presentation text and are allowed.
     # What shared QML must never gain is compositor-specific API/import or

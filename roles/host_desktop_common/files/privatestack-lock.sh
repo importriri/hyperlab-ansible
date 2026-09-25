@@ -5,6 +5,15 @@ readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privat
 
 backend="$("${compositor_adapter}" backend)"
 
+# Tell the HyperLab shell the session is locking, so nothing armed (a
+# destructive confirmation, the launcher, the system panel) survives behind
+# the locker. Fixed receiver, no arguments, backgrounded and time-bounded:
+# a missing or hung shell can never delay or prevent the lock.
+if command -v qs >/dev/null 2>&1; then
+    (timeout 2 qs -c hyperlab ipc call session locking || true) \
+        </dev/null >/dev/null 2>&1 &
+fi
+
 case ${backend} in
     sway)
         image=$(/usr/local/bin/privatestack-theme lock-image)

@@ -82,6 +82,10 @@ hl.bind(
     hl.dsp.exec_cmd("nemo")
 )
 
+-- Transitional application launcher. HyperLab's native command surface
+-- navigates the product; launching arbitrary desktop entries stays outside
+-- the typed bridge until a reviewed app-launch contract exists, so Rofi keeps
+-- this one job and no HyperLab route.
 hl.bind(
     main_mod .. " + D",
     hl.dsp.exec_cmd(
@@ -93,7 +97,7 @@ hl.bind(
 hl.bind(
     main_mod .. " + X",
     hl.dsp.exec_cmd(
-        "/usr/local/bin/privatestack-powermenu"
+        "/usr/bin/qs -c hyperlab ipc call workspace controls"
     )
 )
 
@@ -249,12 +253,20 @@ for workspace = 1, 9 do
     )
 end
 
--- Proven compositor-neutral HyperLab surfaces.
+-- Native HyperLab product surfaces. Every HyperLab route goes through the
+-- shell's fixed IPC receivers: no detached drawer, no overlay launcher and no
+-- legacy control-center process is reachable from the preferred session.
+hl.bind(
+    main_mod .. " + SPACE",
+    hl.dsp.exec_cmd(
+        "/usr/bin/qs -c hyperlab ipc call launcher toggle"
+    )
+)
+
 hl.bind(
     main_mod .. " + F2",
     hl.dsp.exec_cmd(
-        "/usr/local/bin/privatestack-hyperlab-domains "
-        .. "--surface drawer --section diagnostics"
+        "/usr/bin/qs -c hyperlab ipc call workspace diagnostics"
     )
 )
 
@@ -269,12 +281,13 @@ hl.bind(
 hl.bind(
     main_mod .. " + F4",
     hl.dsp.exec_cmd(
-        "/usr/local/bin/privatestack-hyperlab-domains "
-        .. "--surface overlay --section vms"
+        "/usr/bin/qs -c hyperlab ipc call workspace machines"
     )
 )
 
--- Required backend routes retained as explicit migration contracts.
+-- Required backend routes retained as explicit migration contracts. The GTK
+-- surfaces below remain recovery-only tools: they are still deployed, but the
+-- preferred Hyprland session never routes product navigation through them.
 -- HYPERLAB_PARITY_ROUTE:
 -- /usr/local/bin/privatestack-hyperlab-domains --surface drawer --section vms
 -- HYPERLAB_PARITY_ROUTE: hyperlabctl open looking-glass
@@ -393,7 +406,7 @@ hl.bind(
 hl.bind(
     main_mod .. " + SHIFT + P",
     hl.dsp.exec_cmd(
-        "/usr/local/bin/privatestack-controls"
+        "/usr/bin/qs -c hyperlab ipc call workspace controls"
     )
 )
 
@@ -407,7 +420,7 @@ hl.bind(
 hl.bind(
     main_mod .. " + SHIFT + B",
     hl.dsp.exec_cmd(
-        "/usr/local/bin/privatestack-waybar toggle"
+        "/usr/bin/qs -c hyperlab ipc call bar toggle"
     )
 )
 

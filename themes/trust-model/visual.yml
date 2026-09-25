@@ -1,0 +1,105 @@
+version: 1
+theme: trust-model
+
+design:
+  style: dark-near-black
+  density: compact
+  identity: central-symbol
+  decorative_trust_colors: false
+
+appearance:
+  base: "#07090d"
+  mantle: "#0d1117"
+  surface: "#151b23"
+  raised: "#1c2430"
+  overlay: "#232d3a"
+  border: "#303b49"
+  text: "#f0f6fc"
+  subtext: "#9aa7b5"
+  muted: "#697583"
+  focus: "#d0d7de"
+  host_neutral: "#8b949e"
+
+trust:
+  authority: host-owned
+  focused_surface_drives_identity: true
+  host_native_returns_neutral: true
+  identities:
+    host:
+      label: HOST
+      color: "#8b949e"
+      semantic: neutral
+    clean:
+      label: CLEAN
+      color: "#72f2a5"
+      semantic: trust-domain
+    dev:
+      label: DEV
+      color: "#5b8cff"
+      semantic: trust-domain
+    services:
+      label: SERVICES
+      color: "#35e4dd"
+      semantic: trust-domain
+    dirty:
+      label: DIRTY
+      color: "#ff9d45"
+      semantic: trust-domain
+    lab:
+      label: LAB
+      color: "#b184ff"
+      semantic: trust-domain
+
+quickshell:
+  base_uses_appearance_tokens: true
+  focus_uses_neutral_focus_token: true
+  trust_badge_uses_trust_identity: true
+  provenance_uses_trust_identity: true
+  generic_controls_use_trust_colors: false
+  telemetry_uses_trust_colors: false
+
+wallpaper:
+  asset_set: hyperlab-trust-v2
+  geometry: "1672x941"
+  fit: fill
+  rotation: true
+  rotation_seconds: 1800
+  rotation_scope: current-trust-only
+  immediate_switch_on_trust_change: true
+  cross_trust_rotation: false
+  central_symbol_required: true
+  trust_mapping: explicit-manifest
+  infer_mapping_from_color: false
+  infer_mapping_from_filename: false
+
+keyboard_rgb:
+  source: focused-host-owned-trust
+  provider: hyperlab-nitro-control
+  capability: per_zone
+  zones: 4
+  zone_policy: uniform-trust-color
+  brightness: preserve
+  update_policy: event-driven
+  unavailable: continue-without-rgb
+  identities:
+    host:
+      zones: ["8b949e", "8b949e", "8b949e", "8b949e"]
+    clean:
+      zones: ["72f2a5", "72f2a5", "72f2a5", "72f2a5"]
+    dev:
+      zones: ["5b8cff", "5b8cff", "5b8cff", "5b8cff"]
+    services:
+      zones: ["35e4dd", "35e4dd", "35e4dd", "35e4dd"]
+    dirty:
+      zones: ["ff9d45", "ff9d45", "ff9d45", "ff9d45"]
+    lab:
+      zones: ["b184ff", "b184ff", "b184ff", "b184ff"]
+
+security:
+  theme_may_set_trust: false
+  guest_may_set_trust: false
+  wallpaper_may_set_trust: false
+  rgb_may_set_trust: false
+  direct_sysfs: false
+  direct_privilege: false
+  direct_compositor_ipc_from_qml: false

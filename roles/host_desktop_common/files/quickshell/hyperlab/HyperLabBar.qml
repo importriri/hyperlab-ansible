@@ -1,366 +1,49 @@
+// HyperLab top rail (V447-C9.3).
+//
+// The rail is shell chrome: an opaque surface running edge to edge with one
+// hairline beneath it. Inside the 37-unit reserve it answers three
+// questions, in three bounded regions:
+//
+//   left    where am I          identity, compositor workspaces
+//   centre  when, and on what   the clock, the focused host surface
+//   right   what is the host doing   provenance, GPU, system readouts
+//
+// The side regions are bounded, so the clock keeps the display centre while
+// there is room for it and the rail reduces in a defined order rather than
+// colliding: the context elides, the date goes, the wordmark collapses to
+// the mark, and workspace chips fold into a counted overflow.
+//
+// Presentation only. Data arrives from ShellState, actions leave through
+// ShellActions, surfaces are summoned through ShellSurfaces, and no
+// compositor, hypervisor or privileged call exists here.
+
 import Quickshell
-import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
-import QtQuick.Layouts
 
 PanelWindow {
-    id: root
+    id: bar
+
+    visible: bar.shellSurfaces.topRailVisible
+
+    required property var tokens
+    required property var theme
+    required property var icons
+    required property var shellState
+    required property var shellActions
+    required property var shellSurfaces
 
     property var modelData
 
-    readonly property string statusBridge:
-        "/usr/local/bin/privatestack-hyperlab"
-
-    readonly property string compositorAdapter:
-        "/usr/local/bin/privatestack-compositor-adapter"
-
-    readonly property string telemetryBridge:
-        "/usr/local/bin/privatestack-telemetry"
-
-    readonly property string actionBridge:
-        "/usr/local/bin/privatestack-shell-actions"
-
-    property string keyboardLayout: "it"
-    property string wallpaperMode: "public"
-
-    property var palette: ({
-        "name": "fallback",
-        "base": "black",
-        "mantle": "black",
-        "surface": "darkslategray",
-        "overlay": "dimgray",
-        "text": "white",
-        "subtext": "lightgray",
-        "accent": "deepskyblue",
-        "accent2": "cyan",
-        "ok": "limegreen",
-        "warn": "gold",
-        "bad": "crimson"
-    })
-
-    property var workspacePayload: ({
-        "active": 0,
-        "occupied": [],
-        "urgent": []
-    })
-
-    property var trustPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var ramPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var gpuPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var vmPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var temperaturePayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var networkPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var audioPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    property var batteryPayload: ({
-        "text": "…",
-        "tooltip": "",
-        "class": ""
-    })
-
-    function validPalette(candidate) {
-        const required = [
-            "name",
-            "base",
-            "mantle",
-            "surface",
-            "overlay",
-            "text",
-            "subtext",
-            "accent",
-            "accent2",
-            "ok",
-            "warn",
-            "bad"
-        ];
-
-        for (let index = 0; index < required.length; index++) {
-            const key = required[index];
-
-            if (
-                candidate[key] === undefined
-                || typeof candidate[key] !== "string"
-                || candidate[key].length === 0
-            ) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    function applyPalette(raw) {
-        const source = String(raw).trim();
-
-        if (source.length === 0)
-            return;
-
-        try {
-            const parsed = JSON.parse(source);
-
-            if (!root.validPalette(parsed))
-                return;
-
-            root.palette = parsed;
-            console.info(
-                "HyperLab palette loaded: " + parsed.name
-            );
-        } catch (error) {
-            console.warn(
-                "HyperLab semantic palette parse failed"
-            );
-        }
-    }
-
-    function parsePayload(raw, fallbackText) {
-        const source = String(raw).trim();
-
-        if (source.length === 0) {
-            return {
-                "text": fallbackText,
-                "tooltip": "",
-                "class": ""
-            };
-        }
-
-        try {
-            const parsed = JSON.parse(source);
-
-            return {
-                "text":
-                    parsed.text !== undefined
-                    ? String(parsed.text)
-                    : fallbackText,
-                "tooltip":
-                    parsed.tooltip !== undefined
-                    ? String(parsed.tooltip)
-                    : "",
-                "class":
-                    parsed.class !== undefined
-                    ? String(parsed.class)
-                    : ""
-            };
-        } catch (error) {
-            return {
-                "text": fallbackText,
-                "tooltip":
-                    "HyperLab status payload unavailable",
-                "class": "error"
-            };
-        }
-    }
-
-    function applyWorkspacePayload(raw) {
-        const source = String(raw).trim();
-
-        if (source.length === 0)
-            return;
-
-        try {
-            const parsed = JSON.parse(source);
-
-            if (
-                typeof parsed.active !== "number"
-                || !Array.isArray(parsed.occupied)
-                || !Array.isArray(parsed.urgent)
-            ) {
-                return;
-            }
-
-            root.workspacePayload = parsed;
-        } catch (error) {
-            console.warn(
-                "HyperLab workspace payload parse failed"
-            );
-        }
-    }
-
-    function normalizeStatusPayload(candidate, fallbackText) {
-        if (
-            candidate === undefined
-            || candidate === null
-            || typeof candidate !== "object"
-        ) {
-            return {
-                "text": fallbackText,
-                "tooltip": "",
-                "class": "unavailable"
-            };
-        }
-
-        return {
-            "text":
-                candidate.text !== undefined
-                ? String(candidate.text)
-                : fallbackText,
-            "tooltip":
-                candidate.tooltip !== undefined
-                ? String(candidate.tooltip)
-                : "",
-            "class":
-                candidate.class !== undefined
-                ? String(candidate.class)
-                : ""
-        };
-    }
-
-    function applyTelemetryPayload(raw) {
-        const source = String(raw).trim();
-
-        if (source.length === 0)
-            return;
-
-        try {
-            const parsed = JSON.parse(source);
-
-            root.temperaturePayload =
-                root.normalizeStatusPayload(
-                    parsed.temperature,
-                    "—"
-                );
-
-            root.networkPayload =
-                root.normalizeStatusPayload(
-                    parsed.network,
-                    "—"
-                );
-
-            root.audioPayload =
-                root.normalizeStatusPayload(
-                    parsed.audio,
-                    "—"
-                );
-
-            root.batteryPayload =
-                root.normalizeStatusPayload(
-                    parsed.battery,
-                    "—"
-                );
-        } catch (error) {
-            console.warn(
-                "HyperLab telemetry payload parse failed"
-            );
-        }
-    }
-
-    function applyKeyboardLayout(raw) {
-        const candidate = String(raw).trim();
-
-        if (
-            candidate === "it"
-            || candidate === "us"
-            || candidate === "ara"
-        ) {
-            root.keyboardLayout = candidate;
-        }
-    }
-
-    function applyWallpaperMode(raw) {
-        const candidate = String(raw).trim();
-
-        if (
-            candidate === "public"
-            || candidate === "personal"
-        ) {
-            root.wallpaperMode = candidate;
-        }
-    }
-
-    function keyboardLabel() {
-        switch (root.keyboardLayout) {
-        case "us":
-            return "EN";
-        case "ara":
-            return "AR";
-        default:
-            return "IT";
-        }
-    }
-
-    function wallpaperLabel() {
-        return root.wallpaperMode === "personal"
-            ? "PVT"
-            : "PUB";
-    }
-
-    function semanticStatusColor(statusClass) {
-        switch (String(statusClass)) {
-        case "ok":
-            return root.palette.ok;
-        case "warning":
-        case "warn":
-            return root.palette.warn;
-        case "error":
-        case "bad":
-        case "critical":
-            return root.palette.bad;
-        default:
-            return root.palette.accent;
-        }
-    }
-
-    function telemetryTextColor(candidate) {
-        const statusClass = String(candidate.class);
-
-        if (
-            statusClass.length === 0
-            || statusClass === "unavailable"
-        ) {
-            return root.palette.subtext;
-        }
-
-        return root.semanticStatusColor(statusClass);
-    }
-
-    function refreshSlowMetrics() {
-        if (!ramProcess.running)
-            ramProcess.running = true;
-
-        if (!gpuProcess.running)
-            gpuProcess.running = true;
-
-        if (!vmProcess.running)
-            vmProcess.running = true;
-
-        if (!telemetryProcess.running)
-            telemetryProcess.running = true;
-    }
-
     screen: modelData
+
+    readonly property string outputName:
+        bar.screen ? String(bar.screen.name) : ""
+
+    // Reduction thresholds, in logical units of available rail width.
+    readonly property bool wideRail: bar.width >= 1280
+    readonly property bool mediumRail: bar.width >= 1000
+    readonly property bool narrowRail: bar.width < 820
 
     anchors {
         top: true
@@ -368,643 +51,234 @@ PanelWindow {
         right: true
     }
 
-    implicitHeight: 37
-    exclusiveZone: 37
-    color: root.palette.base
+    implicitHeight: bar.tokens.barHeight
+    exclusiveZone: bar.tokens.barHeight
+    color: "transparent"
 
-    Component.onCompleted: {
-        root.applyPalette(
-            paletteFile.text()
-        );
-
-        root.applyKeyboardLayout(
-            keyboardStateFile.text()
-        );
-
-        root.applyWallpaperMode(
-            wallpaperModeStateFile.text()
-        );
-    }
-
-    FileView {
-        id: paletteFile
-
-        path:
-            Quickshell.env("HOME")
-            + "/.config/hyperlab/"
-            + "palette-quickshell.json"
-
-        blockLoading: true
-        watchChanges: true
-
-        onFileChanged: reload()
-
-        onTextChanged: {
-            root.applyPalette(
-                this.text()
-            );
-        }
-    }
-
-    FileView {
-        id: keyboardStateFile
-
-        path:
-            Quickshell.env("HOME")
-            + "/.config/hyperlab/"
-            + "keyboard-layout"
-
-        watchChanges: true
-
-        onFileChanged: reload()
-
-        onTextChanged: {
-            root.applyKeyboardLayout(
-                this.text()
-            );
-        }
-    }
-
-    FileView {
-        id: wallpaperModeStateFile
-
-        path:
-            Quickshell.env("HOME")
-            + "/.config/hyperlab/"
-            + "wallpaper-mode"
-
-        watchChanges: true
-
-        onFileChanged: reload()
-
-        onTextChanged: {
-            root.applyWallpaperMode(
-                this.text()
-            );
-        }
-    }
-
-    SystemClock {
-        id: clock
-        precision: SystemClock.Minutes
-    }
-
-    // Workspace state is compositor-neutral in QML. The adapter owns
-    // translation to Sway or Hyprland and emits one JSON snapshot per event.
-    Process {
-        id: workspaceProcess
-
-        running: true
-
-        command: [
-            root.compositorAdapter,
-            "workspace-watch"
-        ]
-
-        stdout: SplitParser {
-            onRead: data => {
-                root.applyWorkspacePayload(data);
-            }
-        }
-
-        onRunningChanged: {
-            if (!running)
-                workspaceRestart.start();
-        }
-    }
-
-    Timer {
-        id: workspaceRestart
-        interval: 2000
-        repeat: false
-
-        onTriggered: {
-            if (!workspaceProcess.running)
-                workspaceProcess.running = true;
-        }
-    }
-
-    // Trust remains event-driven through hyperlabctl.
-    Process {
-        id: trustProcess
-
-        running: true
-
-        command: [
-            root.statusBridge,
-            "watch",
-            "trust"
-        ]
-
-        stdout: SplitParser {
-            onRead: data => {
-                root.trustPayload =
-                    root.parsePayload(data, "?");
-            }
-        }
-
-        onRunningChanged: {
-            if (!running)
-                trustRestart.start();
-        }
-    }
-
-    Timer {
-        id: trustRestart
-        interval: 2000
-        repeat: false
-
-        onTriggered: {
-            if (!trustProcess.running)
-                trustProcess.running = true;
-        }
-    }
-
-    Process {
-        id: ramProcess
-
-        command: [
-            root.statusBridge,
-            "ram"
-        ]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.ramPayload =
-                    root.parsePayload(this.text, "?");
-            }
-        }
-    }
-
-    Process {
-        id: gpuProcess
-
-        command: [
-            root.statusBridge,
-            "gpu"
-        ]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.gpuPayload =
-                    root.parsePayload(this.text, "?");
-            }
-        }
-    }
-
-    Process {
-        id: vmProcess
-
-        command: [
-            root.statusBridge,
-            "vms"
-        ]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.vmPayload =
-                    root.parsePayload(this.text, "?");
-            }
-        }
-    }
-
-    Process {
-        id: telemetryProcess
-
-        command: [
-            root.telemetryBridge,
-            "snapshot"
-        ]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.applyTelemetryPayload(this.text);
-            }
-        }
-    }
-
-    Process {
-        id: keyboardActionProcess
-
-        command: [
-            root.actionBridge,
-            "keyboard-cycle"
-        ]
-
-        onRunningChanged: {
-            if (!running)
-                keyboardStateFile.reload();
-        }
-    }
-
-    Process {
-        id: wallpaperActionProcess
-
-        command: [
-            root.actionBridge,
-            "wallpaper-mode-toggle"
-        ]
-
-        onRunningChanged: {
-            if (!running)
-                wallpaperModeStateFile.reload();
-        }
-    }
-
-    Process {
-        id: controlsActionProcess
-
-        command: [
-            root.actionBridge,
-            "controls-open"
-        ]
-    }
-
-    Timer {
-        interval: 30000
-        repeat: true
-        running: true
-        triggeredOnStart: true
-
-        onTriggered: root.refreshSlowMetrics()
-    }
+    WlrLayershell.namespace: "hyperlab-bar"
 
     Rectangle {
+        id: barChrome
+
         anchors.fill: parent
-        color: root.palette.base
+        color: bar.theme.rail
 
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color: root.palette.overlay
+            color: bar.theme.hairline
         }
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 10
-            spacing: 6
+        // Where am I.
+        Row {
+            id: leftGroup
 
-            // Definitive product order: workspaces first, then HyperLab.
-            Repeater {
-                model: 9
+            anchors.left: parent.left
+            anchors.leftMargin: bar.tokens.gapOuter - bar.tokens.spaceSm
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -1
+            spacing: bar.tokens.spaceMd
 
-                delegate: Rectangle {
-                    property int workspaceNumber: index + 1
+            IdentityMark {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
+                wordmarkVisible: bar.mediumRail
+                subtitleVisible: false
 
-                    readonly property bool isActive:
-                        root.workspacePayload.active
-                        === workspaceNumber
+                onLauncherRequested: {
+                    bar.shellSurfaces.toggleLauncher(bar.outputName);
+                }
 
-                    readonly property bool isOccupied:
-                        root.workspacePayload.occupied
-                        .indexOf(workspaceNumber) >= 0
+                onDiagnosticsRequested: {
+                    bar.shellSurfaces.openWorkspace("diagnostics");
+                }
 
-                    readonly property bool isUrgent:
-                        root.workspacePayload.urgent
-                        .indexOf(workspaceNumber) >= 0
-
-                    Layout.preferredWidth: 22
-                    Layout.preferredHeight: 23
-
-                    radius: 6
-
-                    color:
-                        isActive
-                        ? root.palette.accent
-                        : (
-                            isOccupied
-                            ? root.palette.surface
-                            : "transparent"
-                        )
-
-                    border.width: 1
-
-                    border.color:
-                        isUrgent
-                        ? root.palette.bad
-                        : (
-                            isActive
-                            ? root.palette.accent
-                            : root.palette.overlay
-                        )
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: parent.workspaceNumber
-
-                        color:
-                            parent.isActive
-                            ? root.palette.base
-                            : (
-                                parent.isOccupied
-                                ? root.palette.text
-                                : root.palette.subtext
-                            )
-
-                        font.pixelSize: 10
-                        font.bold: parent.isActive
-                    }
+                onControlCenterRequested: {
+                    bar.shellSurfaces.openWorkspace("controls");
                 }
             }
 
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 16
-                color: root.palette.overlay
+            ShellDivider {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
             }
 
-            Rectangle {
-                Layout.preferredHeight: 25
-                Layout.preferredWidth:
-                    brandText.implicitWidth + 20
+            WorkspaceStrip {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
+                payload: bar.shellState.workspacePayload
+                sourceState:
+                    bar.shellState.sourceState(
+                        bar.shellState.workspaceSourceState,
+                        bar.shellState.workspaceObservedAt
+                    )
+                maximumSlots: bar.wideRail ? 9 : (bar.mediumRail ? 6 : 4)
 
-                radius: 7
-                color: root.palette.surface
+                onWorkspaceRequested: slot => {
+                    bar.shellActions.invokeWorkspace(slot);
+                }
+            }
+        }
 
-                border.width: 1
-                border.color: root.palette.accent
+        // Host state.
+        Row {
+            id: rightGroup
 
-                Text {
-                    id: brandText
+            anchors.right: parent.right
+            anchors.rightMargin: bar.tokens.gapOuter - bar.tokens.spaceSm
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -1
+            spacing: bar.tokens.spaceSm
 
-                    anchors.centerIn: parent
-                    text: "◆  HYPERLAB"
-                    color: root.palette.text
-                    font.pixelSize: 12
-                    font.bold: true
+            ProvenanceBadge {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: bar.wideRail || badgeResolved
+                tokens: bar.tokens
+                theme: bar.theme
+                icons: bar.icons
+                provenance: bar.shellState.focusedProvenance
+
+                readonly property bool badgeResolved:
+                    bar.shellState.focusedProvenance.available === true
+
+                onDetailsRequested: {
+                    bar.shellSurfaces.openWorkspacePage(
+                        "diagnostics",
+                        "overview"
+                    );
                 }
             }
 
-            Rectangle {
-                Layout.preferredHeight: 25
-                Layout.preferredWidth:
-                    trustText.implicitWidth + 18
-
-                radius: 7
-                color: root.palette.mantle
-
-                border.width: 1
-
-                border.color:
-                    root.semanticStatusColor(
-                        root.trustPayload.class
+            GpuBadge {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
+                icons: bar.icons
+                payload: bar.shellState.gpuPayload
+                claim: bar.shellState.trustClaim
+                claimState: bar.shellState.trustClaimState
+                ownership: bar.shellState.gpuOwnership
+                sourceState:
+                    bar.shellState.sourceState(
+                        bar.shellState.gpuSourceState,
+                        bar.shellState.gpuObservedAt
                     )
 
-                Text {
-                    id: trustText
-
-                    anchors.centerIn: parent
-
-                    text:
-                        "TRUST "
-                        + root.trustPayload.text
-
-                    color: root.palette.text
-                    font.pixelSize: 11
-                    font.bold: true
+                onDetailsRequested: {
+                    bar.shellSurfaces.openWorkspacePage(
+                        "diagnostics",
+                        "isolation"
+                    );
                 }
             }
 
-            Item {
-                Layout.fillWidth: true
+            ShellDivider {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
             }
 
-            Text {
-                text:
-                    "RAM "
-                    + root.ramPayload.text
+            SystemCluster {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
+                icons: bar.icons
+                audioPayload: bar.shellState.audioPayload
+                audioLevel: bar.shellState.audioLevel
+                batteryPayload: bar.shellState.batteryPayload
+                batteryPresence: bar.shellState.batteryPresence
+                networkPayload: bar.shellState.networkPayload
+                selected: bar.shellSurfaces.systemPanelOpen
 
-                color: root.palette.subtext
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "GPU "
-                    + root.gpuPayload.text
-
-                color: root.palette.subtext
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "VM "
-                    + root.vmPayload.text
-
-                color: root.palette.subtext
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "TEMP "
-                    + root.temperaturePayload.text
-
-                color:
-                    root.telemetryTextColor(
-                        root.temperaturePayload
+                attentionClass:
+                    bar.theme.worstStatusClass(
+                        bar.shellState.secondaryPayloads
                     )
 
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "NET "
-                    + root.networkPayload.text
-
-                color:
-                    root.telemetryTextColor(
-                        root.networkPayload
-                    )
-
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "VOL "
-                    + root.audioPayload.text
-
-                color:
-                    root.telemetryTextColor(
-                        root.audioPayload
-                    )
-
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text:
-                    "BAT "
-                    + root.batteryPayload.text
-
-                color:
-                    root.telemetryTextColor(
-                        root.batteryPayload
-                    )
-
-                font.pixelSize: 11
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Rectangle {
-                Layout.preferredHeight: 23
-                Layout.preferredWidth:
-                    keyboardControlText.implicitWidth + 14
-
-                radius: 6
-                color: root.palette.mantle
-
-                border.width: 1
-                border.color: root.palette.overlay
-
-                Text {
-                    id: keyboardControlText
-
-                    anchors.centerIn: parent
-
-                    text:
-                        "KEY "
-                        + root.keyboardLabel()
-
-                    color: root.palette.text
-                    font.pixelSize: 10
-                    font.bold: true
+                onPanelRequested: {
+                    bar.shellSurfaces.toggleSystemPanel(bar.outputName);
                 }
 
-                TapHandler {
-                    onTapped: {
-                        if (!keyboardActionProcess.running)
-                            keyboardActionProcess.running = true;
-                    }
+                onVolumeUpRequested: {
+                    bar.shellSurfaces.showActionOsd(
+                        "audio",
+                        "audio-volume-up",
+                        bar.shellActions.invoke("audio-volume-up"),
+                        bar.outputName
+                    );
+                }
+
+                onVolumeDownRequested: {
+                    bar.shellSurfaces.showActionOsd(
+                        "audio",
+                        "audio-volume-down",
+                        bar.shellActions.invoke("audio-volume-down"),
+                        bar.outputName
+                    );
                 }
             }
 
-            Rectangle {
-                Layout.preferredHeight: 23
-                Layout.preferredWidth:
-                    wallpaperControlText.implicitWidth + 14
+            ControlEntry {
+                anchors.verticalCenter: parent.verticalCenter
+                tokens: bar.tokens
+                theme: bar.theme
+                icons: bar.icons
+                selected:
+                    bar.shellSurfaces.workspaceOpen
+                    && bar.shellSurfaces.workspaceView === "controls"
 
-                radius: 6
-                color: root.palette.mantle
-
-                border.width: 1
-                border.color: root.palette.overlay
-
-                Text {
-                    id: wallpaperControlText
-
-                    anchors.centerIn: parent
-
-                    text:
-                        "WALL "
-                        + root.wallpaperLabel()
-
-                    color: root.palette.text
-                    font.pixelSize: 10
-                    font.bold: true
-                }
-
-                TapHandler {
-                    onTapped: {
-                        if (!wallpaperActionProcess.running)
-                            wallpaperActionProcess.running = true;
-                    }
+                onActivated: {
+                    bar.shellSurfaces.toggleWorkspace("controls");
                 }
             }
+        }
 
-            Rectangle {
-                Layout.preferredHeight: 23
-                Layout.preferredWidth:
-                    controlsText.implicitWidth + 14
+        // When, and on what. The clock holds the display centre while both
+        // side regions still fit beside it; below that the rail reserves a
+        // centre block instead of letting the regions overlap.
+        ContextCluster {
+            id: contextCluster
 
-                radius: 6
-                color: root.palette.surface
+            readonly property real widestSide:
+                Math.max(leftGroup.width, rightGroup.width)
 
-                border.width: 1
-                border.color: root.palette.accent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: -1
 
-                Text {
-                    id: controlsText
+            tokens: bar.tokens
+            theme: bar.theme
+            context: bar.shellState.focusedSurface
+            clock: bar.shellState.clock
+            dateVisible: bar.mediumRail
 
-                    anchors.centerIn: parent
-                    text: "CTL"
+            centeredClock:
+                parent.width / 2 - contextCluster.widestSide
+                > bar.tokens.railClockGuard
 
-                    color: root.palette.text
-                    font.pixelSize: 10
-                    font.bold: true
-                }
+            centerX:
+                contextCluster.centeredClock
+                ? parent.width / 2
+                : Math.min(
+                    parent.width - rightGroup.width - bar.tokens.spaceLg,
+                    leftGroup.x + leftGroup.width + bar.tokens.spaceXl + 40
+                  )
 
-                TapHandler {
-                    onTapped: {
-                        if (!controlsActionProcess.running)
-                            controlsActionProcess.running = true;
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 14
-                color: root.palette.overlay
-            }
-
-            Text {
-                text: Qt.formatDateTime(
-                    clock.date,
-                    "ddd dd MMM  HH:mm"
+            maximumContextWidth:
+                bar.narrowRail
+                ? 0
+                : Math.max(
+                    0,
+                    Math.round(contextCluster.centerX - 48)
+                    - (leftGroup.x + leftGroup.width)
+                    - bar.tokens.spaceHuge
                 )
-
-                color: root.palette.text
-                font.pixelSize: 11
-                font.bold: true
-            }
         }
     }
 }

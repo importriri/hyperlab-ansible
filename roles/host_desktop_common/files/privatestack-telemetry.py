@@ -17,12 +17,23 @@ def payload(
     text: str,
     tooltip: str = "",
     status_class: str = "",
-) -> dict[str, str]:
-    """Return the narrow presentation object consumed by Quickshell."""
+    detail: str = "",
+    **structured: object,
+) -> dict[str, object]:
+    """Return the narrow presentation object consumed by Quickshell.
+
+    ``detail`` names the scope of the reading (sensor, interface, sink) so the
+    shell can label a value without parsing the tooltip prose. ``structured``
+    carries the machine-readable form of the same reading -- an audio level as
+    a number, a battery as a presence flag -- so no consumer ever has to parse
+    a localized percentage back out of display text.
+    """
     return {
         "text": text,
         "tooltip": tooltip,
         "class": status_class,
+        "detail": detail,
+        **structured,
     }
 
 
@@ -117,6 +128,7 @@ def temperature_payload() -> dict[str, str]:
         f"{value:.0f}°C",
         f"Host temperature: {value:.1f}°C ({source})",
         status_class,
+        source,
     )
 
 
@@ -141,7 +153,7 @@ def default_interface() -> str | None:
     return None
 
 
-def network_payload() -> dict[str, str]:
+def network_payload() -> dict[str, object]:
     interface = default_interface()
 
     if not interface:
@@ -149,6 +161,7 @@ def network_payload() -> dict[str, str]:
             "offline",
             "No active default network route",
             "warning",
+            kind="offline",
         )
 
     device = Path("/sys/class/net") / interface
@@ -160,23 +173,33 @@ def network_payload() -> dict[str, str]:
             "offline",
             f"Default interface {interface}: {state}",
             "warning",
+            f"{interface} {state}",
+            kind="offline",
         )
 
-    kind = "wifi" if wireless else "wired"
+    link = "wifi" if wireless else "wired"
 
     return payload(
-        kind,
+        link,
         f"Default interface: {interface}",
         "",
+        f"{interface} up",
+        kind=link,
     )
 
 
-def audio_payload() -> dict[str, str]:
+AUDIO_MAXIMUM = 125
+
+
+def audio_payload() -> dict[str, object]:
+    unknown = {"percent": None, "muted": None, "maximum": AUDIO_MAXIMUM}
+
     if not WPCTL.is_file():
         return payload(
             "—",
             "wpctl is unavailable",
             "unavailable",
+            **unknown,
         )
 
     try:
@@ -196,6 +219,7 @@ def audio_payload() -> dict[str, str]:
             "—",
             "Default audio sink is unavailable",
             "unavailable",
+            **unknown,
         )
 
     if result.returncode != 0:
@@ -203,6 +227,7 @@ def audio_payload() -> dict[str, str]:
             "—",
             "Default audio sink is unavailable",
             "unavailable",
+            **unknown,
         )
 
     match = re.search(
@@ -215,10 +240,11 @@ def audio_payload() -> dict[str, str]:
             "—",
             "Unable to parse default audio volume",
             "unavailable",
+            **unknown,
         )
 
     percent = round(float(match.group(1)) * 100)
-    percent = max(0, min(percent, 125))
+    percent = max(0, min(percent, AUDIO_MAXIMUM))
     muted = "[MUTED]" in result.stdout.upper()
 
     if muted:
@@ -226,25 +252,38 @@ def audio_payload() -> dict[str, str]:
             "mute",
             f"Default audio sink: muted ({percent}%)",
             "warning",
+            "default sink",
+            percent=percent,
+            muted=True,
+            maximum=AUDIO_MAXIMUM,
         )
 
     return payload(
         f"{percent}%",
         f"Default audio sink: {percent}%",
         "",
+        "default sink",
+        percent=percent,
+        muted=False,
+        maximum=AUDIO_MAXIMUM,
     )
 
 
-def battery_payload() -> dict[str, str]:
+def battery_payload() -> dict[str, object]:
     batteries = sorted(
         Path("/sys/class/power_supply").glob("BAT*")
     )
 
+    # A host with no battery is a different fact from a battery that cannot
+    # be read, so presence is reported explicitly instead of inferred from an
+    # unavailable reading.
     if not batteries:
         return payload(
             "—",
             "No battery exposed by this host",
             "unavailable",
+            "no battery",
+            present=False,
         )
 
     battery = batteries[0]
@@ -258,6 +297,7 @@ def battery_payload() -> dict[str, str]:
             "—",
             "Battery capacity is unavailable",
             "unavailable",
+            present=True,
         )
 
     capacity = max(0, min(capacity, 100))
@@ -273,10 +313,13 @@ def battery_payload() -> dict[str, str]:
         f"{capacity}%",
         f"Battery: {capacity}% ({status})",
         status_class,
+        status,
+        present=True,
+        capacity=capacity,
     )
 
 
-def snapshot() -> dict[str, dict[str, str]]:
+def snapshot() -> dict[str, dict[str, object]]:
     """Build one compositor-independent telemetry snapshot."""
     return {
         "temperature": temperature_payload(),

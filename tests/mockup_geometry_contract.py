@@ -19,6 +19,9 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> int:
     manager = MANAGER.read_text(encoding="utf-8")
+    # Structural calls are compared whitespace-free so reformatting a call
+    # across several lines cannot read as a mockup change.
+    flat_manager = re.sub(r",\)", ")", re.sub(r"\s+", "", manager))
     waybar_source = re.sub(r"(?m)^\s*//.*$", "", WAYBAR.read_text(encoding="utf-8"))
     waybar = json.loads(waybar_source)
     waybar_css = WAYBAR_CSS.read_text(encoding="utf-8")
@@ -44,11 +47,12 @@ def main() -> int:
         require(stale not in navigation, f"legacy visible rail item returned: {stale}")
 
     require(
-        'content.append(self._build_vm_showcase(columns=2, compact=True))' in manager,
+        "content.append(self._build_vm_showcase(columns=2,compact=True))"
+        in flat_manager,
         "drawer no longer uses the two-column machine showcase",
     )
     require(
-        "showcase = self._build_vm_showcase(columns=4)" in manager,
+        "showcase=self._build_vm_showcase(columns=4)" in flat_manager,
         "Control Center no longer uses the four-column machine showcase",
     )
     require(

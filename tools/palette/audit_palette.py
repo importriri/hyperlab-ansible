@@ -16,6 +16,10 @@ import yaml
 
 STRUCTURAL = ("base", "mantle", "surface", "overlay", "text", "subtext")
 DOMAINS = ("dom_clean", "dom_dev", "dom_lab", "dom_dirty", "dom_services")
+# HOST is neutral provenance, not a trust domain: it is deliberately excluded
+# from hue separation so it can stay a desaturated control-plane grey, and is
+# checked only for readability against every surface.
+NEUTRAL_DOMAINS = ("dom_host",)
 META = ("label", "note")
 
 AA_NORMAL = 4.5
@@ -87,14 +91,15 @@ def audit(path: Path) -> int:
         print(f"  FAIL default '{default}' does not exist")
 
     required_domains = set(DOMAINS)
-    if set(domains) != required_domains:
+    identity_tokens = required_domains | set(NEUTRAL_DOMAINS)
+    if set(domains) != identity_tokens:
         failures.append(
             "canonical domains: missing %s, extra %s"
-            % (sorted(required_domains - set(domains)), sorted(set(domains) - required_domains))
+            % (sorted(identity_tokens - set(domains)), sorted(set(domains) - identity_tokens))
         )
         print("  FAIL canonical domain token set")
     for variant, tokens in variants.items():
-        leaked = sorted(set(tokens) & required_domains)
+        leaked = sorted(set(tokens) & identity_tokens)
         if leaked:
             failures.append(f"{variant}: overrides canonical domain tokens {leaked}")
             print(f"  FAIL {variant}: domain overrides {leaked}")
@@ -109,6 +114,16 @@ def audit(path: Path) -> int:
                 if ratio < floor:
                     failures.append(f"{variant}: {fg} on {bg} = {ratio:.2f} (minimum {floor})")
                 print(f"    {mark} {fg:8} on {bg:8} {ratio:5.2f}  (minimum {floor})")
+        for token in NEUTRAL_DOMAINS:
+            # HOST provenance carries no hue claim, so readability is the only
+            # thing that must hold on every appearance.
+            ratio = contrast(domains[token], tokens["mantle"])
+            mark = "ok  " if ratio >= AA_LARGE else "FAIL"
+            if ratio < AA_LARGE:
+                failures.append(
+                    f"{variant}: {token} on mantle = {ratio:.2f} (minimum {AA_LARGE})"
+                )
+            print(f"    {mark} {token:8} on mantle   {ratio:5.2f}  (minimum {AA_LARGE})")
         for token in ("accent", "accent2", "ok", "warn", "bad"):
             ratio = contrast(tokens[token], tokens["mantle"])
             mark = "ok  " if ratio >= AA_LARGE else "warn"

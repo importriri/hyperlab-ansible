@@ -6,9 +6,9 @@
 #   python3 tools/choices/choices.py vars > group_vars/all/choices.yml
 
 # Which HyperLab palette should be the default?
-#   alternatives: green, violet, blue, red
+#   alternatives: green, violet, blue, red, trust-model
 desktop_palette: "green"
-desktop_palette_options: ['green', 'violet', 'blue', 'red']
+desktop_palette_options: ['green', 'violet', 'blue', 'red', 'trust-model']
 
 # Should the Lab domain use colour only or colour plus shape?
 #   alternatives: colour_only, colour_and_shape

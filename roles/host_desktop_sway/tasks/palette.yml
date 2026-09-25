@@ -27,6 +27,7 @@
     - "{{ desktop_palette_install_root }}/palettes/violet"
     - "{{ desktop_palette_install_root }}/palettes/blue"
     - "{{ desktop_palette_install_root }}/palettes/red"
+    - "{{ desktop_palette_install_root }}/palettes/trust-model"
 
 - name: Install every runtime palette fragment
   ansible.builtin.copy:
@@ -37,9 +38,57 @@
     mode: "0644"
   loop: "{{ ['green', 'violet', 'blue', 'red'] | product(host_desktop_sway_palette_runtime_fragments) | list }}"
 
+- name: Install the rendered trust-model runtime palette
+  ansible.builtin.copy:
+    src: >-
+      {{ playbook_dir | dirname }}/themes/trust-model/rendered/{{ item }}
+    dest: >-
+      {{ desktop_palette_install_root }}/palettes/trust-model/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ host_desktop_sway_palette_runtime_fragments }}"
+
+- name: Create the reviewed trust-model wallpaper directories
+  ansible.builtin.file:
+    path: "/usr/share/hyperlab/themes/trust-model/wallpapers/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - host
+    - clean
+    - dev
+    - services
+    - dirty
+    - lab
+
+- name: Install the reviewed trust-model wallpaper pool
+  ansible.builtin.copy:
+    src: >-
+      {{ playbook_dir | dirname }}/themes/assets/hyperlab-trust-v2/images/{{ item.0 }}/{{ item.1 }}.png
+    dest: >-
+      /usr/share/hyperlab/themes/trust-model/wallpapers/{{ item.0 }}/{{ item.1 }}.png
+    owner: root
+    group: root
+    mode: "0644"
+  loop: >-
+    {{
+      ['host', 'clean', 'dev', 'services', 'dirty', 'lab']
+      | product(['01', '02'])
+      | list
+    }}
+
 - name: Keep the selected root palette aliases for diagnostic Waybar assets
   ansible.builtin.copy:
-    src: "{{ desktop_palette_fragments }}/{{ desktop_palette }}/{{ item }}"
+    src: >-
+      {{
+        ((playbook_dir | dirname) ~ '/themes/trust-model/rendered/' ~ item)
+        if desktop_palette == 'trust-model'
+        else
+        (desktop_palette_fragments ~ '/' ~ desktop_palette ~ '/' ~ item)
+      }}
     dest: "{{ desktop_palette_install_root }}/{{ item | regex_replace('^hyperlab-palette', 'palette') }}"
     owner: root
     group: root
@@ -90,7 +139,12 @@
 - name: Install the selected palette into user-owned active files
   ansible.builtin.copy:
     src: >-
-      {{ desktop_palette_fragments }}/{{ host_desktop_sway_active_palette }}/{{ item.src }}
+      {{
+        ((playbook_dir | dirname) ~ '/themes/trust-model/rendered/' ~ item.src)
+        if host_desktop_sway_active_palette == 'trust-model'
+        else
+        (desktop_palette_fragments ~ '/' ~ host_desktop_sway_active_palette ~ '/' ~ item.src)
+      }}
     dest: "/home/{{ admin_user }}/.config/{{ item.dest }}"
     owner: "{{ admin_user }}"
     group: "{{ admin_user }}"

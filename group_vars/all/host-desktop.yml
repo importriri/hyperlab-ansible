@@ -124,7 +124,160 @@ host_desktop_common_shell_stage:
   session_actions:
     - keyboard-cycle
     - wallpaper-mode-toggle
-    - controls-open
+    - theme-cycle
+    - workspace-window-focus
+    - session-lock
+    - session-suspend
+    - session-logout
+    - session-reboot
+    - session-poweroff
+    - audio-mute-toggle
+    - audio-volume-up
+    - audio-volume-down
+  # V447-C9 contextual shell. One long-running Quickshell process owns the
+  # rail and summoned product surfaces. State, actions and appearance remain
+  # behind reviewed bridges; presentation components cannot execute backend
+  # commands directly.
+  # V447-C9.3 HyperLab Platform shell. One long-running Quickshell process
+  # owns the rail, the quiet idle desktop and the summoned surfaces; the three
+  # product destinations share one ordinary compositor-managed window. State,
+  # actions and appearance stay behind reviewed bridges, and presentation
+  # components cannot execute backend commands directly.
+  design_system: c9-platform
+  surface_files:
+    - shell.qml
+    - Tokens.qml
+    - Theme.qml
+    - Icons.qml
+    - ShellState.qml
+    - ShellActions.qml
+    - MachineActions.qml
+    - ShellSurfaces.qml
+    - ShellIpc.qml
+    - ShellLabel.qml
+    - ShellIcon.qml
+    - ShellControl.qml
+    - ShellDivider.qml
+    - ShellCard.qml
+    - PanelRow.qml
+    - FocusFollow.qml
+    - SectionHeader.qml
+    - EmptyState.qml
+    - DashedFrame.qml
+    - IsolationGlyph.qml
+    - ProvenanceMarker.qml
+    - ProvenanceTag.qml
+    - StateChip.qml
+    - HardwareSocket.qml
+    - PolicyCell.qml
+    - ResourceMeter.qml
+    - ActionFeedback.qml
+    - ConfirmationSurface.qml
+    - HyperLabBar.qml
+    - IdentityMark.qml
+    - WorkspaceStrip.qml
+    - ContextCluster.qml
+    - ProvenanceBadge.qml
+    - GpuBadge.qml
+    - SystemCluster.qml
+    - ControlEntry.qml
+    - HyperLabDesktop.qml
+    - WorkspaceSurface.qml
+    - WorkspaceFrame.qml
+    - MachineStage.qml
+    - MachineModule.qml
+    - MachineListRow.qml
+    - MachineContextPane.qml
+    - ControlCenterView.qml
+    - DiagnosticsView.qml
+    - OwnershipInstrument.qml
+    - HostFooter.qml
+    - SystemPanel.qml
+    - OsdSurface.qml
+    - LauncherSurface.qml
+  bridge_owner_files:
+    - ShellState.qml
+    - ShellActions.qml
+    - MachineActions.qml
+    - Theme.qml
+  ipc_receiver_files:
+    - ShellIpc.qml
+  ipc_targets:
+    - launcher
+    - appearance
+    - osd
+    - panel
+    - workspace
+    - bar
+  summoned_surfaces:
+    - launcher
+    - system-panel
+    - osd
+  # The product workspace is one ordinary window, not a permanently mapped
+  # layer surface: it is opened deliberately, takes keyboard focus like any
+  # other application and closes back to the quiet desktop.
+  workspace_surface_kind: floating-window
+  workspace_destinations:
+    - machines
+    - controls
+    - diagnostics
+  # The idle desktop is wallpaper, the rail and nothing else. It sits on the
+  # bottom layer with an empty input region, so no click is intercepted by an
+  # invisible surface.
+  desktop_surface_enabled: true
+  desktop_surface_layer: bottom
+  desktop_surface_input: none
+  # Machine operation availability is derived from live host state by the
+  # reviewed machine bridge. Presentation never reconstructs lifecycle rules.
+  machine_action_bridge: /usr/local/bin/privatestack-machine-actions
+  machine_capability_source: bridge
+  machine_verbs:
+    - start
+    - shutdown
+    - reboot
+    - console
+    - ssh
+    - looking-glass
+    - force-stop
+  machine_destructive_verbs:
+    - force-stop
+  # One reviewed parameterised host operation. Its only argument is a
+  # compositor slot, validated in the shell and again by the bridge.
+  parameterized_actions:
+    - workspace-select
+  # Who owns product navigation in each session. The shared role stages the
+  # shell and never starts it; the Hyprland session routes every HyperLab
+  # surface through the shell's reviewed IPC receivers, while Sway keeps the
+  # Waybar and GTK surfaces as its recovery path. Both remain deployed.
+  product_navigation:
+    hyprland: quickshell
+    sway: recovery
+
+# V447-C7 composition tokens.
+#
+# One reviewed geometry scale for every host surface. Hyprland consumes these
+# values through its template; Sway, Foot, Mako and the shared Quickshell token
+# file repeat the same numbers and the C7 composition contract keeps them
+# aligned. Motion and colour are deliberately not declared here: colour stays
+# owned by the theme registry and motion is tuned at the physical gate.
+host_desktop_composition:
+  bar_height: 37
+  gap_inner: 8
+  gap_outer: 16
+  border_size: 1
+  radius_window: 10
+  radius_surface: 12
+  radius_control: 8
+  shadow_enabled: true
+  shadow_range: 18
+  shadow_render_power: 3
+  blur_enabled: false
+  dim_inactive: true
+  dim_strength: 0.06
+  terminal_padding: 14
+  notification_radius: 12
+  notification_border: 1
+  notification_padding: 14
 
 # Keyboard ownership is a security boundary. Host and guest compositor
 # namespaces are deliberately disjoint so focus/capture mistakes cannot turn

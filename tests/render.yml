@@ -226,10 +226,15 @@
         dest: "{{ render_ws.path }}/lab-isolation.nft"
         mode: "0644"
 
+    # The one task in this suite that needs root. verify.sh always runs it;
+    # the tag exists so the unprivileged remainder can still be validated in
+    # an environment without sudo, never so the judge can be skipped in a
+    # real verification run.
     - name: The real judge - nft -c on the rendered ruleset
       become: true
       ansible.builtin.command: nft -c -f {{ render_ws.path }}/lab-isolation.nft
       changed_when: false
+      tags: privileged
 
     - name: Read the rendered matrix and the shipped nftables.conf
       ansible.builtin.slurp:
@@ -299,6 +304,49 @@
         path: "{{ render_ws.path }}"
         state: absent
 
+    - name: Read the shared host desktop brick
+      ansible.builtin.slurp:
+        src: "{{ repo_root }}/roles/host_desktop_common/tasks/main.yml"
+      register: render_common_desktop
+
+    # Compositor-neutral helpers have one owner. Sway keeps its recovery
+    # assets, but it must not deploy a second copy of a shared helper, and the
+    # shared copy must land root-owned and executable.
+    - name: Shared desktop helper ownership
+      ansible.builtin.assert:
+        that:
+          - render_common_copies
+            | selectattr('dest', 'equalto', '/usr/local/bin/privatestack-lock')
+            | list | length == 1
+          - render_common_copies
+            | selectattr('dest', 'equalto',
+                         '/usr/local/bin/privatestack-opacity-toggle')
+            | list | length == 1
+          - render_common_shared_modes | unique == ['0755']
+          - render_common_shared_owners | unique == ['root']
+          - >-
+            'privatestack-machine-actions'
+            in (render_common_desktop.content | b64decode)
+        quiet: true
+      vars:
+        render_common_copies: >-
+          {{ (render_common_desktop.content | b64decode | from_yaml)
+             | map('dict2items') | flatten
+             | selectattr('key', 'equalto', 'ansible.builtin.copy')
+             | map(attribute='value') | list }}
+        render_common_shared_modes: >-
+          {{ render_common_copies
+             | selectattr('dest', 'in',
+                          ['/usr/local/bin/privatestack-lock',
+                           '/usr/local/bin/privatestack-opacity-toggle'])
+             | map(attribute='mode') | list }}
+        render_common_shared_owners: >-
+          {{ render_common_copies
+             | selectattr('dest', 'in',
+                          ['/usr/local/bin/privatestack-lock',
+                           '/usr/local/bin/privatestack-opacity-toggle'])
+             | map(attribute='owner') | list }}
+
     - name: Read the cockpit bricks and their playbooks
       ansible.builtin.slurp:
         src: "{{ repo_root }}/{{ item }}"
@@ -324,7 +372,7 @@
         - roles/host_desktop_sway/files/hyperlab-wallpaper.svg
         - roles/host_desktop_sway/files/hyperlab-gtk.css
         - roles/host_desktop_sway/files/privatestack-waybar.sh
-        - roles/host_desktop_sway/files/privatestack-opacity-toggle.sh
+        - roles/host_desktop_common/files/privatestack-opacity-toggle.sh
         - roles/host_desktop_sway/files/privatestack-theme.sh
         - roles/host_desktop_sway/files/privatestack-keyboard.sh
         - roles/host_desktop_sway/files/privatestack-controls.sh
@@ -417,12 +465,15 @@
           - "'tray' not in render_waybar"
           - "'privatestack-waybar' in render_desk_dests"
           - "'privatestack-superfile' not in render_desk_dests"
-          - "'privatestack-opacity-toggle' in render_desk_dests"
           - "'privatestack-theme' in render_desk_dests"
           - "'privatestack-keyboard' in render_desk_dests"
           - "'privatestack-controls' in render_desk_dests"
-          - "'privatestack-lock' in render_desk_dests"
           - "'privatestack-swaylock' in render_desk_dests"
+          # privatestack-lock and privatestack-opacity-toggle are
+          # compositor-neutral: host_desktop_common owns and deploys them, and
+          # the Sway role must not deploy a second copy.
+          - "'privatestack-opacity-toggle' not in render_desk_dests"
+          - "'privatestack-lock' not in render_desk_dests"
           - "'privatestack-swaybar-status' in render_desk_dests"
           - "render_waybar['layer'] == 'top'"
           - "render_waybar['mode'] == 'dock'"
@@ -825,8 +876,12 @@
           - "'privatestack-compositor-adapter dpms disable' in render_host_hypr_idle"
           - "'privatestack-compositor-adapter dpms enable' in render_host_hypr_idle"
           - "'hyprctl' not in render_host_hypr_idle"
-          - "'path = /usr/share/backgrounds/privatestack/lockscreen.png' in render_host_hypr_lock"
-          - "'text = HyperLab host' in render_host_hypr_lock"
+          # The lock background is a dedicated static product asset: never a
+          # rotated theme wallpaper and never a blurred desktop screenshot.
+          - "'path = /usr/share/backgrounds/hyperlab/lock.png' in render_host_hypr_lock"
+          - "'blur_passes = 0' in render_host_hypr_lock"
+          - "'text = HyperLab' in render_host_hypr_lock"
+          - "'text = Platform' in render_host_hypr_lock"
           - "'splash = false' in render_host_hypr_paper"
           - "'ipc = true' in render_host_hypr_paper"
           - "'wallpaper {' not in render_host_hypr_paper"

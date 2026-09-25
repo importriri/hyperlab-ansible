@@ -1,0 +1,51 @@
+version: 1
+id: trust-model
+name: Trust Model
+status: scaffold
+description: >-
+  HyperLab appearance driven by host-owned trust provenance while preserving
+  the separation between presentation and security authority.
+
+selector:
+  visible: false
+  order: 10
+
+surfaces:
+  quickshell: true
+  gtk: true
+  rofi: true
+  lockscreen: true
+  foot: true
+  kitty: true
+  wallpaper: true
+  keyboard_rgb: true
+
+wallpaper:
+  policy: trust-aware
+  asset_set: hyperlab-trust-v2
+keyboard_rgb:
+  enabled: true
+  mode: trust
+  provider: hyperlab-nitro-control
+  capability: per_zone
+  zones: 4
+  brightness: preserve
+  unavailable: continue-without-rgb
+
+trust:
+  authority: host-owned
+  source: hyperlab-trust-state
+  appearance_binding: dynamic
+  identities:
+    host: neutral
+    clean: dom_clean
+    dev: dom_dev
+    services: dom_services
+    dirty: dom_dirty
+    lab: dom_lab
+
+security:
+  arbitrary_commands: false
+  direct_sysfs: false
+  direct_privilege: false
+  guest_trust_authority: false

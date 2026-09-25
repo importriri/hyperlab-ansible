@@ -5,6 +5,10 @@ default: green
 domains:
   # Trust identity is semantic, not a theme accent. Variants may change the
   # desktop appearance but must never change what a domain colour means.
+  # HOST is the neutral control-plane provenance: it is not a trust domain and
+  # takes no part in the GPU handoff ladder, but it is still an identity the
+  # shell must render the same way under every appearance.
+  dom_host: '#8b949e'
   dom_clean: '#72f2a5'
   dom_dev: '#5b8cff'
   dom_lab: '#b184ff'

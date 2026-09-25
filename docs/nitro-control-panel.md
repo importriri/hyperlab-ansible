@@ -44,8 +44,11 @@ the existing broker rate limit without widening the privileged protocol.
 The visible `Nitro` rail item opens one integrated Nitro Control Board rather
 than a separate hardware utility.
 
-The board includes direct Green, Violet, Blue and Red desktop theme selection
-through the existing normal-user `privatestack-theme` transaction. Theme
+The board includes direct Green, Violet, Blue, Red and Trust Model desktop
+theme selection through the existing normal-user `privatestack-theme`
+transaction. The board offers exactly the themes the helper accepts, so a host
+already running Trust Model keeps a usable selector instead of reporting an
+unknown theme. Theme
 selection changes presentation only. The semantic clean/dev/services/dirty/lab
 trust colors remain fixed across every appearance theme.
 

@@ -21,9 +21,13 @@ THEME_TOKENS = (
     "base", "mantle", "surface", "overlay", "text", "subtext",
     "accent", "accent2", "ok", "warn", "bad",
 )
-DOMAIN_TOKENS = (
+# HOST is the neutral control-plane provenance; the other five are the trust
+# domains. Both are semantic identity, immutable across every appearance.
+NEUTRAL_DOMAIN_TOKENS = ("dom_host",)
+TRUST_DOMAIN_TOKENS = (
     "dom_clean", "dom_dev", "dom_lab", "dom_dirty", "dom_services",
 )
+DOMAIN_TOKENS = NEUTRAL_DOMAIN_TOKENS + TRUST_DOMAIN_TOKENS
 ANSI_TOKENS = (
     "ansi4", "ansi5", "ansi6", "ansi12", "ansi13", "ansi14",
 )

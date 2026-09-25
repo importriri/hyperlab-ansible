@@ -113,9 +113,28 @@ work explicitly requires it.
 - [x] compositor-neutral workspace data adapter
 - [x] theme semantic palette migration
 - [x] host telemetry migration
-- [ ] reviewed interactive HyperLab controls
+- [x] reviewed interactive HyperLab controls
   - [x] keyboard / wallpaper / Controls session surface
-  - [ ] HyperLab / trust / VM / audio action routing
-- [ ] drawer / Control Center migration
+  - [x] HyperLab / trust / VM / audio action routing
+- [x] command surface, system panel and OSD in the shared shell
+- [x] fixed IPC receivers for compositor keybindings
+- [x] quiet idle desktop: the permanently visible cockpit is retired
+- [x] native product workspace: Machines, Control Center and Diagnostics in one
+      ordinary compositor-managed window
+- [x] drawer / Control Center migration: no detached HyperLab route is bound in
+      the preferred session
+- [x] typed machine operation boundary with backend-derived capabilities
+- [x] one shared target-bound confirmation for destructive operations
+- [x] HyperLab Platform identity: one circular symbol from rail to lock
+- [ ] physical screenshot and interaction acceptance on Nitro
+- [ ] reviewed focused-surface provenance resolver (the rail badge reports the
+      resolution as unavailable until one is deployed)
+- [ ] reviewed desktop-entry catalogue and app-launch bridge (Rofi remains a
+      transitional application launcher)
+- [ ] reviewed focused-window targeting (fullscreen/opacity stay compositor
+      shortcuts; the shell cannot request them)
+- [ ] native Create, Networks and Nitro hardware views behind their feature gates
+- [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
+- [ ] shell-owned notifications (mako remains the reviewed daemon)
 - [ ] complete keybinding cheatsheet surface
-- [ ] Sway physical parity acceptance
+- [ ] Sway native parity acceptance (Sway remains the recovery session)

@@ -4,7 +4,7 @@ The hook writes one number to /run/gpu-handoff/trust. No file means the GPU was
 never claimed since boot, which is the only state from which anything can rise.
 """
 
-from ..errors import Unavailable
+from ..errors import Missing, Unavailable
 from .base import Provider
 
 
@@ -17,7 +17,11 @@ class TrustProvider(Provider):
         levels = ctx.config.var("gpu_trust_levels", {}) or {}
         try:
             raw = ctx.read_text(ctx.config.gpu_handoff_state).strip()
-        except Unavailable:
+        except Missing:
+            # Only genuine absence means "never claimed since boot". A
+            # permission or I/O failure propagates as Unavailable: the section
+            # becomes null, a problem is recorded, and every renderer reports
+            # the claim as unknown instead of affirming "unclaimed".
             return {"level": None, "name": None, "claimed": False, "can_ascend": True,
                     "ladder": levels}
         try:

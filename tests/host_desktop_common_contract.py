@@ -294,7 +294,7 @@ def main() -> int:
         "roles/host_desktop_sway/files/privatestack-keyboard.sh",
         "roles/host_desktop_sway/files/privatestack-theme.sh",
         "roles/host_desktop_sway/files/privatestack-controls.sh",
-        "roles/host_desktop_sway/files/privatestack-opacity-toggle.sh",
+        "roles/host_desktop_common/files/privatestack-opacity-toggle.sh",
         "roles/host_desktop_sway/files/privatestack-waybar.sh",
         "roles/host_desktop_sway/files/privatestack-powermenu.sh",
         "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py",
@@ -329,7 +329,7 @@ def main() -> int:
     )
 
     generic_lock = text(
-        "roles/host_desktop_sway/files/privatestack-lock.sh"
+        "roles/host_desktop_common/files/privatestack-lock.sh"
     )
     legacy_lock = text(
         "roles/host_desktop_sway/files/privatestack-swaylock.sh"

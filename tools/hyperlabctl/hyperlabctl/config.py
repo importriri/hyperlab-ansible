@@ -8,7 +8,7 @@ import os
 import socket
 from pathlib import Path
 
-from .errors import ContractError, HyperlabError, Unavailable
+from .errors import ContractError, HyperlabError, Missing, Unavailable
 
 DEFAULTS = {
     "hardware_profile_report": "/etc/privatestack/hardware-profile.yml",
@@ -156,6 +156,6 @@ class Context:
         try:
             return Path(path).read_text(encoding="utf-8")
         except FileNotFoundError:
-            raise Unavailable("%s does not exist" % path) from None
+            raise Missing("%s does not exist" % path) from None
         except OSError as exc:
             raise Unavailable("%s is unreadable: %s" % (path, exc)) from exc

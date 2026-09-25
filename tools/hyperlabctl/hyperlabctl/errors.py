@@ -22,6 +22,18 @@ class Unavailable(HyperlabError):
     severity = "warn"
 
 
+class Missing(Unavailable):
+    """The source genuinely does not exist, as opposed to could not be read.
+
+    Only this subclass carries "absence" as information. A permission or I/O
+    failure stays a plain Unavailable, so a provider that gives absence a
+    meaning (trust: no claim this boot) can never mistake a read failure for
+    it.
+    """
+
+    problem_id = "hyperlab.missing"
+
+
 class ContractError(HyperlabError):
     """The repository contract says something this code cannot honour."""
 

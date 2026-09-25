@@ -61,6 +61,29 @@ def test_trust_reports_every_level_as_reachable_when_unclaimed():
     check("all_reachable", all(row["reachable"] for row in payload["ladder"]))
 
 
+def test_trust_reports_unknown_when_the_state_cannot_be_read():
+    import errno
+    from pathlib import Path
+    from unittest import mock
+
+    ctx = world.build(trust=2)
+    target = str(ctx.config.gpu_handoff_state)
+    real = Path.read_text
+
+    def read_text(self, *args, **kwargs):
+        if str(self) == target:
+            raise OSError(errno.EIO, "Input/output error")
+        return real(self, *args, **kwargs)
+
+    with mock.patch.object(Path, "read_text", read_text):
+        code, output = _run(["--json", "trust"], ctx)
+    payload = json.loads(output)
+    equals("unreadable_rc", code, 1)
+    equals("unreadable_claimed", payload["claimed"], None)
+    equals("unreadable_known", payload["known"], False)
+    equals("unreadable_no_reachable_levels", payload["ladder"], [])
+
+
 def test_trust_closes_the_levels_above_the_current_one():
     _, output = _run(["--json", "trust"], world.build(trust=1))
     ladder = {row["name"]: row for row in json.loads(output)["ladder"]}

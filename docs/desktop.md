@@ -269,16 +269,71 @@ ordinary values remain visually subordinate to trust state.
 
 ### Shared interactive session controls
 
-The Hyprland-first shared shell now exposes the existing session controls for
-keyboard layout, wallpaper mode and the HyperLab Controls menu.
+The Hyprland-first shared shell owns the reviewed session controls natively.
 
-Quickshell never receives an arbitrary command line. It calls only
-`/usr/local/bin/privatestack-shell-actions` with one fixed action identifier.
-The bridge accepts exactly `keyboard-cycle`, `wallpaper-mode-toggle` and
-`controls-open`, rejects every other identifier, and executes only reviewed
-root-owned helpers that are not writable by the desktop session.
+Quickshell never receives an arbitrary command line. Two shapes cross the
+host action boundary and no third one exists:
 
-Keyboard and wallpaper state are not polled. Quickshell watches the existing
-user state files and validates their enum values before presenting them. This
-keeps presentation reactive while compositor mutation remains behind the
-existing reviewed helpers and shared compositor adapter.
+- a **fixed identifier** — `keyboard-cycle`, `wallpaper-mode-toggle`,
+  `theme-cycle`, `workspace-window-focus`, `session-lock`,
+  `session-suspend`, `session-logout`, `session-reboot`,
+  `session-poweroff`, `audio-mute-toggle`, `audio-volume-up`,
+  `audio-volume-down` — which `/usr/local/bin/privatestack-shell-actions`
+  resolves to an immutable argument vector it owns;
+- one **reviewed parameterised operation**, `workspace-select`, whose only
+  argument is a compositor slot validated against `^[1-9]$` in the shell, in
+  the bridge and again in the compositor adapter.
+
+Every other identifier is rejected, and every executable target must be
+root-owned, executable and not writable by the desktop session. Audio
+preserves the established 5-percent step and the 125-percent upper cap.
+
+Machine operations go through a second reviewed boundary,
+`/usr/local/bin/privatestack-machine-actions`, which answers two questions
+and nothing else: what may be done to a machine right now
+(`capabilities NAME`), and one reviewed operation on it (`VERB NAME`). Both
+answers are re-derived from live state — the libvirt inventory, the checked
+HyperLab spec, the strict runtime SSH inventory and the action registry — so
+the shell never reconstructs a lifecycle rule. A managed operation runs in
+its own terminal and is reported as *accepted*, never as *completed*.
+
+Shared QML does not invoke the GTK manager, `wpctl`, compositor IPC, shells
+or privileged tools directly.
+
+Keyboard, wallpaper, theme and reduced-motion state are not polled: Quickshell
+watches the existing user state files and validates their enum values before
+presenting them. A value the host has not published reads as Unknown rather
+than defaulting to one.
+
+### HyperLab Platform — the native product shell
+
+The permanently visible cockpit is retired. The idle desktop is wallpaper,
+the rail, and one line about host observability when a reviewed source is not
+answering; it sits on the bottom layer with an **empty input region**, so no
+click is intercepted by something invisible.
+
+Machines, the Control Center and Diagnostics are three destinations of one
+**ordinary compositor-managed window**. It is opened deliberately, takes
+keyboard focus like any other application, and closes back to the quiet
+desktop. It is not a layer surface pretending to be an application.
+
+Fixed IPC receivers let compositor keybindings summon the same surfaces the
+pointer reaches, on Hyprland and Sway alike:
+
+| Binding | Route |
+| --- | --- |
+| `SUPER + SPACE` | `qs -c hyperlab ipc call launcher toggle` |
+| `SUPER + F2` | `qs -c hyperlab ipc call workspace diagnostics` |
+| `SUPER + F4` | `qs -c hyperlab ipc call workspace machines` |
+| `SUPER + X`, `SUPER + SHIFT + P` | `qs -c hyperlab ipc call workspace controls` |
+| `SUPER + SHIFT + B` | `qs -c hyperlab ipc call bar toggle` |
+
+No detached HyperLab drawer, overlay or control-center process is bound in
+the preferred session. The GTK surfaces remain deployed as Sway recovery
+tools and are documented as migration routes, not as product navigation.
+`SUPER + D` keeps Rofi as a transitional **application** launcher only:
+launching arbitrary desktop entries stays outside the typed bridge until a
+reviewed desktop-entry catalogue exists.
+
+See `docs/hyperlab-shell.md` for the visual and behavioural system and
+`docs/wallpaper-art-direction.md` for the identity assets.

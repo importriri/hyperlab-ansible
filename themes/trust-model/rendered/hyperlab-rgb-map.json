@@ -1,0 +1,61 @@
+{
+  "brightness": "preserve",
+  "capability": "per_zone",
+  "identities": {
+    "clean": {
+      "zones": [
+        "72f2a5",
+        "72f2a5",
+        "72f2a5",
+        "72f2a5"
+      ]
+    },
+    "dev": {
+      "zones": [
+        "5b8cff",
+        "5b8cff",
+        "5b8cff",
+        "5b8cff"
+      ]
+    },
+    "dirty": {
+      "zones": [
+        "ff9d45",
+        "ff9d45",
+        "ff9d45",
+        "ff9d45"
+      ]
+    },
+    "host": {
+      "zones": [
+        "8b949e",
+        "8b949e",
+        "8b949e",
+        "8b949e"
+      ]
+    },
+    "lab": {
+      "zones": [
+        "b184ff",
+        "b184ff",
+        "b184ff",
+        "b184ff"
+      ]
+    },
+    "services": {
+      "zones": [
+        "35e4dd",
+        "35e4dd",
+        "35e4dd",
+        "35e4dd"
+      ]
+    }
+  },
+  "provider": "hyperlab-nitro-control",
+  "source": "focused-host-owned-trust",
+  "theme": "trust-model",
+  "update_policy": "event-driven",
+  "version": 1,
+  "zone_policy": "uniform-trust-color",
+  "zones": 4
+}

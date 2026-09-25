@@ -12,7 +12,7 @@ compile(manager, str(MANAGER), "exec")
 for marker in (
     'NITRO_CONTROL = "/usr/local/bin/hyperlab-nitro-control"',
     'THEME_CONTROL = "/usr/local/bin/privatestack-theme"',
-    'DESKTOP_THEMES = ("green", "violet", "blue", "red")',
+    'DESKTOP_THEMES = ("green", "violet", "blue", "red", "trust-model")',
     '("nitro", "Nitro")',
     '"nitro": self._build_nitro',
     "def run_nitro_json(",
@@ -68,7 +68,7 @@ assert "threading.Thread" not in nitro
 theme_helper = (
     ROOT / "roles/host_desktop_sway/files/privatestack-theme.sh"
 ).read_text(encoding="utf-8")
-assert 'readonly themes=(green violet blue red)' in theme_helper
+assert 'readonly themes=(green violet blue red trust-model)' in theme_helper
 assert 'set) set_theme "${2:-}"' in theme_helper
 
 print("Nitro Control Board v3 persistence contract: OK")

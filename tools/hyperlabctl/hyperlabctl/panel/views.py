@@ -64,9 +64,10 @@ class DomainView(View):
                 "detail": [
                     ("state", domain["state"]),
                     ("memory", "%s MB" % domain["memory_mb"]),
-                    ("networks", ", ".join(domain["networks"]) or "-"),
-                    ("vfio", "yes" if domain["vfio"] else "no"),
-                    ("managed", "yes" if domain.get("managed") else "no"),
+                    ("networks", "unknown" if domain["networks"] is None
+                     else ", ".join(domain["networks"]) or "-"),
+                    ("vfio", _yes_no(domain["vfio"])),
+                    ("managed", _yes_no(domain.get("managed"))),
                     ("device profile", domain.get("device_profile") or "-"),
                     ("lifecycle", domain.get("lifecycle") or "-"),
                     ("trust profile", domain["trust_profile"] or "-"),
@@ -179,3 +180,10 @@ class JournalView(View):
                            ("level", entry["level"])],
             })
         return listed
+
+
+def _yes_no(value):
+    """An unreadable domain's flags are unknown, not "no"."""
+    if value is None:
+        return "unknown"
+    return "yes" if value else "no"

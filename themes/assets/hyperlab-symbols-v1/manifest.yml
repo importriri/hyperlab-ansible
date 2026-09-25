@@ -1,0 +1,86 @@
+version: 1
+id: hyperlab-symbols-v1
+name: HyperLab Symbols v1
+status: canonical
+kind: wallpaper-set
+geometry:
+  width: 1672
+  height: 941
+  aspect_ratio: "1672:941"
+semantic_policy:
+  trust_assignment: pending
+  theme_assignment: pending
+  reason: >-
+    The visual assets are canonical, but no trust identity is inferred
+    from filename, dominant colour or appearance.
+images:
+  - index: 1
+    id: cerchio-nero-e-rosso
+    label: "Cerchio nero e rosso"
+    file: images/01-cerchio-nero-e-rosso.png
+    sha256: f384402336de083018c446921bd9ac34a8605eb05badba7e2b29082d2e6b3e93
+    trust_identity: null
+    theme_role: null
+  - index: 2
+    id: geometria-blu
+    label: "Geometria blu"
+    file: images/02-geometria-blu.png
+    sha256: 49a3f12157b045f2260d338777436321fe81ce8dc8db53c0a5f602f7e82616d4
+    trust_identity: null
+    theme_role: null
+  - index: 3
+    id: orbita-rossa
+    label: "Orbita rossa"
+    file: images/03-orbita-rossa.png
+    sha256: dcc089b8d6ab71dada618ba1f15675b735054f89b03c44833ad320837b2ef954
+    trust_identity: null
+    theme_role: null
+  - index: 4
+    id: orbita-viola
+    label: "Orbita viola"
+    file: images/04-orbita-viola.png
+    sha256: 31bc49e57613ee65a73994e6bcda47e8b853eb01ed3c820bd198200f305e6671
+    trust_identity: null
+    theme_role: null
+  - index: 5
+    id: spirale-verde
+    label: "Spirale verde"
+    file: images/05-spirale-verde.png
+    sha256: 1985f25f5fcecd85de66d898a291a7387f7f3681a56b4a38f2b911a433622ea6
+    trust_identity: null
+    theme_role: null
+  - index: 6
+    id: ingranaggio-oro
+    label: "Ingranaggio oro"
+    file: images/06-ingranaggio-oro.png
+    sha256: 8d6fb22591a5a3d0b7df2410b30c36f356b23b61a97a69b898110d2f5ec9a2c8
+    trust_identity: null
+    theme_role: null
+  - index: 7
+    id: onda-e-semicerchio
+    label: "Onda e semicerchio"
+    file: images/07-onda-e-semicerchio.png
+    sha256: 25d6e2533cd3c094bd22f7b4cc2ea91b3bdad69af034f2a0abe143298bb4fa70
+    trust_identity: null
+    theme_role: null
+  - index: 8
+    id: golden-image
+    label: "Golden Image"
+    file: images/08-golden-image.png
+    sha256: e49a6b4979fb3d7dea553c485b1170b9841617de649e121efd73592119febcb9
+    trust_identity: null
+    theme_role: null
+  - index: 9
+    id: vela-geometrica
+    label: "Vela geometrica"
+    file: images/09-vela-geometrica.png
+    sha256: 1f79addb2e98547312190d567de60c606b31eaea195f65ba41971fb000ae395b
+    trust_identity: null
+    theme_role: null
+  - index: 10
+    id: diagramma-circolare
+    label: "Diagramma circolare"
+    file: images/10-diagramma-circolare.png
+    sha256: ba87056b6085408085b1233bf935b211159693993be707cd59397cc73c864fff
+    trust_identity: null
+    theme_role: null

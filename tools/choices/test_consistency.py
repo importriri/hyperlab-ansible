@@ -67,11 +67,17 @@ def main() -> int:
             if drawer_start >= 0 and drawer_end > drawer_start
             else ""
         )
+        # The showcase call is formatted across several lines in the current
+        # manager. Compare a whitespace-normalised block so a reformat cannot
+        # look like a product decision change.
+        flat_drawer_block = re.sub(
+            r",\)", ")", re.sub(r"\s+", "", drawer_block)
+        )
         drawer_shape = (
             "machine_showcase_no_tabs"
             if (
-                "self._build_vm_showcase(columns=2, compact=True)"
-                in drawer_block
+                "self._build_vm_showcase(columns=2,compact=True)"
+                in flat_drawer_block
                 and "drawer-tabs" not in drawer_block
                 and "Gtk.SearchEntry" not in drawer_block
                 and "drawer-footer" not in drawer_block
@@ -92,6 +98,12 @@ def main() -> int:
     if palette.is_file():
         import yaml
         variants = set(yaml.safe_load(palette.read_text())["variants"])
+        # Legacy palette.yml variants are migration inputs. Registry themes
+        # under themes/<name>/theme.yml are equally selectable.
+        variants |= {
+            theme.parent.name
+            for theme in (REPO / "themes").glob("*/theme.yml")
+        }
         check("desktop_palette exists",
               doc["desktop_palette"]["value"] in variants, True)
         check("all desktop_palette alternatives exist",

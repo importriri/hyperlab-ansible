@@ -12,7 +12,19 @@ class TrustCommand(Command):
 
     def run(self, args, ctx):
         built = doc.build(ctx, only={"trust", "gpu"})
-        trust = built.get("trust") or {}
+        if built.get("trust") is None:
+            # The trust state could not be read. That is unknown, never
+            # "unclaimed": no level is reported as reachable.
+            reason = next((problem["message"] for problem in built.get("problems") or []
+                           if problem.get("provider") == "trust"),
+                          "trust state could not be read")
+            if args.json:
+                print(json.dumps({"claimed": None, "level": None, "known": False,
+                                  "ladder": [], "problem": reason}, indent=2))
+            else:
+                print("GPU trust state is unknown: %s" % reason)
+            return 1
+        trust = built["trust"]
         ladder = sorted((trust.get("ladder") or {}).items(),
                         key=lambda pair: pair[1], reverse=True)
         current = trust.get("level")

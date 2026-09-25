@@ -1,36 +1,109 @@
 # Managed by hyperlab-ansible.
 # Physical-host candidate only. Not activated by the render gate.
+#
+# HyperLab lock surface (V447-C9.3). The lock is part of the shell language:
+# the product identity asset as a graphite ground, the time in the sans family
+# at display size, the HyperLab Platform wordmark beneath it, and one quiet
+# authentication field.
+#
+# The background is a dedicated static asset, not a blurred screenshot and not
+# a rotated theme wallpaper, so a locked screen reveals nothing about the
+# session behind it. No machine name, guest content or provenance appears
+# here: a locked screen carries no trust claim. Authentication is unchanged --
+# PAM through hyprlock, never anything implemented in the shell.
 
 general {
     hide_cursor = true
     immediate_render = true
+    ignore_empty_input = true
 }
 
 background {
     monitor =
-    path = /usr/share/backgrounds/privatestack/lockscreen.png
-    blur_passes = 3
-    blur_size = 7
+    path = /usr/share/backgrounds/hyperlab/lock.png
+    blur_passes = 0
+    brightness = 0.86
+    contrast = 1.0
+    vibrancy = 0.0
 }
 
-input-field {
+# Time.
+label {
     monitor =
-    size = 320, 56
-    outline_thickness = 2
-    dots_size = 0.22
-    dots_spacing = 0.30
-    fade_on_empty = false
-    placeholder_text = Password
-    position = 0, -40
+    text = cmd[update:1000] date +%H:%M
+    font_family = Adwaita Sans
+    font_size = 72
+    color = rgba(240, 246, 252, 0.96)
+    position = 0, 170
+    halign = center
+    valign = center
+}
+
+# Date.
+label {
+    monitor =
+    text = cmd[update:60000] date +'%A %-d %B'
+    font_family = Adwaita Sans
+    font_size = 16
+    color = rgba(154, 167, 181, 0.90)
+    position = 0, 108
+    halign = center
+    valign = center
+}
+
+# Product identity. The wordmark and its subtitle, nothing about the session.
+label {
+    monitor =
+    text = HyperLab
+    font_family = Adwaita Sans
+    font_size = 15
+    color = rgba(240, 246, 252, 0.78)
+    position = 0, 74
     halign = center
     valign = center
 }
 
 label {
     monitor =
-    text = HyperLab host
-    font_size = 24
-    position = 0, 55
+    text = Platform
+    font_family = Adwaita Sans
+    font_size = 11
+    color = rgba(154, 167, 181, 0.66)
+    position = 0, 52
     halign = center
     valign = center
+}
+
+input-field {
+    monitor =
+    size = 320, 48
+    rounding = 12
+    outline_thickness = 1
+    outer_color = rgba(240, 246, 252, 0.16)
+    inner_color = rgba(13, 17, 23, 0.92)
+    font_color = rgba(240, 246, 252, 0.96)
+    check_color = rgba(154, 167, 181, 0.80)
+    fail_color = rgba(248, 81, 73, 0.90)
+    capslock_color = rgba(210, 153, 34, 0.90)
+    dots_size = 0.22
+    dots_spacing = 0.30
+    dots_center = true
+    fade_on_empty = false
+    placeholder_text = <span foreground="##697583">Password</span>
+    fail_text = <span foreground="##f85149">$FAIL</span>
+    position = 0, -40
+    halign = center
+    valign = center
+}
+
+# Input ownership reminder, quiet, bottom left.
+label {
+    monitor =
+    text = SUPER host  ·  ALT guest  ·  RIGHTCTRL escape
+    font_family = JetBrainsMono Nerd Font
+    font_size = 10
+    color = rgba(154, 167, 181, 0.55)
+    position = 48, 40
+    halign = left
+    valign = bottom
 }

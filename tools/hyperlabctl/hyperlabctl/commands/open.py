@@ -18,6 +18,7 @@ from ..composer import find_spec, image_entry
 from ..config import load_yaml
 from ..errors import Unavailable
 from ..inventory import domain_detail
+from ..surface_registry import register_managed_surface
 from .base import Command
 
 
@@ -695,6 +696,37 @@ def _prepare_linux_looking_glass(ctx, domain):
     )
 
 
+def _register_surface_provenance(
+    ctx,
+    domain,
+    surface_kind,
+    executable,
+):
+    repo_value = ctx.config.repo_root
+
+    if repo_value is None:
+        raise Unavailable(
+            "no HyperLab checkout is available for surface provenance"
+        )
+
+    repo_root = Path(repo_value).resolve()
+    relative_spec = find_spec(
+        repo_root,
+        domain,
+    )
+    spec_path = (
+        repo_root
+        / relative_spec
+    ).resolve()
+
+    register_managed_surface(
+        spec_path=spec_path,
+        domain=domain,
+        surface_kind=surface_kind,
+        executable=executable,
+    )
+
+
 class OpenCommand(Command):
     name = "open"
     help = "open fixed graphical HyperLab shell surfaces"
@@ -716,6 +748,9 @@ class OpenCommand(Command):
         looking.add_argument("domain")
 
     def run(self, args, ctx):
+        managed_surface_kind = None
+        managed_surface_domain = None
+
         if args.open_action == "manager":
             executable = _executable(_MANAGER)
             subprocess.Popen(
@@ -740,6 +775,8 @@ class OpenCommand(Command):
                 "--wait",
                 args.domain,
             ]
+            managed_surface_kind = "spice-console"
+            managed_surface_domain = args.domain
         elif args.open_action == "ssh":
             ssh_argv = _ssh_argv(ctx, args.domain)
             _wait_for_ssh_ready(ssh_argv, args.domain)
@@ -785,6 +822,23 @@ class OpenCommand(Command):
             if transport == "linux-experimental":
                 argv.append("egl:mapHDRtoSDR=no")
 
+            managed_surface_kind = "looking-glass"
+            managed_surface_domain = args.domain
+
         executable = _executable(argv[0])
+
+        if managed_surface_kind is not None:
+            if managed_surface_domain is None:
+                raise AssertionError(
+                    "managed surface lost its domain"
+                )
+
+            _register_surface_provenance(
+                ctx,
+                managed_surface_domain,
+                managed_surface_kind,
+                executable,
+            )
+
         os.execv(executable, [executable, *argv[1:]])
         raise AssertionError("os.execv unexpectedly returned")

@@ -24,6 +24,8 @@ SURFACE_TOKENS = {
     "ok",
     "warn",
     "bad",
+    # HOST is neutral control-plane provenance, immutable across appearances.
+    "dom_host",
     "dom_clean",
     "dom_dev",
     "dom_lab",
@@ -183,35 +185,108 @@ def main() -> int:
                 ),
             )
 
-    bar = text(
+    theme_qml = text(
         "roles/host_desktop_common/files/"
-        "quickshell/hyperlab/HyperLabBar.qml"
+        "quickshell/hyperlab/Theme.qml"
+    )
+    state_qml = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/ShellState.qml"
+    )
+    workspace_qml = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/WorkspaceStrip.qml"
+    )
+    shared_qml = "\n".join(
+        text(
+            "roles/host_desktop_common/files/"
+            "quickshell/hyperlab/" + name
+        )
+        for name in stage["surface_files"]
     )
 
     for marker in (
         "FileView {",
-        "watchChanges: true",
+        "function refreshPalette()",
         "palette-quickshell.json",
         "HyperLab palette loaded:",
-        '"workspace-watch"',
-        "workspacePayload",
-        "Repeater {",
-        "model: 9",
-        "workspaceNumber: index + 1",
-        "root.palette.accent",
-        "root.palette.surface",
-        "root.palette.overlay",
-        "root.palette.text",
-        "root.palette.subtext",
         "semanticStatusColor",
+        "function provenanceColor(identity)",
+        "function alpha(candidate, level)",
+        "readonly property color hairline",
+        "readonly property color fillHover",
     ):
         require(
-            marker in bar,
-            f"QML workspace/theme marker missing: {marker}",
+            marker in theme_qml,
+            f"QML theme marker missing: {marker}",
+        )
+
+    for marker in (
+        '"workspace-watch"',
+        "workspacePayload",
+    ):
+        require(
+            marker in state_qml,
+            f"QML workspace-state marker missing: {marker}",
+        )
+
+    for marker in (
+        "visibleWorkspaces",
+        "addWorkspace(strip.payload.active)",
+        "strip.payload.occupied",
+        "strip.payload.urgent",
+        "result.sort(",
+        "model: strip.visibleWorkspaces",
+        "workspaceNumber:",
+        "strip.theme.fillSelected",
+        "strip.theme.textPrimary",
+        "strip.theme.textSecondary",
+        "strip.theme.textQuiet",
+        "strip.theme.semanticStatusColor",
+        "Behavior on x",
+    ):
+        require(
+            marker in workspace_qml,
+            f"QML workspace presentation marker missing: {marker}",
+        )
+
+    for forbidden in (
+        "model: 9",
+        "workspaceNumber: index + 1",
+        "slotCount: 9",
+        # An empty or unreadable compositor snapshot must present an
+        # unavailable navigation state, never a workspace nobody reported.
+        "result.push(1)",
+    ):
+        require(
+            forbidden not in workspace_qml,
+            f"fixed workspace topology returned: {forbidden}",
+        )
+
+    for marker in (
+        "required property string sourceState",
+        "emptyObservation",
+        "Workspaces unavailable",
+        "signal workspaceRequested(int slot)",
+    ):
+        require(
+            marker in workspace_qml,
+            f"observed-only workspace navigation marker missing: {marker}",
         )
 
     require(
-        not re.search(r"#[0-9a-fA-F]{6}", bar),
+        theme_qml.count("watchChanges: true") == 0,
+        "Theme.qml returned to filesystem watcher reloads",
+    )
+    require(
+        state_qml.count("watchChanges: true") == 2
+        and "id: keyboardStateFile" in state_qml
+        and "id: reducedMotionStateFile" in state_qml,
+        "session FileView watcher policy changed",
+    )
+
+    require(
+        not re.search(r"#[0-9a-fA-F]{6}", shared_qml),
         "shared QML duplicated a palette colour literal",
     )
 
@@ -226,7 +301,7 @@ def main() -> int:
         "MouseArea",
     ):
         require(
-            forbidden not in bar,
+            forbidden not in shared_qml,
             f"shared QML crossed backend boundary: {forbidden}",
         )
 

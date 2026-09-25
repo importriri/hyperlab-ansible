@@ -84,7 +84,16 @@
         [
           'keyboard-cycle',
           'wallpaper-mode-toggle',
-          'controls-open'
+          'theme-cycle',
+          'workspace-window-focus',
+          'session-lock',
+          'session-suspend',
+          'session-logout',
+          'session-reboot',
+          'session-poweroff',
+          'audio-mute-toggle',
+          'audio-volume-up',
+          'audio-volume-down'
         ]
       - >-
         host_desktop_common_input_security.host_primary_modifier
@@ -207,22 +216,93 @@
     label: "{{ item.item }}"
   when: not ansible_check_mode
 
-- name: Preserve recovery surfaces while Quickshell remains non-active
+# The shared role stages the shell and never starts it. What changed with the
+# Hyprland pilot is not activation but routing: the preferred session reaches
+# every HyperLab surface through the shell's reviewed IPC receivers, while
+# Sway keeps Waybar and the GTK surfaces as its recovery path. Both remain
+# deployed, so a session without the shell running still has a way back in.
+- name: Preserve recovery surfaces while the shared role stages Quickshell
   ansible.builtin.assert:
     that:
       - not host_desktop_common_shell_stage.runtime_enabled
       - not host_desktop_common_shell_stage.replacement_enabled
       - host_desktop_common_shell_stage.waybar_fallback_required
       - host_desktop_common_shell_stage.gtk_surface_fallback_required
+      - >-
+        host_desktop_common_shell_stage.product_navigation.hyprland
+        == 'quickshell'
+      - >-
+        host_desktop_common_shell_stage.product_navigation.sway
+        == 'recovery'
     fail_msg: >-
-      Phase 2A may stage Quickshell only. Waybar and the existing GTK
-      HyperLab surfaces remain authoritative until physical compositor parity
-      is proven.
+      The shared role may stage Quickshell only, and it may not retire a
+      recovery surface. Hyprland routes product navigation to the shell;
+      Sway keeps Waybar and the GTK HyperLab surfaces until physical
+      compositor parity is proven.
+
+- name: Create the HyperLab product wallpaper directory
+  ansible.builtin.file:
+    path: /usr/share/backgrounds/hyperlab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# "Isolation Ring": the compositor-independent product identity, rendered
+# deterministically by tools/wallpaper/render_isolation_ring.py. It is the
+# same split-boundary-and-core geometry the shell draws in the rail, so the
+# product is recognisable from the lock screen to the top bar without a second
+# logo. It is a ground for the shell and it carries no trust, policy or state
+# meaning: wallpaper never encodes provenance.
+- name: Install the HyperLab product identity wallpaper
+  ansible.builtin.copy:
+    src: wallpapers/isolation-ring-3840x2160.png
+    dest: /usr/share/backgrounds/hyperlab/product.png
+    owner: root
+    group: root
+    mode: "0644"
+
+# The lock surface is a dedicated, static, neutral asset. A locked screen must
+# reveal nothing about the session behind it, so it never reuses a rotated
+# theme wallpaper and never blurs a screenshot of the desktop.
+- name: Install the HyperLab lock identity asset
+  ansible.builtin.copy:
+    src: wallpapers/isolation-ring-lock-3840x2160.png
+    dest: /usr/share/backgrounds/hyperlab/lock.png
+    owner: root
+    group: root
+    mode: "0644"
+
+# "Contained Planes" remains installed as reviewed rollback material until the
+# identity family has passed physical acceptance on both compositors.
+- name: Install the HyperLab rollback product wallpaper
+  ansible.builtin.copy:
+    src: wallpapers/contained-planes-3840x2160.png
+    dest: /usr/share/backgrounds/hyperlab/contained-planes.png
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Install the shared host compositor adapter
   ansible.builtin.copy:
     src: privatestack-compositor-adapter.sh
     dest: /usr/local/bin/privatestack-compositor-adapter
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the shared compositor-neutral lock helper
+  ansible.builtin.copy:
+    src: privatestack-lock.sh
+    dest: /usr/local/bin/privatestack-lock
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the shared focused-window opacity helper
+  ansible.builtin.copy:
+    src: privatestack-opacity-toggle.sh
+    dest: /usr/local/bin/privatestack-opacity-toggle
     owner: root
     group: root
     mode: "0755"
@@ -239,6 +319,14 @@
   ansible.builtin.copy:
     src: privatestack-shell-actions.py
     dest: /usr/local/bin/privatestack-shell-actions
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the typed machine action bridge
+  ansible.builtin.copy:
+    src: privatestack-machine-actions.py
+    dest: /usr/local/bin/privatestack-machine-actions
     owner: root
     group: root
     mode: "0755"

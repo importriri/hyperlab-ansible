@@ -11,6 +11,7 @@
     hl-ok: #72f2a5;
     hl-warn: #ffd166;
     hl-bad: #ff3d5a;
+    hl-dom-host: #8b949e;
     hl-dom-clean: #72f2a5;
     hl-dom-dev: #5b8cff;
     hl-dom-lab: #b184ff;

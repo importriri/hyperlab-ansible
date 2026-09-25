@@ -280,7 +280,7 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
 
         source = source.replace(
             "TRANSACTION_BUDGET_SECONDS = 8.0",
-            "TRANSACTION_BUDGET_SECONDS = 0.20",
+            "TRANSACTION_BUDGET_SECONDS = 1.50",
             1,
         )
 
@@ -292,7 +292,7 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
         )
         source = source.replace(
             first_anchor,
-            "        time.sleep(0.08)\n"
+            "        time.sleep(0.25)\n"
             + first_anchor,
             1,
         )
@@ -310,7 +310,7 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
         source = source.replace(
             second_anchor,
             '        current_phase = "prepared"\n'
-            "        time.sleep(0.15)\n"
+            "        time.sleep(1.35)\n"
             "\n"
             "    # Prepared replay must preserve its original target",
             1,
@@ -356,7 +356,7 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
 
         check(
             "v49_budget_elapsed_bounded",
-            elapsed < 0.8,
+            elapsed < 1.9,
             "elapsed=%r stdout=%r stderr=%r"
             % (
                 elapsed,

@@ -5,6 +5,10 @@ After=graphical-session.target
 
 [Service]
 Type=simple
+# The shell source is deployed as many files. A live file watcher would
+# reload the shell part-way through a deployment and fail on a missing type,
+# so reloads are deliberate: the operator restarts this unit after a deploy.
+Environment=QS_DISABLE_FILE_WATCHER=1
 ExecStart=/usr/bin/qs -c hyperlab
 Restart=on-failure
 RestartSec=1

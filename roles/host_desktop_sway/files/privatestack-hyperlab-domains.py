@@ -42,7 +42,7 @@ CLI = "/usr/local/bin/hyperlabctl"
 NITRO_CONTROL = "/usr/local/bin/hyperlab-nitro-control"
 THEME_CONTROL = "/usr/local/bin/privatestack-theme"
 COMPOSITOR_ADAPTER = "/usr/local/bin/privatestack-compositor-adapter"
-DESKTOP_THEMES = ("green", "violet", "blue", "red")
+DESKTOP_THEMES = ("green", "violet", "blue", "red", "trust-model")
 FOOT = "foot"
 PYTHON = "/usr/bin/python"
 SECTIONS = (
@@ -487,22 +487,22 @@ window.hyperlab-surface {
 }
 .vm-tile:hover { background: alpha(#ffffff, .055); }
 .vm-tile.selected { background: alpha(#ffffff, .075); }
-.vm-tile.domain-clean:hover, .vm-tile.domain-clean.selected { border-color: alpha(@hl_dom_clean, .75); }
-.vm-tile.domain-dev:hover, .vm-tile.domain-dev.selected { border-color: alpha(@hl_dom_dev, .75); }
-.vm-tile.domain-services:hover, .vm-tile.domain-services.selected { border-color: alpha(@hl_dom_services, .75); }
-.vm-tile.domain-dirty:hover, .vm-tile.domain-dirty.selected { border-color: alpha(@hl_dom_dirty, .75); }
-.vm-tile.domain-lab:hover, .vm-tile.domain-lab.selected { border-color: alpha(@hl_dom_lab, .75); }
+.vm-tile.vm-domain-clean:hover, .vm-tile.vm-domain-clean.selected { border-color: alpha(@hl_dom_clean, .75); }
+.vm-tile.vm-domain-dev:hover, .vm-tile.vm-domain-dev.selected { border-color: alpha(@hl_dom_dev, .75); }
+.vm-tile.vm-domain-services:hover, .vm-tile.vm-domain-services.selected { border-color: alpha(@hl_dom_services, .75); }
+.vm-tile.vm-domain-dirty:hover, .vm-tile.vm-domain-dirty.selected { border-color: alpha(@hl_dom_dirty, .75); }
+.vm-tile.vm-domain-lab:hover, .vm-tile.vm-domain-lab.selected { border-color: alpha(@hl_dom_lab, .75); }
 .vm-thumb {
     min-height: 72px;
     padding: 8px 9px;
     border-radius: 12px 12px 0 0;
     background: alpha(#09101a, .82);
 }
-.vm-thumb.domain-clean { background: alpha(@hl_dom_clean, .10); }
-.vm-thumb.domain-dev { background: alpha(@hl_dom_dev, .10); }
-.vm-thumb.domain-services { background: alpha(@hl_dom_services, .10); }
-.vm-thumb.domain-dirty { background: alpha(@hl_dom_dirty, .10); }
-.vm-thumb.domain-lab { background: alpha(@hl_dom_lab, .10); }
+.vm-thumb.vm-domain-clean { background: alpha(@hl_dom_clean, .10); }
+.vm-thumb.vm-domain-dev { background: alpha(@hl_dom_dev, .10); }
+.vm-thumb.vm-domain-services { background: alpha(@hl_dom_services, .10); }
+.vm-thumb.vm-domain-dirty { background: alpha(@hl_dom_dirty, .10); }
+.vm-thumb.vm-domain-lab { background: alpha(@hl_dom_lab, .10); }
 .vm-screen {
     min-height: 46px;
     margin: 4px 6px 0 6px;
@@ -519,11 +519,11 @@ window.hyperlab-surface {
     border-radius: 999px;
     background: alpha(#04080e, .62);
 }
-.vm-state.running.domain-clean { color: @hl_dom_clean; border: 1px solid alpha(@hl_dom_clean, .45); }
-.vm-state.running.domain-dev { color: @hl_dom_dev; border: 1px solid alpha(@hl_dom_dev, .45); }
-.vm-state.running.domain-services { color: @hl_dom_services; border: 1px solid alpha(@hl_dom_services, .45); }
-.vm-state.running.domain-dirty { color: @hl_dom_dirty; border: 1px solid alpha(@hl_dom_dirty, .45); }
-.vm-state.running.domain-lab { color: @hl_dom_lab; border: 1px solid alpha(@hl_dom_lab, .45); }
+.vm-state.running.vm-domain-clean { color: @hl_dom_clean; border: 1px solid alpha(@hl_dom_clean, .45); }
+.vm-state.running.vm-domain-dev { color: @hl_dom_dev; border: 1px solid alpha(@hl_dom_dev, .45); }
+.vm-state.running.vm-domain-services { color: @hl_dom_services; border: 1px solid alpha(@hl_dom_services, .45); }
+.vm-state.running.vm-domain-dirty { color: @hl_dom_dirty; border: 1px solid alpha(@hl_dom_dirty, .45); }
+.vm-state.running.vm-domain-lab { color: @hl_dom_lab; border: 1px solid alpha(@hl_dom_lab, .45); }
 .vm-state.stopped { color: alpha(@hl_text, .46); }
 .vm-quick { margin: 4px 0 0 0; }
 .quick-button {
@@ -766,6 +766,964 @@ window.hyperlab-dismiss-surface .shell-panel {
 .nitro-appearance-card {
     margin-top: 4px;
 }
+
+/* V447-T7C1 definitive neutral trust-surface convergence.
+ *
+ * Generic chrome is graphite / near-black.
+ * Trust colours are semantic identity signals only.
+ */
+.shell-panel {
+    background: @hl_base;
+    border-color: alpha(@hl_text, .16);
+    box-shadow: 0 28px 80px alpha(#000000, .66);
+}
+
+.drawer-panel {
+    background: @hl_base;
+    border-radius: 0 0 16px 0;
+}
+
+.overlay-panel {
+    background: @hl_base;
+    border-radius: 16px;
+}
+
+.mock-titlebar {
+    background: alpha(@hl_mantle, .96);
+    border-bottom-color: alpha(@hl_text, .09);
+}
+
+.control-body {
+    background: @hl_base;
+}
+
+.control-rail {
+    background: alpha(@hl_mantle, .84);
+    border-right-color: alpha(@hl_text, .09);
+}
+
+.control-workspace,
+.mock-main {
+    background: alpha(@hl_base, .98);
+}
+
+.mock-inspect {
+    background: alpha(@hl_mantle, .66);
+    border-left-color: alpha(@hl_text, .09);
+}
+
+.drawer-content,
+.drawer-footer {
+    background: alpha(@hl_mantle, .62);
+    border-color: alpha(@hl_text, .09);
+}
+
+.card,
+.status-tile,
+.toolbar,
+.details-pane,
+.vm-table,
+.network-map,
+.network-dock,
+.gpu-rung,
+.option-card,
+.step {
+    background: alpha(@hl_surface, .74);
+    border-color: alpha(@hl_text, .09);
+}
+
+.card:hover,
+.option-card:hover {
+    background: alpha(@hl_surface, .96);
+    border-color: alpha(@hl_text, .15);
+}
+
+.rail-button.active,
+.nav-button.active {
+    background: alpha(@hl_text, .095);
+    border-color: alpha(@hl_text, .16);
+    color: @hl_text;
+}
+
+.vm-tile {
+    background: alpha(@hl_surface, .84);
+    border-color: alpha(@hl_text, .10);
+}
+
+.vm-tile:hover,
+.vm-tile.selected {
+    background: alpha(@hl_surface, .98);
+}
+
+.vm-thumb,
+.vm-thumb.vm-domain-clean,
+.vm-thumb.vm-domain-dev,
+.vm-thumb.vm-domain-services,
+.vm-thumb.vm-domain-dirty,
+.vm-thumb.vm-domain-lab {
+    background: alpha(@hl_mantle, .97);
+}
+
+.vm-tile.vm-domain-clean:hover,
+.vm-tile.vm-domain-clean.selected {
+    border-color: alpha(@hl_dom_clean, .78);
+}
+
+.vm-tile.vm-domain-dev:hover,
+.vm-tile.vm-domain-dev.selected {
+    border-color: alpha(@hl_dom_dev, .78);
+}
+
+.vm-tile.vm-domain-services:hover,
+.vm-tile.vm-domain-services.selected {
+    border-color: alpha(@hl_dom_services, .78);
+}
+
+.vm-tile.vm-domain-dirty:hover,
+.vm-tile.vm-domain-dirty.selected {
+    border-color: alpha(@hl_dom_dirty, .78);
+}
+
+.vm-tile.vm-domain-lab:hover,
+.vm-tile.vm-domain-lab.selected {
+    border-color: alpha(@hl_dom_lab, .78);
+}
+
+.vm-screen {
+    background: alpha(#000000, .40);
+    border-color: alpha(@hl_text, .14);
+}
+
+.new-vm-tile {
+    background: alpha(@hl_mantle, .30);
+    border-color: alpha(@hl_text, .14);
+}
+
+.new-vm-tile:hover {
+    background: alpha(@hl_surface, .58);
+    border-color: alpha(@hl_text, .28);
+}
+
+.network-zone.domain-clean,
+.network-zone.domain-dev,
+.network-zone.domain-services,
+.network-zone.domain-dirty,
+.network-zone.domain-lab {
+    background: alpha(@hl_surface, .40);
+}
+
+.network-zone.domain-clean {
+    border-color: alpha(@hl_dom_clean, .36);
+}
+
+.network-zone.domain-dev {
+    border-color: alpha(@hl_dom_dev, .36);
+}
+
+.network-zone.domain-services {
+    border-color: alpha(@hl_dom_services, .36);
+}
+
+.network-zone.domain-dirty {
+    border-color: alpha(@hl_dom_dirty, .36);
+}
+
+.network-zone.domain-lab {
+    border-color: alpha(@hl_dom_lab, .36);
+}
+
+.network-node {
+    background: alpha(@hl_mantle, .95);
+    border-color: alpha(@hl_text, .12);
+}
+
+.network-node:hover {
+    background: alpha(@hl_surface, .80);
+}
+
+button,
+.toolbar-button,
+.pill-button {
+    background-image: none;
+    background: alpha(@hl_surface, .76);
+    border-color: alpha(@hl_text, .12);
+}
+
+button:hover,
+.toolbar-button:hover,
+.pill-button:hover {
+    background-image: none;
+    background: alpha(@hl_overlay, .76);
+    border-color: alpha(@hl_text, .20);
+}
+
+.suggested-action,
+.pill-button.primary {
+    background-image: none;
+    background: alpha(@hl_text, .92);
+    border-color: transparent;
+    color: @hl_base;
+}
+
+.suggested-action:hover {
+    background-image: none;
+    background: @hl_text;
+    color: @hl_base;
+}
+
+.trust-diagnostics-card {
+    background: alpha(@hl_mantle, .90);
+    border-color: alpha(@hl_dom_host, .45);
+}
+
+.trust-host-card {
+    background: alpha(@hl_surface, .64);
+    border-left: 3px solid @hl_dom_host;
+}
+
+.trust-ladder-row {
+    background: alpha(@hl_surface, .68);
+}
+
+
+/* V447-T7C2 editorial cockpit pass.
+ *
+ * Quiet graphite product chrome.
+ * Trust colour remains semantic-only.
+ */
+.drawer-panel {
+    background: alpha(@hl_base, .985);
+    border: 1px solid alpha(@hl_text, .12);
+    border-radius: 18px;
+    box-shadow: 0 24px 70px alpha(#000000, .58);
+}
+
+.mock-titlebar {
+    min-height: 48px;
+    padding: 12px 16px;
+    background: alpha(@hl_mantle, .92);
+    border-bottom: 1px solid alpha(@hl_text, .075);
+}
+
+.mock-title {
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.mock-badge {
+    background: alpha(@hl_text, .055);
+    border: 1px solid alpha(@hl_text, .065);
+    color: alpha(@hl_text, .55);
+}
+
+.mock-section {
+    margin: 14px 0 7px 0;
+}
+
+.mock-section-title {
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.mock-section-net {
+    font-size: 9px;
+    color: alpha(@hl_text, .30);
+}
+
+.mock-section-line {
+    background: alpha(@hl_text, .065);
+}
+
+.vm-tile {
+    min-height: 108px;
+    padding: 0;
+    background: alpha(@hl_surface, .72);
+    border: 1px solid alpha(@hl_text, .075);
+    border-radius: 14px;
+    box-shadow: 0 8px 22px alpha(#000000, .18);
+}
+
+.vm-tile:hover {
+    background: alpha(@hl_surface, .94);
+    border-color: alpha(@hl_text, .15);
+}
+
+.vm-tile.selected {
+    background: alpha(@hl_overlay, .72);
+}
+
+.vm-product-head {
+    padding: 13px 13px 10px 13px;
+}
+
+.vm-product-icon {
+    opacity: .92;
+}
+
+.vm-product-divider {
+    min-height: 1px;
+    background: alpha(@hl_text, .065);
+    margin: 0 13px;
+}
+
+.vm-product-footer {
+    min-height: 32px;
+    padding: 7px 11px 8px 13px;
+}
+
+.vm-name {
+    color: @hl_text;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.vm-facts {
+    color: alpha(@hl_text, .46);
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 9px;
+}
+
+.vm-product-kind {
+    color: alpha(@hl_text, .34);
+    font-size: 9px;
+}
+
+.vm-state {
+    font-size: 8px;
+    font-weight: 800;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: alpha(@hl_base, .48);
+}
+
+.quick-button {
+    min-height: 24px;
+    padding: 2px 8px;
+    border-radius: 7px;
+    background: alpha(@hl_text, .065);
+    border-color: alpha(@hl_text, .09);
+}
+
+.quick-button:hover {
+    background: alpha(@hl_text, .12);
+    border-color: alpha(@hl_text, .17);
+}
+
+.new-vm-tile {
+    min-height: 50px;
+    margin-top: 11px;
+    padding: 0 14px;
+    border: 1px dashed alpha(@hl_text, .16);
+    border-radius: 13px;
+    background: alpha(@hl_mantle, .38);
+    color: alpha(@hl_text, .68);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.new-vm-tile:hover {
+    background: alpha(@hl_surface, .72);
+    border-color: alpha(@hl_text, .30);
+    color: @hl_text;
+}
+
+.trust-diagnostics-card {
+    padding: 14px;
+    background: alpha(@hl_mantle, .88);
+}
+
+.trust-host-card,
+.trust-ladder-row {
+    border-radius: 12px;
+    background: alpha(@hl_surface, .60);
+}
+
+.control-rail {
+    background: alpha(@hl_mantle, .72);
+}
+
+.mock-main {
+    background: alpha(@hl_base, .98);
+}
+
+.mock-inspect {
+    background: alpha(@hl_mantle, .52);
+}
+
+.card {
+    border-color: alpha(@hl_text, .065);
+    box-shadow: none;
+}
+
+/* V447-C3 Astra definitive visual layer. */
+
+/*
+ * Neutral product chrome.
+ * Trust colours are provenance accents, not theme colours.
+ */
+
+.shell-panel {
+    background: @hl_base;
+    color: @hl_text;
+    border: 1px solid alpha(@hl_text, .13);
+    border-radius: 12px;
+    box-shadow: 0 26px 70px alpha(#000000, .60);
+    padding: 0;
+}
+
+.drawer-panel {
+    padding: 0;
+    border-radius: 0 0 12px 0;
+    border-top-width: 0;
+    border-left-width: 0;
+}
+
+.overlay-panel {
+    padding: 0;
+    border-radius: 12px;
+}
+
+.mock-titlebar {
+    min-height: 42px;
+    padding: 10px 14px;
+    background: transparent;
+    border-bottom: 1px solid alpha(@hl_text, .09);
+}
+
+.mock-titlebar label {
+    color: @hl_text;
+}
+
+.control-rail {
+    min-width: 170px;
+    padding: 12px 9px;
+    background: transparent;
+    border-right: 1px solid alpha(@hl_text, .09);
+}
+
+.mock-main {
+    padding: 15px 16px 20px;
+    background: transparent;
+}
+
+.mock-inspect {
+    min-width: 300px;
+    padding: 14px;
+    background: transparent;
+    border-left: 1px solid alpha(@hl_text, .09);
+}
+
+
+/* ---------------------------------------------------------
+ * VM showcase
+ * --------------------------------------------------------- */
+
+.vm-tile {
+    min-height: 148px;
+    padding: 0;
+    border-radius: 12px;
+    background: alpha(@hl_text, .04);
+    border: 1px solid alpha(@hl_text, .09);
+    box-shadow: none;
+}
+
+.vm-tile:hover {
+    background: alpha(@hl_text, .055);
+}
+
+.vm-tile.selected {
+    background: alpha(@hl_text, .065);
+}
+
+.vm-tile.vm-domain-clean:hover,
+.vm-tile.vm-domain-clean.selected {
+    border-color: alpha(@hl_dom_clean, .65);
+}
+
+.vm-tile.vm-domain-dev:hover,
+.vm-tile.vm-domain-dev.selected {
+    border-color: alpha(@hl_dom_dev, .65);
+}
+
+.vm-tile.vm-domain-services:hover,
+.vm-tile.vm-domain-services.selected {
+    border-color: alpha(@hl_dom_services, .65);
+}
+
+.vm-tile.vm-domain-dirty:hover,
+.vm-tile.vm-domain-dirty.selected {
+    border-color: alpha(@hl_dom_dirty, .65);
+}
+
+.vm-tile.vm-domain-lab:hover,
+.vm-tile.vm-domain-lab.selected {
+    border-color: alpha(@hl_dom_lab, .65);
+}
+
+
+/* ---------------------------------------------------------
+ * Mock display preview
+ * --------------------------------------------------------- */
+
+.vm-thumb {
+    min-height: 72px;
+    padding: 8px 9px;
+    border-radius: 12px 12px 0 0;
+    background: alpha(@hl_mantle, .97);
+}
+
+.vm-thumb.vm-domain-clean {
+    background: alpha(@hl_dom_clean, .10);
+}
+
+.vm-thumb.vm-domain-dev {
+    background: alpha(@hl_dom_dev, .10);
+}
+
+.vm-thumb.vm-domain-services {
+    background: alpha(@hl_dom_services, .10);
+}
+
+.vm-thumb.vm-domain-dirty {
+    background: alpha(@hl_dom_dirty, .10);
+}
+
+.vm-thumb.vm-domain-lab {
+    background: alpha(@hl_dom_lab, .10);
+}
+
+.vm-screen {
+    min-height: 46px;
+    margin: 4px 6px 0 6px;
+    padding: 7px;
+    border-radius: 5px;
+    background: alpha(#000000, .40);
+    border: 1px solid alpha(@hl_text, .14);
+}
+
+.vm-screen-line {
+    min-height: 4px;
+    border-radius: 2px;
+    background: alpha(@hl_text, .13);
+}
+
+
+/* ---------------------------------------------------------
+ * Runtime state / hover controls
+ * --------------------------------------------------------- */
+
+.vm-state {
+    min-height: 18px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: alpha(#000000, .42);
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.vm-state.stopped {
+    color: alpha(@hl_text, .48);
+}
+
+.vm-state.running.vm-domain-clean {
+    color: @hl_dom_clean;
+}
+
+.vm-state.running.vm-domain-dev {
+    color: @hl_dom_dev;
+}
+
+.vm-state.running.vm-domain-services {
+    color: @hl_dom_services;
+}
+
+.vm-state.running.vm-domain-dirty {
+    color: @hl_dom_dirty;
+}
+
+.vm-state.running.vm-domain-lab {
+    color: @hl_dom_lab;
+}
+
+.vm-quick {
+    margin: 4px 0 0 0;
+}
+
+.quick-button {
+    min-height: 24px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid alpha(@hl_text, .20);
+    background: alpha(#050910, .76);
+    color: @hl_text;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.quick-button:hover {
+    border-color: alpha(@hl_text, .36);
+    background: alpha(@hl_text, .10);
+}
+
+
+/* ---------------------------------------------------------
+ * Metadata
+ * --------------------------------------------------------- */
+
+.vm-meta {
+    padding: 10px 12px 12px;
+}
+
+.vm-name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: @hl_text;
+}
+
+.vm-facts {
+    font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    font-size: 10.5px;
+    color: alpha(@hl_text, .42);
+}
+
+
+/* ---------------------------------------------------------
+ * Create-VM placeholder
+ * --------------------------------------------------------- */
+
+.new-vm-tile {
+    min-height: 148px;
+    margin-top: 0;
+    border-radius: 12px;
+    border: 1px dashed alpha(@hl_text, .16);
+    background: transparent;
+    color: alpha(@hl_text, .48);
+}
+
+
+/* ---------------------------------------------------------
+ * Trust / diagnostics stay neutral.
+ * Semantic identity is carried by explicit provenance accents.
+ * --------------------------------------------------------- */
+
+.trust-diagnostics-card {
+    background: transparent;
+    border-color: alpha(@hl_text, .10);
+}
+
+.trust-host-card {
+    background: alpha(@hl_text, .035);
+    border-left: 3px solid @hl_dom_host;
+}
+
+.trust-ladder-row {
+    background: alpha(@hl_text, .035);
+    border-color: alpha(@hl_text, .08);
+}
+
+
+/* V447-C4 Machines Astra polish. */
+
+.vm-tile,
+.vm-tile.vm-domain-clean,
+.vm-tile.vm-domain-dev,
+.vm-tile.vm-domain-services,
+.vm-tile.vm-domain-dirty,
+.vm-tile.vm-domain-lab {
+    border-left-width: 1px;
+    border-left-color: alpha(@hl_text, .09);
+}
+
+.vm-tile:hover {
+    background: alpha(@hl_text, .052);
+    border-color: alpha(@hl_text, .18);
+}
+
+.vm-tile.vm-domain-clean:hover,
+.vm-tile.vm-domain-clean.selected {
+    border-color: alpha(@hl_dom_clean, .55);
+}
+
+.vm-tile.vm-domain-dev:hover,
+.vm-tile.vm-domain-dev.selected {
+    border-color: alpha(@hl_dom_dev, .55);
+}
+
+.vm-tile.vm-domain-services:hover,
+.vm-tile.vm-domain-services.selected {
+    border-color: alpha(@hl_dom_services, .55);
+}
+
+.vm-tile.vm-domain-dirty:hover,
+.vm-tile.vm-domain-dirty.selected {
+    border-color: alpha(@hl_dom_dirty, .55);
+}
+
+.vm-tile.vm-domain-lab:hover,
+.vm-tile.vm-domain-lab.selected {
+    border-color: alpha(@hl_dom_lab, .55);
+}
+
+.vm-thumb {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_text, .055),
+            alpha(@hl_base, .94)
+        );
+}
+
+.vm-thumb.vm-domain-clean {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_dom_clean, .16),
+            alpha(@hl_base, .95) 76%
+        );
+}
+
+.vm-thumb.vm-domain-dev {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_dom_dev, .16),
+            alpha(@hl_base, .95) 76%
+        );
+}
+
+.vm-thumb.vm-domain-services {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_dom_services, .16),
+            alpha(@hl_base, .95) 76%
+        );
+}
+
+.vm-thumb.vm-domain-dirty {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_dom_dirty, .16),
+            alpha(@hl_base, .95) 76%
+        );
+}
+
+.vm-thumb.vm-domain-lab {
+    background-image:
+        linear-gradient(
+            135deg,
+            alpha(@hl_dom_lab, .16),
+            alpha(@hl_base, .95) 76%
+        );
+}
+
+.vm-screen {
+    background: alpha(#000000, .48);
+    border-color: alpha(@hl_text, .16);
+}
+
+.vm-screen-line {
+    background: alpha(@hl_text, .18);
+}
+
+.vm-state {
+    background: alpha(#000000, .32);
+    border-color: alpha(@hl_text, .10);
+}
+
+.vm-state.stopped {
+    color: alpha(@hl_text, .52);
+}
+
+.vm-meta {
+    background: alpha(@hl_text, .018);
+}
+
+.vm-facts {
+    color: alpha(@hl_text, .52);
+}
+
+.new-vm-tile {
+    background: alpha(@hl_text, .018);
+    border-color: alpha(@hl_text, .18);
+}
+
+.new-vm-tile:hover {
+    background: alpha(@hl_text, .035);
+    border-color: alpha(@hl_text, .30);
+}
+
+
+/* V447-C4 Trust Astra polish. */
+
+/*
+ * Trust is provenance, not chrome.
+ * Keep the drawer neutral and let semantic colours identify domains.
+ */
+
+.trust-diagnostics-card {
+    background: transparent;
+    border-color: alpha(@hl_text, .08);
+    box-shadow: none;
+}
+
+/* Neutralise GTK suggested-action styling only inside Trust. */
+.trust-diagnostics-card button,
+.trust-diagnostics-card button.suggested-action {
+    min-height: 28px;
+    padding: 4px 11px;
+    border-radius: 7px;
+    color: @hl_text;
+    background: alpha(@hl_text, .045);
+    border: 1px solid alpha(@hl_text, .13);
+    box-shadow: none;
+}
+
+.trust-diagnostics-card button:hover,
+.trust-diagnostics-card button.suggested-action:hover {
+    color: @hl_text;
+    background: alpha(@hl_text, .075);
+    border-color: alpha(@hl_text, .23);
+    box-shadow: none;
+}
+
+.trust-diagnostics-card button:active,
+.trust-diagnostics-card button.suggested-action:active {
+    background: alpha(@hl_text, .10);
+    border-color: alpha(@hl_text, .28);
+}
+
+/* HOST is the neutral control plane, not another trust domain. */
+.trust-host-card {
+    background: alpha(@hl_text, .025);
+    border-color: alpha(@hl_text, .09);
+    border-left-width: 1px;
+    border-left-color: alpha(@hl_dom_host, .42);
+    box-shadow: none;
+}
+
+/* Ladder rows should read as one list, not five heavy nested cards. */
+.trust-ladder-row {
+    background: alpha(@hl_text, .018);
+    border-color: alpha(@hl_text, .065);
+    box-shadow: none;
+}
+
+.trust-ladder-row:hover {
+    background: alpha(@hl_text, .030);
+    border-color: alpha(@hl_text, .11);
+}
+
+/* Prevent domain classes from painting the whole row. */
+.trust-ladder-row.domain-clean,
+.trust-ladder-row.domain-dev,
+.trust-ladder-row.domain-services,
+.trust-ladder-row.domain-dirty,
+.trust-ladder-row.domain-lab {
+    background: alpha(@hl_text, .018);
+}
+
+/* Keep semantic colour as a restrained provenance edge. */
+.trust-ladder-row.domain-clean {
+    border-left: 2px solid alpha(@hl_dom_clean, .62);
+}
+
+.trust-ladder-row.domain-dev {
+    border-left: 2px solid alpha(@hl_dom_dev, .62);
+}
+
+.trust-ladder-row.domain-services {
+    border-left: 2px solid alpha(@hl_dom_services, .62);
+}
+
+.trust-ladder-row.domain-dirty {
+    border-left: 2px solid alpha(@hl_dom_dirty, .62);
+}
+
+.trust-ladder-row.domain-lab {
+    border-left: 2px solid alpha(@hl_dom_lab, .62);
+}
+
+/* Text hierarchy: brighter names, quieter explanatory copy. */
+.trust-host-card .card-title,
+.trust-ladder-row .card-title {
+    color: @hl_text;
+}
+
+.trust-host-card .caption,
+.trust-ladder-row .caption {
+    color: alpha(@hl_text, .55);
+}
+
+
+/* V447-C5 exact visual corrections. */
+
+/*
+ * The generic .domain-* rules draw a 3px provenance edge.
+ * VM thumbnails already express provenance through their tint,
+ * so they must not inherit that edge.
+ */
+.vm-thumb.vm-domain-clean,
+.vm-thumb.vm-domain-dev,
+.vm-thumb.vm-domain-services,
+.vm-thumb.vm-domain-dirty,
+.vm-thumb.vm-domain-lab {
+    border-left-width: 0;
+    border-left-color: transparent;
+}
+
+/*
+ * Trust details is semantically an ordinary diagnostic action,
+ * not a GTK suggested-action.
+ */
+.trust-diagnostics-card button.trust-action-primary {
+    min-height: 28px;
+    padding: 4px 11px;
+    border-radius: 7px;
+    color: @hl_text;
+    background: alpha(@hl_text, .045);
+    border: 1px solid alpha(@hl_text, .13);
+    box-shadow: none;
+}
+
+.trust-diagnostics-card button.trust-action-primary:hover {
+    color: @hl_text;
+    background: alpha(@hl_text, .075);
+    border-color: alpha(@hl_text, .23);
+    box-shadow: none;
+}
+
+.trust-diagnostics-card button.trust-action-primary:active {
+    background: alpha(@hl_text, .10);
+    border-color: alpha(@hl_text, .28);
+}
+
+
+/* V447-C6 isolated VM trust namespace. */
+
+/*
+ * VM widgets deliberately do not inherit the global .domain-* edge.
+ * vm-domain-* carries the same semantic identity in VM-only surfaces.
+ */
+.vm-tile.vm-domain-clean,
+.vm-tile.vm-domain-dev,
+.vm-tile.vm-domain-services,
+.vm-tile.vm-domain-dirty,
+.vm-tile.vm-domain-lab {
+    border-left-width: 1px;
+    border-left-color: alpha(@hl_text, .09);
+}
+
+.vm-thumb.vm-domain-clean,
+.vm-thumb.vm-domain-dev,
+.vm-thumb.vm-domain-services,
+.vm-thumb.vm-domain-dirty,
+.vm-thumb.vm-domain-lab {
+    border-left-width: 0;
+    border-left-color: transparent;
+}
+
 """
 
 
@@ -938,6 +1896,7 @@ try:
 except EOFError:
     pass
 raise SystemExit(rc)
+
 """
     subprocess.Popen(
         [
@@ -1158,7 +2117,18 @@ class HyperlabWindow(Gtk.Window):
     def _shell_header(self, compact: bool = False) -> Gtk.Box:
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=11)
         header.add_css_class("mock-titlebar")
-        header.append(text_label("Machines" if compact else "HyperLab", "mock-title", wrap=False))
+        self.header_title = text_label(
+            (
+                "Trust & Diagnostics"
+                if compact and self.current_section == "diagnostics"
+                else "Machines"
+                if compact
+                else "HyperLab"
+            ),
+            "mock-title",
+            wrap=False,
+        )
+        header.append(self.header_title)
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         header.append(spacer)
@@ -1261,7 +2231,7 @@ class HyperlabWindow(Gtk.Window):
         return toolbar
 
     def _build_drawer_shell(self, panel: Gtk.Box) -> None:
-        """Definitive 500x560 machine drawer, flush-left under Waybar."""
+        """Desktop-class shell drawer, flush-left under the shared bar."""
         panel.append(self._shell_header(compact=True))
         self.drawer_holder = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.drawer_holder.set_hexpand(True)
@@ -1290,10 +2260,192 @@ class HyperlabWindow(Gtk.Window):
         content.set_margin_bottom(16)
         content.set_margin_start(13)
         content.set_margin_end(13)
-        content.append(self._build_vm_showcase(columns=2, compact=True))
+        if self.current_section == "diagnostics":
+            content.append(
+                self._build_drawer_diagnostics()
+            )
+        else:
+            content.append(
+                self._build_vm_showcase(
+                    columns=2,
+                    compact=True,
+                )
+            )
+
         self.drawer_holder.append(content)
+
+        if self.header_title is not None:
+            self.header_title.set_text(
+                "Trust & Diagnostics"
+                if self.current_section == "diagnostics"
+                else "Machines"
+            )
+
         if self.header_status is not None:
-            self.header_status.set_text("%d running" % len(self.model.running_domains))
+            if self.current_section == "diagnostics":
+                problem_count = (
+                    len(self.model.load_errors)
+                    + len(self.model.problems)
+                )
+                self.header_status.set_text(
+                    "%d issue%s"
+                    % (
+                        problem_count,
+                        "" if problem_count == 1 else "s",
+                    )
+                )
+            else:
+                self.header_status.set_text(
+                    "%d running"
+                    % len(self.model.running_domains)
+                )
+
+    def _build_drawer_diagnostics(self) -> Gtk.Widget:
+        """Compact Trust and Diagnostics surface for the shell Trust badge."""
+        root = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=10,
+        )
+
+        intro = card()
+        intro.add_css_class("trust-diagnostics-card")
+        intro.append(
+            text_label(
+                "Trust & Diagnostics",
+                "card-title",
+                wrap=False,
+            )
+        )
+        intro.append(
+            text_label(
+                "Host-owned provenance and the reviewed workload isolation ladder.",
+                "caption",
+            )
+        )
+
+        actions = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=7,
+        )
+
+        actions.append(
+            button(
+                "Trust details",
+                lambda _button: self._diagnostic_action(
+                    "trust.show"
+                ),
+                "trust-action-primary",
+            )
+        )
+
+        actions.append(
+            button(
+                "Doctor",
+                lambda _button: self._diagnostic_action(
+                    "doctor.run"
+                ),
+            )
+        )
+
+        intro.append(actions)
+        root.append(intro)
+
+        host = card()
+        host.add_css_class("trust-host-card")
+        host.append(
+            text_label(
+                "HOST",
+                "card-title",
+                wrap=False,
+            )
+        )
+        host.append(
+            text_label(
+                "Neutral control plane · not a workload trust domain",
+                "caption",
+            )
+        )
+        root.append(host)
+
+        for domain_id in (
+            "clean",
+            "dev",
+            "services",
+            "dirty",
+            "lab",
+        ):
+            meta = DOMAIN_META[domain_id]
+
+            item = card(
+                vertical=False,
+                spacing=9,
+            )
+
+            item.add_css_class("trust-ladder-row")
+            item.add_css_class(
+                "domain-%s" % domain_id
+            )
+
+            body = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=2,
+            )
+            body.set_hexpand(True)
+
+            body.append(
+                text_label(
+                    meta["title"],
+                    "card-title",
+                    wrap=False,
+                )
+            )
+
+            body.append(
+                text_label(
+                    meta["subtitle"],
+                    "caption",
+                )
+            )
+
+            item.append(body)
+
+            item.append(
+                text_label(
+                    domain_id.upper(),
+                    "domain-badge-%s" % domain_id,
+                    wrap=False,
+                )
+            )
+
+            root.append(item)
+
+        problem_count = (
+            len(self.model.load_errors)
+            + len(self.model.problems)
+        )
+
+        footer = card()
+        footer.append(
+            text_label(
+                "Diagnostics",
+                "card-title",
+                wrap=False,
+            )
+        )
+        footer.append(
+            text_label(
+                "%d reported issue%s"
+                % (
+                    problem_count,
+                    "" if problem_count == 1 else "s",
+                ),
+                "caption",
+                wrap=False,
+            )
+        )
+        root.append(footer)
+
+        return root
 
     def _drawer_vm_row(self, domain: dict[str, Any]) -> Gtk.Widget:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
@@ -1461,7 +2613,11 @@ class HyperlabWindow(Gtk.Window):
 
     def select_section(self, section: str) -> None:
         if self.surface_mode == "drawer":
-            self.current_section = "vms"
+            self.current_section = (
+                "diagnostics"
+                if section == "diagnostics"
+                else "vms"
+            )
             self._rebuild_drawer("")
             return
         aliases = {
@@ -1469,7 +2625,6 @@ class HyperlabWindow(Gtk.Window):
             "domains": "vms",
             "images": "create",
             "activity": "vms",
-            "diagnostics": "gpu",
         }
         section = aliases.get(section, section)
         if section not in self.builders:
@@ -1929,15 +3084,15 @@ class HyperlabWindow(Gtk.Window):
         running = str(domain.get("state", "")).lower() == "running"
         tile = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         tile.add_css_class("vm-tile")
-        tile.add_css_class("domain-%s" % domain_id)
+        tile.add_css_class("vm-domain-%s" % domain_id)
         if getattr(self, "selected_vm", None) and self.selected_vm.get("name") == name:
             tile.add_css_class("selected")
 
         thumb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         thumb.add_css_class("vm-thumb")
-        thumb.add_css_class("domain-%s" % domain_id)
+        thumb.add_css_class("vm-domain-%s" % domain_id)
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        state = text_label("RUNNING" if running else "STOPPED", "vm-state", "running" if running else "stopped", "domain-%s" % domain_id, wrap=False)
+        state = text_label("RUNNING" if running else "STOPPED", "vm-state", "running" if running else "stopped", "vm-domain-%s" % domain_id, wrap=False)
         top.append(state)
         spacer = Gtk.Box(); spacer.set_hexpand(True); top.append(spacer)
         thumb.append(top)
@@ -3049,9 +4204,14 @@ class HyperlabWindow(Gtk.Window):
 
         choices = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         for theme in DESKTOP_THEMES:
-            choice = Gtk.Button(label=theme.title())
+            choice = Gtk.Button(label=theme.replace("-", " ").title())
             choice.set_hexpand(True)
             choice.set_sensitive(available)
+            if not available:
+                choice.set_tooltip_text(
+                    "The HyperLab theme helper is unavailable, "
+                    "so the desktop theme cannot be changed here."
+                )
             if theme == current:
                 choice.add_css_class("active")
             choice.connect(

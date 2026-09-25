@@ -6,6 +6,15 @@ set -euo pipefail
 
 readonly palette_root=${HYPERLAB_PALETTE_ROOT:-/usr/share/hyperlab/palettes}
 readonly public_wallpaper_root=${HYPERLAB_PUBLIC_WALLPAPER_ROOT:-/usr/share/backgrounds/privatestack/public}
+readonly trust_wallpaper_root=${HYPERLAB_TRUST_WALLPAPER_ROOT:-/usr/share/hyperlab/themes/trust-model/wallpapers}
+# The HyperLab product wallpaper ("Isolation Ring"): one theme-independent
+# image, selectable as its own mode. It carries no trust or policy meaning.
+readonly product_wallpaper=${HYPERLAB_PRODUCT_WALLPAPER:-/usr/share/backgrounds/hyperlab/product.png}
+# The lock surface is product identity, never a theme rotation: it must not
+# show a wallpaper carrying provenance, guest-derived or session content.
+readonly product_lock_image=${HYPERLAB_LOCK_IMAGE:-/usr/share/backgrounds/hyperlab/lock.png}
+readonly trust_wallpaper_count=2
+readonly trust_rotation_seconds=1800
 readonly data_home=${XDG_DATA_HOME:-"${HOME}/.local/share"}
 readonly personal_wallpaper_root=${HYPERLAB_PERSONAL_WALLPAPER_ROOT:-${data_home}/hyperlab/wallpapers/personal}
 readonly config_home=${XDG_CONFIG_HOME:-"${HOME}/.config"}
@@ -21,7 +30,7 @@ readonly daemon_key=${compositor_session//\//_}
 readonly daemon_lock=${XDG_RUNTIME_DIR:-${state_dir}}/hyperlab-wallpaper-${daemon_key:-wayland}.lock
 readonly public_wallpaper_count=20
 readonly rotation_seconds=${HYPERLAB_WALLPAPER_INTERVAL:-60}
-readonly themes=(green violet blue red)
+readonly themes=(green violet blue red trust-model)
 readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privatestack-compositor-adapter}
 
 mkdir -p "${config_dir}" "${state_dir}" "${personal_wallpaper_root}"
@@ -32,8 +41,8 @@ notify() {
     fi
 }
 
-valid_theme() { case ${1:-} in green|violet|blue|red) return 0 ;; *) return 1 ;; esac; }
-valid_mode() { case ${1:-} in public|personal) return 0 ;; *) return 1 ;; esac; }
+valid_theme() { case ${1:-} in green|violet|blue|red|trust-model) return 0 ;; *) return 1 ;; esac; }
+valid_mode() { case ${1:-} in public|personal|product) return 0 ;; *) return 1 ;; esac; }
 
 current_theme() {
     local value=green
@@ -83,8 +92,24 @@ personal_wallpaper_count() {
     printf '%s\n' "${count}"
 }
 
+# An explicit product wallpaper selection wins over every theme's own pool,
+# including the trust-model rotation, so the neutral HyperLab Platform
+# combination -- trust-model chrome with the Isolation Ring -- is a real,
+# selectable state rather than one the trust pool silently overrides.
+product_selected() {
+    [[ $(current_mode) == product ]] && [[ -r ${product_wallpaper} ]]
+}
+
 active_wallpaper_count() {
     local theme=$1 count
+    if product_selected; then
+        printf '1\n'
+        return 0
+    fi
+    if [[ ${theme} == trust-model ]]; then
+        printf '%s\n' "${trust_wallpaper_count}"
+        return 0
+    fi
     if [[ $(current_mode) == personal ]]; then
         count=$(personal_wallpaper_count "${theme}")
         if (( count > 0 )); then
@@ -110,6 +135,19 @@ personal_wallpaper_path() { printf '%s/%s/%02d.png\n' "${personal_wallpaper_root
 
 wallpaper_path() {
     local theme=$1 index=$2 mode image
+    if product_selected; then
+        printf '%s\n' "${product_wallpaper}"
+        return 0
+    fi
+    if [[ ${theme} == trust-model ]]; then
+        printf -v image '%s/host/%02d.png' "${trust_wallpaper_root}" "$(( index + 1 ))"
+        [[ -r ${image} ]] || {
+            printf 'HyperLab: missing trust-model wallpaper: %s\n' "${image}" >&2
+            return 1
+        }
+        printf '%s\n' "${image}"
+        return 0
+    fi
     mode=$(current_mode)
     if [[ ${mode} == personal ]]; then
         image=$(personal_wallpaper_path "${theme}" "${index}")
@@ -154,24 +192,31 @@ reload_palette_consumers() {
 signal_wallpaper_mode() { pkill -SIGRTMIN+9 -x waybar 2>/dev/null || true; }
 signal_controls() { pkill -SIGRTMIN+11 -x waybar 2>/dev/null || true; }
 
+signal_quickshell_appearance() {
+    [[ -x /usr/bin/qs ]] || return 0
+    /usr/bin/qs -c hyperlab ipc call appearance refresh >/dev/null 2>&1 || true
+}
+
 session_start() {
     local theme index
     theme=$(current_theme); index=$(read_index "${theme}")
     install_active_palette "${theme}"
     set_desktop_wallpaper "${theme}" "${index}"
     reload_palette_consumers
+    signal_quickshell_appearance
     signal_wallpaper_mode
     signal_controls
 }
 
 set_theme() {
     local theme=$1
-    valid_theme "${theme}" || { printf 'usage: %s set green|violet|blue|red\n' "$0" >&2; return 2; }
+    valid_theme "${theme}" || { printf 'usage: %s set green|violet|blue|red|trust-model\n' "$0" >&2; return 2; }
     write_atomic "${theme_file}" "${theme}"
     write_atomic "${desktop_index_file}" 0
     install_active_palette "${theme}"
     set_desktop_wallpaper "${theme}" 0
     reload_palette_consumers
+    signal_quickshell_appearance
     signal_wallpaper_mode
     signal_controls
     # A Control Center-owned transaction keeps its visible surface alive and
@@ -195,10 +240,11 @@ cycle_theme() {
 
 set_mode() {
     local mode=$1 theme index
-    valid_mode "${mode}" || { printf 'usage: %s mode-set public|personal\n' "$0" >&2; return 2; }
+    valid_mode "${mode}" || { printf 'usage: %s mode-set public|personal|product\n' "$0" >&2; return 2; }
     write_atomic "${wallpaper_mode_file}" "${mode}"
     theme=$(current_theme); index=$(read_index "${theme}")
     set_desktop_wallpaper "${theme}" "${index}"
+    signal_quickshell_appearance
     signal_wallpaper_mode
     signal_controls
     if [[ ${mode} == personal ]] && [[ ! -r $(personal_wallpaper_path "${theme}" "${index}") ]]; then
@@ -209,16 +255,33 @@ set_mode() {
 }
 
 toggle_mode() {
-    if [[ $(current_mode) == public ]]; then
-        set_mode personal
-    else
-        set_mode public
+    # Trust-model has two wallpaper sources: the neutral product ring and the
+    # reviewed trust pool (recorded as "public"). Toggling moves between them.
+    if [[ $(current_theme) == trust-model ]]; then
+        case $(current_mode) in
+            product) set_mode public ;;
+            *) set_mode product ;;
+        esac
+        return 0
     fi
+    case $(current_mode) in
+        public) set_mode personal ;;
+        personal) set_mode product ;;
+        *) set_mode public ;;
+    esac
 }
 
 mode_json() {
     local mode theme sample available=true
     mode=$(current_mode); theme=$(current_theme)
+    if [[ ${mode} == product ]]; then
+        printf '{"text":" HL","tooltip":"HyperLab product wallpaper · click: next source","class":"product"}\n'
+        return 0
+    fi
+    if [[ ${theme} == trust-model ]]; then
+        printf '{"text":"AUTO","tooltip":"Trust-model wallpaper pool · next reviewed HOST candidate on rotation · click: HyperLab product wallpaper","class":"trust-model"}\n'
+        return 0
+    fi
     sample=$(personal_wallpaper_path "${theme}" "$(read_index "${theme}")")
     [[ ${mode} == personal && ! -r ${sample} ]] && available=false
     if [[ ${mode} == public ]]; then
@@ -242,6 +305,14 @@ next_wallpaper() {
 
 lock_image() {
     local theme desktop_index lock_index count
+
+    if [[ -r ${product_lock_image} ]]; then
+        printf '%s\n' "${product_lock_image}"
+        return 0
+    fi
+
+    # Fallback only: an installation without the product lock asset keeps the
+    # historical rotation offset rather than locking to a blank screen.
     theme=$(current_theme)
     count=$(active_wallpaper_count "${theme}")
     desktop_index=$(read_index "${theme}")
@@ -253,7 +324,14 @@ run_daemon() {
     [[ ${rotation_seconds} =~ ^[0-9]+$ ]] || { printf 'HYPERLAB_WALLPAPER_INTERVAL must be an integer.\n' >&2; return 2; }
     (( rotation_seconds >= 30 )) || { printf 'Minimum supported interval: 30 seconds.\n' >&2; return 2; }
     exec 9>"${daemon_lock}"; flock -n 9 || exit 0
-    while sleep "${rotation_seconds}"; do next_wallpaper --quiet || exit 0; done
+    while true; do
+        delay=${rotation_seconds}
+        if [[ $(current_theme) == trust-model ]]; then
+            delay=${trust_rotation_seconds}
+        fi
+        sleep "${delay}"
+        next_wallpaper --quiet || exit 0
+    done
 }
 
 case ${1:-status} in

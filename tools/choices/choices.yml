@@ -13,6 +13,10 @@ choices:
       violet: Violet ambience with cyan accents; the Lab domain moves to magenta and keeps a shape marker.
       blue: Deep blue with electric-blue and cyan accents; a cool, high-contrast variant.
       red: Deep red with coral and amber accents while keeping every trust domain distinguishable.
+      trust-model: >-
+        Near-black HyperLab presentation driven by host-owned trust
+        provenance, canonical trust colours and the reviewed
+        hyperlab-trust-v2 wallpaper pool.
   lab_marking:
     question: Should the Lab domain use colour only or colour plus shape?
     value: colour_and_shape

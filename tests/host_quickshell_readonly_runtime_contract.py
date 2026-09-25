@@ -7,12 +7,14 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+QML = "roles/host_desktop_common/files/quickshell/hyperlab/"
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(
-            f"HyperLab Quickshell readonly runtime contract: {message}"
+            "HyperLab Quickshell readonly runtime contract: "
+            + message
         )
 
 
@@ -44,10 +46,12 @@ def main() -> int:
         "slow status polling cadence changed",
     )
 
-    bar = text(
-        "roles/host_desktop_common/files/"
-        "quickshell/hyperlab/HyperLabBar.qml"
-    )
+    state_qml = text(QML + "ShellState.qml")
+    bar = text(QML + "HyperLabBar.qml")
+    machine_stage = text(QML + "MachineStage.qml")
+    context = text(QML + "ContextCluster.qml")
+    identity = text(QML + "IdentityMark.qml")
+    gpu = text(QML + "GpuBadge.qml")
 
     for marker in (
         "import Quickshell.Io",
@@ -61,23 +65,47 @@ def main() -> int:
         '"gpu"',
         '"vms"',
         "interval: 30000",
-        'text: "◆  HYPERLAB"',
-        '"TRUST "',
-        "root.trustPayload.text",
-        '"RAM "',
-        "root.ramPayload.text",
-        '"GPU "',
-        "root.gpuPayload.text",
-        '"VM "',
-        "root.vmPayload.text",
+        "applyTrustPayload(data)",
     ):
         require(
-            marker in bar,
-            f"required shell marker missing: {marker}",
+            marker in state_qml,
+            f"required runtime marker missing: {marker}",
         )
 
-    # Shared QML can consume the reviewed presentation bridge only.
-    # Compositor IPC and privileged operations stay outside the shell.
+    for marker, corpus in (
+        ('text: "HyperLab"', identity),
+        ("badge.claim.claimed", gpu),
+        (
+            "provenanceColor(badge.claim.identity)",
+            gpu,
+        ),
+        (
+            "claim: bar.shellState.trustClaim",
+            bar,
+        ),
+        (
+            "payload: bar.shellState.gpuPayload",
+            bar,
+        ),
+        (
+            "shellState.machines",
+            machine_stage,
+        ),
+        (
+            "cluster.context",
+            context,
+        ),
+    ):
+        require(
+            marker in corpus,
+            f"required presentation wiring missing: {marker}",
+        )
+
+    shared_qml = "\n".join(
+        text(QML + name)
+        for name in stage["surface_files"]
+    )
+
     for forbidden in (
         "Quickshell.Hyprland",
         "Quickshell.I3",
@@ -93,19 +121,19 @@ def main() -> int:
         "MouseArea",
     ):
         require(
-            forbidden not in bar,
+            forbidden not in shared_qml,
             f"forbidden shell behavior appeared: {forbidden}",
         )
 
     require(
-        bar.count('"watch"') == 1
-        and bar.count('"trust"') >= 1,
+        state_qml.count('"watch"') == 1
+        and state_qml.count('"trust"') >= 1,
         "trust stream command is no longer singular",
     )
 
     require(
-        "interval: 1000" not in bar
-        and "interval: 5000" not in bar,
+        "interval: 1000" not in state_qml
+        and "interval: 5000" not in state_qml,
         "read-only status core gained aggressive polling",
     )
 

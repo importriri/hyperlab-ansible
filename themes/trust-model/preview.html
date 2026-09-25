@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HyperLab Trust Model Preview</title>
+<style>
+:root {
+  --base: #07090d;
+  --mantle: #0d1117;
+  --surface: #151b23;
+  --overlay: #232d3a;
+  --text: #f0f6fc;
+  --subtext: #9aa7b5;
+  --focus: #d0d7de;
+  --host: #8b949e;
+  --clean: #72f2a5;
+  --dev: #5b8cff;
+  --services: #35e4dd;
+  --dirty: #ff9d45;
+  --lab: #b184ff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% -10%, #18212d 0, transparent 40%),
+    var(--base);
+  color: var(--text);
+  font-family:
+    "JetBrainsMono Nerd Font",
+    "JetBrains Mono",
+    monospace;
+}
+.bar {
+  height: 37px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  background: rgba(7,9,13,.95);
+  border-bottom: 1px solid var(--overlay);
+}
+.ws {
+  width: 23px;
+  height: 23px;
+  border: 1px solid var(--overlay);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--subtext);
+  font-size: 10px;
+}
+.ws.active {
+  border-color: var(--focus);
+  background: var(--surface);
+  color: var(--text);
+}
+.pill {
+  height: 25px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--overlay);
+  font-size: 11px;
+}
+.brand {
+  border-color: var(--focus);
+  font-weight: 700;
+}
+.trust {
+  border-color: var(--dev);
+}
+.spacer { flex: 1; }
+.metric {
+  color: var(--subtext);
+  font-size: 10px;
+}
+.control {
+  color: var(--text);
+  background: var(--mantle);
+}
+main {
+  max-width: 1500px;
+  margin: 42px auto;
+  padding: 0 28px 60px;
+}
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+.lede {
+  max-width: 900px;
+  color: var(--subtext);
+  line-height: 1.65;
+}
+.section {
+  margin-top: 36px;
+}
+.trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.trust-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--overlay);
+  border-radius: 9px;
+  background: var(--mantle);
+}
+.trust-chip code {
+  color: var(--subtext);
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.gallery {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+.asset {
+  overflow: hidden;
+  border: 1px solid var(--overlay);
+  border-radius: 12px;
+  background: var(--mantle);
+}
+.asset img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+  object-fit: cover;
+}
+.asset-name {
+  padding: 10px 12px;
+  color: var(--subtext);
+  font-size: 11px;
+}
+.note {
+  border-left: 3px solid var(--focus);
+  padding: 12px 15px;
+  background: var(--mantle);
+  color: var(--subtext);
+  line-height: 1.55;
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <span class="ws active">1</span>
+  <span class="ws">2</span>
+  <span class="ws">3</span>
+  <span class="ws">4</span>
+  <span class="ws">5</span>
+  <span class="ws">6</span>
+  <span class="ws">7</span>
+  <span class="ws">8</span>
+  <span class="ws">9</span>
+
+  <span class="pill brand">◆ HYPERLAB</span>
+  <span class="pill trust">TRUST DEV</span>
+
+  <span class="spacer"></span>
+
+  <span class="metric">RAM 11.7G</span>
+  <span class="metric">GPU VFIO</span>
+  <span class="metric">VM 1</span>
+  <span class="metric">42°C</span>
+  <span class="metric">NET UP</span>
+  <span class="metric">VOL 65%</span>
+  <span class="metric">BAT 83%</span>
+
+  <span class="pill control">KEY IT</span>
+  <span class="pill control">THEME</span>
+  <span class="pill control">CTL</span>
+</header>
+
+<main>
+  <h1>HyperLab · Trust Model</h1>
+
+  <p class="lede">
+    Near-black host shell. Focus remains neutral. Trust colour appears
+    only where the interface is communicating host-owned provenance.
+    The keyboard follows the same identity through the reviewed four-zone
+    Nitro broker.
+  </p>
+
+  <section class="section">
+    <h2>Trust identities</h2>
+    <div class="trust-row">
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#8b949e"></span>
+              HOST
+              <code>#8b949e</code>
+            </div>
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#72f2a5"></span>
+              CLEAN
+              <code>#72f2a5</code>
+            </div>
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#5b8cff"></span>
+              DEV
+              <code>#5b8cff</code>
+            </div>
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#35e4dd"></span>
+              SERVICES
+              <code>#35e4dd</code>
+            </div>
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#ff9d45"></span>
+              DIRTY
+              <code>#ff9d45</code>
+            </div>
+
+            <div class="trust-chip">
+              <span class="dot"
+                    style="background:#b184ff"></span>
+              LAB
+              <code>#b184ff</code>
+            </div>
+
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Canonical symbols</h2>
+
+    <div class="note">
+      These ten assets are canonical, but no symbol is assigned to a trust
+      identity yet. This gallery exists specifically so that mapping can be
+      reviewed visually instead of inferred from filename or colour.
+    </div>
+
+    <div class="gallery">
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/01-cerchio-nero-e-rosso.png"
+                   alt="01-cerchio-nero-e-rosso">
+              <div class="asset-name">
+                01-cerchio-nero-e-rosso
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/02-geometria-blu.png"
+                   alt="02-geometria-blu">
+              <div class="asset-name">
+                02-geometria-blu
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/03-orbita-rossa.png"
+                   alt="03-orbita-rossa">
+              <div class="asset-name">
+                03-orbita-rossa
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/04-orbita-viola.png"
+                   alt="04-orbita-viola">
+              <div class="asset-name">
+                04-orbita-viola
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/05-spirale-verde.png"
+                   alt="05-spirale-verde">
+              <div class="asset-name">
+                05-spirale-verde
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/06-ingranaggio-oro.png"
+                   alt="06-ingranaggio-oro">
+              <div class="asset-name">
+                06-ingranaggio-oro
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/07-onda-e-semicerchio.png"
+                   alt="07-onda-e-semicerchio">
+              <div class="asset-name">
+                07-onda-e-semicerchio
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/08-golden-image.png"
+                   alt="08-golden-image">
+              <div class="asset-name">
+                08-golden-image
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/09-vela-geometrica.png"
+                   alt="09-vela-geometrica">
+              <div class="asset-name">
+                09-vela-geometrica
+              </div>
+            </article>
+
+            <article class="asset">
+              <img src="../assets/hyperlab-symbols-v1/images/10-diagramma-circolare.png"
+                   alt="10-diagramma-circolare">
+              <div class="asset-name">
+                10-diagramma-circolare
+              </div>
+            </article>
+
+    </div>
+  </section>
+</main>
+</body>
+</html>

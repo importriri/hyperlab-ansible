@@ -59,7 +59,7 @@ def main():
     require("LayerShell.set_margin(self, LayerShell.Edge.TOP, 0)" in manager and
             "panel.set_margin_top(0)" in manager and
             "panel.set_margin_start(0)" in manager,
-            "drawer no longer lands flush-left below Waybar")
+            "drawer no longer uses the reviewed floating offset")
     require('gapplication action "${app_id}" quit' in manager_session and
             "flock -n 9" in manager_session and
             'exec "${manager}" --warm' in manager_session,
@@ -86,9 +86,13 @@ def main():
             'self._ensure_window("drawer", "vms")' in manager and
             "self.windows: dict[str, HyperlabWindow]" in manager,
             "prebuilt resident drawer missing")
-    require('header.append(text_label("Machines" if compact else "HyperLab", "mock-title"' in manager and
-            'self.header_status = text_label("Loading…", "mock-badge"' in manager,
-            "definitive minimal titlebar is missing")
+    require(
+        "self.header_title = text_label(" in manager and
+        '"Trust & Diagnostics"' in manager and
+        '"Machines"' in manager and
+        'self.header_status = text_label("Loading…", "mock-badge"' in manager,
+        "definitive dynamic shell titlebar is missing",
+    )
     require("Gtk.ShortcutController()" in manager and
             "Gtk.ShortcutScope.GLOBAL" in manager and
             'Gtk.ShortcutTrigger.parse_string("Escape")' in manager,
@@ -124,7 +128,7 @@ def main():
             'self.inspect_holder.set_size_request(300, -1)' in manager,
             "definitive 170/main/300 Control Center geometry is missing")
     require("panel.set_margin_top(40)" in manager,
-            "Control Center is not pinned 40 px below the 37 px Waybar")
+            "Control Center does not use the reviewed 24 px visual offset")
     for section, label in (("vms", "Machines"), ("create", "Create"),
                            ("policies", "Networks"), ("gpu", "GPU"),
                            ("nitro", "Nitro")):
@@ -132,9 +136,14 @@ def main():
                 "definitive rail section missing: %s" % label)
     require('("overview", "Overview")' not in manager.split("navigation = [", 1)[1].split("]", 1)[0],
             "legacy nine-section rail returned")
-    require('content.append(self._build_vm_showcase(columns=2, compact=True))' in manager and
-            'showcase = self._build_vm_showcase(columns=4)' in manager,
-            "drawer/full machine showcases do not match the 2/4-column mockup")
+    require(
+        "self._build_drawer_diagnostics()" in manager and
+        "columns=2" in manager and
+        "compact=True" in manager and
+        'showcase = self._build_vm_showcase(columns=4)' in manager,
+        "drawer routing no longer preserves the 2-column Machines surface "
+        "and the 4-column full manager",
+    )
     require('canvas = Gtk.Fixed()' in manager and
             'canvas.add_css_class("network-canvas")' in manager and
             'content.append(dock)' in manager and
@@ -185,6 +194,7 @@ def main():
     )
 
     tasks = text("roles/host_desktop_sway/tasks/main.yml")
+    common_tasks = text("roles/host_desktop_common/tasks/main.yml")
     palette_tasks = text("roles/host_desktop_sway/tasks/palette.yml")
     require("/usr/local/bin/privatestack-cava" in tasks and
             "/usr/local/bin/privatestack-fullscreen" in tasks and
@@ -199,9 +209,25 @@ def main():
         "privatestack-waybar.sh",
         "privatestack-theme.sh",
         "privatestack-keyboard.sh", "privatestack-controls.sh",
-        "privatestack-lock.sh", "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
+        "privatestack-swaylock.sh", "privatestack-swaybar-status.py",
     ):
         require(deployed in tasks, "visual-lock asset not deployed: %s" % deployed)
+
+    for shared_deployed in (
+        "privatestack-lock.sh",
+        "privatestack-opacity-toggle.sh",
+    ):
+        require(
+            shared_deployed in common_tasks,
+            "shared desktop helper not deployed by common: %s"
+            % shared_deployed,
+        )
+
+    require(
+        "privatestack-lock.sh" not in tasks
+        and "privatestack-opacity-toggle.sh" not in tasks,
+        "Sway still owns compositor-neutral lock or opacity helpers",
+    )
     require("superfile-config.toml" not in tasks and
             "privatestack-superfile.sh" not in tasks,
             "retired Superfile assets still have active desktop ownership")
@@ -285,12 +311,12 @@ def main():
     require("public_wallpaper_count=20" in theme_helper and
             "personal_wallpaper_count" in theme_helper and
             "active_wallpaper_count" in theme_helper and
-            "readonly themes=(green violet blue red)" in theme_helper and
+            "readonly themes=(green violet blue red trust-model)" in theme_helper and
             "wallpaper_mode_file" in theme_helper and
             "lock_index=$(( (desktop_index + 3) % count ))" in theme_helper and
             "HYPERLAB_WALLPAPER_INTERVAL" in theme_helper,
             "theme helper lacks four themes, source mode, rotation or lock separation")
-    lock_helper = text("roles/host_desktop_sway/files/privatestack-lock.sh")
+    lock_helper = text("roles/host_desktop_common/files/privatestack-lock.sh")
     swaylock_helper = text("roles/host_desktop_sway/files/privatestack-swaylock.sh")
     require("privatestack-theme lock-image" in lock_helper and
             "swaylock" in lock_helper and "hyprlock" in lock_helper,

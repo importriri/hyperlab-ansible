@@ -204,6 +204,23 @@ def main() -> int:
         defaults["host_desktop_hyprland_monitor_scale"] == 1.0,
         "reviewed physical-host Hyprland scale changed",
     )
+    require(
+        defaults["host_desktop_hyprland_palette_variants"]
+        == ["green", "violet", "blue", "red", "trust-model"],
+        "Host Hyprland palette parity changed",
+    )
+    require(
+        defaults["host_desktop_hyprland_palette_fallback"] == "green",
+        "Host Hyprland palette fallback changed",
+    )
+    require(
+        (
+            ROOT
+            / "themes/trust-model/rendered/"
+            "hyperlab-palette-hyprland.lua"
+        ).is_file(),
+        "trust-model Hyprland runtime palette is missing",
+    )
 
     require(
         product["preferred_compositor"] == "hyprland",
@@ -643,15 +660,32 @@ def main() -> int:
     for marker in (
         "hide_cursor = true",
         "immediate_render = true",
-        (
-            "path = /usr/share/backgrounds/"
-            "privatestack/lockscreen.png"
-        ),
-        "text = HyperLab host",
+        # A dedicated static product asset, so a locked screen cannot leak a
+        # blurred desktop or a rotated trust-pool wallpaper.
+        "path = /usr/share/backgrounds/hyperlab/lock.png",
+        "blur_passes = 0",
+        "text = HyperLab",
+        "text = Platform",
     ):
         require(
             marker in hypr_lock,
             f"hyprlock render contract missing: {marker}",
+        )
+
+    # Comments explain the rule; the rendered directives must obey it.
+    hypr_lock_body = "\n".join(
+        line for line in hypr_lock.splitlines()
+        if not line.lstrip().startswith("#")
+    ).lower()
+
+    for forbidden in (
+        "screenshot",
+        "trust",
+        "lockscreen.png",
+    ):
+        require(
+            forbidden not in hypr_lock_body,
+            f"lock surface gained session-revealing content: {forbidden}",
         )
 
     require(
@@ -679,16 +713,16 @@ def main() -> int:
         "theme controller no longer publishes the active Hyprland palette",
     )
 
-    sway_tasks = text(
-        "roles/host_desktop_sway/tasks/main.yml"
+    common_tasks = text(
+        "roles/host_desktop_common/tasks/main.yml"
     )
     require(
-        (
-            "dest: "
-            "/usr/share/backgrounds/privatestack/lockscreen.png"
-        )
-        in sway_tasks,
-        "Hyprlock candidate references an unmanaged lockscreen asset",
+        "dest: /usr/share/backgrounds/hyperlab/lock.png" in common_tasks,
+        "the lock surface references an unmanaged identity asset",
+    )
+    require(
+        "dest: /usr/share/backgrounds/hyperlab/product.png" in common_tasks,
+        "the product wallpaper is not deployed by the shared role",
     )
 
     adapter_contract = defaults[
@@ -740,9 +774,14 @@ def main() -> int:
         'main_mod .. " + " .. key',
         'main_mod .. " + SHIFT + " .. key',
         "hl.dsp.window.resize({",
-        "/usr/local/bin/privatestack-hyperlab-domains ",
-        "--surface drawer --section diagnostics",
-        "--surface overlay --section vms",
+        # The preferred session reaches every HyperLab surface through the
+        # shell's fixed IPC receivers. The GTK routes below survive as
+        # recovery documentation, never as a binding.
+        "ipc call launcher toggle",
+        "ipc call workspace machines",
+        "ipc call workspace diagnostics",
+        "ipc call workspace controls",
+        "HYPERLAB_PARITY_ROUTE:",
         "hyperlabctl doctor",
         "hyperlabctl open looking-glass",
         "hyperlabctl open console",
@@ -775,6 +814,19 @@ def main() -> int:
             f"accepted adapter route missing: {boundary}",
         )
 
+    # No detached HyperLab surface may be bound in the preferred session.
+    for forbidden in (
+        'exec_cmd(\n        "/usr/local/bin/privatestack-hyperlab-domains ',
+        "--surface drawer --section diagnostics",
+        "--surface overlay --section vms",
+        "privatestack-controls",
+        "privatestack-powermenu",
+    ):
+        require(
+            forbidden not in hypr,
+            f"legacy detached HyperLab route returned to Hyprland: {forbidden}",
+        )
+
     for boundary in (
         "wallpaper-daemon",
         "idle-dpms",
@@ -796,8 +848,9 @@ def main() -> int:
         "controls": text(
             "roles/host_desktop_sway/files/privatestack-controls.sh"
         ),
+        # Compositor-neutral helpers live in host_desktop_common.
         "opacity": text(
-            "roles/host_desktop_sway/files/privatestack-opacity-toggle.sh"
+            "roles/host_desktop_common/files/privatestack-opacity-toggle.sh"
         ),
         "waybar": text(
             "roles/host_desktop_sway/files/privatestack-waybar.sh"
@@ -817,7 +870,7 @@ def main() -> int:
         "roles/host_desktop_sway/files/privatestack-swaylock.sh"
     )
     generic_lock = text(
-        "roles/host_desktop_sway/files/privatestack-lock.sh"
+        "roles/host_desktop_common/files/privatestack-lock.sh"
     )
     require(
         "privatestack-lock" in legacy_lock,

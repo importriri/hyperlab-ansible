@@ -10,6 +10,7 @@ set $hl_accent2 #ff9f43
 set $hl_ok #72f2a5
 set $hl_warn #ffd166
 set $hl_bad #ff3d5a
+set $hl_dom_host #8b949e
 set $hl_dom_clean #72f2a5
 set $hl_dom_dev #5b8cff
 set $hl_dom_lab #b184ff

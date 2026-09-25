@@ -22,6 +22,7 @@ PALETTES: dict[str, dict[str, str]] = {
     "violet": {"base":"#0a0a16","mantle":"#12122a","surface":"#1b1b3a","overlay":"#2f2f5c","text":"#e2e0ff","subtext":"#9d9dc4","accent":"#9d6cff","accent2":"#43d8ff","ok":"#72f2a5","warn":"#ffd275","bad":"#ff668f"},
     "blue": {"base":"#08131f","mantle":"#0d1c2b","surface":"#142a3e","overlay":"#254866","text":"#deefff","subtext":"#8eacc4","accent":"#4da3ff","accent2":"#55d6ff","ok":"#62d9a6","warn":"#ffd166","bad":"#ff6b7a"},
     "red": {"base":"#180b0d","mantle":"#241013","surface":"#35171b","overlay":"#5a2a31","text":"#ffe7e9","subtext":"#c49a9f","accent":"#ff5d6c","accent2":"#ff9f43","ok":"#72f2a5","warn":"#ffd166","bad":"#ff3d5a"},
+    "trust-model": {"base":"#07090d","mantle":"#0d1117","surface":"#151b23","overlay":"#232d3a","text":"#f0f6fc","subtext":"#9aa7b5","accent":"#d0d7de","accent2":"#8b949e","ok":"#3fb950","warn":"#d29922","bad":"#f85149"},
 }
 WALLPAPER_MODE_FILE = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "hyperlab/wallpaper-mode"
 KEYBOARD_LAYOUT_FILE = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "hyperlab/keyboard-layout"
@@ -40,8 +41,17 @@ def current_wallpaper_mode() -> str:
         mode = WALLPAPER_MODE_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         mode = "public"
-    return mode if mode in {"public", "personal"} else "public"
+    return mode if mode in {"public", "personal", "product"} else "public"
 
+
+
+def wallpaper_label() -> str:
+    if current_theme() == "trust-model":
+        return "AUTO"
+    mode = current_wallpaper_mode()
+    if mode == "product":
+        return "HYPERLAB"
+    return "CHILL" if mode == "public" else "PERSONAL"
 
 
 def current_keyboard_layout() -> str:
@@ -190,7 +200,7 @@ def blocks() -> list[dict[str, Any]]:
     return [
         block("brand", "HyperLab", palette, accent=True),
         block("theme", theme.upper(), palette, accent=True),
-        block("wallpaper", "CHILL" if current_wallpaper_mode() == "public" else "PERSONAL", palette),
+        block("wallpaper", wallpaper_label(), palette),
         block("keyboard", f"KEY {keyboard_label()}", palette),
         block("controls", "CONTROLS", palette),
         block("vms", VMS.get(), palette),

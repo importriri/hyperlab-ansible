@@ -43,58 +43,159 @@ def main() -> int:
         "shell became compositor-specific",
     )
 
-    require(
-        stage
-        == {
-            "implementation": "quickshell",
-            "config_name": "hyperlab",
-            "config_root": "/etc/xdg/quickshell/hyperlab",
-            "package": "quickshell",
-            "reviewed_api_series": "0.3",
-            "runtime_enabled": False,
-            "replacement_enabled": False,
-            "waybar_fallback_required": True,
-            "gtk_surface_fallback_required": True,
-            "compositor_specific_imports_allowed": False,
-            "read_only_runtime_data_enabled": True,
-            "read_only_status_bridge": (
-                "/usr/local/bin/privatestack-hyperlab"
-            ),
-            "trust_update_transport": "event-stream",
-            "slow_poll_seconds": 30,
-            "workspace_state_enabled": True,
-            "workspace_state_bridge": (
-                "/usr/local/bin/privatestack-compositor-adapter"
-            ),
-            "workspace_update_transport": "event-stream",
-            "semantic_palette_enabled": True,
-            "semantic_palette_user_path": (
-                ".config/hyperlab/palette-quickshell.json"
-            ),
-            "telemetry_enabled": True,
-            "telemetry_bridge": (
-                "/usr/local/bin/privatestack-telemetry"
-            ),
-            "telemetry_poll_seconds": 30,
-            "telemetry_fields": [
-                "temperature",
-                "network",
-                "audio",
-                "battery",
-            ],
-            "session_controls_enabled": True,
-            "session_action_bridge": (
-                "/usr/local/bin/privatestack-shell-actions"
-            ),
-            "session_state_transport": "file-watch",
-            "session_actions": [
-                "keyboard-cycle",
-                "wallpaper-mode-toggle",
-                "controls-open",
-            ],
+    expected_stage = {
+        "implementation": "quickshell",
+        "config_name": "hyperlab",
+        "config_root": "/etc/xdg/quickshell/hyperlab",
+        "package": "quickshell",
+        "reviewed_api_series": "0.3",
+        "runtime_enabled": False,
+        "replacement_enabled": False,
+        "waybar_fallback_required": True,
+        "gtk_surface_fallback_required": True,
+        "compositor_specific_imports_allowed": False,
+        "read_only_runtime_data_enabled": True,
+        "read_only_status_bridge": "/usr/local/bin/privatestack-hyperlab",
+        "trust_update_transport": "event-stream",
+        "slow_poll_seconds": 30,
+        "workspace_state_enabled": True,
+        "workspace_state_bridge": "/usr/local/bin/privatestack-compositor-adapter",
+        "workspace_update_transport": "event-stream",
+        "semantic_palette_enabled": True,
+        "semantic_palette_user_path": ".config/hyperlab/palette-quickshell.json",
+        "telemetry_enabled": True,
+        "telemetry_bridge": "/usr/local/bin/privatestack-telemetry",
+        "telemetry_poll_seconds": 30,
+        "telemetry_fields": [
+            "temperature",
+            "network",
+            "audio",
+            "battery",
+        ],
+        "session_controls_enabled": True,
+        "session_action_bridge": "/usr/local/bin/privatestack-shell-actions",
+        "session_state_transport": "file-watch",
+        "session_actions": [
+            "keyboard-cycle",
+            "wallpaper-mode-toggle",
+            "theme-cycle",
+            "workspace-window-focus",
+            "session-lock",
+            "session-suspend",
+            "session-logout",
+            "session-reboot",
+            "session-poweroff",
+            "audio-mute-toggle",
+            "audio-volume-up",
+            "audio-volume-down",
+        ],
+        "design_system": "c9-platform",
+        "surface_files": [
+            "shell.qml",
+            "Tokens.qml",
+            "Theme.qml",
+            "Icons.qml",
+            "ShellState.qml",
+            "ShellActions.qml",
+            "MachineActions.qml",
+            "ShellSurfaces.qml",
+            "ShellIpc.qml",
+            "ShellLabel.qml",
+            "ShellIcon.qml",
+            "ShellControl.qml",
+            "ShellDivider.qml",
+            "ShellCard.qml",
+            "PanelRow.qml",
+            "FocusFollow.qml",
+            "SectionHeader.qml",
+            "EmptyState.qml",
+            "DashedFrame.qml",
+            "IsolationGlyph.qml",
+            "ProvenanceMarker.qml",
+            "ProvenanceTag.qml",
+            "StateChip.qml",
+            "HardwareSocket.qml",
+            "PolicyCell.qml",
+            "ResourceMeter.qml",
+            "ActionFeedback.qml",
+            "ConfirmationSurface.qml",
+            "HyperLabBar.qml",
+            "IdentityMark.qml",
+            "WorkspaceStrip.qml",
+            "ContextCluster.qml",
+            "ProvenanceBadge.qml",
+            "GpuBadge.qml",
+            "SystemCluster.qml",
+            "ControlEntry.qml",
+            "HyperLabDesktop.qml",
+            "WorkspaceSurface.qml",
+            "WorkspaceFrame.qml",
+            "MachineStage.qml",
+            "MachineModule.qml",
+            "MachineListRow.qml",
+            "MachineContextPane.qml",
+            "ControlCenterView.qml",
+            "DiagnosticsView.qml",
+            "OwnershipInstrument.qml",
+            "HostFooter.qml",
+            "SystemPanel.qml",
+            "OsdSurface.qml",
+            "LauncherSurface.qml",
+        ],
+        "bridge_owner_files": [
+            "ShellState.qml",
+            "ShellActions.qml",
+            "MachineActions.qml",
+            "Theme.qml",
+        ],
+        "ipc_receiver_files": ["ShellIpc.qml"],
+        "ipc_targets": [
+            "launcher",
+            "appearance",
+            "osd",
+            "panel",
+            "workspace",
+            "bar",
+        ],
+        "summoned_surfaces": [
+            "launcher",
+            "system-panel",
+            "osd",
+        ],
+        "workspace_surface_kind": "floating-window",
+        "workspace_destinations": [
+            "machines",
+            "controls",
+            "diagnostics",
+        ],
+        "desktop_surface_enabled": True,
+        "desktop_surface_layer": "bottom",
+        "desktop_surface_input": "none",
+        "machine_action_bridge":
+            "/usr/local/bin/privatestack-machine-actions",
+        "machine_capability_source": "bridge",
+        "machine_verbs": [
+            "start",
+            "shutdown",
+            "reboot",
+            "console",
+            "ssh",
+            "looking-glass",
+            "force-stop",
+        ],
+        "machine_destructive_verbs": ["force-stop"],
+        "parameterized_actions": ["workspace-select"],
+        "product_navigation": {
+            "hyprland": "quickshell",
+            "sway": "recovery",
         },
-        "Phase 2A deployment contract changed",
-    )
+    }
+
+    for key, expected in expected_stage.items():
+        require(
+            key in stage and stage[key] == expected,
+            f"shared shell stage invariant changed: {key}",
+        )
 
     shell = text(
         "roles/host_desktop_common/files/"
@@ -103,6 +204,26 @@ def main() -> int:
     bar = text(
         "roles/host_desktop_common/files/"
         "quickshell/hyperlab/HyperLabBar.qml"
+    )
+    tokens = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/Tokens.qml"
+    )
+    state = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/ShellState.qml"
+    )
+    identity = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/IdentityMark.qml"
+    )
+    trust = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/GpuBadge.qml"
+    )
+    context = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/ContextCluster.qml"
     )
     tasks = text(
         "roles/host_desktop_common/tasks/main.yml"
@@ -122,18 +243,77 @@ def main() -> int:
         )
 
     for marker in (
+        "id: sharedTokens",
+        "id: sharedIcons",
+        "id: sharedTheme",
+        "id: sharedState",
+        "id: sharedSurfaces",
+        "id: sharedActions",
+        "tokens: sharedTokens",
+        "icons: sharedIcons",
+        "theme: sharedTheme",
+        "shellState: sharedState",
+        "shellActions: sharedActions",
+        "shellSurfaces: sharedSurfaces",
+        "sharedState.settleAction(action)",
+        "ShellIpc {",
+        "MachineActions {",
+        "machineActions: sharedMachineActions",
+        "HyperLabDesktop {",
+        "WorkspaceSurface {",
+        "SystemPanel {",
+        "OsdSurface {",
+        "LauncherSurface {",
+        # Operation results are observed once, at the root, and published
+        # into the state layer rather than inferred by any view.
+        "onActionResult:",
+        "onSettled:",
+        "sharedState.recordOperation(",
+        "reducedMotion: sharedState.reducedMotion",
+    ):
+        require(
+            marker in shell,
+            f"shared dependency injection marker missing: {marker}",
+        )
+
+    for forbidden in (
+        "id: tokens",
+        "id: theme",
+        "id: state",
+        "id: actions",
+        "tokens: tokens",
+        "theme: theme",
+        "shellState: state",
+        "shellActions: actions",
+        "state.settleAction(action)",
+    ):
+        require(
+            forbidden not in shell,
+            f"ambiguous QML self-binding returned: {forbidden}",
+        )
+
+    # Dependency injection is explicit. Component additions are reviewed by
+    # name instead of a brittle global binding count.
+    for marker in (
+        "theme: sharedTheme",
+        "shellState: sharedState",
+        "shellSurfaces: sharedSurfaces",
+        "tokens: sharedTokens",
+        "icons: sharedIcons",
+    ):
+        require(
+            marker in shell,
+            f"shared dependency injection missing: {marker}",
+        )
+
+
+    for marker in (
         "PanelWindow",
-        "implicitHeight: 37",
-        "exclusiveZone: 37",
+        "implicitHeight: bar.tokens.barHeight",
+        "exclusiveZone: bar.tokens.barHeight",
         "top: true",
         "left: true",
         "right: true",
-        'text: "◆  HYPERLAB"',
-        'text: "◆  HYPERLAB"',
-        '"TRUST "',
-        "root.trustPayload.text",
-        "SystemClock",
-        "import Quickshell.Io",
     ):
         require(
             marker in bar,
@@ -141,8 +321,36 @@ def main() -> int:
         )
 
     require(
+        "readonly property int barHeight: 37" in tokens,
+        "37px shared shell reserve changed",
+    )
+    require(
+        'text: "HyperLab"' in identity,
+        "HyperLab identity marker moved unexpectedly",
+    )
+    require(
+        "claim" in trust
+        and "provenanceColor(" in trust
+        and "claimed" in trust,
+        "trust badge no longer follows the explicit host claim",
+    )
+    require(
+        "id: centeredClock" in context
+        and "SystemClock {" in state
+        and "import Quickshell.Io" in state,
+        "clock/runtime ownership changed",
+    )
+
+    require(
         "property var modelData" in bar,
         "Variants delegate lost its modelData injection property",
+    )
+
+    # The rail performs no machine operation, so it is never handed the
+    # machine action layer. This is the exact wiring defect C9.2 shipped.
+    require(
+        "machineActions" not in bar,
+        "the rail regained machine operation authority",
     )
     require(
         "required property var modelData" not in bar,
@@ -152,7 +360,13 @@ def main() -> int:
         ),
     )
 
-    combined = shell + "\n" + bar
+    combined = "\n".join(
+        text(
+            "roles/host_desktop_common/files/"
+            "quickshell/hyperlab/" + name
+        )
+        for name in stage["surface_files"]
+    )
 
     for forbidden in (
         "Quickshell.Hyprland",
@@ -162,6 +376,7 @@ def main() -> int:
         "execDetached",
         "MouseArea",
         "ShellCommand",
+        "DesktopEntries",
         '["sh", "-c"',
     ):
         require(
@@ -174,7 +389,7 @@ def main() -> int:
         "Verify the reviewed Quickshell API series",
         "Create the shared HyperLab Quickshell config directory",
         "Install the non-active shared HyperLab Quickshell source",
-        "Preserve recovery surfaces while Quickshell remains non-active",
+        "Preserve recovery surfaces while the shared role stages Quickshell",
         "community.general.pacman:",
         "/etc/xdg/quickshell/hyperlab",
     ):
@@ -213,7 +428,7 @@ def main() -> int:
     )
 
     print(
-        "HyperLab shared Quickshell Phase 2A contract: OK"
+        "HyperLab shared Quickshell C9 contract: OK"
     )
     return 0
 

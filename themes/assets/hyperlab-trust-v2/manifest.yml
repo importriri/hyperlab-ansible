@@ -1,0 +1,69 @@
+version: 2
+id: hyperlab-trust-v2
+name: HyperLab Trust Wallpaper Pool v2
+status: candidate
+kind: trust-wallpaper-pool
+geometry:
+  width: 1672
+  height: 941
+  aspect_ratio: 1672:941
+rotation:
+  enabled: true
+  interval_minutes: 30
+  strategy: cycle-within-current-trust
+  switch_on_trust_change: true
+  cross_trust_rotation: false
+authority:
+  source: host-owned-trust
+  wallpaper_may_set_trust: false
+  rgb_follows_wallpaper: false
+  rgb_follows_trust: true
+identities:
+  host:
+    trust_color: '#8b949e'
+    count: 2
+    wallpapers:
+      - file: images/host/01.png
+        sha256: 6068ba49c2adcdc5c84500eb8f2b2c67730a1fb3e4472b24d38d637c016fa13f
+      - file: images/host/02.png
+        sha256: c189294dfdbedfeb22165afd0cd4506c52da03e7b21c9552025a060b383176cb
+  clean:
+    trust_color: '#72f2a5'
+    count: 2
+    wallpapers:
+      - file: images/clean/01.png
+        sha256: 101104b9474049143114ab8ac925dfb77ed88e7e76d3e5481037c20e1d61367b
+      - file: images/clean/02.png
+        sha256: 59b89c47c30e0b6fbc3b04bdb46204d9c7a86011b4ed4e6222f37fde2700ff91
+  dev:
+    trust_color: '#5b8cff'
+    count: 2
+    wallpapers:
+      - file: images/dev/01.png
+        sha256: 3649a85b1028ffb11f316b08abf22780f449ef3b1177dae343fad48917bb2df2
+      - file: images/dev/02.png
+        sha256: a934b264b956e75d969be8e5259730430005a437d74db1d87537da7fa444384e
+  services:
+    trust_color: '#35e4dd'
+    count: 2
+    wallpapers:
+      - file: images/services/01.png
+        sha256: 6ba1f85e3c1b179d05a76f2ea8429c358e9143dd7e26925202061b2861d12f55
+      - file: images/services/02.png
+        sha256: f766c03d96e03c8777501c3c895685d9deaef4cc4d62a8d38c3aedb12c228af6
+  dirty:
+    trust_color: '#ff9d45'
+    count: 2
+    wallpapers:
+      - file: images/dirty/01.png
+        sha256: 3c1027998995f8cbbbc7ccb5b40d4aaef592f248e1bf781d2a13321dd5ece6c2
+      - file: images/dirty/02.png
+        sha256: 56eace3402ce657a2f33737c8e5eebcf930269c2c6caecf925aa1e3cb7abe67f
+  lab:
+    trust_color: '#b184ff'
+    count: 2
+    wallpapers:
+      - file: images/lab/01.png
+        sha256: c29e9325b3049cc8aeb9cb71a35a74f7e4c90581c57382a8f3582d0215252b50
+      - file: images/lab/02.png
+        sha256: 65648094e00b24ccfadcf8793ed4d74a1b285abf06cb56ab67940e14bb7cadab

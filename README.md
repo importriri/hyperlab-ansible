@@ -128,6 +128,9 @@ Operator and architecture references:
 - [`docs/nitro-control-backend.md`](docs/nitro-control-backend.md) — privileged Nitro broker boundary and runtime protocol;
 - [`docs/nitro-control-panel.md`](docs/nitro-control-panel.md) — normal-user Nitro Control Board and desktop-theme integration;
 - [`docs/visual-trust-contract.md`](docs/visual-trust-contract.md) — semantic trust colors and their separation from appearance themes;
+- [`docs/theme-system.md`](docs/theme-system.md) — declarative theme registry, the Trust Model theme and host-owned presentation provenance;
+- [`docs/hyperlab-shell.md`](docs/hyperlab-shell.md) — the HyperLab Platform shell: surfaces, design system and presentation boundaries;
+- [`docs/wallpaper-art-direction.md`](docs/wallpaper-art-direction.md) — the generated product identity assets and the rules any wallpaper keeps;
 - [`docs/nitro-arch-dev-vfio-campaign.md`](docs/nitro-arch-dev-vfio-campaign.md) — ordered Nitro VFIO campaign;
 - [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — Windows image sealing;
 - [`docs/linux-iso-workshop.md`](docs/linux-iso-workshop.md) — ISO-to-qcow2 handoff;

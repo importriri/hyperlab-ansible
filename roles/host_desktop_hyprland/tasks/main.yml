@@ -389,6 +389,18 @@
     mode: "0644"
   when: host_desktop_hyprland_session_lifecycle_enabled
 
+# The shared shell unit has one owner. It is installed whether or not session
+# lifecycle management is enabled, because the unit file is what makes the
+# shell startable at all; the lifecycle block below only couples it to the
+# managed session target.
+- name: Install the shared HyperLab Quickshell service definition
+  ansible.builtin.copy:
+    src: hyperlab-quickshell.service
+    dest: /etc/systemd/user/hyperlab-quickshell.service
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Install HyperLab Hyprland lifecycle services
   ansible.builtin.copy:
     src: "{{ item }}"
@@ -396,7 +408,9 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ host_desktop_hyprland_session_services }}"
+  loop: >-
+    {{ host_desktop_hyprland_session_services
+       | reject('equalto', 'hyperlab-quickshell.service') | list }}
   when: host_desktop_hyprland_session_lifecycle_enabled
 
 - name: Create HyperLab Hyprland target wants directory

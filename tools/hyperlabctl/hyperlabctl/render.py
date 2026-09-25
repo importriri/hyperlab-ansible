@@ -101,15 +101,21 @@ def as_waybar(document):
             break
         severity = "warn"
 
-    if trust.get("claimed"):
+    # An unreadable trust section is unknown, never "unclaimed".
+    trust_known = trust_claim(document)["known"]
+    if not trust_known:
+        text = "?"
+        trust_line = "unknown (trust state could not be read)"
+    elif trust.get("claimed"):
         text = "%s %s" % (trust.get("name") or "?", trust.get("level"))
+        trust_line = "%s (%s), reboot to rise" % (trust.get("name"), trust.get("level"))
     else:
         text = "unclaimed"
+        trust_line = "unclaimed"
 
     running = [domain for domain in domains if domain["state"] == "running"]
     tooltip = [
-        "trust: %s" % ("%s (%s), reboot to rise" % (trust.get("name"), trust.get("level"))
-                       if trust.get("claimed") else "unclaimed"),
+        "trust: %s" % trust_line,
         "assignable: %s MB" % memory.get("assignable_mb", "?"),
         "gpu: %s" % (gpu.get("held_by") or ("free" if gpu.get("bound") else "not bound")),
         "networks: %s/%s" % (networks.get("active", "?"), networks.get("expected", "?")),
@@ -140,6 +146,10 @@ def waybar_field(document, field):
         state = "warn" if claimed else "ok"
         tooltip = ("GPU held at trust %s; only a reboot raises it"
                    % trust.get("level")) if claimed else "GPU unclaimed this boot"
+        if not trust_claim(document)["known"]:
+            # An unreadable or inconsistent claim is never shown as "unclaimed".
+            text, state = "?", "error"
+            tooltip = "GPU trust claim could not be read; run hyperlabctl doctor"
     elif field == "ram":
         assignable = memory.get("assignable_mb")
         text = "%s MB" % assignable if assignable is not None else "?"
@@ -172,4 +182,125 @@ def waybar_field(document, field):
         state = "error"
         tooltip = "this section could not be read; run hyperlabctl doctor"
 
-    return {"text": text, "alt": state, "tooltip": tooltip, "class": state}
+    payload = {"text": text, "alt": state, "tooltip": tooltip, "class": state}
+    if field == "trust":
+        # Additive read-only projection for the shell: the explicit host claim
+        # as structured fields, so the shell never parses the display text.
+        payload.update(trust_claim(document))
+    if field == "gpu":
+        # Additive read-only projection: the current owner is the running
+        # domain that holds the device, never inferred from availability text.
+        payload.update(gpu_ownership(document))
+    if field == "vms":
+        # Additive read-only projection for the desktop. Never infer trust from
+        # a VM name, network attachment, running state or appearance.
+        available = isinstance(document.get("domains"), list)
+        payload["machines_available"] = available
+        payload["machines"] = machine_cards(document) if available else []
+        if not available:
+            payload.update(text="?", alt="error", **{
+                "class": "error", "tooltip": "Machine inventory unavailable",
+            })
+    return payload
+
+
+# The reviewed GPU handoff ladder. SERVICES sits outside the GPU handoff and can
+# never hold a boot claim; HOST is the control plane, never a rung.
+GPU_LADDER = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
+
+
+def trust_claim(document):
+    """The host's explicit GPU trust claim for this boot; nothing inferred.
+
+    `known` is true only for an affirmative, internally consistent reading:
+    the trust section was read, and it either reports no claim, or a claim by
+    a ladder identity at that identity's canonical rung. An unreadable
+    section, an unmapped level or an off-ladder identity is `known: false`,
+    so a consumer can never present "could not read the restriction" as
+    "there is no restriction".
+    """
+    trust = document.get("trust")
+    if not isinstance(trust, dict) or not isinstance(trust.get("claimed"), bool):
+        return {"known": False, "claimed": False, "identity": None, "level": None}
+    if not trust["claimed"]:
+        return {"known": True, "claimed": False, "identity": None, "level": None}
+    name = trust.get("name")
+    level = trust.get("level")
+    rung = GPU_LADDER.get(name) if isinstance(name, str) else None
+    if rung is None or isinstance(level, bool) or level != rung:
+        return {"known": False, "claimed": False, "identity": None, "level": None}
+    return {"known": True, "claimed": True, "identity": name, "level": rung}
+
+
+def gpu_ownership(document):
+    """Structured GPU facts: owner, VFIO binding, and whether either is known."""
+    gpu = document.get("gpu")
+    if not isinstance(gpu, dict):
+        return {"owner": None, "bound": None, "known": False}
+    owner = gpu.get("held_by")
+    return {
+        "owner": owner if isinstance(owner, str) and owner else None,
+        "bound": bool(gpu.get("bound")),
+        "known": True,
+    }
+
+
+def _known_bool(value):
+    return value if isinstance(value, bool) else None
+
+
+def machine_cards(document):
+    """The authoritative presentation facts for one machine.
+
+    Everything here is read from a provider, never inferred from a name, a
+    network attachment or an appearance. Two distinctions matter and are
+    preserved deliberately:
+
+      * `networks` is null when the domain could not be read and [] when the
+        domain really declares no interface, so the shell never reports
+        "None" for something it does not know;
+      * `gpu_relation` is structured, so presentation can change the words
+        without changing behaviour.
+
+    Operation availability is deliberately NOT published here. It depends on
+    the live spec registry and the runtime SSH inventory, which this document
+    does not read, so the shell asks the reviewed machine bridge for it.
+    """
+    identities = {"clean", "dev", "services", "dirty", "lab"}
+    gpu = document.get("gpu") or {}
+    result = []
+    for domain in document.get("domains") or []:
+        profile = domain.get("trust_profile")
+        identity = profile if profile in identities else "unclassified"
+        if gpu.get("held_by") == domain["name"]:
+            relation = "held"
+            assignment = "GPU held"
+        elif domain.get("state") == "unknown":
+            relation = "unknown"
+            assignment = "GPU assignment unknown"
+        elif domain.get("vfio"):
+            relation = "configured"
+            assignment = "Passthrough configured"
+        else:
+            relation = "none"
+            assignment = "No passthrough configured"
+        networks = domain.get("networks")
+        result.append({
+            "name": domain["name"],
+            "state": domain["state"],
+            "provenance": identity,
+            "gpu": assignment,
+            "gpu_relation": relation,
+            "memory_mb": domain.get("memory_mb"),
+            "vcpus": domain.get("vcpus"),
+            "network": domain.get("network"),
+            "networks": list(networks) if isinstance(networks, list) else None,
+            # Tri-state: None when the domain could not be read.
+            "managed": _known_bool(domain.get("managed")),
+            "vfio": _known_bool(domain.get("vfio")),
+            "lifecycle": domain.get("lifecycle"),
+            "device_profile": domain.get("device_profile"),
+            "blocked": domain.get("blocked"),
+        })
+    order = ("clean", "dev", "services", "dirty", "lab", "unclassified")
+    return sorted(result, key=lambda row: (order.index(row["provenance"]), row["name"]))
