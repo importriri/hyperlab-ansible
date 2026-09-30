@@ -21,7 +21,13 @@ jobs:
       - name: Install the fixed toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck bats nftables lua5.4
+          sudo apt-get install -y -qq \
+            shellcheck bats nftables lua5.4 \
+            qmlscene-qt6 \
+            qml6-module-qtquick \
+            qml6-module-qtquick-window \
+            qml6-module-qtqml-workerscript
+          test -x /usr/lib/qt6/bin/qmlscene
           pip install --user ansible ansible-lint ruff
           ansible-galaxy collection install -r collections/requirements.yml
 
@@ -29,12 +35,13 @@ jobs:
         run: ruff check .
 
       - name: Lint every role and playbook (production profile)
+        id: ansible_lint
         run: |
           set -o pipefail
           ansible-lint 2>&1 | tee ansible-lint.log
 
       - name: Preserve lint diagnostics on failure
-        if: failure()
+        if: steps.ansible_lint.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: ansible-lint-diagnostics
@@ -50,6 +57,7 @@ jobs:
           done
 
       - name: Per-brick structural contracts (discovered)
+        id: structural_contracts
         run: |
           set -o pipefail
           {
@@ -60,7 +68,7 @@ jobs:
           } 2>&1 | tee structural-contracts.log
 
       - name: Preserve structural diagnostics on failure
-        if: failure()
+        if: steps.structural_contracts.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: structural-contract-diagnostics
@@ -86,6 +94,7 @@ jobs:
           python tests/contract_mutations.py
 
       - name: Render and invariant tests
+        id: render_invariants
         run: |
           set -o pipefail
           ansible-playbook -i inventory.ini tests/render.yml \
@@ -93,7 +102,7 @@ jobs:
             2>&1 | tee render-invariants.log
 
       - name: Preserve render diagnostics on failure
-        if: failure()
+        if: steps.render_invariants.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: render-invariant-diagnostics
@@ -111,7 +120,7 @@ jobs:
 
       - name: Shellcheck every shell script (discovered)
         run: |
-          files=$(grep -rlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)
+          files=$(grep -rIlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)
           if [ -n "${files}" ]; then
             echo "${files}" | xargs shellcheck
           else
