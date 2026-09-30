@@ -519,6 +519,32 @@ Item {
                         }
                     }
 
+                    // What the keyboard follows. The colours themselves are
+                    // the host's trust identities; this only picks a source.
+                    PanelRow {
+                        width: parent.width
+                        tokens: view.tokens
+                        theme: view.theme
+                        glyph: view.icons.controlCenter
+                        title: "Keyboard lighting"
+                        value: view.shellState.rgbModeLabel()
+                        hint:
+                            view.shellState.themeState.known
+                            && view.shellState.themeState.value === "trust-model"
+                            ? "off · system trust · focused window"
+                            : "applies with the trust-model theme"
+                        interactive: true
+                        busy: view.shellActions.busy
+                        onActivated: {
+                            view.shellSurfaces.showActionOsd(
+                                "lighting",
+                                "rgb-mode-toggle",
+                                view.shellActions.invoke("rgb-mode-toggle"),
+                                ""
+                            );
+                        }
+                    }
+
                     ShellDivider {
                         width: parent.width
                         vertical: false

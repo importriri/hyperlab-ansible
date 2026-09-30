@@ -99,6 +99,17 @@ ShellRoot {
 
     MachineActions {
         id: sharedMachineActions
+        machineInventory: sharedState.machinesAvailable ? sharedState.machines : []
+        inventoryObservedAt: sharedState.machinesObservedAt
+        onInventoryRefreshRequested: sharedState.refreshInventory()
+        onOperationChanged: record => {
+            sharedState.recordOperation({
+                "id": record.id, "kind": "machine",
+                "label": sharedMachineActions.labelFor(record.verb),
+                "target": record.machine, "phase": record.phase,
+                "detail": record.detail
+            });
+        }
 
         // Transport in, observation out: the state layer decides whether a
         // reply answers the question currently being asked.

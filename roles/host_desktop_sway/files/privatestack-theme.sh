@@ -23,6 +23,8 @@ readonly config_dir=${config_home}/hyperlab
 readonly state_dir=${state_home}/hyperlab
 readonly theme_file=${config_dir}/theme
 readonly wallpaper_mode_file=${config_dir}/wallpaper-mode
+# What keyboard RGB follows. Absent means off: operator colours are untouched.
+readonly rgb_mode_file=${config_dir}/rgb-mode
 readonly desktop_index_file=${state_dir}/wallpaper-index
 readonly desktop_path_file=${state_dir}/desktop-wallpaper
 readonly compositor_session=${HYPRLAND_INSTANCE_SIGNATURE:-${SWAYSOCK:-${WAYLAND_DISPLAY:-wayland}}}
@@ -43,6 +45,7 @@ notify() {
 
 valid_theme() { case ${1:-} in green|violet|blue|red|trust-model) return 0 ;; *) return 1 ;; esac; }
 valid_mode() { case ${1:-} in public|personal|product) return 0 ;; *) return 1 ;; esac; }
+valid_rgb_mode() { case ${1:-} in off|system-trust|focus-trust) return 0 ;; *) return 1 ;; esac; }
 
 current_theme() {
     local value=green
@@ -293,6 +296,37 @@ mode_json() {
     fi
 }
 
+current_rgb_mode() {
+    local value=off
+    if [[ -r ${rgb_mode_file} ]]; then
+        IFS= read -r value <"${rgb_mode_file}" || true
+    fi
+    valid_rgb_mode "${value}" || value=off
+    printf '%s\n' "${value}"
+}
+
+# The focus accent actuator re-reads this file; it chooses a source only and
+# never names a trust identity.
+set_rgb_mode() {
+    local mode=$1
+    valid_rgb_mode "${mode}" || { printf 'usage: %s rgb-mode-set off|system-trust|focus-trust\n' "$0" >&2; return 2; }
+    write_atomic "${rgb_mode_file}" "${mode}"
+    signal_quickshell_appearance
+    if [[ ${mode} != off && $(current_theme) != trust-model ]]; then
+        notify "Keyboard lighting: ${mode^^} (applies with the trust-model theme)"
+    else
+        notify "Keyboard lighting: ${mode^^}"
+    fi
+}
+
+toggle_rgb_mode() {
+    case $(current_rgb_mode) in
+        off) set_rgb_mode system-trust ;;
+        system-trust) set_rgb_mode focus-trust ;;
+        *) set_rgb_mode off ;;
+    esac
+}
+
 next_wallpaper() {
     local quiet=${1:-} theme index count
     theme=$(current_theme)
@@ -345,6 +379,9 @@ case ${1:-status} in
     mode-set) set_mode "${2:-}" ;;
     mode-toggle) toggle_mode ;;
     mode-json) mode_json ;;
+    rgb-mode) current_rgb_mode ;;
+    rgb-mode-set) set_rgb_mode "${2:-}" ;;
+    rgb-mode-toggle) toggle_rgb_mode ;;
     daemon) run_daemon ;;
-    *) printf 'usage: %s {status|session-start|set THEME|cycle|next|lock-image|mode|mode-set MODE|mode-toggle|mode-json|daemon}\n' "$0" >&2; exit 2 ;;
+    *) printf 'usage: %s {status|session-start|set THEME|cycle|next|lock-image|mode|mode-set MODE|mode-toggle|mode-json|rgb-mode|rgb-mode-set MODE|rgb-mode-toggle|daemon}\n' "$0" >&2; exit 2 ;;
 esac

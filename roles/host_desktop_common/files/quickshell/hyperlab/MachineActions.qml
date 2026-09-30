@@ -11,21 +11,16 @@
 //   capabilities   one short-lived runner per request, each carrying its own
 //                  immutable serial and machine, so a late or cancelled reply
 //                  can never be mistaken for the current one;
-//   lifecycle      start, shutdown, reboot, force stop: one serialized
-//                  runner, so two conflicting power operations are never in
-//                  flight at once;
+//   lifecycle      a short dispatch, then per-machine durable operation
+//                  records polled through the same typed bridge;
 //   connections    console, SSH, Looking Glass: the bridge becomes the client
 //                  process and lives as long as the connection does, so each
 //                  open connection has its own runner and never blocks
 //                  lifecycle, capability reads or a connection to another
 //                  machine.
 //
-// Nothing here is optimistic. A managed operation launches in its own
-// terminal and outlives this process, so it is reported as `accepted`. A
-// foreground operation reports `completed` only when the process it became
-// actually finished; a connection reports `closed` when its client exits
-// cleanly. A non-zero exit is a failure, never a success with a different
-// colour.
+// Managed lifecycle is recovered from private operation records. The terminal
+// belongs to a separate user unit. Inventory alone verifies machine state.
 
 import Quickshell
 import Quickshell.Io
@@ -55,6 +50,39 @@ Scope {
 
     // Enough for real use; a runaway loop cannot fork unbounded clients.
     readonly property int connectionLimit: 6
+
+    property alias machineInventory: operationState.inventory
+    property alias inventoryObservedAt: operationState.inventoryObservedAt
+    signal operationChanged(var record)
+    signal inventoryRefreshRequested()
+
+    OperationTracker {
+        id: operationState
+        onChanged: record => machineActions.operationChanged(record)
+        onRefreshRequested: machineActions.inventoryRefreshRequested()
+    }
+
+    // Reopen the observer window of a still-running operation. Closing that
+    // window never stopped the operation; this only attaches again.
+    function activeOperationFor(machine) {
+        return operationState.activeFor(String(machine));
+    }
+    function viewOperation(machine) {
+        const record = operationState.activeFor(String(machine));
+        if (record === null || operationView.running)
+            return false;
+        operationView.command = [machineActions.bridge, "operation-view", record.id];
+        operationView.running = true;
+        return true;
+    }
+    Process {
+        id: operationView
+    }
+
+    function busyFor(machine) {
+        return machineActions.pendingMachine === String(machine)
+            || operationState.busyFor(String(machine));
+    }
 
     signal accepted(string verb, string machine)
     signal settled(string verb, string machine, string phase, string detail)
@@ -86,6 +114,10 @@ Scope {
             return "Looking Glass";
         case "force-stop":
             return "Force stop";
+        case "power-cycle":
+            return "Power cycle";
+        case "reset":
+            return "Reset";
         default:
             return "Operation";
         }
@@ -208,7 +240,7 @@ Scope {
         if (machineActions.isConnection(operation))
             return machineActions.openConnection(operation, name);
 
-        if (operationRunner.running)
+        if (operationRunner.running || machineActions.busyFor(name))
             return false;
 
         machineActions.pendingVerb = operation;
@@ -241,6 +273,16 @@ Scope {
         if (parsed === null)
             return;
 
+        if (operationState.valid(parsed)) {
+            if (parsed.machine !== machineActions.pendingMachine
+                || operationState.actionVerbs[parsed.action_id] !== machineActions.pendingVerb)
+                return;
+            machineActions.pendingPhase = "dispatched";
+            machineActions.pendingMode = "operation";
+            operationState.apply(parsed, parsed.operation_id);
+            return;
+        }
+
         if (parsed.phase === "accepted") {
             machineActions.pendingPhase = "accepted";
             machineActions.pendingMode = String(parsed.mode);
@@ -253,7 +295,9 @@ Scope {
 
         if (parsed.phase === "refused") {
             machineActions.pendingPhase = "refused";
-            operationRunner.failureDetail = String(parsed.reason);
+            operationRunner.failureDetail = parsed.reason === "operation-in-progress"
+                ? "An operation is already in progress for this machine"
+                : "The machine operation was refused";
         }
     }
 
@@ -268,15 +312,6 @@ Scope {
             }
         }
 
-        stderr: StdioCollector {
-            onStreamFinished: {
-                const text = String(this.text).trim();
-
-                if (text.length > 0 && operationRunner.failureDetail.length === 0)
-                    operationRunner.failureDetail = text;
-            }
-        }
-
         onExited: (exitCode, exitStatus) => {
             const verb = machineActions.pendingVerb;
             const machine = machineActions.pendingMachine;
@@ -287,11 +322,6 @@ Scope {
 
             if (machineActions.pendingPhase === "refused") {
                 phase = "refused";
-            } else if (mode === "detached" && exitCode === 0) {
-                // The operation is running in its own terminal. Accepted is
-                // the most this layer can truthfully say.
-                phase = "accepted";
-                detail = "Running in its own HyperLab operation terminal";
             } else if (exitCode === 0 && machineActions.pendingPhase === "accepted") {
                 phase = "completed";
                 detail = "";
@@ -308,7 +338,71 @@ Scope {
             machineActions.pendingPhase = "";
             operationRunner.failureDetail = "";
 
-            machineActions.settled(verb, machine, phase, detail);
+            if (mode !== "operation")
+                machineActions.settled(verb, machine, phase, detail);
+        }
+    }
+
+    // Also covers failed-to-start, where QProcess may never emit exited.
+    Timer {
+        interval: 90000
+        running: machineActions.pendingVerb.length > 0
+        repeat: false
+        onTriggered: {
+            if (operationRunner.running) {
+                operationRunner.signal(9);
+                return;
+            }
+            const verb = machineActions.pendingVerb;
+            const machine = machineActions.pendingMachine;
+            machineActions.pendingVerb = "";
+            machineActions.pendingMachine = "";
+            machineActions.pendingMode = "";
+            machineActions.pendingPhase = "";
+            machineActions.settled(verb, machine, "failed", "Machine bridge unavailable");
+        }
+    }
+
+    // One snapshot poll in flight. A bridge failure preserves unresolved busy
+    // state, and disables new lifecycle requests until discovery recovers.
+    Process {
+        id: operationStatus
+        command: [machineActions.bridge, "operations"]
+        property string buffer: ""
+        onStarted: { buffer = ""; statusDeadline.restart(); }
+        stdout: StdioCollector {
+            onStreamFinished: operationStatus.buffer = String(this.text)
+        }
+        onExited: (exitCode, exitStatus) => {
+            statusDeadline.stop();
+            if (exitCode !== 0)
+                operationState.known = false;
+            else
+                operationState.snapshot(machineActions.parseLine(operationStatus.buffer));
+        }
+    }
+    Timer {
+        id: statusDeadline
+        interval: 15000
+        onTriggered: {
+            operationState.known = false;
+            operationStatus.signal(9);
+        }
+    }
+    Timer {
+        interval: 2000
+        running: true
+        triggeredOnStart: true
+        repeat: true
+        onTriggered: {
+            operationState.now = Date.now();
+            if (!operationStatus.running && !statusDeadline.running) {
+                // Arm before starting: failed-to-start has no onStarted.
+                statusDeadline.start();
+                operationStatus.running = true;
+            }
+            if (operationState.records.some(r => r.phase === "verifying"))
+                machineActions.inventoryRefreshRequested();
         }
     }
 

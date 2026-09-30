@@ -59,6 +59,23 @@
       - >-
         host_desktop_common_shell_stage.workspace_update_transport
         == 'event-stream'
+      - >-
+        host_desktop_common_shell_stage.surface_provenance_bridge
+        == '/usr/local/bin/privatestack-surface-provenance'
+      - >-
+        host_desktop_common_shell_stage.surface_provenance_transport
+        == 'correlated-stream'
+      - host_desktop_common_shell_stage.focus_accent_enabled
+      - >-
+        host_desktop_common_shell_stage.focus_accent_bridge
+        == '/usr/local/bin/privatestack-focus-accent'
+      - >-
+        host_desktop_common_shell_stage.focus_accent_unit
+        == 'hyperlab-focus-accent.service'
+      - >-
+        host_desktop_common_shell_stage.keyboard_rgb_modes
+        == ['off', 'system-trust', 'focus-trust']
+      - host_desktop_common_shell_stage.keyboard_rgb_default_mode == 'off'
       - host_desktop_common_shell_stage.semantic_palette_enabled
       - >-
         host_desktop_common_shell_stage.semantic_palette_user_path
@@ -84,6 +101,7 @@
         [
           'keyboard-cycle',
           'wallpaper-mode-toggle',
+          'rgb-mode-toggle',
           'theme-cycle',
           'workspace-window-focus',
           'session-lock',
@@ -184,6 +202,7 @@
     mode: "0755"
 
 - name: Install the non-active shared HyperLab Quickshell source
+  tags: [hyperlab_provenance]
   ansible.builtin.copy:
     src: quickshell/hyperlab/
     dest: "{{ host_desktop_common_shell_stage.config_root }}/"
@@ -291,6 +310,48 @@
     group: root
     mode: "0755"
 
+- name: Install the shared read-only surface provenance bridge
+  tags: [hyperlab_provenance]
+  ansible.builtin.copy:
+    src: privatestack-surface-provenance.sh
+    dest: /usr/local/bin/privatestack-surface-provenance
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the shared focus provenance accent bridge
+  ansible.builtin.copy:
+    src: privatestack-focus-accent.sh
+    dest: /usr/local/bin/privatestack-focus-accent
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the focus provenance accent user service
+  ansible.builtin.copy:
+    src: hyperlab-focus-accent.service
+    dest: /etc/systemd/user/hyperlab-focus-accent.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the graphical session wants directory
+  ansible.builtin.file:
+    path: /etc/systemd/user/graphical-session.target.wants
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Wanted by the graphical session itself, so Hyprland and Sway both run it
+# without changing either compositor's reviewed helper set.
+- name: Run focus provenance accents in every graphical session
+  ansible.builtin.file:
+    src: /etc/systemd/user/hyperlab-focus-accent.service
+    dest: /etc/systemd/user/graphical-session.target.wants/hyperlab-focus-accent.service
+    state: link
+    force: true
+
 - name: Install the shared compositor-neutral lock helper
   ansible.builtin.copy:
     src: privatestack-lock.sh
@@ -327,6 +388,14 @@
   ansible.builtin.copy:
     src: privatestack-machine-actions.py
     dest: /usr/local/bin/privatestack-machine-actions
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the reviewed managed operation runner
+  ansible.builtin.copy:
+    src: privatestack-operation.py
+    dest: /usr/local/bin/privatestack-operation
     owner: root
     group: root
     mode: "0755"

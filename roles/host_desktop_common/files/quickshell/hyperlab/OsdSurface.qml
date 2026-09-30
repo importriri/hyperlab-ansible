@@ -60,6 +60,8 @@ PanelWindow {
             return osd.icons.keyboard;
         case "wallpaper":
             return osd.icons.wallpaper;
+        case "lighting":
+            return osd.icons.keyboard;
         default:
             return osd.icons.theme;
         }
@@ -73,6 +75,8 @@ PanelWindow {
             return "Keyboard";
         case "wallpaper":
             return "Wallpaper";
+        case "lighting":
+            return "Keyboard lighting";
         default:
             return "Theme";
         }
@@ -97,6 +101,8 @@ PanelWindow {
             return osd.shellState.keyboardName();
         case "wallpaper":
             return osd.shellState.wallpaperLabel();
+        case "lighting":
+            return osd.shellState.rgbModeLabel();
         default:
             return osd.shellState.themeLabel();
         }

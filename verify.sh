@@ -153,7 +153,7 @@ run_render() {
     cleanup_render_password_file
 }
 
-scripts="$(grep -rlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)"
+scripts="$(grep -rIlE '^#!(/usr)?/bin/(env )?(ba)?sh' --exclude-dir=.git --exclude='*.md' . 2>/dev/null || true)"
 if [ -n "${scripts}" ]; then
     step "level 0a - shellcheck (every shell script, discovered - this file included)"
     if echo "${scripts}" | xargs shellcheck; then

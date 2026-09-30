@@ -57,6 +57,9 @@ usage:
   privatestack-compositor-adapter focused-window-json
   privatestack-compositor-adapter focused-window-watch
   privatestack-compositor-adapter opacity-set VALUE
+  privatestack-compositor-adapter window-identities-json
+  privatestack-compositor-adapter focus-accent-set WINDOW_ID #RRGGBB STABLE_ID
+  privatestack-compositor-adapter focus-accent-clear WINDOW_ID #RRGGBBAA STABLE_ID
   privatestack-compositor-adapter dpms enable|disable
   privatestack-compositor-adapter native-bar show|hide|toggle
   privatestack-compositor-adapter session-exit
@@ -916,6 +919,57 @@ case ${operation} in
 
     focused-window-watch)
         focused_window_watch
+        ;;
+
+    window-identities-json)
+        [[ $# -eq 1 ]] || { usage; exit 2; }
+        [[ ${backend} == hyprland ]] || exit 3
+        run_hyprctl clients -j | python3 -c '
+import json
+import re
+import sys
+
+windows = []
+for node in json.load(sys.stdin):
+    address, stable = node.get("address"), node.get("stableId")
+    if (node.get("mapped", True) is True and isinstance(address, str)
+            and re.fullmatch(r"0x[0-9a-f]{1,16}", address)
+            and isinstance(stable, str) and re.fullmatch(r"[0-9a-fA-F]{1,16}", stable)):
+        windows.append({"window_id": address, "stable_id": stable.lower()})
+print(json.dumps({"windows": windows}, separators=(",", ":")))
+'
+        ;;
+
+    focus-accent-set|focus-accent-clear)
+        # Caller supplies presentation values; this bridge only translates IPC.
+        window=${2:-}
+        stable=${4:-}
+        [[ $# -eq 4 && ${window} =~ ^0x[0-9a-f]{1,16}$ &&
+           ${stable} =~ ^[0-9a-f]{1,16}$ ]] || {
+            printf 'window address and stable id required\n' >&2
+            exit 2
+        }
+        [[ ${3:-} =~ ^#[0-9a-f]{6}([0-9a-f]{2})?$ ]] || {
+            printf 'colour must be #rrggbb or #rrggbbaa\n' >&2
+            exit 2
+        }
+        if [[ ${#3} -eq 7 ]]; then
+            value="rgb(${3#\#})"
+        else
+            value="rgba(${3#\#})"
+        fi
+        case ${backend} in
+            sway)
+                printf 'per-window border colour unsupported\n' >&2
+                exit 3
+                ;;
+            hyprland)
+                # Stable targeting prevents a recycled address from reaching a
+                # different window between the caller snapshot and this write.
+                run_hyprctl dispatch \
+                    "hl.dsp.window.set_prop({ prop = \"active_border_color\", value = \"${value}\", window = \"stableid:${stable}\" })"
+                ;;
+        esac
         ;;
 
     opacity-set)

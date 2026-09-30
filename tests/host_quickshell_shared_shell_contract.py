@@ -61,6 +61,15 @@ def main() -> int:
         "workspace_state_enabled": True,
         "workspace_state_bridge": "/usr/local/bin/privatestack-compositor-adapter",
         "workspace_update_transport": "event-stream",
+        "surface_provenance_bridge": (
+            "/usr/local/bin/privatestack-surface-provenance"
+        ),
+        "surface_provenance_transport": "correlated-stream",
+        "focus_accent_enabled": True,
+        "focus_accent_bridge": "/usr/local/bin/privatestack-focus-accent",
+        "focus_accent_unit": "hyperlab-focus-accent.service",
+        "keyboard_rgb_modes": ["off", "system-trust", "focus-trust"],
+        "keyboard_rgb_default_mode": "off",
         "semantic_palette_enabled": True,
         "semantic_palette_user_path": ".config/hyperlab/palette-quickshell.json",
         "telemetry_enabled": True,
@@ -78,6 +87,7 @@ def main() -> int:
         "session_actions": [
             "keyboard-cycle",
             "wallpaper-mode-toggle",
+            "rgb-mode-toggle",
             "theme-cycle",
             "workspace-window-focus",
             "session-lock",
@@ -118,6 +128,7 @@ def main() -> int:
             "PolicyCell.qml",
             "ResourceMeter.qml",
             "ActionFeedback.qml",
+            "OperationTracker.qml",
             "ConfirmationSurface.qml",
             "HyperLabBar.qml",
             "IdentityMark.qml",

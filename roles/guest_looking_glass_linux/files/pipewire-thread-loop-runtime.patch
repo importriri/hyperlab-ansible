@@ -1,5 +1,5 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
-index de0211d..e4bd02e 100644
+index de0211d..86e5541 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
 @@ -114,7 +114,8 @@ static bool startStream(struct pw_stream * stream, uint32_t node)
@@ -39,7 +39,24 @@ index de0211d..e4bd02e 100644
  }
  
  static CaptureFormat convertSpaFormat(enum spa_video_format spa)
-@@ -334,8 +339,6 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
+@@ -191,10 +196,12 @@ static void streamParamChangedCallback(void * opaque, uint32_t id,
+   this->width  = info.size.width;
+   this->height = info.size.height;
+   this->format = convertSpaFormat(info.format);
+-  this->hdr    = info.format & (
+-      SPA_VIDEO_FORMAT_xBGR_210LE |
+-      SPA_VIDEO_FORMAT_RGBA_F16);
+-  this->hdrPQ  = true; // this is assumed and untested
++  // SPA video formats are enum values, not flags: masking marked every
++  // 8-bit SDR format as HDR PQ and made clients tag sRGB frames as ST2084.
++  this->hdr    =
++      info.format == SPA_VIDEO_FORMAT_xBGR_210LE ||
++      info.format == SPA_VIDEO_FORMAT_RGBA_F16;
++  this->hdrPQ  = this->hdr; // upstream PQ assumption, HDR formats only
+
+   const int bpp = this->format == CAPTURE_FMT_RGBA16F ? 8 : 4;
+   this->pitch = this->width * bpp;
+@@ -334,8 +341,6 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
      goto fail;
    }
  
@@ -48,7 +65,7 @@ index de0211d..e4bd02e 100644
    while (!this->hasFormat)
      pw_thread_loop_wait(this->threadLoop);
  
-@@ -343,12 +346,14 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
+@@ -343,12 +348,14 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
    {
      DEBUG_ERROR("Unknown frame format");
      pw_thread_loop_accept(this->threadLoop);
@@ -63,7 +80,7 @@ index de0211d..e4bd02e 100644
  
    return true;
  fail:
-@@ -358,16 +363,33 @@ fail:
+@@ -358,16 +365,33 @@ fail:
  
  static void pipewire_stop(void)
  {
@@ -99,7 +116,7 @@ index de0211d..e4bd02e 100644
      this->stream = NULL;
    }
  
-@@ -377,13 +399,22 @@ static bool pipewire_deinit(void)
+@@ -377,13 +401,22 @@ static bool pipewire_deinit(void)
      this->core = NULL;
    }
  
@@ -123,7 +140,7 @@ index de0211d..e4bd02e 100644
    if (this->sessionHandle)
      portal_destroySession(this->portal, &this->sessionHandle);
  
-@@ -410,14 +441,22 @@ static CaptureResult pipewire_capture(
+@@ -410,14 +443,22 @@ static CaptureResult pipewire_capture(
  {
    int result;
  
@@ -146,7 +163,7 @@ index de0211d..e4bd02e 100644
  
    if (this->formatChanged)
    {
-@@ -468,12 +507,17 @@ static CaptureResult pipewire_getFrame(
+@@ -468,12 +509,17 @@ static CaptureResult pipewire_getFrame(
    const size_t maxFrameSize)
  {
    if (this->stop || !this->frameData)

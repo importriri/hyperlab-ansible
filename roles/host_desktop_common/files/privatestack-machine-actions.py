@@ -13,7 +13,7 @@ capability answer is advice for presentation only -- this bridge re-derives
 everything before it acts.
 
 Every response is one JSON object on stdout so the shell reads structure
-instead of prose. A launched terminal reports `accepted`, never `completed`.
+instead of prose. Managed lifecycle reports correlated durable operation records, never spawn success.
 """
 
 from __future__ import annotations
@@ -27,8 +27,7 @@ from pathlib import Path
 from typing import Any
 
 HYPERLABCTL = "/usr/local/bin/hyperlabctl"
-FOOT = "/usr/bin/foot"
-PYTHON = "/usr/bin/python3"
+OPERATION = "/usr/local/bin/privatestack-operation"
 CHECKOUT_POINTER = Path("/etc/hyperlabctl/checkout")
 
 VERBS = (
@@ -337,6 +336,17 @@ def capabilities(name: str) -> dict[str, Any]:
             "destructive": verb in DESTRUCTIVE_VERBS,
         }
 
+    # What the libvirt console actually shows. A VFIO guest's desktop is on
+    # its passed-through GPU (Looking Glass or the physical output); the
+    # console is its emulated display, useful for boot and login recovery.
+    # Unknown VFIO state claims neither.
+    vfio = machine.get("vfio")
+    verbs["console"]["display"] = (
+        "emulated-recovery" if vfio is True
+        else "primary" if vfio is False
+        else "unknown"
+    )
+
     live_managed = machine.get("managed")
     return {
         "phase": "capabilities",
@@ -361,42 +371,9 @@ def checkout() -> str:
     return str(candidate)
 
 
-def privileged(argv: list[str], action_id: str, name: str) -> None:
-    code = r"""
-import json
-import subprocess
-import sys
-
-argv = json.loads(sys.argv[1])
-cwd = sys.argv[2]
-
-print("HyperLab reviewed machine operation")
-print("action:", sys.argv[3])
-print("machine:", sys.argv[4])
-print()
-rc = subprocess.call(argv, cwd=cwd)
-try:
-    input("\n[exit %d - press Enter to close] " % rc)
-except EOFError:
-    pass
-raise SystemExit(rc)
-""".strip()
-
-    subprocess.Popen(
-        [
-            FOOT,
-            "--app-id=hyperlab-operation",
-            "--title=HyperLab · " + name,
-            PYTHON,
-            "-c",
-            code,
-            json.dumps(argv),
-            checkout(),
-            action_id,
-            name,
-        ],
-        start_new_session=True,
-    )
+def privileged(action_id: str, name: str) -> None:
+    # The runner re-resolves the action; argv never crosses this boundary.
+    os.execv(OPERATION, [OPERATION, "launch", action_id, name])
 
 
 def valid_name(name: str) -> None:
@@ -407,6 +384,13 @@ def valid_name(name: str) -> None:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["operations"]:
+        os.execv(OPERATION, [OPERATION, "operations"])
+    if len(sys.argv) == 3 and sys.argv[1] == "operation":
+        os.execv(OPERATION, [OPERATION, "operation", sys.argv[2]])
+    if len(sys.argv) == 3 and sys.argv[1] == "operation-view":
+        # Reattach an observer; the runner validates the id and owns nothing new.
+        os.execv(OPERATION, [OPERATION, "view", sys.argv[2]])
     if len(sys.argv) != 3:
         raise Refused("usage: machine-action {capabilities|VERB} MACHINE")
 
@@ -428,17 +412,8 @@ def main() -> int:
     argv = resolve(action_id, name, spec_row)
 
     if detached(action_id):
-        # The operation runs in its own terminal and outlives this process.
-        # Accepting it is all this bridge can honestly report.
-        privileged(argv, action_id, name)
-        emit({
-            "phase": "accepted",
-            "mode": "detached",
-            "verb": verb,
-            "machine": name,
-            "action_id": action_id,
-        })
-        return 0
+        privileged(action_id, name)
+        return 127
 
     emit({
         "phase": "accepted",

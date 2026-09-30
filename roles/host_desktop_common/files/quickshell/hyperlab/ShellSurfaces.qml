@@ -204,14 +204,21 @@ QtObject {
 
     // Selection carries the backend identity and the generation it was
     // resolved against; the view resolves it against the current snapshot.
-    function selectMachine(identifier, generation) {
+    function selectMachine(identifier, generation, raiseExisting) {
         const name = String(identifier);
+        const shouldRaise =
+            raiseExisting === undefined ? true : raiseExisting === true;
 
         if (name.length === 0)
             return false;
 
         surfaces.cancelConfirmation();
-        surfaces.openWorkspace("machines");
+
+        // External selection may raise an existing workspace, but a click
+        // inside the already-visible Machines workspace is state-only.
+        // Refocusing that same compositor window can warp the pointer.
+        surfaces.openWorkspacePage("machines", "", shouldRaise);
+
         surfaces.selectedMachineId = name;
         surfaces.selectionGeneration =
             typeof generation === "number" ? generation : -1;
@@ -325,7 +332,8 @@ QtObject {
         return candidate === "audio"
             || candidate === "keyboard"
             || candidate === "theme"
-            || candidate === "wallpaper";
+            || candidate === "wallpaper"
+            || candidate === "lighting";
     }
 
     // Show the host's current state for a kind, with no action attached:

@@ -177,8 +177,12 @@ Host-native surfaces resolve to neutral `HOST`. A surface that looks like a
 managed transport but lacks valid host registration is `unresolved`; it may not
 drive wallpaper or keyboard RGB until host provenance is recovered.
 
-The compositor adapter and launchers publish the required PID information in a
-later runtime-integration gate. The resolver introduced here remains read-only.
+The resolver remains read-only. Its `stream` mode answers one correlated
+request per line for the shell; see the live chain in
+[`hyperlab-shell.md`](hyperlab-shell.md#focused-surface-provenance).
+
+A surface that looks like a managed transport but reports no PID is also
+`unresolved`: without a process identity no registration can be verified.
 
 ## Managed surface runtime binding
 
@@ -225,6 +229,129 @@ Guest-controlled title and application metadata remain non-authoritative.
 The coordinator itself contains no compositor calls, hardware calls, privilege
 boundary or filesystem writes. A later actuator gate may consume only reviewed
 `planned` output.
+
+## Focus provenance accents and keyboard RGB
+
+`hyperlab-focus-accent.service` (wanted by the graphical session, so it runs
+under Hyprland and Sway alike) mirrors existing authority onto presentation.
+It decides no identity:
+
+- the focused surface's identity comes from the reviewed surface provenance
+  resolver, exactly as for the rail badge;
+- the host trust claim comes from `hyperlabctl watch --field trust`,
+  validated at its canonical rung;
+- colours come only from the rendered trust-model map
+  (`hyperlab-rgb-map.json`), itself pinned to the canonical trust colours.
+
+**Accent.** A resolved surface's border takes its identity colour, bound to
+that one window through the compositor adapter, so an identity can never
+follow focus onto another window. A surface without a resolved identity
+carries no trust colour, and a window whose provenance is lost returns to
+the theme border. The generic focus token stays neutral. Sway can only
+colour whatever is focused, so it reports accents as unsupported and keeps
+its neutral border rather than risk showing one window's identity on the
+next.
+
+Accents are enabled only under `trust-model`. Other themes receive their own
+appearance border, never a provenance colour. Cleanup does not read the live
+`general:col.active_border`: the theme selection file changes before the
+compositor reload, which can be deferred. The high-level focus actuator instead reads the selected
+theme's root-owned palette under `/usr/share/hyperlab/palettes`. It supplies an
+explicit validated colour to the adapter; the adapter owns only IPC translation
+and contains no theme selection or palette policy.
+
+The installed Nitro Hyprland 0.56.2 build
+`efb50993780079460b0cbed1363e2166a2de1d9f` was probed on a disposable Foot on
+2026-09-26. `hyprctl setprop address:WINDOW activebordercolor -1` returned
+`unknown request`. The exact Lua candidate was:
+
+```lua
+hl.dsp.window.set_prop({
+    prop = "active_border_color", value = "-1", window = "address:WINDOW"
+})
+```
+
+It returned `ok` and `getprop ... active_border_color` became `0deg`, but the
+rendered border remained DEV blue after changing the global border to
+`#123456`. Thus neither that sentinel nor `unset` is used for cleanup. The
+[matching upstream implementation](https://github.com/hyprwm/Hyprland/blob/efb50993780079460b0cbed1363e2166a2de1d9f/src/config/shared/actions/ConfigActions.cpp#L756)
+assigns an empty gradient override; it does not remove this override.
+
+The fallback explicitly paints the intended theme border. A second disposable
+Foot probe verified Green → Trust Model → Violet → Trust Model as
+`ff7ee787` → `ffd0d7de` → `ff9d6cff` → `ffd0d7de`, including captured border
+pixels. The original global `ffd0d7de 0deg` was restored after the sentinel
+probe and remained unchanged throughout the fallback probe. No service or
+configuration was deployed by these probes.
+
+Because fallback painting is not a native reset, the actuator retains cleanup
+receipts for its previously touched windows and synchronizes those exact windows
+on subsequent theme changes. The policy-free `window-identities-json` adapter
+snapshot supplies current addresses and compositor stable IDs. Before repaint,
+closed or reused-address receipts are pruned; writes target `stableid:` rather
+than a recyclable address. At most 32 receipts (including the active accent) are
+retained. If all 32 are live, new accents are declined until pruning frees a slot;
+live cleanup ownership is never silently evicted. Synchronization handles one
+receipt per loop and rechecks current input/correlation around blocking work.
+Missing/invalid palettes suppress all repaint IPC until the selected palette's
+file identity/content stamp or theme changes; backend failures back off for 60
+seconds. These are neutral/appearance overrides, not extra
+active trust accents. Only one window may own a trust accent. Receipts contain
+no trust identity and are valid only for the recorded backend and compositor
+instance; a new instance drops them without IPC. Sway cleanup exit 3 is terminal.
+This synchronization requires the presentation service to be running; it also
+runs when that service restarts in the same compositor instance.
+
+**Keyboard RGB** follows `~/.config/hyperlab/rgb-mode`, set through the theme
+controller (`privatestack-theme rgb-mode-toggle`, or *Keyboard lighting* in
+the Control Center):
+
+| Mode | Keyboard follows |
+|---|---|
+| `off` (default) | restore saved operator zones, then release RGB ownership |
+| `system-trust` | the host trust claim; an unclaimed GPU is HOST |
+| `focus-trust` | the resolved identity of the focused surface |
+
+RGB is only driven while the trust-model theme is active, is written with
+runtime scope through `hyperlab-nitro-control` (never persistent), keeps the
+operator's current brightness, and respects the broker's rate limit. An
+unresolved surface, an invalid claim or an unavailable broker holds the
+current colours.
+
+Window cleanup metadata remains in the private runtime HyperLab directory.
+The session manager must already have created the user-owned `XDG_RUNTIME_DIR`;
+the actuator creates only its `hyperlab` child, mode 0700. The window journal
+contains schema, backend, exact compositor instance, current owned address and
+bounded address-to-stable-ID cleanup receipts. Invalid journals are quarantined without using any
+address from them.
+
+RGB ownership is separate:
+`$XDG_STATE_HOME/hyperlab/focus-accent/focus-accent-rgb.json` (default
+`~/.local/state/hyperlab/focus-accent/focus-accent-rgb.json`). The directory is 0700 and the
+atomically replaced file is 0600. The shared `hyperlab` parent may remain 0755;
+its mode is not changed. A validated legacy same-boot baseline is migrated into
+the private child before removing the old file; invalid legacy state still blocks
+recapture. It contains only schema, the kernel boot ID,
+four original operator zones and an ownership boolean. It survives logout
+without linger. Same-boot restarts reuse the original baseline; a different boot
+ID discards ownership without restoring old hardware state. Restores always read
+current live brightness and use the Nitro broker's runtime scope.
+
+Unsafe/malformed RGB records are renamed to the deterministic `.invalid`
+quarantine entry without following symlinks. A quarantine entry keeps RGB in a
+structured `rgb-degraded` hold across restarts; borders continue independently.
+Unsafe directories disable writes rather than manufacturing replacement state.
+Recovery is deliberate: stop the presentation service, set mode `off`, establish
+known manual operator zones through the reviewed Nitro controls, then remove the
+quarantined RGB entry from the private state directory and restart the service.
+Do not remove quarantine merely to resume automatic lighting: current hardware
+colours may still be the previous managed trust colour.
+
+These probes prove the reset limitation and fallback rendering. Nitro physical
+acceptance of the C9.4 focused-provenance interaction is also complete: rapid
+HOST↔DEV focus switching updated the reviewed border/RGB presentation correctly,
+and operator RGB restore passed. Logout/login remains part of broader session and
+release qualification rather than an open C9.4 focus-accent defect.
 
 ## Shell visual roles
 

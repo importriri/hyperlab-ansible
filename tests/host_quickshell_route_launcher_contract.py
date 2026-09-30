@@ -17,6 +17,7 @@ BRIDGE = ROOT / (
 EXPECTED_ACTIONS = {
     "keyboard-cycle",
     "wallpaper-mode-toggle",
+    "rgb-mode-toggle",
     "theme-cycle",
     "workspace-window-focus",
     "session-lock",

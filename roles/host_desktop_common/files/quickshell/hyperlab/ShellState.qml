@@ -6,6 +6,7 @@
 // Every source is a reviewed read-only bridge:
 //   privatestack-hyperlab              status, trust claim and inventory
 //   privatestack-compositor-adapter    compositor-neutral workspace/focus
+//   privatestack-surface-provenance    reviewed focused-surface provenance
 //   privatestack-telemetry             host telemetry snapshot
 //   ~/.config/hyperlab/<state file>    session state published by helpers
 //
@@ -38,6 +39,9 @@ Scope {
     readonly property string telemetryBridge:
         "/usr/local/bin/privatestack-telemetry"
 
+    readonly property string surfaceProvenanceBridge:
+        "/usr/local/bin/privatestack-surface-provenance"
+
     readonly property alias clock: shellClock
 
     // Three missed slow polls before an observation stops being current.
@@ -54,6 +58,9 @@ Scope {
     property var keyboardState: ({ "value": "", "known": false })
     property var themeState: ({ "value": "", "known": false })
     property var wallpaperState: ({ "value": "", "known": false })
+    // What keyboard RGB follows. The file is written by the theme
+    // controller; absent is the reviewed default, off.
+    property var rgbModeState: ({ "value": "", "known": false })
 
     // A real accessibility setting, consumed by every animation in the
     // shell. Absent means motion is enabled.
@@ -199,8 +206,10 @@ Scope {
 
     // The compositor's own identity for the focused surface. This is host
     // metadata about a host process: it names a window, and it is never a
-    // provenance or trust decision.
+    // provenance or trust decision. The PID is only a lookup key for the
+    // resolver; the window title is never retained.
     property var focusPayload: ({
+        "pid": null,
         "app_id": "",
         "window_id": ""
     })
@@ -208,15 +217,305 @@ Scope {
     readonly property string focusedSurface:
         String(state.focusPayload.app_id)
 
-    // Focused-surface provenance is a separate, reviewed resolution from the
-    // compositor identity above. No focused-provenance resolver is deployed
-    // on this host yet, so the shell reports it as unavailable and shows no
-    // identity rather than deriving one from a window name.
-    readonly property var focusedProvenance: ({
-        "available": false,
-        "identity": "",
-        "reason": "No reviewed focused-surface provenance resolver is deployed"
+    // ------------------------------------------ focused-surface provenance
+    //
+    // Provenance is a separate, reviewed resolution of the compositor
+    // identity above, answered by the host-owned resolver behind
+    // privatestack-surface-provenance. The shell validates the answer's
+    // shape and presents it; it never derives an identity itself.
+    //
+    // Every focus snapshot becomes one numbered request. Only the answer to
+    // the latest request is accepted, and a different surface drops the
+    // previous identity at once, so a guest identity can never stay attached
+    // to the window that replaced it.
+
+    readonly property int provenanceTimeoutMs: 3000
+
+    readonly property var guestProvenanceIdentities: [
+        "clean",
+        "dev",
+        "services",
+        "dirty",
+        "lab"
+    ]
+
+    // The resolver's reviewed reason vocabulary. A reason outside it makes
+    // the whole answer invalid rather than being shown as-is.
+    readonly property var provenanceReasons: ({
+        "no-focused-client": "No focused window",
+        "unregistered-host-process": "Host process",
+        "managed-surface-resolved": "Registered managed surface",
+        "managed-surface-not-registered":
+            "Managed transport without a host registration",
+        "managed-surface-without-pid":
+            "Managed transport without a process identity",
+        "registered-process-not-verifiable":
+            "Registered process can no longer be verified",
+        "registered-pid-start-time-mismatch":
+            "Process identity changed since registration",
+        "registered-executable-mismatch":
+            "Process is not the reviewed transport",
+        "registered-domain-spec-unavailable":
+            "VM specification is unavailable",
+        "registered-domain-spec-drift":
+            "VM specification changed since launch",
+        "registered-domain-name-mismatch":
+            "VM specification names another machine",
+        "unsupported-network-profile":
+            "VM specification has no reviewed network profile",
+        "looking-glass-spec-policy-mismatch":
+            "VM specification does not permit Looking Glass"
     })
+
+    // The request the shell is waiting on, and the line handed to the
+    // resolver process for it.
+    property int provenanceRequest: 0
+    property string provenanceRequestLine: ""
+    property bool provenancePending: false
+
+    // The surface the current observation belongs to, as pid/app/window.
+    property string provenanceSurfaceKey: ""
+
+    property var provenanceObservation: state.provenanceResult(
+        "loading", "", "", "", "resolver-loading",
+        "Waiting for the provenance resolver"
+    )
+
+    // loading    nothing asked or answered yet
+    // resolving  asked for this surface, no answer yet
+    // resolved   the resolver named a reviewed identity (HOST or a guest)
+    // unresolved the resolver refused to name one: fail closed
+    // unavailable the resolver or the focus source could not answer
+    readonly property var focusedProvenance: {
+        const focus = state.sourceState(
+            state.focusSourceState,
+            state.focusObservedAt
+        );
+
+        if (focus === "loading")
+            return state.provenanceResult(
+                "loading", "", "", "", "focus-loading",
+                "Waiting for the focused surface"
+            );
+
+        if (focus !== "ok")
+            return state.provenanceResult(
+                "unavailable", "", "", "", "focus-" + focus,
+                "The focused surface is " + focus
+            );
+
+        return state.provenanceObservation;
+    }
+
+    function provenanceResult(status, identity, source, domain, code, reason) {
+        const labels = {
+            "loading": "Waiting",
+            "resolving": "Resolving",
+            "resolved": "",
+            "unresolved": "Unresolved",
+            "unavailable": "Unavailable"
+        };
+
+        return {
+            "available": status === "resolved",
+            "state": status,
+            "label": labels[status],
+            "identity": identity,
+            "source": source,
+            "domain": domain,
+            "reasonCode": code,
+            "reason": reason
+        };
+    }
+
+    function provenanceUnavailable(code, reason) {
+        return state.provenanceResult(
+            "unavailable", "", "", "", code, reason
+        );
+    }
+
+    function provenanceSurfaceKeyFor(surface) {
+        return JSON.stringify([surface.pid, surface.app_id, surface.window_id]);
+    }
+
+    function requestProvenance() {
+        const surface = state.focusPayload;
+        const key = state.provenanceSurfaceKeyFor(surface);
+        state.provenanceRequest += 1;
+
+        // Even an identical PID/window tuple may have been reused. Only a
+        // fresh resolver check may restore the identity for this snapshot.
+        state.provenanceObservation = state.provenanceResult(
+            "resolving", "", "", "", "resolver-pending",
+            "Resolving host provenance"
+        );
+
+        state.provenanceSurfaceKey = key;
+        state.provenancePending = true;
+        state.provenanceRequestLine = JSON.stringify({
+            "request": state.provenanceRequest,
+            "surface": {
+                "pid": surface.pid,
+                "app_id": surface.app_id,
+                "window_id": surface.window_id
+            }
+        });
+    }
+
+    // The resolver process ended. Whatever it was answering is unknown.
+    function provenanceStopped() {
+        state.provenanceRequest += 1;
+        state.provenancePending = false;
+        state.provenanceSurfaceKey = "";
+        state.provenanceObservation = state.provenanceUnavailable(
+            "resolver-stopped",
+            "The provenance resolver is not running"
+        );
+    }
+
+    // The latest request went unanswered for too long. Returns true when
+    // the resolver should be restarted.
+    function provenanceTimedOut() {
+        if (!state.provenancePending)
+            return false;
+
+        state.provenanceRequest += 1;
+        state.provenancePending = false;
+        state.provenanceSurfaceKey = "";
+        state.provenanceObservation = state.provenanceUnavailable(
+            "resolver-timeout",
+            "The provenance resolver did not answer in time"
+        );
+
+        return true;
+    }
+
+    function validProvenance(value) {
+        const invalid = state.provenanceUnavailable(
+            "resolver-invalid",
+            "The provenance answer failed validation"
+        );
+
+        if (value === null || typeof value !== "object" || Array.isArray(value)
+            || value.schema !== 1
+            || typeof value.resolved !== "boolean"
+            || value.guest_metadata_authoritative !== false)
+            return invalid;
+
+        // The answer must be about the process the shell asked about.
+        if (value.pid !== state.focusPayload.pid)
+            return invalid;
+
+        const code = String(value.reason);
+
+        if (!Object.prototype.hasOwnProperty.call(state.provenanceReasons, code))
+            return invalid;
+
+        const reason = state.provenanceReasons[code];
+
+        if (!value.resolved) {
+            if (value.surface_class !== "managed-unresolved"
+                || value.trust !== null
+                || value.presentation_identity !== "host"
+                || value.trust_source !== null || value.domain !== null
+                || value.network_profile !== null
+                || value.wallpaper_allowed !== false || value.rgb_allowed !== false
+                || code === "managed-surface-resolved"
+                || code === "no-focused-client" || code === "unregistered-host-process")
+                return invalid;
+
+            return state.provenanceResult(
+                "unresolved", "", "", "", code, reason
+            );
+        }
+
+        if (value.surface_class === "host-native") {
+            if (value.trust !== "host"
+                || value.presentation_identity !== "host"
+                || value.trust_source !== "host-native"
+                || value.domain !== null || value.network_profile !== null
+                || value.wallpaper_allowed !== true || value.rgb_allowed !== true
+                || (code !== "no-focused-client" && code !== "unregistered-host-process"))
+                return invalid;
+
+            return state.provenanceResult(
+                "resolved", "host", "host-native", "", code, reason
+            );
+        }
+
+        if (value.surface_class === "managed-guest") {
+            const identity = value.trust;
+
+            if (state.guestProvenanceIdentities.indexOf(identity) < 0
+                || value.presentation_identity !== identity
+                || value.network_profile !== identity
+                || value.trust_source !== "host-owned-vm-spec"
+                || typeof value.domain !== "string"
+                || value.domain.length === 0
+                || value.domain.length > 128
+                || value.pid === null || code !== "managed-surface-resolved"
+                || ["looking-glass", "spice-console", "ssh"].indexOf(value.surface_kind) < 0
+                || typeof value.spec !== "string" || value.spec.length === 0
+                || typeof value.spec_sha256 !== "string"
+                || !/^[0-9a-f]{64}$/.test(value.spec_sha256)
+                || value.wallpaper_allowed !== true || value.rgb_allowed !== true)
+                return invalid;
+
+            return state.provenanceResult(
+                "resolved", identity, "host-owned-vm-spec", value.domain,
+                code, reason
+            );
+        }
+
+        return invalid;
+    }
+
+    function applyProvenancePayload(raw) {
+        const parsed = state.parseJson(raw);
+
+        // Completed, cancelled and old requests cannot publish another answer.
+        if (!state.provenancePending)
+            return;
+
+        if (parsed === null || !Number.isInteger(parsed.request)) {
+            state.provenancePending = false;
+            state.provenanceObservation = state.provenanceUnavailable(
+                "resolver-invalid", "The provenance answer failed validation"
+            );
+            return;
+        }
+
+        if (parsed.request !== state.provenanceRequest)
+            return;
+
+        state.provenancePending = false;
+
+        if (parsed.schema !== 1) {
+            state.provenanceObservation = state.provenanceUnavailable(
+                "resolver-schema",
+                "The provenance resolver answered with an unknown schema"
+            );
+            return;
+        }
+
+        if (parsed.status === "unavailable") {
+            state.provenanceObservation = state.provenanceUnavailable(
+                "resolver-refused",
+                "Resolver: " + String(parsed.reason).slice(0, 160)
+            );
+            return;
+        }
+
+        if (parsed.status !== "ok") {
+            state.provenanceObservation = state.provenanceUnavailable(
+                "resolver-invalid",
+                "The provenance answer failed validation"
+            );
+            return;
+        }
+
+        state.provenanceObservation = state.validProvenance(parsed.provenance);
+    }
 
     // --------------------------------------------------------------- trust
 
@@ -745,10 +1044,15 @@ Scope {
             };
         }
 
+        // Only a reviewed display class passes; anything else is unknown.
+        const displays = ["primary", "emulated-recovery", "unknown"];
+
         return {
             "available": entry.available,
             "reason": entry.reason,
-            "known": true
+            "known": true,
+            "display":
+                displays.indexOf(entry.display) >= 0 ? entry.display : "unknown"
         };
     }
 
@@ -1035,12 +1339,20 @@ Scope {
     function applyFocusPayload(raw) {
         const parsed = state.parseJson(raw);
 
-        if (parsed === null) {
+        if (parsed === null
+            || (parsed.pid !== null && (!Number.isInteger(parsed.pid) || parsed.pid <= 0))
+            || typeof parsed.app_id !== "string"
+            || typeof parsed.window_id !== "string") {
             state.focusSourceState = "unavailable";
+            state.provenanceStopped();
             return;
         }
 
         state.focusPayload = {
+            "pid":
+                Number.isInteger(parsed.pid) && parsed.pid > 0
+                ? parsed.pid
+                : null,
             "app_id":
                 typeof parsed.app_id === "string" ? parsed.app_id : "",
             "window_id":
@@ -1049,6 +1361,7 @@ Scope {
 
         state.focusSourceState = "ok";
         state.focusObservedAt = Date.now();
+        state.requestProvenance();
     }
 
     function applyTelemetryPayload(raw) {
@@ -1131,6 +1444,36 @@ Scope {
         state.keyboardState = { "value": "", "known": false };
     }
 
+    function applyRgbMode(raw) {
+        const candidate = String(raw).trim();
+
+        if (candidate === "system-trust" || candidate === "focus-trust"
+            || candidate === "off" || candidate === "") {
+            state.rgbModeState = {
+                "value": candidate.length > 0 ? candidate : "off",
+                "known": true
+            };
+            return;
+        }
+
+        // Unrecognised content is not a mode the actuator will follow.
+        state.rgbModeState = { "value": "", "known": false };
+    }
+
+    function rgbModeLabel() {
+        if (!state.rgbModeState.known)
+            return "Unknown";
+
+        switch (state.rgbModeState.value) {
+        case "system-trust":
+            return "System trust";
+        case "focus-trust":
+            return "Focused window";
+        default:
+            return "Off";
+        }
+    }
+
     function applyWallpaperMode(raw) {
         const candidate = String(raw).trim();
 
@@ -1210,6 +1553,7 @@ Scope {
     function refreshAppearanceState() {
         themeStateFile.reload();
         wallpaperModeStateFile.reload();
+        rgbModeStateFile.reload();
         reducedMotionStateFile.reload();
     }
 
@@ -1222,6 +1566,7 @@ Scope {
             keyboardStateFile.reload();
             break;
         case "wallpaper-mode-toggle":
+        case "rgb-mode-toggle":
         case "theme-cycle":
             // The theme controller publishes one coalesced appearance
             // refresh only after its complete transaction has settled.
@@ -1240,6 +1585,7 @@ Scope {
         state.applyThemeName(themeStateFile.text());
         state.applyKeyboardLayout(keyboardStateFile.text());
         state.applyWallpaperMode(wallpaperModeStateFile.text());
+        state.applyRgbMode(rgbModeStateFile.text());
         state.applyReducedMotion(reducedMotionStateFile.text());
     }
 
@@ -1288,6 +1634,29 @@ Scope {
 
         onTextChanged: {
             state.applyWallpaperMode(this.text());
+        }
+    }
+
+    FileView {
+        id: rgbModeStateFile
+
+        path:
+            Quickshell.env("HOME")
+            + "/.config/hyperlab/"
+            + "rgb-mode"
+
+        // Absence is the reviewed default (off), not a read failure.
+        printErrors: false
+
+        onLoadFailed: error => {
+            if (error === FileViewError.FileNotFound)
+                state.applyRgbMode("");
+            else
+                state.applyRgbMode("unreadable");
+        }
+
+        onTextChanged: {
+            state.applyRgbMode(this.text());
         }
     }
 
@@ -1383,6 +1752,7 @@ Scope {
         onRunningChanged: {
             if (!running) {
                 state.focusSourceState = "unavailable";
+                state.provenanceStopped();
                 focusRestart.start();
             }
         }
@@ -1396,6 +1766,86 @@ Scope {
         onTriggered: {
             if (!focusProcess.running)
                 focusProcess.running = true;
+        }
+    }
+
+    // Focused-surface provenance: one long-lived read-only resolver that
+    // answers each numbered focus request on its own line. A restarted
+    // resolver is re-asked about the surface that is focused now.
+    Process {
+        id: provenanceProcess
+
+        running: true
+        stdinEnabled: true
+
+        command: [
+            state.surfaceProvenanceBridge,
+            "stream"
+        ]
+
+        readonly property string requestLine: state.provenanceRequestLine
+
+        // The deadline applies whether or not the resolver is running, so a
+        // request can never wait silently for a process that is not there.
+        onRequestLineChanged: {
+            if (requestLine.length === 0)
+                return;
+
+            // Churn cannot extend an already outstanding deadline.
+            if (!provenanceWatchdog.running)
+                provenanceWatchdog.restart();
+
+            if (provenanceProcess.running)
+                provenanceProcess.write(requestLine + "\n");
+        }
+
+        onStarted: {
+            // A new process receives a new serial, never a cancelled request.
+            if (state.focusSourceState === "ok")
+                state.requestProvenance();
+        }
+
+        stdout: SplitParser {
+            onRead: data => {
+                state.applyProvenancePayload(data);
+                if (!state.provenancePending)
+                    provenanceWatchdog.stop();
+            }
+        }
+
+        onRunningChanged: {
+            if (!running) {
+                provenanceWatchdog.stop();
+                state.provenanceStopped();
+                provenanceRestart.start();
+            }
+        }
+    }
+
+    Timer {
+        id: provenanceRestart
+        interval: 2000
+        repeat: false
+
+        onTriggered: {
+            if (!provenanceProcess.running)
+                provenanceProcess.running = true;
+        }
+    }
+
+    Timer {
+        id: provenanceWatchdog
+        interval: state.provenanceTimeoutMs
+        repeat: false
+
+        onTriggered: {
+            if (!state.provenanceTimedOut())
+                return;
+
+            if (provenanceProcess.running)
+                provenanceProcess.signal(9);
+            else
+                provenanceRestart.start();
         }
     }
 

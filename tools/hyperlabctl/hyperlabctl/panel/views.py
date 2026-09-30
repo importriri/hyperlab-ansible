@@ -48,8 +48,10 @@ class DomainView(View):
             if domain["blocked"]:
                 note, colour = "short %d MB" % domain["blocked"]["short_mb"], "warn"
             elif domain["vfio"]:
-                note = "vfio %s" % (domain["trust_profile"] or "UNGUARDED")
-                colour = "error" if domain["trust_profile"] is None else "mauve"
+                # The VFIO note is the GPU gate, not the network identity.
+                gate = domain.get("gpu_trust_profile")
+                note = "vfio %s" % (gate or "UNGUARDED")
+                colour = "error" if gate is None else "mauve"
             elif domain.get("managed"):
                 note = "managed %s" % (domain.get("lifecycle") or "guest")
                 colour = "blue"

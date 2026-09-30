@@ -91,4 +91,5 @@ def parse_domain(xml_text):
         "managed": metadata is not None,
         "device_profile": None if metadata is None else metadata.get("device-profile"),
         "lifecycle": None if metadata is None else metadata.get("lifecycle"),
+        "network_profile": None if metadata is None else metadata.get("network-profile"),
     }

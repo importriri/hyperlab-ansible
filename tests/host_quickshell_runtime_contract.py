@@ -156,7 +156,7 @@ def adapt_state(source: str) -> str:
         "    }\n",
     )
     source = re.sub(r"(?m)^\s+(themeStateFile|keyboardStateFile"
-                    r"|wallpaperModeStateFile|reducedMotionStateFile"
+                    r"|wallpaperModeStateFile|rgbModeStateFile|reducedMotionStateFile"
                     r"|paletteFile)\.reload\(\);\n", "", source)
     source = re.sub(
         r"    Component\.onCompleted: \{[^}]*\}\n", "", source
@@ -357,8 +357,26 @@ Window {
         readonly property var powerVerbs: ["start", "shutdown", "reboot"]
         readonly property var advancedVerbs: ["force-stop"]
 
+        // Active durable operations by machine, shaped like the tracker's
+        // presentation records ({id, machine, verb, phase, ...}). Empty means
+        // no operation to reattach to; a scenario may add one.
+        property var activeOperations: ({})
+        property var viewed: []
+
+        function activeOperationFor(machine) {
+            return activeOperations[String(machine)] || null;
+        }
+        function viewOperation(machine) {
+            const record = activeOperationFor(machine);
+            if (record === null)
+                return false;
+            viewed = viewed.concat([record.id]);
+            return true;
+        }
+
         // Mirrors MachineActions.labelFor so the fixture reads like the
         // product rather than like its verb identifiers.
+        function busyFor(machine) { return busy; }
         function labelFor(verb) {
             switch (String(verb)) {
             case "start": return "Start";
@@ -692,6 +710,9 @@ def run(
                 **os.environ,
                 "QT_QPA_PLATFORM": "offscreen",
                 "QT_QUICK_BACKEND": "software",
+                # Without a controlling terminal Qt logs to journald, which
+                # would hide binding errors from the noise check below.
+                "QT_FORCE_STDERR_LOGGING": "1",
             },
             check=False,
         )
@@ -1191,6 +1212,18 @@ TRUTH = """
             check(sharedState.keyboardName() === "Unknown",
                   "an invalid keyboard layout kept or adopted a value");
 
+            // Keyboard lighting: absent is the reviewed default, off; an
+            // unrecognised value is unknown, never the previous mode.
+            sharedState.applyRgbMode("");
+            check(sharedState.rgbModeLabel() === "Off",
+                  "an absent RGB mode was not the reviewed default");
+            sharedState.applyRgbMode("focus-trust");
+            check(sharedState.rgbModeLabel() === "Focused window",
+                  "an observed RGB mode was not adopted");
+            sharedState.applyRgbMode("rainbow");
+            check(sharedState.rgbModeLabel() === "Unknown",
+                  "an invalid RGB mode kept or adopted a value");
+
             // Focused-surface provenance is never derived in the shell.
             check(sharedState.focusedProvenance.available === false,
                   "the shell claimed a focused provenance resolution");
@@ -1579,6 +1612,293 @@ def backend_trust_payloads() -> dict[str, str]:
     }
 
 
+def resolver_answers() -> dict[str, dict]:
+    """Provenance answers produced by the real reviewed resolver.
+
+    HOST for an unregistered host process, DEV for a verified Looking Glass
+    registration, and fail-closed for an unregistered Looking Glass surface.
+    The reviewed executable is bound to a fixture binary for the DEV case
+    only; nothing outside the fixture's temporary directory is read.
+    """
+    import hashlib
+    import importlib.util
+
+    import yaml
+
+    spec = importlib.util.spec_from_file_location(
+        "surface_provenance_runtime_fixture",
+        ROOT / "tools/surface_provenance.py",
+    )
+    assert spec is not None and spec.loader is not None
+    resolver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(resolver)
+
+    with tempfile.TemporaryDirectory(prefix="hyperlab-provenance-") as name:
+        temp = Path(name)
+        repo = temp / "repo"
+        (repo / "vm-specs").mkdir(parents=True)
+        spec_path = repo / "vm-specs/arch-dev-vfio.yml"
+        spec_path.write_text(yaml.safe_dump({
+            "name": "arch-dev-vfio",
+            "device_profile": "vfio",
+            "network_profile": "dev",
+            "looking_glass": True,
+        }), encoding="utf-8")
+
+        transport = temp / "looking-glass-client"
+        transport.write_text("#!/bin/sh\n", encoding="utf-8")
+        resolver.EXPECTED_EXECUTABLES["looking-glass"] = str(transport.resolve())
+
+        proc = temp / "proc" / "901"
+        proc.mkdir(parents=True)
+        (proc / "stat").write_text(
+            "901 (looking-glass) S " + "0 " * 18 + "4242 0 0\n",
+            encoding="utf-8",
+        )
+        (proc / "exe").symlink_to(transport)
+
+        registry = {"version": 1, "entries": [{
+            "pid": 901,
+            "process_start_ticks": "4242",
+            "executable": str(transport.resolve()),
+            "surface_kind": "looking-glass",
+            "domain": "arch-dev-vfio",
+            "spec_sha256": hashlib.sha256(spec_path.read_bytes()).hexdigest(),
+            "registered_by": "hyperlabctl",
+        }]}
+
+        def answer(pid: int, app_id: str) -> dict:
+            return resolver.resolve(
+                repo=repo,
+                surface={"pid": pid, "app_id": app_id, "window_id": "0x1"},
+                registry=registry,
+                proc_root=temp / "proc",
+            )
+
+        return {
+            "host": answer(900, "foot"),
+            "dev": answer(901, "looking-glass-client"),
+            "unresolved": answer(902, "looking-glass-client"),
+        }
+
+
+PROVENANCE = """
+            const real = @@PROVENANCE@@;
+            const badge = window.find(rail, "provenance-badge");
+
+            function answer(provenance, request) {
+                sharedState.applyProvenancePayload(JSON.stringify({
+                    "schema": 1,
+                    "status": "ok",
+                    "request": request === undefined
+                        ? sharedState.provenanceRequest : request,
+                    "provenance": provenance
+                }));
+            }
+
+            function focus(pid, app, windowId) {
+                sharedState.applyFocusPayload(JSON.stringify({
+                    "pid": pid, "app_id": app, "window_id": windowId,
+                    "title": "CLEAN trusted title"
+                }));
+            }
+
+            function forged(change) {
+                const value = JSON.parse(JSON.stringify(real.dev));
+                change(value);
+                return value;
+            }
+
+            check(badge !== null, "the rail provenance badge is not rendered");
+
+            // Host-native: HOST from the resolver, context unchanged.
+            focus(900, "foot", "0x10");
+            check(sharedState.focusedProvenance.state === "resolving"
+                  && sharedState.focusedProvenance.identity === "",
+                  "a newly focused surface did not start without an identity");
+            const sent = JSON.parse(sharedState.provenanceRequestLine);
+            check(sent.surface.pid === 900
+                  && sent.request === sharedState.provenanceRequest,
+                  "the focused PID did not reach the resolver request");
+            check(sharedState.provenanceRequestLine.indexOf("title") < 0
+                  && sharedState.provenanceRequestLine.indexOf("CLEAN") < 0,
+                  "the window title reached the resolver request");
+            const hostRequest = sharedState.provenanceRequest;
+            answer(real.host);
+            check(sharedState.focusedProvenance.available
+                  && sharedState.focusedProvenance.identity === "host"
+                  && sharedState.focusedProvenance.source === "host-native",
+                  "a host-native answer did not present HOST");
+            check(badge.resolved && badge.identity === "host",
+                  "the rail badge did not present HOST");
+            check(sharedState.focusedSurface === "foot",
+                  "compositor context changed with provenance");
+
+            // Managed DEV: the previous identity is dropped at once, and a
+            // late answer to an older request is ignored.
+            focus(901, "looking-glass-client", "0x11");
+            check(!sharedState.focusedProvenance.available
+                  && sharedState.focusedProvenance.identity === "",
+                  "the previous identity stayed attached to a new surface");
+            answer(real.host, hostRequest);
+            check(sharedState.focusedProvenance.state === "resolving",
+                  "an answer to an older request was applied");
+            answer(real.dev);
+            check(sharedState.focusedProvenance.available
+                  && sharedState.focusedProvenance.identity === "dev"
+                  && sharedState.focusedProvenance.domain === "arch-dev-vfio"
+                  && sharedState.focusedProvenance.source
+                     === "host-owned-vm-spec",
+                  "a verified managed surface did not present DEV");
+            check(sharedState.focusedSurface === "looking-glass-client",
+                  "provenance replaced the compositor context");
+            check(badge.identity === "dev", "the rail badge did not present DEV");
+
+            for (const identity of ["clean", "services"]) {
+                focus(901, "looking-glass-client", "0x11");
+                answer(forged(v => {
+                    v.trust = identity;
+                    v.presentation_identity = identity;
+                    v.network_profile = identity;
+                }));
+                check(sharedState.focusedProvenance.identity === identity,
+                      "a reviewed identity was lost in presentation");
+            }
+            check(sharedState.gpuLadder.services === undefined,
+                  "SERVICES entered the GPU ladder");
+
+            // An identical tuple still needs revalidation (PID reuse).
+            focus(901, "looking-glass-client", "0x11");
+            check(sharedState.focusedProvenance.identity === "",
+                  "an identical tuple retained stale provenance");
+
+            // Back to a host window: DEV never follows it.
+            focus(900, "foot", "0x10");
+            check(sharedState.focusedProvenance.identity === "",
+                  "DEV stayed attached to a host window");
+            answer(real.dev);
+            check(sharedState.focusedProvenance.state === "unavailable"
+                  && sharedState.focusedProvenance.reasonCode
+                     === "resolver-invalid",
+                  "an answer about another process was accepted");
+
+            // Unregistered managed transport: fail closed, visibly.
+            focus(902, "looking-glass-client", "0x12");
+            answer(real.unresolved);
+            check(sharedState.focusedProvenance.state === "unresolved"
+                  && !sharedState.focusedProvenance.available
+                  && sharedState.focusedProvenance.identity === ""
+                  && sharedState.focusedProvenance.reasonCode
+                     === "managed-surface-not-registered",
+                  "an unregistered managed surface did not fail closed");
+            check(badge.unresolved && !badge.resolved,
+                  "the rail badge hid a fail-closed surface");
+
+            // Every inconsistent shape is rejected, never presented.
+            const invalid = [
+                forged(v => { v.network_profile = "clean"; }),
+                forged(v => { v.trust = "host"; }),
+                forged(v => { v.presentation_identity = "clean"; }),
+                forged(v => { v.trust_source = "guest"; }),
+                forged(v => { v.guest_metadata_authoritative = true; }),
+                forged(v => { v.reason = "guest-says-so"; }),
+                forged(v => { v.domain = ""; }),
+                forged(v => { v.schema = 2; }),
+                forged(v => { v.surface_class = "guest"; }),
+                forged(v => { v.resolved = "yes"; }),
+                forged(v => { v.resolved = false; }),
+                forged(v => { v.reason = "unregistered-host-process"; }),
+                forged(v => { v.spec_sha256 = "bad"; }),
+                forged(v => { v.surface_kind = "guest"; }),
+                forged(v => { v.wallpaper_allowed = false; })
+            ];
+            for (let index = 0; index < invalid.length; index++) {
+                focus(901, "looking-glass-client", "0x2" + index);
+                answer(invalid[index]);
+                check(sharedState.focusedProvenance.state === "unavailable"
+                      && sharedState.focusedProvenance.identity === "",
+                      "an inconsistent provenance answer was presented");
+            }
+
+            focus(901, "looking-glass-client", "0x11");
+            sharedState.applyProvenancePayload(JSON.stringify({
+                "schema": 1, "status": "unavailable",
+                "request": sharedState.provenanceRequest,
+                "reason": "surface registry mode must be exactly 0600"
+            }));
+            check(sharedState.focusedProvenance.state === "unavailable"
+                  && sharedState.focusedProvenance.reasonCode
+                     === "resolver-refused",
+                  "a resolver refusal was not reported as unavailable");
+
+            focus(901, "looking-glass-client", "0x11");
+            sharedState.applyProvenancePayload(JSON.stringify({
+                "schema": 2, "status": "ok",
+                "request": sharedState.provenanceRequest,
+                "provenance": real.dev
+            }));
+            check(sharedState.focusedProvenance.reasonCode === "resolver-schema",
+                  "an unknown answer schema was accepted");
+
+            // Lifecycle: a silent or stopped resolver is unavailable.
+            focus(901, "looking-glass-client", "0x11");
+            check(sharedState.provenanceTimedOut() === true
+                  && sharedState.focusedProvenance.reasonCode
+                     === "resolver-timeout",
+                  "an unanswered request did not time out");
+            check(sharedState.provenanceTimedOut() === false,
+                  "a timeout fired without an outstanding request");
+            answer(real.dev);
+            check(sharedState.focusedProvenance.reasonCode === "resolver-timeout",
+                  "a late answer restored trust after timeout");
+            sharedState.provenanceStopped();
+            answer(real.dev);
+            check(sharedState.focusedProvenance.state === "unavailable"
+                  && sharedState.focusedProvenance.reasonCode
+                     === "resolver-stopped",
+                  "a stopped resolver kept its last answer");
+            focus(901, "looking-glass-client", "0x11");
+            check(sharedState.focusedProvenance.state === "resolving",
+                  "an answer from a stopped resolver was reused");
+
+            // Invalid snapshots must never be recast as a host desktop.
+            for (const pid of ["901", true, -1, 0]) {
+                focus(pid, "foot", "0x13");
+                check(sharedState.focusedProvenance.state === "unavailable"
+                      && !sharedState.provenancePending,
+                      "a malformed PID was forwarded to the resolver");
+            }
+
+            focus(901, "looking-glass-client", "0x11");
+            sharedState.applyProvenancePayload("not json");
+            check(sharedState.focusedProvenance.state === "unavailable",
+                  "a malformed answer did not invalidate provenance");
+            answer(real.dev);
+            check(sharedState.focusedProvenance.state === "unavailable",
+                  "a second answer replaced a rejected answer");
+
+            focus(901, "looking-glass-client", "0x11");
+            const oldDev = sharedState.provenanceRequest;
+            focus(900, "firefox", "0x10");
+            answer(real.host);
+            answer(real.dev, oldDev);
+            check(sharedState.focusedProvenance.identity === "host",
+                  "a late DEV answer replaced Firefox HOST");
+
+            // A failed focus source makes provenance unavailable.
+            sharedState.applyFocusPayload("not json");
+            check(sharedState.focusedProvenance.state === "unavailable"
+                  && sharedState.focusedProvenance.reasonCode
+                     === "focus-unavailable",
+                  "provenance outlived its focus source");
+
+            focus(902, "looking-glass-client", "0x12");
+            answer(real.unresolved);
+            sharedSurfaces.openWorkspacePage("diagnostics", "session");
+            check(sharedSurfaces.subpage === "session",
+                  "Diagnostics did not open on Session");
+"""
+
 TRUST_PROVIDER_PATH = """
             // Real backend payloads (see backend_trust_payloads): a read
             // failure must never become an affirmative "unclaimed", and must
@@ -1807,6 +2127,11 @@ def main() -> int:
                  json.dumps(backend_trust_payloads()),
              )),
             ("freshness", 1920, 1080, populated, FRESHNESS),
+            ("provenance", 1920, 1080, populated,
+             PROVENANCE.replace(
+                 "@@PROVENANCE@@",
+                 json.dumps(resolver_answers()),
+             )),
             ("modal", 1920, 1080, populated, MODAL),
             ("long-confirmation-short", 800, 480, populated, LONG_CONFIRM),
             ("long-confirmation-laptop", 1366, 768, populated, LONG_CONFIRM),

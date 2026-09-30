@@ -136,15 +136,17 @@ PanelWindow {
             spacing: bar.tokens.spaceSm
 
             ProvenanceBadge {
+                objectName: "provenance-badge"
                 anchors.verticalCenter: parent.verticalCenter
-                visible: bar.wideRail || badgeResolved
+                visible: bar.wideRail || badgeShown
                 tokens: bar.tokens
                 theme: bar.theme
                 icons: bar.icons
                 provenance: bar.shellState.focusedProvenance
 
-                readonly property bool badgeResolved:
+                readonly property bool badgeShown:
                     bar.shellState.focusedProvenance.available === true
+                    || bar.shellState.focusedProvenance.state === "unresolved"
 
                 onDetailsRequested: {
                     bar.shellSurfaces.openWorkspacePage(

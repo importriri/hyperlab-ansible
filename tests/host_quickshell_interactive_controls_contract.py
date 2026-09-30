@@ -51,6 +51,7 @@ EXPECTED_TAP_HANDLERS = {
 EXPECTED_ACTIONS = [
     "keyboard-cycle",
     "wallpaper-mode-toggle",
+    "rgb-mode-toggle",
     "theme-cycle",
     "workspace-window-focus",
     "session-lock",
@@ -72,6 +73,10 @@ EXPECTED_COMMANDS = {
     "wallpaper-mode-toggle": (
         "/usr/local/bin/privatestack-theme",
         "mode-toggle",
+    ),
+    "rgb-mode-toggle": (
+        "/usr/local/bin/privatestack-theme",
+        "rgb-mode-toggle",
     ),
     "theme-cycle": (
         "/usr/local/bin/privatestack-theme",
@@ -386,6 +391,23 @@ def main() -> int:
             marker in launcher,
             f"launcher dispatch is not kind-aware: {marker}",
         )
+
+    machine_stage = text(
+        "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/MachineStage.qml"
+    )
+
+    require(
+        machine_stage.count(
+            "stage.shellState.machinesGeneration,\n"
+            "                                            false"
+        ) == 1
+        and machine_stage.count(
+            "stage.shellState.machinesGeneration,\n"
+            "                                    false"
+        ) == 1,
+        "machine-card selection may refocus the visible workspace",
+    )
 
     require(
         'action: ""' not in launcher,

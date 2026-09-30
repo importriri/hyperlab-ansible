@@ -126,9 +126,10 @@ work explicitly requires it.
 - [x] typed machine operation boundary with backend-derived capabilities
 - [x] one shared target-bound confirmation for destructive operations
 - [x] HyperLab Platform identity: one circular symbol from rail to lock
-- [ ] physical screenshot and interaction acceptance on Nitro
-- [ ] reviewed focused-surface provenance resolver (the rail badge reports the
-      resolution as unavailable until one is deployed)
+- [x] physical screenshot and interaction acceptance on Nitro
+- [x] reviewed focused-surface provenance resolver wired live into the shell
+      (software-verified)
+- [x] physical Nitro acceptance of live focused-surface provenance
 - [ ] reviewed desktop-entry catalogue and app-launch bridge (Rofi remains a
       transitional application launcher)
 - [ ] reviewed focused-window targeting (fullscreen/opacity stay compositor

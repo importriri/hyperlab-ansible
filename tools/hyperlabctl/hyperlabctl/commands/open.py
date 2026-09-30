@@ -24,6 +24,11 @@ from .base import Command
 
 _MANAGER = "/usr/local/bin/privatestack-hyperlab-domains"
 _LOOKING_GLASS_CLIENT = "/usr/local/bin/looking-glass-client"
+# Registered managed consoles exec the reviewed absolute path: a PATH lookup
+# may name the same binary through a symlinked directory (/usr/sbin on Arch),
+# which surface provenance registration correctly refuses.
+_VIRT_VIEWER = "/usr/bin/virt-viewer"
+_FOOT = "/usr/bin/foot"
 _SECTIONS = (
     "overview",
     "domains",
@@ -769,7 +774,7 @@ class OpenCommand(Command):
             return 0
         if args.open_action == "console":
             argv = [
-                "virt-viewer",
+                _VIRT_VIEWER,
                 "--connect",
                 "qemu:///system",
                 "--wait",
@@ -781,11 +786,13 @@ class OpenCommand(Command):
             ssh_argv = _ssh_argv(ctx, args.domain)
             _wait_for_ssh_ready(ssh_argv, args.domain)
             argv = [
-                "foot",
-                "--app-id=hyperlab-operation",
+                _FOOT,
+                "--app-id=hyperlab-managed-ssh",
                 "--title=SSH · " + args.domain,
                 *ssh_argv,
             ]
+            managed_surface_kind = "ssh"
+            managed_surface_domain = args.domain
         else:
             _require_running_vfio(ctx, args.domain)
             transport = _looking_glass_transport(ctx, args.domain)

@@ -27,6 +27,7 @@ TRUST_IDENTITIES = {
 EXPECTED_EXECUTABLES = {
     "looking-glass": "/usr/local/bin/looking-glass-client",
     "spice-console": "/usr/bin/virt-viewer",
+    "ssh": "/usr/bin/foot",
 }
 
 

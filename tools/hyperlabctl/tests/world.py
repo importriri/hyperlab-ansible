@@ -53,6 +53,7 @@ hyperlab_root: HYPERLAB_ROOT
 
 DOMAIN_XML = """<domain type='kvm'>
   <name>{name}</name>
+  {metadata}
   <memory unit='KiB'>{kib}</memory>
   <devices>
     <interface type='network'><source network='{net}'/></interface>
@@ -63,6 +64,13 @@ DOMAIN_XML = """<domain type='kvm'>
 HOSTDEV = """<hostdev mode='subsystem' type='pci'>
       <source><address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/></source>
     </hostdev>"""
+
+
+def managed_metadata(network, device="standard",
+                     namespace="https://github.com/importriri/hyperlab-ansible/hyperlab/1"):
+    return ("<metadata><hyperlab:instance xmlns:hyperlab='%s' schema='1' image='arch' "
+            "lifecycle='permanent' device-profile='%s' network-profile='%s'/></metadata>"
+            % (namespace, device, network))
 
 
 def build(domains=None, trust=None, memtotal_kb=7948000, drivers=None,
@@ -124,6 +132,7 @@ def build(domains=None, trust=None, memtotal_kb=7948000, drivers=None,
         runner.register(virsh + ["dumpxml", domain["name"]], DOMAIN_XML.format(
             name=domain["name"], kib=domain["memory_mb"] * 1024,
             net=domain.get("network", "clean"),
+            metadata=domain.get("metadata", ""),
             hostdev=HOSTDEV if domain.get("vfio") else ""))
         runner.register(virsh + ["start", domain["name"]], "Domain started\n")
         runner.register(virsh + ["shutdown", domain["name"]], "Domain is being shutdown\n")

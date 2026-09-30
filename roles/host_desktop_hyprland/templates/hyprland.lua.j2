@@ -66,6 +66,17 @@ hl.config({
     },
 })
 
+-- A newly-created external authentication surface, never internal navigation.
+hl.window_rule({
+    name = "hyperlab-operation",
+    match = { class = "^hyperlab-operation$" },
+    float = true,
+    size = { 980, 560 },
+    center = true,
+    no_initial_focus = false,
+    focus_on_activate = true,
+})
+
 -- Basic workstation parity.
 hl.bind(
     main_mod .. " + Return",

@@ -427,7 +427,16 @@ Item {
                             view.shellState.focusedSurface.length > 0
                             ? view.shellState.focusedSurface
                             : "None reported"
-                        hint: "host process, not a trust claim"
+                        hint:
+                            "pid "
+                            + (view.shellState.focusPayload.pid === null
+                                ? "none"
+                                : String(view.shellState.focusPayload.pid))
+                            + (view.shellState.focusPayload.window_id.length > 0
+                                ? " · window "
+                                  + view.shellState.focusPayload.window_id
+                                : "")
+                            + " · host metadata, not a trust claim"
                     }
 
                     PanelRow {
@@ -440,14 +449,37 @@ Item {
                             ? view.theme.provenanceLabel(
                                 view.shellState.focusedProvenance.identity
                               )
-                            : "Unavailable"
+                            : String(view.shellState.focusedProvenance.label)
                         valueColor:
                             view.shellState.focusedProvenance.available === true
                             ? view.theme.provenanceColor(
                                 view.shellState.focusedProvenance.identity
                               )
-                            : view.theme.textQuiet
+                            : (view.shellState.focusedProvenance.state
+                                === "unresolved"
+                                ? view.theme.semanticStatusColor("warning")
+                                : view.theme.textQuiet)
                         hint: String(view.shellState.focusedProvenance.reason)
+                    }
+
+                    PanelRow {
+                        width: parent.width
+                        tokens: view.tokens
+                        theme: view.theme
+                        title: "Provenance source"
+                        value:
+                            view.shellState.focusedProvenance.domain.length > 0
+                            ? view.shellState.focusedProvenance.domain
+                            : (view.shellState.focusedProvenance.source.length > 0
+                                ? view.shellState.focusedProvenance.source
+                                : "None")
+                        hint:
+                            view.shellState.focusedProvenance.state
+                            + " · "
+                            + view.shellState.focusedProvenance.reasonCode
+                            + (view.shellState.focusedProvenance.domain.length > 0
+                                ? " · " + view.shellState.focusedProvenance.source
+                                : "")
                     }
                 }
             }

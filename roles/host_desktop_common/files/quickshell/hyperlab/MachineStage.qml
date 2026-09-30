@@ -390,7 +390,8 @@ Item {
                                     onActivated:
                                         stage.shellSurfaces.selectMachine(
                                             String(modelData.name),
-                                            stage.shellState.machinesGeneration
+                                            stage.shellState.machinesGeneration,
+                                            false
                                         )
                                 }
                             }
@@ -446,7 +447,8 @@ Item {
                             onActivated:
                                 stage.shellSurfaces.selectMachine(
                                     String(modelData.name),
-                                    stage.shellState.machinesGeneration
+                                    stage.shellState.machinesGeneration,
+                                    false
                                 )
                         }
                     }

@@ -132,6 +132,15 @@ The GPU trust ladder controls which reviewed VFIO domain may receive the dGPU
 during one host boot. Window provenance describes which security/network domain
 owns a visible managed surface.
 
+Machine identity in hyperlabctl follows the same split. A managed guest's
+`trust_profile` comes from the `network-profile` the reviewed guest role wrote
+from its VM spec into the libvirt metadata, and only while every interface is
+attached to that declared network. `gpu_domain_profiles` stays the VFIO gate
+(`gpu_trust_profile`): a VFIO guest without an entry is still an error, and a
+gate that disagrees with the network identity leaves the guest unclassified
+with `domains.trust_conflict`. An unmanaged domain is named only by a GPU gate
+entry; being attached to a trust network does not classify it.
+
 `services` therefore has a visual trust identity while remaining structurally
 outside GPU handoff. Visual provenance must not infer GPU eligibility from the
 presence of a trust color.

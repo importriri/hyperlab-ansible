@@ -294,12 +294,26 @@ Item {
                                 modelData
                             )
 
-                        title: pane.machineActions.labelFor(modelData)
+                        // A VFIO guest's console is its emulated display:
+                        // real for boot and login, not where its desktop is.
+                        readonly property bool recoveryConsole:
+                            modelData === "console"
+                            && entry.display === "emulated-recovery"
+
+                        title:
+                            recoveryConsole
+                            ? "Recovery console"
+                            : pane.machineActions.labelFor(modelData)
                         interactive: true
                         enabled: entry.available && !connected
                         disabledReason:
                             connected ? "Already open" : entry.reason
-                        hint: connected ? "open now" : "open"
+                        hint:
+                            recoveryConsole
+                            ? (connected
+                                ? "open now · emulated display"
+                                : "boot and login · desktop is on Looking Glass or the GPU output")
+                            : (connected ? "open now" : "open")
 
                         onActivated: pane.request(modelData)
                     }
@@ -344,7 +358,7 @@ Item {
                         title: pane.machineActions.labelFor(modelData)
                         interactive: true
                         enabled: entry.available
-                        busy: pane.machineActions.busy
+                        busy: pane.machineActions.busyFor(pane.identifier)
                         disabledReason: entry.reason
                         hint: "run"
 
@@ -384,7 +398,7 @@ Item {
                         tone: "danger"
                         interactive: true
                         enabled: entry.available
-                        busy: pane.machineActions.busy
+                        busy: pane.machineActions.busyFor(pane.identifier)
                         disabledReason: entry.reason
                         hint: "confirmation required"
 
@@ -561,6 +575,22 @@ Item {
                 record: pane.operation
             }
 
+            PanelRow {
+                width: parent.width
+                visible: pane.machineActions.activeOperationFor(pane.identifier) !== null
+                tokens: pane.tokens
+                theme: pane.theme
+                glyph: pane.icons.consoleTransport
+                title: "Open operation window"
+                interactive: true
+                enabled: true
+                busy: false
+                disabledReason: ""
+                hint: "attach"
+
+                onActivated: pane.machineActions.viewOperation(pane.identifier)
+            }
+
             ShellLabel {
                 width: parent.width
                 visible:
@@ -571,7 +601,7 @@ Item {
                 wrapMode: Text.WordWrap
                 text:
                     pane.present && pane.machine.managed === true
-                    ? "Power operations for this machine run its HyperLab spec in a separate operation window."
+                    ? "Power operations for this machine run its HyperLab spec as a durable operation; its window only observes it."
                     : "Power operations for this external machine go directly to the host."
                 color: pane.theme.textQuiet
             }

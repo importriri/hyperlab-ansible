@@ -79,7 +79,7 @@ def main() -> int:
     )
     require(
         ssh_branch.index("_wait_for_ssh_ready")
-        < ssh_branch.index('"foot"'),
+        < ssh_branch.index("_FOOT,"),
         "interactive terminal starts before the readiness gate",
     )
 

@@ -143,6 +143,13 @@ def main() -> int:
     runtime_patch_sha256 = hashlib.sha256(
         runtime_patch_path.read_bytes()
     ).hexdigest()
+    # SPA formats are enum values, not flags. The sender must not mark 8-bit
+    # SDR frames HDR/PQ, or colour-managed clients tag sRGB as ST2084.
+    runtime_patch_text = runtime_patch_path.read_text()
+    assert "+      info.format == SPA_VIDEO_FORMAT_xBGR_210LE ||" in runtime_patch_text
+    assert "+      info.format == SPA_VIDEO_FORMAT_RGBA_F16;" in runtime_patch_text
+    assert "+  this->hdrPQ  = this->hdr;" in runtime_patch_text
+    assert "-  this->hdr    = info.format & (" in runtime_patch_text
     graph = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
     assert defaults["guest_looking_glass_linux_experimental"] is False
     assert defaults["guest_looking_glass_linux_commit"] == (
@@ -174,7 +181,7 @@ def main() -> int:
         == runtime_patch_sha256
     )
     assert runtime_patch_sha256 == (
-        "80c89e6a42902e7526916ac6d4879e4de13e0f55a8afba317ad531d410d0ee2f"
+        "1b8bf54ee5db31a48a8c62185881c5de1299a39889871def54c0532b415ad057"
     )
     assert "guest_looking_glass_linux_compat_patch_sha256" in tasks
     assert "guest_looking_glass_linux_runtime_patch_sha256" in tasks

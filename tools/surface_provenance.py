@@ -39,16 +39,19 @@ TRUST_IDENTITIES = (
 MANAGED_SURFACE_KINDS = (
     "looking-glass",
     "spice-console",
+    "ssh",
 )
 
 EXPECTED_EXECUTABLES = {
     "looking-glass": "/usr/local/bin/looking-glass-client",
     "spice-console": "/usr/bin/virt-viewer",
+    "ssh": "/usr/bin/foot",
 }
 
 # These identifiers are only a fail-closed hint that an unregistered surface
 # looks like a managed transport. They NEVER assign trust.
 MANAGED_APP_HINTS = {
+    "hyperlab-managed-ssh",
     "looking-glass",
     "looking-glass-client",
     "virt-viewer",
@@ -76,6 +79,18 @@ SURFACE_KEYS = {
     "window_id",
     "title",
 }
+
+
+# Stream mode answers one correlated request per line. A request larger than
+# this is not a focus snapshot and is refused without being parsed.
+STREAM_REQUEST_KEYS = {
+    "request",
+    "surface",
+}
+
+STREAM_LINE_LIMIT = 16384
+
+STREAM_REASON_LIMIT = 240
 
 
 class ProvenanceError(ValueError):
@@ -493,6 +508,14 @@ def resolve(
     pid = surface["pid"]
 
     if pid is None:
+        # Without a PID no registration can be verified, so a surface that
+        # looks like a managed transport stays unresolved rather than HOST.
+        if managed_hint(surface["app_id"]):
+            return unresolved(
+                surface=surface,
+                reason="managed-surface-without-pid",
+            )
+
         return host_native(
             surface=surface,
             reason="no-focused-client",
@@ -615,8 +638,85 @@ def emit(payload: dict[str, Any]) -> None:
             payload,
             separators=(",", ":"),
             sort_keys=True,
-        )
+        ),
+        flush=True,
     )
+
+
+def stream_answer(
+    *,
+    repo: Path,
+    raw: str,
+    registry_path: Path | None,
+    proc_root: Path,
+) -> dict[str, Any]:
+    """Answer one correlated request; never raise for request content.
+
+    Request:  {"request": N, "surface": {pid, app_id, window_id[, title]}}
+    Answer:   {"schema": 1, "request": N, "status": "ok", "provenance": {...}}
+          or  {"schema": 1, "request": N|null, "status": "unavailable",
+               "reason": "..."}
+
+    The registry is re-read for every request, so a registration published
+    after this process started, a pruned entry or a tampered registry is
+    observed on the next focus event instead of being cached.
+    """
+    request: int | None = None
+
+    try:
+        require(
+            len(raw) <= STREAM_LINE_LIMIT,
+            "request exceeds the reviewed size",
+        )
+
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ProvenanceError(
+                "request is not JSON"
+            ) from exc
+
+        require(
+            isinstance(message, dict)
+            and set(message) == STREAM_REQUEST_KEYS,
+            "request key set changed",
+        )
+
+        candidate = message["request"]
+
+        require(
+            isinstance(candidate, int)
+            and not isinstance(candidate, bool)
+            and candidate > 0,
+            "request id must be a positive integer",
+        )
+
+        request = candidate
+
+        payload = resolve(
+            repo=repo,
+            surface=message["surface"],
+            registry=optional_registry(registry_path),
+            proc_root=proc_root,
+        )
+    except (
+        OSError,
+        ProvenanceError,
+        TypeError,
+    ) as exc:
+        return {
+            "schema": SCHEMA_VERSION,
+            "request": request,
+            "status": "unavailable",
+            "reason": str(exc)[:STREAM_REASON_LIMIT],
+        }
+
+    return {
+        "schema": SCHEMA_VERSION,
+        "request": request,
+        "status": "ok",
+        "provenance": payload,
+    }
 
 
 def main() -> int:
@@ -652,6 +752,14 @@ def main() -> int:
         "--registry",
         type=Path,
         default=None,
+    )
+
+    stream_parser = sub.add_parser("stream")
+
+    stream_parser.add_argument(
+        "--registry",
+        type=Path,
+        required=True,
     )
 
     args = parser.parse_args()
@@ -704,6 +812,36 @@ def main() -> int:
             print(
                 "SURFACE_PROVENANCE_RESOLVER=PASS"
             )
+            return 0
+
+        if args.command == "stream":
+            # One answer per request line, until the shell closes stdin.
+            while True:
+                line = sys.stdin.readline(STREAM_LINE_LIMIT + 2)
+                if not line:
+                    break
+                # Bound allocation as well as parsing. Drain an oversized
+                # line in bounded chunks before accepting another request.
+                oversized = len(line.rstrip("\n")) > STREAM_LINE_LIMIT
+                if oversized:
+                    while line and not line.endswith("\n"):
+                        line = sys.stdin.readline(STREAM_LINE_LIMIT + 2)
+                    raw = " " * (STREAM_LINE_LIMIT + 1)
+                else:
+                    raw = line.rstrip("\n")
+
+                if not oversized and not raw.strip():
+                    continue
+
+                emit(
+                    stream_answer(
+                        repo=args.repo,
+                        raw=raw,
+                        registry_path=args.registry,
+                        proc_root=args.proc_root,
+                    )
+                )
+
             return 0
 
         surface = json.loads(

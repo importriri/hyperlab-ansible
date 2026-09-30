@@ -29,6 +29,7 @@ Scope {
     readonly property var allowedActions: [
         "keyboard-cycle",
         "wallpaper-mode-toggle",
+        "rgb-mode-toggle",
         "theme-cycle",
         "workspace-window-focus",
         "session-lock",
@@ -65,6 +66,8 @@ Scope {
             return "Keyboard layout";
         case "wallpaper-mode-toggle":
             return "Wallpaper mode";
+        case "rgb-mode-toggle":
+            return "Keyboard lighting";
         case "theme-cycle":
             return "Theme";
         case "workspace-window-focus":

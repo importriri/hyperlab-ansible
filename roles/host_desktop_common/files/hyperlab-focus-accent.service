@@ -1,0 +1,12 @@
+[Unit]
+Description=HyperLab focus provenance accents and trust keyboard RGB
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Read-only toward trust: it mirrors the reviewed resolver and host trust
+# claim onto presentation. RGB writes use runtime scope only.
+ExecStart=/usr/local/bin/privatestack-focus-accent run
+Restart=on-failure
+RestartSec=2

@@ -16,6 +16,18 @@ proof.
   PipeWire frame lifetime and thread-loop locking caused a sender crash.
 - [`looking-glass-linux-pipewire-disconnect-lifetime.md`](looking-glass-linux-pipewire-disconnect-lifetime.md):
   PipeWire stream teardown during a real client disconnect could crash the Linux sender.
+- [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
+  the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
+  clients tagged sRGB surfaces as ST2084.
+- [`guest-waybar-over-fullscreen.md`](guest-waybar-over-fullscreen.md):
+  the guest shortcut requested maximization instead of true fullscreen; the
+  native fullscreen correction is software-verified, deployed and physically
+  accepted on Nitro, including Waybar hide and restore.
+- [`looking-glass-guest-tearing.md`](looking-glass-guest-tearing.md):
+  the reported Valley flicker was physically localized upstream into Valley's
+  application-specific OpenGL/GLX/Xwayland path; direct guest and X11 captures
+  contain it while Heaven is clean. It is not a HyperLab/Looking Glass
+  presentation blocker.
 - [`kvmfr-guest-device-sizing.md`](kvmfr-guest-device-sizing.md): host module
   sizing was incorrectly treated as guest policy.
 - [`libvirt-kvmfr-cgroup-acl.md`](libvirt-kvmfr-cgroup-acl.md): QEMU could see

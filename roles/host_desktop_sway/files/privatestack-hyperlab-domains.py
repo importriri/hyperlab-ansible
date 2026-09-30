@@ -3417,11 +3417,23 @@ class HyperlabWindow(Gtk.Window):
 
     def _managed_action(self, action_id: str, domain: dict[str, Any], spec_row: dict[str, Any]) -> None:
         try:
-            argv = resolve(action_id, spec=spec_row.get("path"))
+            if action_id in {"vm.managed-start", "vm.managed-shutdown",
+                             "vm.managed-reboot", "vm.force-stop", "vm.power-cycle", "vm.reset"}:
+                result = subprocess.run(
+                    ["/usr/local/bin/privatestack-operation", "launch",
+                     action_id, str(domain.get("name"))],
+                    capture_output=True, text=True, check=False, timeout=90,
+                )
+                answer = json.loads(result.stdout)
+                if result.returncode or answer.get("phase") in {"refused", "failed"}:
+                    raise ControlError("Operation refused or unavailable: "
+                                       + str(answer.get("reason", "unavailable")))
+            else:
+                argv = resolve(action_id, spec=spec_row.get("path"))
+                terminal_sequence([argv], "hyperlab: %s %s" % (action_id, domain.get("name")))
             self.close_surface()
-            terminal_sequence([argv], "hyperlab: %s %s" % (action_id, domain.get("name")))
             self.events.insert(0, SessionEvent(action_id, str(domain.get("name"))))
-        except (ControlError, OSError) as exc:
+        except (ControlError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
             self.show_error(str(exc))
 
     def _destructive_managed(self, action_id: str, label: str, domain: dict[str, Any], spec_row: dict[str, Any]) -> None:
@@ -3937,7 +3949,8 @@ class HyperlabWindow(Gtk.Window):
                         "-e",
                         json.dumps({"guest_cloud_init_ssh_public_keys": keys}, separators=(",", ":")),
                     ])
-                start_argv = resolve("vm.managed-start", spec=spec_path)
+                start_argv = ["/usr/local/bin/privatestack-operation", "launch",
+                              "vm.managed-start", str(spec.get("name"))]
                 terminal_sequence([create_argv, start_argv], "hyperlab: create " + str(spec.get("name")))
                 self.events.insert(0, SessionEvent("Creation started", str(spec.get("name")), "ok"))
                 self.select_section("vms")

@@ -2,7 +2,7 @@
 //
 // One presentation for the life of a host or machine operation. It owns no
 // truth: it renders the record the action layer published and nothing else,
-// so a launched terminal reads as "accepted", never as "completed".
+// so managed execution remains separate from inventory-verified completion.
 //
 //   accepted   the bridge took the request
 //   pending    the operation is running
@@ -28,6 +28,8 @@ Item {
 
     readonly property string statusClass: {
         switch (feedback.phase) {
+        case "interrupted":
+        case "unverified":
         case "failed":
         case "refused":
             return "bad";
@@ -46,6 +48,17 @@ Item {
         const verb = String(feedback.record.label);
 
         switch (feedback.phase) {
+        case "requested":
+        case "dispatched":
+            return verb + " requested for " + target;
+        case "running":
+            return verb + " running for " + target;
+        case "verifying":
+            return verb + " finished — verifying " + target;
+        case "interrupted":
+            return verb + " interrupted for " + target;
+        case "unverified":
+            return verb + " state not verified for " + target;
         case "accepted":
             return verb + " accepted for " + target;
         case "pending":

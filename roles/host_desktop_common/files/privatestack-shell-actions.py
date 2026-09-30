@@ -32,6 +32,11 @@ ACTIONS: dict[str, tuple[str, ...]] = {
         "/usr/local/bin/privatestack-theme",
         "mode-toggle",
     ),
+    # Chooses what keyboard RGB follows; it never names an identity.
+    "rgb-mode-toggle": (
+        "/usr/local/bin/privatestack-theme",
+        "rgb-mode-toggle",
+    ),
     "theme-cycle": (
         "/usr/local/bin/privatestack-theme",
         "cycle",

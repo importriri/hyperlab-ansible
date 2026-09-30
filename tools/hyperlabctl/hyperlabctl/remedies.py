@@ -16,6 +16,10 @@ REMEDIES = {
     "networks.inactive": "virsh -c qemu:///system net-start <name>",
     "domains.unguarded_vfio": "add the domain to gpu_domain_profiles in "
                               "group_vars/all/networks.yml, then re-run foundation.yml",
+    "domains.trust_conflict": "make the guest's vm-specs network_profile and its "
+                              "gpu_domain_profiles entry agree, then re-apply the guest",
+    "domains.network_identity_mismatch": "re-apply the guest from its vm-spec so its "
+                                         "interfaces match its network_profile",
     "store.low_space": "prune {root}/cache and {root}/exports, or grow the volume",
     "images.sealed_without_checksum": "re-run playbooks/image-prepare.yml with "
                                       "image_factory_operation=seal",

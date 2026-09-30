@@ -77,8 +77,13 @@ survive.
   is host metadata about a host process. It is not a provenance claim and it
   is never the GPU trust tooltip wearing a different label.
 - **Provenance** and **GPU** are separate fields answering separate
-  questions. The provenance badge reports the focused surface's resolved
-  identity, or says the resolution is unavailable. The GPU entry shows a
+  questions. The provenance badge reports the focused surface's identity as
+  resolved by the host (see [Focused-surface provenance](#focused-surface-provenance)):
+  HOST for a host-native surface, the VM's reviewed identity for a verified
+  managed transport, a warning-toned "Unresolved" for a surface that looks
+  managed but has no valid host registration, and quiet text while the
+  resolution is pending or unavailable. Context and provenance never merge:
+  Looking Glass stays the context while DEV is the provenance. The GPU entry shows a
   current owner, a retained boot claim, or an unreadable source — and stays
   silent when ownership is known and nothing holds it, because a free GPU at
   idle is not news.
@@ -113,6 +118,12 @@ from the live libvirt inventory, the checked HyperLab spec, the strict
 runtime SSH inventory and the reviewed action registry. A disabled control
 shows the bridge's own reason: *"Looking Glass is disabled by the machine
 spec"*, *"runtime SSH inventory has the wrong mode"*.
+
+For a VFIO guest the bridge reports the console as its *emulated* display,
+and the pane labels it **Recovery console**: it is real and useful for boot
+and login, but the guest desktop is on its passed-through GPU — Looking Glass
+or the physical output. The console stays available; it is never presented
+as the guest's desktop.
 
 The bridge reconciles the domain's own managed metadata with the spec
 inventory: a managed domain whose spec is unavailable is refused, not
@@ -166,8 +177,10 @@ Three sections, native, replacing the Rofi and GTK control routes entirely.
 - **Audio and network** — the structured audio level with mute and ±5, and
   the observed network, temperature and battery. No toggle is drawn for
   something the reviewed bridge cannot perform.
-- **Input and appearance** — keyboard layout, theme and wallpaper source as
-  the reviewed cycling operations, the rail toggle, and the observed
+- **Input and appearance** — keyboard layout, theme, wallpaper source and
+  keyboard lighting (off · system trust · focused window, see
+  [theme-system.md](theme-system.md#focus-provenance-accents-and-keyboard-rgb))
+  as the reviewed cycling operations, the rail toggle, and the observed
   reduced-motion setting.
 
 Focused-window fullscreen and opacity are shown here, and in the system
@@ -183,17 +196,121 @@ contain them.
 Read-only, ordered by the questions an operator asks.
 
 - **Overview** — every reviewed source, what it last said and when, plus the
-  operations this session actually reported. A launched operation terminal is
-  recorded as *accepted*, never as *completed*.
+  operations this session actually reported. Dispatch is never completion.
+  Start, shutdown, force-stop and reset may be presented as *completed* only
+  after fresh backend inventory verifies their distinct expected terminal
+  state. Reboot and power-cycle both begin and end in Running, so Running
+  alone is never accepted as proof that those lifecycle transitions occurred.
 - **Isolation and GPU** — current owner, boot claim, observation age, the
   four-rung handoff ladder (CLEAN 3 · DEV 2 · DIRTY 1 · LAB 0), HOST above it
   as control plane and SERVICES in its own compartment outside the ladder.
   The diagram explains policy; it performs no handoff.
 - **Inventory** — whether the inventory can be trusted right now, and the
   per-provenance counts, shown only when the inventory is actually known.
-- **Session** — the compositor's identity for the focused surface, whether a
-  reviewed provenance resolution exists for it, host telemetry, and the
-  appearance state including whether the provenance colour table is complete.
+- **Session** — the compositor's identity for the focused surface (with its
+  PID and window), the resolved provenance with its state, source, domain and
+  reason code, host telemetry, and the appearance state including whether the
+  provenance colour table is complete.
+
+## Durable machine operations
+
+Managed start, shutdown, reboot, force stop, power cycle and reset run through
+`privatestack-operation`, never through QML or a terminal:
+
+- `launch` re-resolves the allowlisted action from the checkout, refuses a
+  second non-final operation for the same machine under one lock, writes a
+  private record (`$XDG_RUNTIME_DIR/hyperlab/operations/<id>.json`, 0600) and
+  starts `hyperlab-operation-<id>` as a transient user unit.
+- The unit runs `privatestack-operation run <id>`, which owns a private PTY as
+  Ansible's controlling terminal and relays it over a 0600, same-uid socket.
+- Foot runs separately in `hyperlab-view-<id>-*` as `attach <id>`, an observer.
+  Closing it detaches and never signals the operation. The Machine pane's
+  *Open operation window* (bridge verb `operation-view`) reattaches, replaying
+  recent output, for example to answer a pending become prompt.
+- Records move `requested → dispatched → running → succeeded | failed |
+  interrupted`. `interrupted` means the unit itself stopped (for example
+  `systemctl --user stop`) or was found inactive before reaching a result.
+- Runner `succeeded` means the reviewed backend command exited successfully;
+  it is not automatically proof of every lifecycle transition. The shell
+  reconciles start, shutdown, force-stop and reset against a fresh distinct
+  backend state. Reboot and power-cycle deliberately become `unverified` in
+  presentation after execution succeeds because both start and finish in
+  Running; a future typed backend transition receipt may strengthen that
+  status without making QML a lifecycle authority.
+- The shell polls `operations` every 2 s. A shell restart rehydrates from the
+  records, and a record-less active unit refuses new lifecycle requests.
+
+The historical independent review for this design is recorded in
+[`c9-independent-review-2026-09-27.md`](c9-independent-review-2026-09-27.md).
+
+## Focused-surface provenance
+
+`ShellState` turns every focus snapshot from the compositor adapter into one
+numbered request to `privatestack-surface-provenance stream`, a read-only
+bridge to the reviewed resolver (`tools/surface_provenance.py`) in the
+HyperLab checkout. The request carries the PID, app id and window id; the
+window title never leaves the adapter.
+
+- Only the answer to the latest request is accepted. A different surface
+  drops the previous identity immediately, so a guest identity never stays
+  attached to the window that replaced it. Even an identical PID/window
+  tuple clears its answer until revalidated, to avoid cached PID reuse.
+- Every answer is shape-checked before presentation: a guest identity must
+  agree with its `network_profile`, come from `host-owned-vm-spec`, name a
+  domain and answer for the focused PID; a reason outside the resolver's
+  vocabulary invalidates the answer.
+- The resolver re-reads the per-user registry for every request. An
+  untrusted registry, a resolver error, an unanswered request (3 seconds)
+  or a stopped resolver is *unavailable*; none of them becomes HOST. The
+  watchdog kills only its owned resolver process; focus churn cannot extend
+  the deadline. The resolver restarts after 2 seconds with a new request for
+  the current surface. Completed or cancelled requests cannot answer again.
+- Provenance is re-resolved on every focus event and on the adapter's
+  30-second heartbeat, which bounds how long specification drift or a
+  vanished process can go unnoticed on a surface that keeps focus.
+
+
+### Narrow Nitro deployment and physical acceptance — PASS
+
+The focused-surface provenance path is now physically accepted on Nitro in
+addition to its source and contract verification.
+
+The accepted runtime evidence covers the security-relevant boundaries rather
+than trusting application labels:
+
+- a reviewed managed Looking Glass surface for `arch-dev-vfio` resolves to
+  `DEV` from the host-owned VM specification;
+- the reviewed managed SSH surface resolves to `DEV`;
+- an ordinary unregistered Foot terminal resolves as `HOST`;
+- a Foot window spoofing the managed SSH application id and title but lacking
+  the reviewed registration fails closed as `Unresolved`;
+- rapid switching between host-native and managed guest surfaces does not
+  retain stale guest provenance;
+- guest titles and application ids alone do not establish trust.
+
+The managed SSH route is registered as surface kind `ssh`, with `/usr/bin/foot`
+as its reviewed executable. `ShellState` accepts `ssh` only as one of the
+reviewed managed-surface kinds and still requires a valid resolver answer
+correlated to the focused PID/window request.
+
+The spoof test is especially important: a window using
+`hyperlab-managed-ssh` and an SSH-looking title without a matching reviewed
+registration produced `managed-surface-not-registered`, no guest trust, and
+the shell presented `Unresolved`. This preserves the fail-closed boundary.
+
+The Nitro deployment was intentionally narrow. The provenance bridge and
+shared shell source were deployed without changing VM trust, GPU ownership,
+network policy or guest metadata authority. Provenance remains host-owned and
+is re-resolved on focus changes.
+
+Classification:
+
+`C9_C_MANAGED_SURFACE_PROVENANCE=PHYSICAL_PASS`
+
+The deterministic coverage in
+`tests/surface_provenance_live_binding_contract.py` and
+`tests/managed_ssh_surface_provenance_contract.py` remains the regression
+boundary for this behavior.
 
 ## Launcher
 

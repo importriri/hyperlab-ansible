@@ -54,7 +54,7 @@ def domains(ctx):
                      "vcpus": None,
                      "networks": None, "hostdevs": [], "vfio": None,
                      "managed": None, "device_profile": None,
-                     "lifecycle": None}
+                     "lifecycle": None, "network_profile": None}
                 )
         ctx.cache["inventory.domains"] = collected
     return ctx.cache["inventory.domains"]

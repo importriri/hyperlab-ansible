@@ -213,11 +213,13 @@ hl.bind(
     hl.dsp.window.close()
 )
 
+-- True fullscreen covers the top-layer bar; maximization keeps its work area.
 hl.bind(
     main_mod .. " + F",
-    hl.dsp.exec_cmd(
-        "hyprctl dispatch fullscreen 1"
-    )
+    hl.dsp.window.fullscreen({
+        action = "toggle",
+        mode = "fullscreen",
+    })
 )
 
 hl.bind(
