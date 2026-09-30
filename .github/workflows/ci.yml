@@ -26,6 +26,7 @@ jobs:
             qmlscene-qt6 \
             qml6-module-qtquick \
             qml6-module-qtquick-window \
+            qml6-module-qtquick-shapes \
             qml6-module-qtqml-workerscript
           test -x /usr/lib/qt6/bin/qmlscene
           pip install --user ansible ansible-lint ruff
@@ -41,7 +42,7 @@ jobs:
           ansible-lint 2>&1 | tee ansible-lint.log
 
       - name: Preserve lint diagnostics on failure
-        if: steps.ansible_lint.outcome == 'failure'
+        if: ${{ failure() && steps.ansible_lint.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
           name: ansible-lint-diagnostics
@@ -68,7 +69,7 @@ jobs:
           } 2>&1 | tee structural-contracts.log
 
       - name: Preserve structural diagnostics on failure
-        if: steps.structural_contracts.outcome == 'failure'
+        if: ${{ failure() && steps.structural_contracts.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
           name: structural-contract-diagnostics
@@ -102,7 +103,7 @@ jobs:
             2>&1 | tee render-invariants.log
 
       - name: Preserve render diagnostics on failure
-        if: steps.render_invariants.outcome == 'failure'
+        if: ${{ failure() && steps.render_invariants.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
           name: render-invariant-diagnostics
