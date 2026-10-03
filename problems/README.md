@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`vfio-registry-refused-second-definition.md`](vfio-registry-refused-second-definition.md):
+  a second VFIO Machine was refused while the first was shut off; the GPU
+  is now owned only by the running domain.
 - [`image-factory-block-condition-skipped-lock-release.md`](image-factory-block-condition-skipped-lock-release.md):
   a successful import skipped its own final check and kept its lock, because
   the commit changed the block's condition.

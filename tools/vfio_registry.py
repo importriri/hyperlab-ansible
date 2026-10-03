@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Refuse PCI and fixed-SPICE collisions across libvirt domain XML."""
+"""Refuse PCI, Looking Glass and fixed-SPICE collisions across libvirt domain XML.
+
+The GPU is a boot-scoped lease (ADR 0016): several HyperLab-managed VFIO
+domains may name the same PCI functions in their definitions, but only one of
+them may run at a time. A domain HyperLab does not manage never shares them.
+"""
 from __future__ import annotations
 
 import json
@@ -28,6 +33,31 @@ def address_bdf(address: ET.Element) -> str:
     return f"{domain:04x}:{bus:02x}:{slot:02x}.{function:x}"
 
 
+HYPERLAB_NAMESPACES = (
+    "https://github.com/importriri/hyperlab-ansible/hyperlab/1",
+    "https://github.com/importriri/privatestack-ansible/hyperlab/1",
+)
+QEMU_NAMESPACE = "http://libvirt.org/schemas/domain/qemu/1.0"
+
+
+def managed_vfio(root: ET.Element) -> bool:
+    for namespace in HYPERLAB_NAMESPACES:
+        instance = root.find(f"./metadata/{{{namespace}}}instance")
+        if instance is not None:
+            return instance.get("device-profile") == "vfio"
+    return False
+
+
+def looking_glass_devices(root: ET.Element) -> list[str]:
+    devices = []
+    for arg in root.findall(f"./{{{QEMU_NAMESPACE}}}commandline/{{{QEMU_NAMESPACE}}}arg"):
+        value = arg.get("value", "")
+        if "memory-backend-file" in value and "/dev/kvmfr" in value:
+            start = value.index("/dev/kvmfr")
+            devices.append(value[start:].split("'", 1)[0])
+    return sorted(set(devices))
+
+
 def domain_contract(xml_text: str, name: str) -> dict[str, Any]:
     try:
         root = ET.fromstring(xml_text)
@@ -38,7 +68,12 @@ def domain_contract(xml_text: str, name: str) -> dict[str, Any]:
         bdfs.append(address_bdf(node))
     graphics = root.find("./devices/graphics[@type='spice']")
     port = None if graphics is None else graphics.get("port")
-    return {"bdfs": sorted(bdfs), "spice_port": port}
+    return {
+        "bdfs": sorted(bdfs),
+        "spice_port": port,
+        "managed_vfio": managed_vfio(root),
+        "looking_glass": looking_glass_devices(root),
+    }
 
 
 def main() -> int:
@@ -62,6 +97,10 @@ def main() -> int:
                 "active_names must be a string list")
 
         planned_set = set(planned_bdfs)
+        planned_looking_glass: list[str] = []
+        for item in domains:
+            if isinstance(item, dict) and item.get("name") == planned_name and isinstance(item.get("xml"), str):
+                planned_looking_glass = domain_contract(item["xml"], planned_name)["looking_glass"]
         seen_names: set[str] = set()
         for item in domains:
             require(isinstance(item, dict), "domain registry entries must be mappings")
@@ -79,9 +118,17 @@ def main() -> int:
                     require(owned == planned_set,
                             f"existing domain {name} owns VFIO devices {sorted(owned)}, expected {sorted(planned_set)}")
                 continue
-            require(not overlap,
-                    f"VFIO devices {overlap} are already assigned to libvirt domain {name}")
+            # Another managed VFIO domain may name the same GPU: owning it is a
+            # lease taken at start. An unmanaged domain never shares it.
+            require(not overlap or contract["managed_vfio"],
+                    f"VFIO devices {overlap} are already assigned to libvirt domain {name}, "
+                    "which HyperLab does not manage")
             if mode == "start" and name in active_names:
+                require(not overlap,
+                        f"VFIO devices {overlap} are in use by running domain {name}")
+                shared = sorted(set(planned_looking_glass) & set(contract["looking_glass"]))
+                require(not shared,
+                        f"Looking Glass device {', '.join(shared)} is in use by running domain {name}")
                 require(contract["spice_port"] != spice_port,
                         f"active domain {name} already owns fixed SPICE port {spice_port}")
 

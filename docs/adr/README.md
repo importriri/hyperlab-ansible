@@ -34,6 +34,8 @@ entered the pipeline.
     model rendered by Waybar, Rofi and the terminal panel.
 15. [`0015-golden-image-capture.md`](0015-golden-image-capture.md) — the
     Workbench and the capture, generalization and seal of a Golden Image.
+16. [`0016-gpu-shared-definition-running-lease.md`](0016-gpu-shared-definition-running-lease.md) — several
+    managed VFIO domains may name the GPU; only the running one owns it.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

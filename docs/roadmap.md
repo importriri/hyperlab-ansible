@@ -199,6 +199,10 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 
 ### 5b. GPU as a capability and a boot-scoped lease
 
+- [x] several managed VFIO domains may name the GPU in their definitions;
+      only the running one owns it, checked under the GPU lock at start
+      ([ADR 0016](adr/0016-gpu-shared-definition-running-lease.md),
+      software-verified)
 - [ ] a Machine declares `gpu_capable`; owning the GPU is a host-owned lease
       for one run, so a dev Machine can start without the GPU and restart
       with it for Blender or CUDA

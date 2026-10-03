@@ -514,6 +514,19 @@ def domain_xml(name: str, bdfs: list[str], port: str = "5900") -> str:
     return f"<domain><name>{name}</name><devices>{''.join(hostdevs)}<graphics type='spice' port='{port}'/></devices></domain>"
 
 
+def managed_vfio_xml(name: str, bdfs: list[str], *, profile: str = "vfio", kvmfr: bool = False,
+                     namespace: str = "https://github.com/importriri/hyperlab-ansible/hyperlab/1") -> str:
+    xml = domain_xml(name, bdfs, port="")
+    metadata = f"<metadata><hyperlab:instance xmlns:hyperlab='{namespace}' device-profile='{profile}'/></metadata>"
+    xml = xml.replace("<devices>", metadata + "<devices>", 1)
+    if kvmfr:
+        qemu = "http://libvirt.org/schemas/domain/qemu/1.0"
+        xml = xml.replace("<domain>", f"<domain xmlns:qemu='{qemu}'>", 1).replace("</domain>", (
+            "<qemu:commandline><qemu:arg value='-object'/><qemu:arg value=\"{'qom-type':'memory-backend-file',"
+            "'id':'looking-glass','mem-path':'/dev/kvmfr0','size':67108864,'share':true}\"/></qemu:commandline></domain>"))
+    return xml
+
+
 def test_vfio_registry() -> None:
     planned = ["0000:01:00.0", "0000:01:00.1"]
     safe_payload = {
@@ -532,6 +545,41 @@ def test_vfio_registry() -> None:
     collision["domains"] = [{"name": "other", "xml": domain_xml("other", [planned[0]])}]
     refused = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(collision))
     assert refused.returncode == 2 and "already assigned" in refused.stderr
+
+    # The GPU is a boot-scoped lease: another managed VFIO domain may name the
+    # same functions, but only one of them may run.
+    managed = managed_vfio_xml("arch-dev-vfio", planned)
+    shared = dict(safe_payload)
+    shared["mode"] = "define"
+    shared["domains"] = [{"name": "arch-dev-vfio", "xml": managed}]
+    accepted = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(shared))
+    assert accepted.returncode == 0, accepted.stderr
+    legacy = dict(shared)
+    legacy["domains"] = [{"name": "arch-dev-vfio", "xml": managed_vfio_xml(
+        "arch-dev-vfio", planned, namespace="https://github.com/importriri/privatestack-ansible/hyperlab/1")}]
+    accepted = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(legacy))
+    assert accepted.returncode == 0, accepted.stderr
+    standard = dict(shared)
+    standard["domains"] = [{"name": "arch-dev", "xml": managed_vfio_xml("arch-dev", planned, profile="standard")}]
+    refused = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(standard))
+    assert refused.returncode == 2 and "does not manage" in refused.stderr
+
+    lease = dict(safe_payload)
+    lease["planned_name"] = "dev-01"
+    lease["domains"] = [
+        {"name": "dev-01", "xml": managed_vfio_xml("dev-01", planned, kvmfr=True)},
+        {"name": "arch-dev-vfio", "xml": managed_vfio_xml("arch-dev-vfio", planned, kvmfr=True)},
+    ]
+    accepted = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(lease))
+    assert accepted.returncode == 0, accepted.stderr
+    running = dict(lease, active_names=["arch-dev-vfio"])
+    refused = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(running))
+    assert refused.returncode == 2 and "in use by running domain arch-dev-vfio" in refused.stderr
+
+    transport = dict(lease, active_names=["lg-only"])
+    transport["domains"] = lease["domains"] + [{"name": "lg-only", "xml": managed_vfio_xml("lg-only", [], kvmfr=True)}]
+    refused = run(sys.executable, str(VFIO_REGISTRY), stdin=json.dumps(transport))
+    assert refused.returncode == 2 and "/dev/kvmfr0 is in use by running domain lg-only" in refused.stderr
 
     port_collision = dict(safe_payload)
     port_collision["domains"] = [

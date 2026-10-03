@@ -45,7 +45,9 @@ controller so libvirt cannot synthesize duplicate legacy input devices, and
 disable the balloon because IOMMU-pinned memory is not reclaimable.
 
 Before definition, every libvirt domain is checked for UUID, MAC and PCI
-collisions. Before start, a global GPU lock and the existing capacity lock are
+collisions. (Since [ADR 0016](0016-gpu-shared-definition-running-lease.md),
+HyperLab-managed VFIO domains may share the PCI functions in their
+definitions; only the running domain owns them.) Before start, a global GPU lock and the existing capacity lock are
 held while libvirt is re-read for PCI and fixed-SPICE ownership. The trust hook
 uses two independent files:
 
