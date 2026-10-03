@@ -65,9 +65,14 @@ for _, cmd in ipairs(starts) do
     assert(not cmd:match("kill.*waybar"), "fullscreen must not kill the bar")
 end
 assert(bars == 1, "normal guest desktop must launch exactly one bar")
+local suppressed = false
 for _, rule in ipairs(rules) do
     assert(rule.immediate ~= true, "unreviewed immediate presentation rule")
+    if rule.suppress_event == "maximize" and rule.match and rule.match.class == ".*" then
+        suppressed = true
+    end
 end
+assert(suppressed, "maximize requests must be suppressed so new windows tile")
 assert(#monitors == 1)
 @@MONITOR_ASSERT@@
 '''
@@ -117,6 +122,7 @@ def main() -> None:
     )
     assert old_dispatch != source
     rejected(old_dispatch, bar, 'historical guest shortcut')
+    rejected(source.replace('suppress_event = "maximize"', ''), bar, 'maximize requests honoured')
     rejected(source.replace('allow_tearing = false', 'allow_tearing = true'), bar, 'tearing')
     rejected(source.replace('allow_tearing = false,', ''), bar, 'implicit tearing policy')
     rejected(source, dict(bar, layer='overlay'), 'overlay bar')
