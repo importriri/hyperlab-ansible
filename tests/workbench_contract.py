@@ -184,6 +184,8 @@ def check_seal(lab: Lab) -> None:
     assert "/home/*" in args
     command = args[args.index("--run-command") + 1]
     assert "userdel -r" in command and "$3 >= 1000 && $3 < 60000" in command
+    assert args[-2:] == ["--truncate", "/etc/machine-id"], "the machine-id must be emptied last"
+    assert args.index("--truncate") > args.index("--run-command"), "a command can write a machine-id again"
     assert not any(str(lab.disk) == arg for arg in args), "sysprep touched the source disk"
     guestfish = [call for call in lab.calls() if call[0] == "guestfish"]
     assert guestfish and "--ro" in guestfish[0]

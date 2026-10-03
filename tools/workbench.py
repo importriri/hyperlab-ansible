@@ -45,7 +45,9 @@ REMOVE_USERS = (
 )
 
 # Generalization of the copy: the default operations, the users, and the
-# deletes that cover what the default operations do not.
+# deletes that cover what the default operations do not. Customizations run
+# in command-line order, after the operations; running a command can write a
+# machine-id into the guest again, so the machine-id is emptied last.
 SYSPREP_ARGS = [
     "--operations", "defaults",
     "--run-command", REMOVE_USERS,
@@ -58,6 +60,7 @@ SYSPREP_ARGS = [
     "--delete", "/var/lib/cloud/data",
     "--delete", "/etc/sudoers.d/90-cloud-init-users",
     "--delete", "/var/cache/pacman/pkg/*",
+    "--truncate", "/etc/machine-id",
 ]
 
 # Leftover scan: one guestfish script, one marker per probe. A leading `-`
