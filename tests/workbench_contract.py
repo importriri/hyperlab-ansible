@@ -124,7 +124,7 @@ class Lab:
         assert result.stderr.startswith("workbench: "), result.stderr
         return result.stderr
 
-    def adopt(self, domain: str = "arch-dev-vfio", image: str = "arch-dev-20261003", ok: bool = True):
+    def adopt(self, domain: str = "arch-dev-vfio", image: str = "contract-dev-20261003", ok: bool = True):
         return self.run("adopt", "--repo", str(self.repo), "--domain", domain,
                         "--image-id", image, "--base-image", "arch", "--profile", "dev",
                         "--by", "sid", ok=ok)
@@ -160,7 +160,7 @@ def check_refusals(lab: Lab) -> None:
     lab.scan.write_text(CLEAN_SCAN.replace("@@home\n", "@@home\nsid\n"))
     message = lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio", ok=False)
     assert "home directories remain: sid" in message, message
-    assert not (lab.root / "staging/arch-dev-20261003").exists(), "a refused seal left staging behind"
+    assert not (lab.root / "staging/contract-dev-20261003").exists(), "a refused seal left staging behind"
     assert lab.run("show", "--domain", "arch-dev-vfio")["state"] == "candidate"
     lab.scan.write_text(CLEAN_SCAN)
     assert "not in the Workbench" in lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev", ok=False)
@@ -193,7 +193,7 @@ def check_seal(lab: Lab) -> None:
     assert guestfish and "--ro" in guestfish[0]
 
     manifest = yaml.safe_load(Path(result["manifest"]).read_text())
-    assert manifest["id"] == "arch-dev-20261003" and manifest["version"] == "20261003"
+    assert manifest["id"] == "contract-dev-20261003" and manifest["version"] == "20261003"
     assert manifest["source_type"] == "local" and manifest["status"] == "not-built"
     assert manifest["source_sha256"] == result["sha256"]
     assert manifest["generalized"] is True and manifest["contains_personal_data"] is False
@@ -201,7 +201,7 @@ def check_seal(lab: Lab) -> None:
     assert manifest["virtual_size_gib"] == 100
 
     # The rendered manifest passes the repository's own schema validator.
-    images = ROOT / "images" / "arch-dev-20261003.yml"
+    images = ROOT / "images" / "contract-dev-20261003.yml"
     assert not images.exists()
     try:
         images.write_text(Path(result["manifest"]).read_text())
@@ -211,7 +211,7 @@ def check_seal(lab: Lab) -> None:
         # ...and the image factory accepts it as a local import of the staged disk.
         plan = subprocess.run(
             [sys.executable, str(ROOT / "tools/image_plan.py"), "--root", str(ROOT),
-             "--manifest", "images/arch-dev-20261003.yml",
+             "--manifest", "images/contract-dev-20261003.yml",
              "--store", "/var/lib/libvirt/images/hyperlab", "--operation", "prepare",
              "--source-sha256", result["sha256"], "--local-source", str(staged)],
             capture_output=True, text=True, check=False,
