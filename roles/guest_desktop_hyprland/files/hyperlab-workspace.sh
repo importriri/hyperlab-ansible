@@ -5,6 +5,7 @@
 #   hyperlab-workspace launcher      ALT+Space
 #   hyperlab-workspace overview      ALT+D
 #   hyperlab-workspace new-project   ALT+N
+#   hyperlab-workspace cheatsheet    ALT+H
 #
 # The key bindings always call this script, never the shell directly, so
 # every key keeps working when the shell is not running: the launcher falls
@@ -14,6 +15,7 @@
 set -u
 
 config=hyperlab-workspace
+keys_file=/etc/xdg/quickshell/hyperlab-workspace/keys.json
 state_dir="${XDG_STATE_HOME:-${HOME}/.local/state}/hyperlab-workspace"
 
 shell_call() {
@@ -78,8 +80,14 @@ case "${1:-}" in
             [ -n "${name}" ] && exec hyperlab-desk project-new "$(current_desk)" "${name}"
         fi
         ;;
+    cheatsheet)
+        if ! shell_call cheatsheet; then
+            jq -r '.groups[] | "── \(.title)", (.keys[] | "\(.keys)\t\(.does)")' \
+                "${keys_file}" | rofi -dmenu -i -p "Keys" >/dev/null
+        fi
+        ;;
     *)
-        echo "usage: hyperlab-workspace session|launcher|overview|new-project" >&2
+        echo "usage: hyperlab-workspace session|launcher|overview|new-project|cheatsheet" >&2
         exit 2
         ;;
 esac

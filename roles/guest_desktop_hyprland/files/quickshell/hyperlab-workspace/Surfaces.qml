@@ -8,11 +8,13 @@ QtObject {
 
     property bool launcherOpen: false
     property bool overviewOpen: false
+    property bool cheatsheetOpen: false
     // Set when the overview should start with the new-project field open.
     property int newProjectSerial: 0
 
     function openLauncher() {
         overviewOpen = false;
+        cheatsheetOpen = false;
         launcherOpen = true;
     }
 
@@ -25,7 +27,14 @@ QtObject {
 
     function openOverview() {
         launcherOpen = false;
+        cheatsheetOpen = false;
         overviewOpen = true;
+    }
+
+    function toggleCheatsheet() {
+        const wasOpen = cheatsheetOpen;
+        closeAll();
+        cheatsheetOpen = !wasOpen;
     }
 
     function toggleOverview() {
@@ -43,5 +52,6 @@ QtObject {
     function closeAll() {
         launcherOpen = false;
         overviewOpen = false;
+        cheatsheetOpen = false;
     }
 }

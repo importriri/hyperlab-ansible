@@ -26,6 +26,11 @@ Item {
             return ipc.surfaces.overviewOpen ? "open" : "closed";
         }
 
+        function cheatsheet(): string {
+            ipc.surfaces.toggleCheatsheet();
+            return ipc.surfaces.cheatsheetOpen ? "open" : "closed";
+        }
+
         function newProject(): string {
             ipc.surfaces.newProject();
             return "open";

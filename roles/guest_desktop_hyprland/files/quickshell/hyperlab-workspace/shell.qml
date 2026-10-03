@@ -12,6 +12,7 @@
 //   ├── DockLayer      Desks, workspaces of the current Desk, launcher
 //   ├── DeskOverview   ALT+D, every Desk and its projects
 //   ├── Launcher       ALT+Space, applications, projects and actions
+//   ├── Cheatsheet     ALT+H, every guest key from keys.json
 //   ├── Osd            Desk changes, volume, helper outcomes
 //   └── Ipc            fixed receivers for the key bindings
 //
@@ -102,6 +103,16 @@ ShellRoot {
         Launcher {
             theme: sharedTheme
             deskState: sharedDesks
+            surfaces: sharedSurfaces
+            primary: shell.isPrimary(screen)
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        Cheatsheet {
+            theme: sharedTheme
             surfaces: sharedSurfaces
             primary: shell.isPrimary(screen)
         }

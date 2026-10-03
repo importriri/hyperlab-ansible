@@ -75,6 +75,7 @@ The guest keeps the `ALT` namespace. `SUPER` belongs to the host and
 | `ALT+D` | Desks overview |
 | `ALT+Space` | launcher: applications, projects, actions |
 | `ALT+N` | new project in the current Desk |
+| `ALT+H` | the key sheet: every guest key, grouped |
 | `ALT+L` | lock (hyprlock) |
 | `ALT+Return` | terminal |
 
@@ -93,6 +94,7 @@ Log out, restart and power off ask for a second `Enter`.
 | Desks overview | every Desk with its projects and live window counts | same |
 | Launcher | applications, projects of every Desk, actions | desktop entries, the model |
 | OSD | Desk changes, volume, helper outcomes | Desk state, PipeWire |
+| Key sheet | every guest key, grouped (`ALT+H`) | `keys.json`, also read by the rofi fallback |
 | Lock | time, date, password, where you were | hyprlock, `hyperlab-desk lock-label` |
 | Desktop | large clock, greeting, where you are, under the windows | the clock, `$USER`, the Desk state |
 
@@ -149,8 +151,8 @@ lives in `desks.js`, `stats.js` and `launcher.js` and is tested directly.
 
 ## Look
 
-- the focused window wears a gradient border in the theme's accent that turns
-  slowly, and a glow of the same colour; inactive windows dim slightly;
+- the focused window wears a border in the theme's accent and a glow of the
+  same colour; inactive windows dim slightly;
 - terminals are translucent over the blurred wallpaper;
 - an empty workspace shows the desktop clock and greeting;
 - a Desk change is announced by name, and the context island catches a

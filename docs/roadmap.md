@@ -88,7 +88,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 - [ ] `hypridle` DPMS through the reviewed Lua dispatcher form
 - [ ] project restore: a project reopens the windows it had, not only its
       launch commands
-- [ ] keybinding cheatsheet surface in the guest (`ALT+/`)
+- [x] keybinding sheet in the guest (`ALT+H`), from one `keys.json` that the
+      contract checks against the bound keys
+- [ ] a reviewed Lua form for a gradient active border
 - [ ] shell-owned notifications with a do-not-disturb mode per Desk
 - [ ] the same shell on every workstation Template, not only `arch-dev-vfio`
 

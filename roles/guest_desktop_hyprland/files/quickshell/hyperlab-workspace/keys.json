@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "title": "Desks and projects",
+      "keys": [
+        { "keys": "ALT+1 … 9", "does": "Go to Desk n, where you left it" },
+        { "keys": "ALT+CTRL+1 … 9", "does": "Go to project slot n of this Desk" },
+        { "keys": "ALT+Page Down / Up", "does": "Next / previous Desk" },
+        { "keys": "ALT+D", "does": "Desks overview" },
+        { "keys": "ALT+N", "does": "New project in this Desk" }
+      ]
+    },
+    {
+      "title": "Windows",
+      "keys": [
+        { "keys": "ALT+Return", "does": "New terminal, tiled beside the others" },
+        { "keys": "ALT+arrows", "does": "Focus the window in that direction" },
+        { "keys": "ALT+SHIFT+arrows", "does": "Move the window in that direction" },
+        { "keys": "ALT+SHIFT+1 … 9", "does": "Send the window to Desk n" },
+        { "keys": "ALT+CTRL+SHIFT+1 … 9", "does": "Send the window to slot n" },
+        { "keys": "ALT+J", "does": "Split side by side / stacked" },
+        { "keys": "ALT+F", "does": "Fullscreen" },
+        { "keys": "ALT+V", "does": "Float or tile" },
+        { "keys": "ALT+P", "does": "Pseudo-tile: keep the window's own size" },
+        { "keys": "ALT+Q", "does": "Close the window" },
+        { "keys": "ALT+drag", "does": "Move (left button) or resize (right button)" }
+      ]
+    },
+    {
+      "title": "Apps and shell",
+      "keys": [
+        { "keys": "ALT+Space", "does": "Launcher: apps, projects, actions" },
+        { "keys": "ALT+E", "does": "Files" },
+        { "keys": "ALT+R", "does": "Plain app menu (rofi)" },
+        { "keys": "ALT+H", "does": "This sheet" }
+      ]
+    },
+    {
+      "title": "Session",
+      "keys": [
+        { "keys": "ALT+L", "does": "Lock" },
+        { "keys": "ALT+SHIFT+T", "does": "Next theme" },
+        { "keys": "ALT+SHIFT+W", "does": "Next wallpaper" },
+        { "keys": "ALT+volume keys", "does": "Volume and mute" }
+      ]
+    },
+    {
+      "title": "Host, outside this machine",
+      "keys": [
+        { "keys": "Right CTRL", "does": "Release keyboard and mouse to the host" },
+        { "keys": "SUPER+…", "does": "Always the host, never this guest" }
+      ]
+    }
+  ]
+}

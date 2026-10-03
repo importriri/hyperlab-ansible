@@ -19,6 +19,7 @@ that keep it safe and coherent, so a later edit cannot quietly undo them:
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -119,6 +120,7 @@ def check_hyprland_wiring() -> None:
         ('main_mod .. " + D"', "hyperlab-workspace overview"),
         ('main_mod .. " + space"', "hyperlab-workspace launcher"),
         ('main_mod .. " + N"', "hyperlab-workspace new-project"),
+        ('main_mod .. " + H"', "hyperlab-workspace cheatsheet"),
         ('main_mod .. " + " .. key', '"hyperlab-desk desk " .. key'),
         ('main_mod .. " + SHIFT + " .. key', '"hyperlab-desk move-to-desk " .. key'),
         ('main_mod .. " + CTRL + " .. key', '"hyperlab-desk workspace " .. key'),
@@ -137,13 +139,40 @@ def check_hyprland_wiring() -> None:
     require("exec waybar" in script, "a failing shell no longer falls back to Waybar")
     require("QS_DISABLE_FILE_WATCHER=1" in script, "the shell would reload mid-deployment")
     require("exec rofi -show drun" in script, "the launcher key has no fallback")
-    for call in ("launcher", "overview", "newProject"):
+    for call in ("launcher", "overview", "newProject", "cheatsheet"):
         require(f"shell_call {call}" in script, f"{call} does not try the shell first")
 
     lock = (ROLE / "files/hyprlock.conf").read_text()
     require("cmd[update:5000] hyperlab-desk lock-label" in lock, "the lock no longer says where you were")
     require("$guest_accent" in lock and "IBM Plex" in lock, "the lock lost the workstation style")
     require('"pidof hyprlock || hyprlock"' in lua, "ALT+L no longer locks with hyprlock")
+
+
+def check_keys_sheet() -> None:
+    """Every ALT binding the guest configures is on the sheet, and back."""
+    sheet = json.loads((SHELL / "keys.json").read_text())
+    listed = {
+        entry["keys"] for group in sheet["groups"] for entry in group["keys"]
+    }
+    lua = (ROLE / "templates/hyprland.lua.j2").read_text()
+    singles = set(re.findall(r'main_mod \.\. " \+ ([A-Za-z]+)"', lua))
+    names = {"Return": "ALT+Return", "space": "ALT+Space"}
+    for key in singles:
+        if key.startswith("XF86") or key in ("left", "right", "up", "down"):
+            continue
+        if key in ("Page_Down", "Page_Up"):
+            continue
+        chord = names.get(key, "ALT+" + key.upper() if len(key) == 1 else "ALT+" + key)
+        require(chord in listed, f"ALT binding {key!r} is missing from keys.json")
+    for chord in ("ALT+1 … 9", "ALT+CTRL+1 … 9", "ALT+SHIFT+1 … 9",
+                  "ALT+CTRL+SHIFT+1 … 9", "ALT+arrows", "ALT+SHIFT+arrows",
+                  "ALT+Page Down / Up", "ALT+SHIFT+T", "ALT+SHIFT+W", "Right CTRL"):
+        require(chord in listed, f"keys.json lost {chord}")
+    # The sheet only promises keys that exist.
+    for chord in listed:
+        if chord.startswith("ALT+") and len(chord) == 5:
+            require(f'main_mod .. " + {chord[-1]}"' in lua,
+                    f"keys.json lists {chord}, which is not bound")
 
 
 def check_role() -> None:
@@ -227,11 +256,15 @@ def check_role() -> None:
     require('["pgrep", "-x", "waybar"]' in controller,
             "a theme change would start Waybar beside the shell")
     require('"hyperlab-workstation": {' in controller, "the controller lacks the workstation theme")
+    theme_lua = controller.split('CONFIG / "hypr/theme.lua"', 1)[1].split('""",', 1)[0]
+    require("deg" not in theme_lua and not re.search(r"rgba\([^)]*\) rgba", theme_lua),
+            "theme.lua colours must be single rgba() values under the Lua configuration")
 
 
 def main() -> int:
     check_shell_sources()
     check_hyprland_wiring()
+    check_keys_sheet()
     check_role()
     print("HyperLab guest workspace shell contract: OK")
     return 0

@@ -272,7 +272,8 @@ Item {
         QsHarness.files = {
             "/proc/stat": @@PROC_STAT@@,
             "/proc/meminfo": @@MEMINFO@@,
-            "/proc/net/route": @@ROUTE@@
+            "/proc/net/route": @@ROUTE@@,
+            "@@KEYS_PATH@@": @@KEYS@@
         };
         DesktopEntries.applications.values = [
             { "name": "Blender", "genericName": "3D modeller", "icon": "blender",
@@ -508,6 +509,34 @@ SCENARIOS = {
         ];
     }
 """,
+    "cheatsheet": r"""
+    function scenario() {
+        steps = [
+            { "wait": 900, "run": done => {
+                check(QsHarness.ipc.workspace.cheatsheet() === "open", "the key sheet did not open");
+                done();
+            } },
+            { "wait": 600, "run": done => {
+                for (const value of ["Everything here starts with ALT", "DESKS AND PROJECTS",
+                                     "WINDOWS", "ALT+H", "This sheet", "ALT+Return",
+                                     "New terminal, tiled beside the others", "Right CTRL"])
+                    check(visibleText(value), "missing on the key sheet: " + value);
+                capture("cheatsheet", done);
+            } },
+            { "wait": 50, "run": done => {
+                check(QsHarness.ipc.workspace.cheatsheet() === "closed", "ALT+H did not close the sheet");
+                QsHarness.ipc.workspace.launcher();
+                const launcher = findWith("results");
+                launcher.query = "keys";
+                const index = launcher.results.findIndex(r => r.id === "keys");
+                check(index >= 0, "the launcher does not offer the key sheet");
+                launcher.activate(index);
+                check(findWith("groups").open, "the launcher did not open the key sheet");
+                done();
+            } }
+        ];
+    }
+""",
     "helper-missing": r"""
     function scenario() {
         QsHarness.processes = Object.assign({}, QsHarness.processes,
@@ -543,7 +572,7 @@ def stage(directory: Path) -> None:
     shutil.copyfile(WALLPAPER, directory / "wallpaper.png")
 
 
-def scene(name: str) -> str:
+def scene(name: str, directory: Path) -> str:
     out = str(Path(OUT).resolve()) if OUT else ""
     source = PRELUDE + SCENARIOS[name] + "}\n"
     replacements = {
@@ -552,6 +581,8 @@ def scene(name: str) -> str:
         "@@PROC_STAT@@": json.dumps(PROC_STAT),
         "@@MEMINFO@@": json.dumps(MEMINFO),
         "@@ROUTE@@": json.dumps(ROUTE),
+        "@@KEYS_PATH@@": str(directory / "shell/keys.json"),
+        "@@KEYS@@": json.dumps((SHELL / "keys.json").read_text()),
     }
     for key, value in replacements.items():
         source = source.replace(key, value)
@@ -570,7 +601,7 @@ def harmless(line: str) -> bool:
 
 def run(runner: str, directory: Path, name: str) -> None:
     path = directory / f"{name}.qml"
-    path.write_text(scene(name))
+    path.write_text(scene(name, directory))
     try:
         result = subprocess.run(
             [runner, str(path)],

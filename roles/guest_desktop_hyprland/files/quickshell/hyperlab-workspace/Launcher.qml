@@ -107,6 +107,8 @@ PanelWindow {
         }
         list.push({ "kind": "action", "id": "overview", "title": "Desks overview",
                     "keywords": "desk switch", "hint": "ALT+D", "always": q.length === 0 });
+        list.push({ "kind": "action", "id": "keys", "title": "Keyboard shortcuts",
+                    "keywords": "keys help cheatsheet", "hint": "ALT+H" });
         list.push({ "kind": "action", "id": "lock", "title": "Lock",
                     "keywords": "lock screen away", "hint": "ALT+L" });
         list.push({ "kind": "action", "id": "theme", "title": "Next guest theme",
@@ -153,6 +155,8 @@ PanelWindow {
             deskState.newProject(deskState.currentDesk, query);
         } else if (item.id === "overview") {
             surfaces.openOverview();
+        } else if (item.id === "keys") {
+            surfaces.toggleCheatsheet();
         } else {
             const commands = {
                 "lock": ["loginctl", "lock-session"],
