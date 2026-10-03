@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`image-factory-block-condition-skipped-lock-release.md`](image-factory-block-condition-skipped-lock-release.md):
+  a successful import skipped its own final check and kept its lock, because
+  the commit changed the block's condition.
 - [`workbench-root-dotfiles-in-image.md`](workbench-root-dotfiles-in-image.md):
   root's configuration, cache and npm directories reached the first captured
   image; the seal deletes them and the scan refuses them.

@@ -3,8 +3,15 @@
   when: image_factory_transaction_complete
   ansible.builtin.include_tasks: validate.yml
 
+# A block's condition is evaluated again for every task in it, its always
+# section included. The commit below marks the transaction complete, so the
+# block runs on a copy taken before it starts.
+- name: Record that this run owns a new image transaction
+  ansible.builtin.set_fact:
+    image_factory_new_transaction: "{{ image_factory_transaction_clean }}"
+
 - name: Prepare a new image transaction
-  when: image_factory_transaction_clean
+  when: image_factory_new_transaction
   block:
     - name: Inspect the local import source before any managed write
       when: image_factory_plan.source_type == 'local'

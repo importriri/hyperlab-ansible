@@ -450,6 +450,14 @@ def test_role_structure() -> None:
     assert prepare.index("Acquire the per-image factory lock") < prepare.index("Download the pinned official cloud image")
     assert "image_factory_plan.base_path" in prepare
     assert "failed new image transaction" in prepare
+    owns = prepare.index('image_factory_new_transaction: "{{ image_factory_transaction_clean }}"')
+    assert owns < prepare.index("- name: Prepare a new image transaction")
+    assert "when: image_factory_new_transaction\n" in prepare
+    assert "when: image_factory_transaction_clean" not in prepare, (
+        "the commit flips image_factory_transaction_clean, which would skip the "
+        "post-commit validation and the lock release"
+    )
+    assert "image_factory_new_transaction:" not in prepare[owns + 1:], "the ownership copy must not change"
     assert "local_source" not in receipt
     assert "source_sha256" in receipt
     assert parrot["source_type"] == "local"
