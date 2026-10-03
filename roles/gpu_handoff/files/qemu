@@ -109,9 +109,21 @@ if (( domain_entries == 0 )); then
     exit 1
 fi
 
-# A domain absent from both reviewed policy surfaces is not a GPU domain.
-# It passes without touching GPU contamination state.
+# A domain absent from both reviewed policy surfaces is not a GPU domain and
+# passes without touching GPU contamination state - but only if it really
+# carries no PCI passthrough. libvirt hands the hook the domain XML on stdin;
+# an unmapped domain with a PCI hostdev would otherwise take the device
+# without ever lowering the recorded ladder level.
 if [[ -z "${profile}" ]]; then
+    domain_xml="$(cat)"
+    if [[ -z "${domain_xml}" ]]; then
+        echo "gpu-handoff: no domain XML for unlisted ${domain}: refusing (fail closed)" >&2
+        exit 1
+    fi
+    if grep -Eq "<hostdev[^>]*type=['\"]pci['\"]|<interface[^>]*type=['\"]hostdev['\"]" <<< "${domain_xml}"; then
+        echo "gpu-handoff: REFUSING ${domain}: PCI passthrough without a reviewed GPU handoff policy" >&2
+        exit 1
+    fi
     exit 0
 fi
 

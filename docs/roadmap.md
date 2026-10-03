@@ -67,6 +67,7 @@ Software-verified:
 - [x] product Machine CLI and registry-backed inventory
 - [x] root GPU-policy observability and remedies
 - [x] Diagnostics lists libvirt domains outside the product inventory
+- [x] the qemu hook refuses an unmapped domain that carries PCI passthrough
 - [x] complete discovered contract suite green
 
 Open before C10 can be used as a product path:
@@ -76,8 +77,8 @@ Open before C10 can be used as a product path:
 - [ ] the first published Template pinned to that Golden Image
 - [ ] a Machine created, projected, defined and started on Nitro, with its
       managed `domains.d` policy written and verified by the hook
-- [ ] the hook refuses an unmapped domain that carries the GPU (see
-      [`gpu-handoff-policy.md`](gpu-handoff-policy.md#known-open-work))
+- [ ] physical proof that the hook refuses an unmapped domain with PCI
+      passthrough (software-verified in `tests/hook.bats`)
 - [ ] physical acceptance of the product-only Machines workspace and the
       Diagnostics outside-domain list
 

@@ -57,6 +57,15 @@ The hook never reads the user-owned Machine registry or a VM-spec. Product
 intent reaches it only after the privileged tool has written the root-owned
 file.
 
+A domain absent from both surfaces is not a GPU domain and passes without
+touching the recorded level, but only if the domain XML that libvirt passes on
+stdin carries no PCI passthrough: no `<hostdev type='pci'>` and no
+`<interface type='hostdev'>`. An unmapped domain with PCI passthrough, or a
+call with no domain XML at all, is refused. Without that check a domain left out
+of the policy could take the GPU without ever lowering the ladder. The domains
+provider still reports such a domain as `domains.unguarded_vfio` before anyone
+tries to start it.
+
 ## The ceiling rule
 
 A handoff profile may lower, never raise, the class that a ranked network
@@ -94,12 +103,8 @@ would break the existing guest lifecycle without changing what it means.
 
 ## Known open work
 
-- A libvirt domain that is absent from both policy surfaces passes the hook
-  without touching the recorded level. The domains provider reports such a
-  domain as `domains.unguarded_vfio`, but the hook itself does not inspect the
-  domain XML for the GPU address. Making the hook refuse an unmapped domain that
-  carries the GPU is the next hardening step for this policy.
-- The managed policy surface has contract coverage only. No real
-  `domains.d` entry has been written on Nitro yet.
+- The managed policy surface and the unmapped-passthrough refusal have
+  contract coverage only. No real `domains.d` entry has been written on Nitro
+  yet, and no unmapped passthrough domain has been refused on hardware.
 - A boot-scoped GPU lease (a GPU-capable Machine that may also start without
   the GPU) is a product direction, not an implemented feature.

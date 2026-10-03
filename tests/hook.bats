@@ -24,6 +24,27 @@ arch-dev-vfio dev
 win11dirty-disposable dirty
 win11lab-test lab
 EOF
+    # libvirt passes the domain XML on stdin. An unlisted domain is judged
+    # by it: no PCI passthrough passes, PCI passthrough is refused.
+    PLAIN_XML="${TESTDIR}/plain.xml"
+    cat > "${PLAIN_XML}" <<EOF
+<domain type='kvm'><name>svc-jellyfin</name><devices>
+<disk type='file' device='disk'/><interface type='network'/>
+</devices></domain>
+EOF
+    PCI_XML="${TESTDIR}/pci.xml"
+    cat > "${PCI_XML}" <<EOF
+<domain type='kvm'><name>rogue-vfio</name><devices>
+<hostdev mode='subsystem' type='pci' managed='yes'>
+<source><address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/></source>
+</hostdev></devices></domain>
+EOF
+    NIC_XML="${TESTDIR}/nic.xml"
+    cat > "${NIC_XML}" <<EOF
+<domain type='kvm'><name>rogue-nic</name><devices>
+<interface type="hostdev" managed="yes"><source/></interface>
+</devices></domain>
+EOF
 }
 
 teardown() {
@@ -132,20 +153,45 @@ state() {
 
 @test "an unlisted service domain passes while GPU trust is held" {
     "${HOOK}" win11clean-valley prepare
-    run "${HOOK}" svc-jellyfin prepare
+    run "${HOOK}" svc-jellyfin prepare < "${PLAIN_XML}"
     [ "$status" -eq 0 ]
     [ "$(state)" = "3" ]
 }
 
 @test "an unlisted service domain passes with no state and creates none" {
-    run "${HOOK}" svc-jellyfin prepare
+    run "${HOOK}" svc-jellyfin prepare < "${PLAIN_XML}"
     [ "$status" -eq 0 ]
     [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
 }
 
 @test "network profile names alone are not GPU domain names" {
-    run "${HOOK}" clean prepare
+    run "${HOOK}" clean prepare < "${PLAIN_XML}"
     [ "$status" -eq 0 ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "an unlisted domain with PCI passthrough is refused and records nothing" {
+    run "${HOOK}" rogue-vfio prepare < "${PCI_XML}"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"PCI passthrough without a reviewed GPU handoff policy"* ]]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "an unlisted domain cannot take PCI passthrough while trust is held" {
+    "${HOOK}" win11dirty-disposable prepare
+    run "${HOOK}" rogue-vfio prepare < "${PCI_XML}"
+    [ "$status" -eq 1 ]
+    [ "$(state)" = "1" ]
+}
+
+@test "an unlisted domain with a hostdev network interface is refused" {
+    run "${HOOK}" rogue-nic prepare < "${NIC_XML}"
+    [ "$status" -eq 1 ]
+}
+
+@test "an unlisted domain without domain XML fails closed" {
+    run "${HOOK}" svc-jellyfin prepare < /dev/null
+    [ "$status" -eq 1 ]
     [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
 }
 
