@@ -653,6 +653,29 @@ def verify_shell_binding() -> None:
         "vms bridge does not use product inventory",
     )
 
+    require(
+        "[[ ${field} == diagnostics-domains ]]"
+        in bridge
+        and "waybar --field vms"
+        in bridge,
+        "Diagnostics has no raw domain observation",
+    )
+
+    state = (
+        ROOT
+        / "roles/host_desktop_common/files/"
+        "quickshell/hyperlab/ShellState.qml"
+    ).read_text(
+        encoding="utf-8"
+    )
+
+    require(
+        '"diagnostics-domains"' in state
+        and "state.applyOutsideDomainsPayload(this.text)" in state
+        and "state.applyMachinePayload(this.text)" in state,
+        "raw domains and product Machines share one source",
+    )
+
     stage = (
         ROOT
         / "roles/host_desktop_common/files/"

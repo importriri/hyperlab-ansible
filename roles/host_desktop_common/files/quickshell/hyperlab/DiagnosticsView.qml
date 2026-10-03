@@ -392,6 +392,75 @@ Item {
                 }
             }
 
+            SectionHeader {
+                width: parent.width
+                visible: view.section === "inventory"
+                tokens: view.tokens
+                theme: view.theme
+                label: "Outside the product inventory"
+                description:
+                    "Libvirt domains with no Machine record: checked-in "
+                    + "fixtures and external domains. They are observed "
+                    + "here, never offered as Machines."
+            }
+
+            ShellCard {
+                width: parent.width
+                visible: view.section === "inventory"
+                tokens: view.tokens
+                theme: view.theme
+
+                Column {
+                    id: outsideRows
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: 2
+
+                    PanelRow {
+                        width: parent.width
+                        visible:
+                            !view.shellState.outsideDomainsAvailable
+                            || view.shellState.outsideDomains.length === 0
+                        tokens: view.tokens
+                        theme: view.theme
+                        title: "Domains"
+                        value:
+                            view.shellState.outsideDomainsAvailable
+                            ? "None"
+                            : "Not answering"
+                        valueColor:
+                            view.theme.semanticStatusColor(
+                                view.shellState.outsideDomainsAvailable
+                                ? "ok"
+                                : "bad"
+                            )
+                        hint:
+                            view.shellState.outsideDomainsAvailable
+                            ? ""
+                            : "libvirt domains could not be observed"
+                    }
+
+                    Repeater {
+                        model:
+                            view.shellState.outsideDomainsAvailable
+                            ? view.shellState.outsideDomains
+                            : []
+
+                        delegate: PanelRow {
+                            required property var modelData
+
+                            width: parent.width
+                            tokens: view.tokens
+                            theme: view.theme
+                            title: modelData.name
+                            value: view.icons.machineStateWord(modelData.state)
+                            hint: view.shellState.outsideDomainKind(modelData)
+                        }
+                    }
+                }
+            }
+
             // ------------------------------------------------- Session
 
             SectionHeader {

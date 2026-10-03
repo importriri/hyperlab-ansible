@@ -138,5 +138,8 @@ proof.
 - [`managed-machine-provenance-claim.md`](managed-machine-provenance-claim.md):
   a self-asserted `managed-machine` tag let a dirty plan write a clean
   root-owned GPU handoff policy.
+- [`product-inventory-hid-fixture-domains.md`](product-inventory-hid-fixture-domains.md):
+  product-only Machines hid running fixture domains while the empty state
+  promised they were in Diagnostics.
 
 Author: [importriri](https://github.com/importriri).

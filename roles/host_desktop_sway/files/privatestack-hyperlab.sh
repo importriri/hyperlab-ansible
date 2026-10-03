@@ -34,6 +34,13 @@ once() {
             fallback "hyperlabctl Machine inventory failed"
             return 0
         fi
+    elif [[ ${field} == diagnostics-domains ]]; then
+        # Raw libvirt observation for Diagnostics. It never feeds the Machines
+        # workspace: a domain is not a product Machine because it exists.
+        if ! payload="$(${cli} waybar --field vms 2>/dev/null)"; then
+            fallback "hyperlabctl domain observation failed"
+            return 0
+        fi
     elif ! payload="$(${cli} waybar --field "${field}" 2>/dev/null)"; then
         fallback "hyperlabctl failed: run ${cli} doctor in a terminal"
         return 0

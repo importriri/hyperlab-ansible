@@ -1108,6 +1108,46 @@ TRUTH = """
             check(!sharedState.machinesAvailable,
                   "an invalid provenance was accepted");
 
+            // Raw libvirt domains are a Diagnostics observation only. A
+            // domain that matches a product Machine is not listed again, and
+            // nothing observed here ever joins the Machines inventory.
+            sharedState.applyMachinePayload(JSON.stringify({
+                machines_available: true,
+                machines: [{ name: "development-01", state: "not-created",
+                             gpu: "Runtime not created",
+                             provenance: "unclassified" }]
+            }));
+            sharedState.applyOutsideDomainsPayload(JSON.stringify({
+                machines_available: true,
+                machines: [
+                    { name: "development-01", state: "running",
+                      managed: true },
+                    { name: "arch-dev-vfio", state: "running",
+                      managed: true },
+                    { name: "external-01", state: "shut off",
+                      managed: false }
+                ]
+            }));
+            check(sharedState.outsideDomainsAvailable,
+                  "an observed domain list looked unavailable");
+            check(sharedState.outsideDomains.length === 2
+                  && sharedState.outsideDomains[0].name === "arch-dev-vfio"
+                  && sharedState.outsideDomains[1].name === "external-01",
+                  "outside domains did not exclude the product Machine");
+            check(sharedState.machines.length === 1
+                  && sharedState.machines[0].name === "development-01",
+                  "an observed fixture joined the product inventory");
+            check(sharedState.outsideDomainKind(
+                      sharedState.outsideDomains[0]) === "HyperLab fixture"
+                  && sharedState.outsideDomainKind(
+                      sharedState.outsideDomains[1]) === "External domain",
+                  "outside domain kinds were misclassified");
+
+            sharedState.applyOutsideDomainsPayload("not json");
+            check(!sharedState.outsideDomainsAvailable
+                  && sharedState.outsideDomains.length === 0,
+                  "a malformed domain observation kept stale rows");
+
             // A boot claim is accepted only from an affirmative, internally
             // consistent observation, and every failure is visibly a failure:
             // never "No claim this boot", never a silent rail.

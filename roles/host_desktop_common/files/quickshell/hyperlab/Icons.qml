@@ -119,6 +119,13 @@ QtObject {
             return "Shut off";
         case "crashed":
             return "Crashed";
+        // Product Machine states that have no libvirt counterpart.
+        case "not-created":
+            return "Not created";
+        case "configuration-drift":
+            return "Configuration drift";
+        case "runtime-unavailable":
+            return "Runtime unavailable";
         case "unknown":
             return "State unknown";
         default:

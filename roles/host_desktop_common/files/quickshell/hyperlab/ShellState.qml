@@ -79,6 +79,7 @@ Scope {
     property real trustObservedAt: 0
     property real gpuObservedAt: 0
     property real machinesObservedAt: 0
+    property real outsideDomainsObservedAt: 0
     property real telemetryObservedAt: 0
     property real workspaceObservedAt: 0
     property real focusObservedAt: 0
@@ -705,6 +706,63 @@ Scope {
         }
 
         return running;
+    }
+
+    // Libvirt domains with no product Machine record: checked-in fixtures,
+    // external domains and orphaned managed domains. Diagnostics shows them
+    // read-only; they never join `machines` and carry no actions here.
+    property var observedDomains: []
+    property bool outsideDomainsAvailable: false
+
+    readonly property var outsideDomains: {
+        const product = {};
+
+        for (let index = 0; index < state.machines.length; index++)
+            product[String(state.machines[index].name)] = true;
+
+        return state.observedDomains.filter(
+            row => product[String(row.name)] !== true
+        );
+    }
+
+    function outsideDomainKind(row) {
+        if (row.managed === true)
+            return "HyperLab fixture";
+
+        if (row.managed === false)
+            return "External domain";
+
+        return "Unreadable domain";
+    }
+
+    function applyOutsideDomainsPayload(raw) {
+        const parsed = state.parseJson(raw);
+
+        if (
+            parsed === null
+            || parsed.machines_available !== true
+            || !Array.isArray(parsed.machines)
+            || !parsed.machines.every(
+                row => row
+                    && typeof row.name === "string"
+                    && row.name.length > 0
+                    && typeof row.state === "string"
+            )
+        ) {
+            state.observedDomains = [];
+            state.outsideDomainsAvailable = false;
+            return;
+        }
+
+        state.observedDomains = parsed.machines.map(row => ({
+            "name": row.name,
+            "state": row.state,
+            "managed": row.managed === true
+                ? true
+                : row.managed === false ? false : null
+        }));
+        state.outsideDomainsAvailable = true;
+        state.outsideDomainsObservedAt = Date.now();
     }
 
     readonly property var provenanceOrder: [
@@ -1538,6 +1596,7 @@ Scope {
         state.startPoll(ramProcess);
         state.startPoll(gpuProcess);
         state.startPoll(vmProcess);
+        state.startPoll(outsideDomainsProcess);
         state.startPoll(telemetryProcess);
     }
 
@@ -1547,6 +1606,7 @@ Scope {
 
     function refreshInventory() {
         state.startPoll(vmProcess);
+        state.startPoll(outsideDomainsProcess);
         state.startPoll(gpuProcess);
     }
 
@@ -1933,6 +1993,23 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 state.applyMachinePayload(this.text);
+            }
+        }
+    }
+
+    Process {
+        id: outsideDomainsProcess
+
+        property real startedAt: 0
+
+        command: [
+            state.statusBridge,
+            "diagnostics-domains"
+        ]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                state.applyOutsideDomainsPayload(this.text);
             }
         }
     }
