@@ -34,10 +34,15 @@ the NVIDIA module and the initramfs must agree.
 
 ## Fix
 
-The role installs its packages in one full transaction: refresh, upgrade the
-whole system, install (`update_cache: true`, `upgrade: true`). It reports a
-change only when the transaction changed packages, so a second run stays at
-`changed=0`.
+The role first brings the whole system to one current state
+(`update_cache: true`, `upgrade: true`) and only then installs its packages
+against that fresh database. The sync reports a change only when packages
+changed, so a second run stays at `changed=0`.
+
+The first version of this fix put `name`, `update_cache` and `upgrade` on one
+pacman task. The module refuses that combination ("parameters are mutually
+exclusive: name|upgrade") before touching the guest, so it had to be two
+tasks. The contract now pins the split and its order.
 
 After a run that upgraded the kernel or NVIDIA, reboot the guest before
 graphical acceptance, as in
@@ -45,5 +50,5 @@ graphical acceptance, as in
 
 ## Regression proof
 
-`tests/guest_workspace_shell_contract.py` requires the full transaction on the
-install task.
+`tests/guest_workspace_shell_contract.py` requires a full system sync task, without
+`name`, before the install task.

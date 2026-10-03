@@ -10,7 +10,7 @@ that keep it safe and coherent, so a later edit cannot quietly undo them:
   3. every guest key goes through the ALT namespace and through the
      helpers, so the keys keep working when the shell is not running, and a
      failing shell falls back to Waybar;
-  4. the role installs every piece it wires in one full Arch transaction,
+  4. the role syncs the whole Arch system before installing what it wires,
      pins the reviewed Quickshell API series, validates the image Desks and
      keeps Waybar deployed;
   5. Desk n owns workspaces n*10+1..n*10+9 in the helper and in the shell
@@ -165,9 +165,17 @@ def check_role() -> None:
     ):
         require(needle in tasks, f"the role no longer does: {needle}")
 
-    install = tasks.split("- name: Install the official Hyprland guest stack", 1)[1].split("\n- name:", 1)[0]
-    require("update_cache: true" in install and "upgrade: true" in install,
-            "new guest packages must be installed in one full system transaction")
+    sync = tasks.split(
+        "- name: Fully synchronize the Arch package state before installing new packages", 1
+    )
+    require(len(sync) == 2, "new guest packages are installed without a full system sync")
+    sync_task = sync[1].split("\n- name:", 1)[0]
+    require("update_cache: true" in sync_task and "upgrade: true" in sync_task,
+            "the guest package sync is not a full upgrade")
+    require("name:" not in sync_task.split("community.general.pacman:", 1)[1],
+            "pacman refuses name together with upgrade")
+    require(sync[1].find("- name: Install the official Hyprland guest stack") > 0,
+            "the full system sync must run before the install")
 
     controller = (ROLE / "files/privatestack-guest-theme.py").read_text()
     require('"privatestack-guest/palette.json"' in controller,

@@ -75,18 +75,23 @@
 
 # Arch supports one package state only. Installing new packages against a
 # stale sync database asks mirrors for versions they no longer carry, and a
-# refresh without an upgrade is a partial upgrade. The install is therefore
-# one full transaction: refresh, upgrade, install.
-- name: Install the official Hyprland guest stack in a full system transaction
+# refresh without an upgrade is a partial upgrade. The system is therefore
+# brought to one full, current state first; the install then resolves against
+# that fresh database. The pacman module refuses `name` together with
+# `upgrade`, so these are two tasks.
+- name: Fully synchronize the Arch package state before installing new packages
+  community.general.pacman:
+    update_cache: true
+    upgrade: true
+  register: guest_desktop_hyprland_system_upgrade
+  changed_when: >-
+    guest_desktop_hyprland_system_upgrade.packages | default([])
+    | length > 0
+
+- name: Install the official Hyprland guest stack
   community.general.pacman:
     name: "{{ guest_desktop_hyprland_packages }}"
     state: present
-    update_cache: true
-    upgrade: true
-  register: guest_desktop_hyprland_package_transaction
-  changed_when: >-
-    guest_desktop_hyprland_package_transaction.packages | default([])
-    | length > 0
 
 - name: Inspect official guest desktop entrypoints
   ansible.builtin.stat:
