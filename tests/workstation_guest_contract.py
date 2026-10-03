@@ -126,6 +126,8 @@ def main() -> int:
     palettes = defaults["guest_desktop_hyprland_palettes"]
     assert themes == [
         "hyperlab-workstation",
+        "hyperlab-gaming-clean",
+        "hyperlab-gaming-dirty",
         "sakura-circuit",
         "neon-terminal",
         "moon-library",

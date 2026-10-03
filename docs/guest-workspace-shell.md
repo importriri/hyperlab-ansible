@@ -10,6 +10,32 @@ The guest never shows trust. There is no trust badge, no provenance colour
 and no GPU ownership in the guest shell: a guest can paint anything, so only
 the host frame around it may say what the machine is and what it may reach.
 
+## Rice profiles
+
+Every Arch workstation guest is built by the same roles. A profile only
+chooses what that kind of guest starts with, so a new Machine of a kind gets
+the same rice without being riced again by hand.
+
+| Profile | Playbook | Network | Theme and wallpaper | Extra software | Default Desks |
+| --- | --- | --- | --- | --- | --- |
+| `dev` | `guest-arch-dev-vfio.yml` | dev | `hyperlab-workstation`, `dev/02` | IDE stack | Programming, 3D Design, Research, Systems |
+| `gaming-clean` | `guest-arch-gaming-clean.yml` | clean | `hyperlab-gaming-clean`, `clean/02` | Steam, Heroic (Epic, GOG), GameMode, MangoHud | Play, Stores, Capture, System |
+| `gaming-dirty` | `guest-arch-gaming-dirty.yml` | dirty | `hyperlab-gaming-dirty`, `dirty/02` | Lutris, Wine, winetricks, GameMode, MangoHud | Play, Modding, Launchers, System |
+
+Store accounts that own purchases live only in `gaming-clean`; `gaming-dirty`
+never installs a store client. The VM specs `arch-gaming-clean` and
+`arch-gaming-dirty` place them on their networks, take the GPU at their own
+class of the handoff ladder and do not share the clipboard.
+
+Wallpapers are the wordless `02` images of the reviewed `hyperlab-trust-v2`
+identity set in this repository. The role checks each one against the
+manifest digest before installing it, and installs all three on every guest,
+so `ALT+SHIFT+T` can move between the profile themes. A guest with no theme
+of its own yet starts on its profile's theme; one you already chose is kept.
+
+The playbooks run the full Arch sync and the Zen kernel on every run and keep
+the stock kernel as the recovery boot entry, so no extra flags are needed.
+
 ## Machine, Desk, Project
 
 ```text
@@ -68,6 +94,7 @@ Log out, restart and power off ask for a second `Enter`.
 | Launcher | applications, projects of every Desk, actions | desktop entries, the model |
 | OSD | Desk changes, volume, helper outcomes | Desk state, PipeWire |
 | Lock | time, date, password, where you were | hyprlock, `hyperlab-desk lock-label` |
+| Desktop | large clock, greeting, where you are, under the windows | the clock, `$USER`, the Desk state |
 
 Every number comes from a real source inside the guest, and a source that
 cannot be read hides its readout instead of showing a made-up value:
@@ -120,15 +147,24 @@ Source: `roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace/`.
 surface controller into every surface. Logic that does not need Quickshell
 lives in `desks.js`, `stats.js` and `launcher.js` and is tested directly.
 
+## Look
+
+- the focused window wears a gradient border in the theme's accent that turns
+  slowly, and a glow of the same colour; inactive windows dim slightly;
+- terminals are translucent over the blurred wallpaper;
+- an empty workspace shows the desktop clock and greeting;
+- a Desk change is announced by name, and the context island catches a
+  highlight;
+- a readout that runs hot (85 % and above) turns to the urgent colour.
+
 ## Themes
 
 The shell follows the active guest theme through `palette.json`, written by
 `privatestack-guest-theme`, so `ALT+SHIFT+T` recolours it without a restart.
-`hyperlab-workstation` is the default theme: the shell's own palette and a
-generated wallpaper with no words and no trust colour. Your own wallpapers for
-it go in `/usr/share/backgrounds/privatestack-guest/hyperlab-workstation/desktop/`
-and `.../lockscreen/` as `01.png`, `02.png` and so on; they sort before the
-generated `bootstrap.png`.
+Each profile theme uses its identity wallpaper as `01.png`, before the
+generated `bootstrap.png`. More wallpapers for a theme go in
+`/usr/share/backgrounds/privatestack-guest/<theme>/desktop/` and
+`.../lockscreen/` as `02.png`, `03.png` and so on.
 
 ## Recovery
 

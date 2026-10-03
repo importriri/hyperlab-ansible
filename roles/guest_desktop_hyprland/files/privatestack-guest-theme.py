@@ -19,6 +19,23 @@ THEMES = {
         "accent_alt": "8fb0ff",
         "urgent": "ff5c7a",
     },
+    # The gaming profiles share the workstation look in their own colour.
+    "hyperlab-gaming-clean": {
+        "background": "040806",
+        "foreground": "e4f2ea",
+        "surface": "08110c",
+        "accent": "72f2a5",
+        "accent_alt": "b7f8d2",
+        "urgent": "ff5c7a",
+    },
+    "hyperlab-gaming-dirty": {
+        "background": "0a0604",
+        "foreground": "f6e9df",
+        "surface": "140c07",
+        "accent": "ff9d45",
+        "accent_alt": "ffc48a",
+        "urgent": "ff4d6d",
+    },
     "sakura-circuit": {
         "background": "17111d",
         "foreground": "f7e8ff",
@@ -183,17 +200,20 @@ def palette_files(
     )
 
     return {
+        # The active window wears the theme: a slowly turning gradient
+        # border and a glow in the accent; inactive windows recede.
         CONFIG / "hypr/theme.lua": f"""hl.config({{
     general = {{
         col = {{
-            active_border = "rgba({accent}ff)",
-            inactive_border = "rgba({accent_alt}55)",
+            active_border = "rgba({accent}ff) rgba({accent_alt}ff) rgba({accent}ff) 45deg",
+            inactive_border = "rgba({surface}cc)",
         }},
     }},
 
     decoration = {{
         shadow = {{
-            color = "rgba(00000099)",
+            color = "rgba({accent}55)",
+            color_inactive = "rgba(00000088)",
         }},
     }},
 }})
@@ -534,12 +554,16 @@ def apply_theme(
     return changed
 
 
-def current_theme() -> str:
+def current_theme(default: str = "") -> str:
     state = load_state()
     theme = state.get("theme")
 
     if isinstance(theme, str) and theme in THEMES:
         return theme
+
+    # A guest with no recorded choice starts on its profile's theme.
+    if default in THEMES:
+        return default
 
     return ORDER[0]
 
@@ -582,7 +606,7 @@ def main() -> None:
 
     if action == "prepare":
         changed = apply_theme(
-            current_theme(),
+            current_theme(sys.argv[2] if len(sys.argv) > 2 else ""),
             runtime=False,
             rotate=False,
         )

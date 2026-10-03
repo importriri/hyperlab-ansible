@@ -56,22 +56,100 @@ guest_desktop_hyprland_shell: quickshell
 # series needs review before the shell is installed.
 guest_desktop_hyprland_quickshell_series: "0.3"
 
-# The image's default Desks. A user's own
+# The rice profile of this guest. Every profile shares the same roles,
+# shell, keys and security rules; a profile only chooses the theme it starts
+# on, its wallpaper, its default Desks and the extra packages it needs. The
+# playbook of each guest kind sets it, so a new Machine of that kind starts
+# from the same rice instead of being riced again by hand.
+guest_desktop_hyprland_profile: dev
+
+# Wallpapers come from the reviewed product identity set in this repository
+# and are verified against its manifest digest before they are installed.
+# Only the 02 variants are used: they carry no words, so the guest paints no
+# trust label of its own.
+guest_desktop_hyprland_identity_assets: >-
+  {{ guest_repository_root }}/themes/assets/hyperlab-trust-v2
+
+guest_desktop_hyprland_profiles:
+  dev:
+    theme: hyperlab-workstation
+    wallpaper: images/dev/02.png
+    packages: []
+    desks:
+      - name: Programming
+        blurb: Code, repositories and the terminals around them.
+        projects: []
+      - name: 3D Design
+        blurb: Blender and CAD, with the GPU when the machine has one.
+        projects: []
+      - name: Research
+        blurb: Reading, notes and documentation.
+        projects: []
+      - name: Systems
+        blurb: Ansible, networking and infrastructure work.
+        projects: []
+  # Official stores with real accounts: Steam, and Heroic for Epic and GOG.
+  # Nothing modded or untrusted is ever installed here.
+  gaming-clean:
+    theme: hyperlab-gaming-clean
+    wallpaper: images/clean/02.png
+    multilib: true
+    packages:
+      - steam
+      - gamemode
+      - lib32-gamemode
+      - lib32-mangohud
+      - lib32-nvidia-utils
+      - flatpak
+    flatpaks:
+      - com.heroicgameslauncher.hgl
+    desks:
+      - name: Play
+        blurb: The game you are playing, alone on its Desk.
+        projects: []
+      - name: Stores
+        blurb: Steam and Heroic, the only places games come from here.
+        projects: []
+      - name: Capture
+        blurb: Screenshots, clips and recordings.
+        projects: []
+      - name: System
+        blurb: Drivers, telemetry and settings.
+        projects: []
+  # Modded games and third-party launchers. Never a store account that owns
+  # purchases: those stay in gaming-clean.
+  gaming-dirty:
+    theme: hyperlab-gaming-dirty
+    wallpaper: images/dirty/02.png
+    multilib: true
+    packages:
+      - lutris
+      - wine
+      - winetricks
+      - gamemode
+      - lib32-gamemode
+      - lib32-mangohud
+      - lib32-nvidia-utils
+    flatpaks: []
+    desks:
+      - name: Play
+        blurb: The game you are playing, alone on its Desk.
+        projects: []
+      - name: Modding
+        blurb: Mod managers, archives and load orders.
+        projects: []
+      - name: Launchers
+        blurb: Lutris and Wine prefixes.
+        projects: []
+      - name: System
+        blurb: Drivers, telemetry and settings.
+        projects: []
+
+# The image's default Desks: the profile's, unless overridden. A user's own
 # ~/.config/hyperlab-workspace/desks.json takes precedence. Desk n owns
 # Hyprland workspaces n*10+1 .. n*10+9; at most nine Desks.
-guest_desktop_hyprland_workspace_desks:
-  - name: Programming
-    blurb: Code, repositories and the terminals around them.
-    projects: []
-  - name: 3D Design
-    blurb: Blender and CAD, with the GPU when the machine has one.
-    projects: []
-  - name: Research
-    blurb: Reading, notes and documentation.
-    projects: []
-  - name: Systems
-    blurb: Ansible, networking and infrastructure work.
-    projects: []
+guest_desktop_hyprland_workspace_desks: >-
+  {{ guest_desktop_hyprland_profiles[guest_desktop_hyprland_profile].desks }}
 
 # Ordinary workstation guests keep interactive login. Dedicated appliance-style
 # guests may opt into a persistent graphical session.
@@ -95,6 +173,8 @@ guest_desktop_hyprland_headless_scale: 1
 
 guest_desktop_hyprland_theme_order:
   - hyperlab-workstation
+  - hyperlab-gaming-clean
+  - hyperlab-gaming-dirty
   - sakura-circuit
   - neon-terminal
   - moon-library
@@ -108,6 +188,20 @@ guest_desktop_hyprland_palettes:
     accent: "5b8cff"
     accent_alt: "8fb0ff"
     urgent: "ff5c7a"
+  hyperlab-gaming-clean:
+    background: "040806"
+    foreground: "e4f2ea"
+    surface: "08110c"
+    accent: "72f2a5"
+    accent_alt: "b7f8d2"
+    urgent: "ff5c7a"
+  hyperlab-gaming-dirty:
+    background: "0a0604"
+    foreground: "f6e9df"
+    surface: "140c07"
+    accent: "ff9d45"
+    accent_alt: "ffc48a"
+    urgent: "ff4d6d"
   sakura-circuit:
     background: "17111d"
     foreground: "f7e8ff"

@@ -114,7 +114,7 @@ profiles it allows; the ceiling rule applies.
 |---|---|---|---|
 | `workstation-dev` | dev | dev | everyday development, the Workspace Shell |
 | `gaming-clean` | clean | clean | official stores with real accounts: Steam, Epic, GOG; nothing else installed |
-| `gaming-modded` | dirty | dirty | modded games and third-party launchers; never the store accounts |
+| `gaming-dirty` | dirty | dirty | modded games and third-party launchers; never the store accounts |
 | `gaming-offline` | lab (no internet) | lab | untrusted or cracked software, offline |
 | `browser-disposable` | dirty | none | throwaway browsing, reset on shutdown |
 | `services` | services | per Template | appliances such as Jellyfin |
@@ -124,8 +124,10 @@ shares a disk, a network or a Machine with an account that owns purchases.
 Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 
 - [ ] first published Template, `workstation-dev`, pinned to the sealed image
-- [ ] `gaming-clean`, `gaming-modded` and `gaming-offline` Templates for Linux
-      and Windows
+- [x] Arch rice profiles `dev`, `gaming-clean` and `gaming-dirty` on one set
+      of roles, with their playbooks and VM specs (software-verified)
+- [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
+      and Windows, pinned to sealed images of those profiles
 - [ ] `browser-disposable` with reset on shutdown
 - [ ] Template review gate: a Template cannot request a network, GPU profile
       or device its class forbids

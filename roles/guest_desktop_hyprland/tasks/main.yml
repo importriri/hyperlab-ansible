@@ -58,6 +58,27 @@
     fail_msg: >-
       The optional Hyprland headless monitor policy is incomplete.
 
+- name: Validate the guest rice profile
+  ansible.builtin.assert:
+    that:
+      - guest_desktop_hyprland_profile in guest_desktop_hyprland_profiles
+      - >-
+        guest_desktop_hyprland_profiles[guest_desktop_hyprland_profile].theme
+        in guest_desktop_hyprland_theme_order
+      - >-
+        guest_desktop_hyprland_profiles.values() | map(attribute='wallpaper')
+        | select('match', '^images/[a-z]+/02\\.png$') | list | length ==
+        guest_desktop_hyprland_profiles | length
+    fail_msg: >-
+      The guest profile must be one of
+      {{ guest_desktop_hyprland_profiles.keys() | list | join(', ') }},
+      start on a known theme, and use a wordless 02 identity wallpaper.
+
+- name: Select the guest rice profile
+  ansible.builtin.set_fact:
+    guest_desktop_hyprland_selected_profile: >-
+      {{ guest_desktop_hyprland_profiles[guest_desktop_hyprland_profile] }}
+
 - name: Validate the guest desktop shell policy
   ansible.builtin.assert:
     that:
@@ -72,6 +93,32 @@
     fail_msg: >-
       The guest shell must be quickshell or waybar, and the image must
       define between one and nine Desks with distinct names.
+
+# Steam, Wine and the 32-bit drivers live in the official multilib
+# repository, which a stock Arch install ships commented out.
+- name: Enable the official multilib repository for gaming profiles
+  ansible.builtin.replace:
+    path: /etc/pacman.conf
+    regexp: '^#\[multilib\]\n#Include = /etc/pacman\.d/mirrorlist$'
+    replace: "[multilib]\nInclude = /etc/pacman.d/mirrorlist"
+  when: guest_desktop_hyprland_selected_profile.multilib | default(false)
+
+- name: Read the pacman repository configuration
+  ansible.builtin.slurp:
+    path: /etc/pacman.conf
+  register: guest_desktop_hyprland_pacman_conf
+  when: guest_desktop_hyprland_selected_profile.multilib | default(false)
+
+- name: Require multilib before installing gaming packages
+  ansible.builtin.assert:
+    that:
+      - >-
+        guest_desktop_hyprland_pacman_conf.content | b64decode
+        is search('(?m)^\\[multilib\\]\\nInclude = /etc/pacman\\.d/mirrorlist$')
+    fail_msg: >-
+      The gaming profile needs the official [multilib] repository and
+      /etc/pacman.conf does not enable it in the reviewed form.
+  when: guest_desktop_hyprland_selected_profile.multilib | default(false)
 
 # Arch supports one package state only. Installing new packages against a
 # stale sync database asks mirrors for versions they no longer carry, and a
@@ -88,10 +135,28 @@
     guest_desktop_hyprland_system_upgrade.packages | default([])
     | length > 0
 
-- name: Install the official Hyprland guest stack
+- name: Install the official Hyprland guest stack and the profile packages
   community.general.pacman:
-    name: "{{ guest_desktop_hyprland_packages }}"
+    name: >-
+      {{ guest_desktop_hyprland_packages
+      + guest_desktop_hyprland_selected_profile.packages | default([]) }}
     state: present
+
+- name: Add the Flathub remote for profile applications outside Arch
+  community.general.flatpak_remote:
+    name: flathub
+    flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+    method: system
+    state: present
+  when: guest_desktop_hyprland_selected_profile.flatpaks | default([]) | length > 0
+
+- name: Install the profile applications from Flathub
+  community.general.flatpak:
+    name: "{{ guest_desktop_hyprland_selected_profile.flatpaks }}"
+    remote: flathub
+    method: system
+    state: present
+  when: guest_desktop_hyprland_selected_profile.flatpaks | default([]) | length > 0
 
 - name: Inspect official guest desktop entrypoints
   ansible.builtin.stat:
@@ -368,6 +433,55 @@
     }}
   when: not ansible_check_mode
 
+- name: Inspect the identity wallpapers on the controller
+  ansible.builtin.stat:
+    path: "{{ guest_desktop_hyprland_identity_assets }}/{{ item.value.wallpaper }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  delegate_to: localhost
+  become: false
+  loop: "{{ guest_desktop_hyprland_profiles | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: guest_desktop_hyprland_identity_files
+
+- name: Require every identity wallpaper to match its reviewed digest
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false)
+      - >-
+        item.stat.checksum ==
+        (guest_desktop_hyprland_identity_manifest.identities
+        [item.item.value.wallpaper.split('/')[1]].wallpapers
+        | selectattr('file', 'equalto', item.item.value.wallpaper)
+        | map(attribute='sha256') | first)
+    fail_msg: >-
+      {{ item.item.value.wallpaper }} does not match the digest in the
+      hyperlab-trust-v2 manifest.
+    quiet: true
+  vars:
+    guest_desktop_hyprland_identity_manifest: >-
+      {{ lookup('ansible.builtin.file',
+      guest_desktop_hyprland_identity_assets ~ '/manifest.yml') | from_yaml }}
+  loop: "{{ guest_desktop_hyprland_identity_files.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+# Every profile theme gets its wallpaper on every guest, so ALT+SHIFT+T can
+# move between them; 01.png sorts before the generated bootstrap image.
+- name: Install the identity wallpaper of each profile theme
+  ansible.builtin.copy:
+    src: "{{ guest_desktop_hyprland_identity_assets }}/{{ item.0.value.wallpaper }}"
+    dest: "/usr/share/backgrounds/privatestack-guest/{{ item.0.value.theme }}/{{ item.1 }}/01.png"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: >-
+    {{ guest_desktop_hyprland_profiles | dict2items
+    | product(['desktop', 'lockscreen']) | list }}
+  loop_control:
+    label: "{{ item.0.value.theme }}/{{ item.1 }}"
+
 - name: Create guest user configuration directories
   ansible.builtin.file:
     path: "/home/{{ admin_user }}/{{ item }}"
@@ -457,6 +571,7 @@
     argv:
       - /usr/local/bin/privatestack-guest-theme
       - prepare
+      - "{{ guest_desktop_hyprland_selected_profile.theme }}"
   environment:
     HOME: "/home/{{ admin_user }}"
   register: guest_desktop_hyprland_theme_prepare

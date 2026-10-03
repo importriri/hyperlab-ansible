@@ -1,0 +1,26 @@
+---
+schema_version: 1
+name: arch-gaming-clean
+image: arch
+lifecycle: permanent
+device_profile: vfio
+network_profile: clean
+looking_glass_mode: linux-experimental
+resource_profile: heavy
+resources:
+  memory_mb: 16384
+  vcpus: 4
+  disk_gib: 100
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: true
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Accelerated Arch gaming-clean workstation for official stores with real accounts (Steam, Heroic for Epic and GOG)
+tags: [linux, gaming, clean, vfio, looking-glass-experimental]
+snapshot_policy: manual
+backup_policy: manual
+benchmark: glmark2

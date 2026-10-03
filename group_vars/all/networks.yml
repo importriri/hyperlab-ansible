@@ -42,4 +42,6 @@ gpu_trust_levels:
 gpu_domain_profiles:
   win11clean-valley: clean
   arch-dev-vfio: dev
+  arch-gaming-clean: clean
+  arch-gaming-dirty: dirty
   win11dirty-disposable: dirty

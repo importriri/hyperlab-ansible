@@ -159,8 +159,42 @@ def check_role() -> None:
             "the workstation theme is not first")
     require(defaults["guest_desktop_hyprland_theme_default"] == "hyperlab-workstation",
             "the workstation theme is not the default")
-    desks = defaults["guest_desktop_hyprland_workspace_desks"]
-    require(1 <= len(desks) <= 9, "the image must define one to nine Desks")
+    profiles = defaults["guest_desktop_hyprland_profiles"]
+    require(set(profiles) == {"dev", "gaming-clean", "gaming-dirty"},
+            "the guest rice profiles changed without review")
+    require(defaults["guest_desktop_hyprland_profile"] == "dev", "dev is not the default profile")
+    themes = defaults["guest_desktop_hyprland_theme_order"]
+    for name, profile in profiles.items():
+        require(1 <= len(profile["desks"]) <= 9, f"{name} must define one to nine Desks")
+        require(profile["theme"] in themes, f"{name} starts on an unknown theme")
+        require(re.fullmatch(r"images/[a-z]+/02\.png", profile["wallpaper"]),
+                f"{name} must use a wordless 02 identity wallpaper")
+        require((ROOT / "themes/assets/hyperlab-trust-v2" / profile["wallpaper"]).is_file(),
+                f"{name} wallpaper is missing from the identity set")
+    # Store accounts live only in gaming-clean; dirty never gets a store client.
+    require("steam" in profiles["gaming-clean"]["packages"], "gaming-clean lost Steam")
+    for store in ("steam", "flatpak"):
+        require(store not in profiles["gaming-dirty"]["packages"],
+                f"gaming-dirty must not install the store client {store}")
+    require(not profiles["gaming-dirty"].get("flatpaks"), "gaming-dirty must not install store apps")
+    for kind, network in (("dev-vfio", "dev"), ("gaming-clean", "clean"), ("gaming-dirty", "dirty")):
+        play = yaml.safe_load((ROOT / f"playbooks/guest-arch-{kind}.yml").read_text())[0]["vars"]
+        require(play["workstation_kernel_profile"] == "arch-zen"
+                and play["workstation_kernel_remove_fallback"] is False,
+                f"guest-arch-{kind} must run the full sync and keep the recovery kernel")
+        expected = "dev" if kind == "dev-vfio" else kind
+        require(play["guest_desktop_hyprland_profile"] == expected,
+                f"guest-arch-{kind} selects the wrong profile")
+        spec_name = "arch-dev-vfio" if kind == "dev-vfio" else f"arch-{kind}"
+        spec = yaml.safe_load((ROOT / f"vm-specs/{spec_name}.yml").read_text())
+        require(spec["network_profile"] == network, f"{spec_name} is on the wrong network")
+        if network != "dev":
+            require(spec["clipboard"] is False, f"{spec_name} must not share the clipboard")
+    gpu = yaml.safe_load((ROOT / "group_vars/all/networks.yml").read_text())["gpu_domain_profiles"]
+    require(gpu.get("arch-gaming-clean") == "clean" and gpu.get("arch-gaming-dirty") == "dirty",
+            "gaming guests must take the GPU at their own class")
+    require("Require every identity wallpaper to match its reviewed digest" in tasks,
+            "identity wallpapers are installed without their digest check")
 
     for needle in (
         "src: quickshell/hyperlab-workspace/",

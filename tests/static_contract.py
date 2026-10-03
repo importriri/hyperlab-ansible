@@ -111,7 +111,13 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     )
     check(
         set(domain_profiles)
-        == {"win11clean-valley", "arch-dev-vfio", "win11dirty-disposable"},
+        == {
+            "win11clean-valley",
+            "arch-dev-vfio",
+            "win11dirty-disposable",
+            "arch-gaming-clean",
+            "arch-gaming-dirty",
+        },
         "reviewed VFIO domain map drift",
     )
     check(set(domain_profiles.values()) <= set(trust_levels), "every VFIO domain must map to a reviewed GPU trust level")

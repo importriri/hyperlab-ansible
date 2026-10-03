@@ -1,0 +1,26 @@
+---
+schema_version: 1
+name: arch-gaming-dirty
+image: arch
+lifecycle: permanent
+device_profile: vfio
+network_profile: dirty
+looking_glass_mode: linux-experimental
+resource_profile: heavy
+resources:
+  memory_mb: 16384
+  vcpus: 4
+  disk_gib: 100
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: true
+looking_glass: true
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Accelerated Arch gaming-dirty workstation, modded games and third-party launchers, never a store account that owns purchases
+tags: [linux, gaming, dirty, vfio, looking-glass-experimental]
+snapshot_policy: manual
+backup_policy: manual
+benchmark: glmark2
