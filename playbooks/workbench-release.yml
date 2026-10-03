@@ -1,0 +1,13 @@
+---
+- name: Release one Workbench candidate and its staging
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    workbench_operation: release
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: workbench
+    - workbench

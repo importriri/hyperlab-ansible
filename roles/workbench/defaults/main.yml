@@ -1,0 +1,23 @@
+---
+# The Workbench of Golden Image candidates (docs/adr/0015-golden-image-capture.md).
+workbench_root: /var/lib/hyperlab-workbench
+workbench_repository_root: "{{ playbook_dir | dirname }}"
+workbench_tool: "{{ workbench_repository_root }}/tools/workbench.py"
+
+# adopt, seal or release; set by the playbook, never by the caller.
+workbench_operation: ""
+
+# The domain to adopt, seal or release (-e workbench_domain=...).
+workbench_domain: ""
+
+# Adopt only: the rice profile the image carries, the base image manifest it
+# was built over (read from vm-specs/<domain>.yml when that spec exists), and
+# the new image id. Sealed images are never replaced, so the id carries the
+# capture date.
+workbench_profile: dev
+workbench_base_image: ""
+workbench_image_id: ""
+
+# Offline generalization and inspection of the copied disk.
+workbench_packages:
+  - guestfs-tools

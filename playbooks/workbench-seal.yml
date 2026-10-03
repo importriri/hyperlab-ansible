@@ -1,0 +1,13 @@
+---
+- name: Capture, generalize and stage one Workbench candidate
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    workbench_operation: seal
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: workbench
+    - workbench

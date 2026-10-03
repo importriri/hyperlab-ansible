@@ -1,0 +1,158 @@
+---
+- name: Validate the Workbench request
+  ansible.builtin.assert:
+    that:
+      - workbench_operation in ['adopt', 'seal', 'release']
+      - workbench_domain is string
+      - workbench_domain is match('^[a-z0-9][a-z0-9-]{0,62}$')
+    fail_msg: >-
+      Name the domain with -e workbench_domain=<name> (lowercase letters,
+      digits and dashes).
+
+- name: Install the offline generalization tools
+  community.general.pacman:
+    name: "{{ workbench_packages }}"
+    state: present
+  when: workbench_operation == 'seal'
+
+- name: Create the root-owned Workbench directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ workbench_root }}", mode: "0755" }
+    - { path: "{{ workbench_root }}/registry", mode: "0755" }
+    - { path: "{{ workbench_root }}/staging", mode: "0700" }
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Adopt the domain as a Golden Image candidate
+  when: workbench_operation == 'adopt'
+  block:
+    - name: Read the domain's reviewed VM spec when it has one
+      ansible.builtin.stat:
+        path: "{{ workbench_repository_root }}/vm-specs/{{ workbench_domain }}.yml"
+      register: workbench_spec
+
+    - name: Resolve the base image and the new image id
+      ansible.builtin.set_fact:
+        workbench_resolved_base: >-
+          {{ workbench_base_image
+          or (lookup('ansible.builtin.file', workbench_spec.stat.path) | from_yaml).image
+          if workbench_spec.stat.exists else workbench_base_image }}
+        workbench_resolved_image_id: >-
+          {{ workbench_image_id
+          or (((lookup('ansible.builtin.file', workbench_spec.stat.path) | from_yaml).image
+          if workbench_spec.stat.exists else workbench_base_image)
+          ~ '-' ~ workbench_profile ~ '-' ~ lookup('ansible.builtin.pipe', 'date +%Y%m%d')) }}
+
+    - name: Require a base image
+      ansible.builtin.assert:
+        that:
+          - workbench_resolved_base | length > 0
+        fail_msg: >-
+          {{ workbench_domain }} has no VM spec; name its base image with
+          -e workbench_base_image=<image>.
+
+    - name: Record the candidate
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ workbench_tool }}"
+          - --root
+          - "{{ workbench_root }}"
+          - adopt
+          - --repo
+          - "{{ workbench_repository_root }}"
+          - --domain
+          - "{{ workbench_domain }}"
+          - --image-id
+          - "{{ workbench_resolved_image_id }}"
+          - --base-image
+          - "{{ workbench_resolved_base }}"
+          - --profile
+          - "{{ workbench_profile }}"
+          - --by
+          - "{{ lookup('ansible.builtin.env', 'USER') }}"
+      register: workbench_adopted
+      changed_when: true
+
+    - name: Show the candidate
+      ansible.builtin.debug:
+        msg: >-
+          {{ workbench_domain }} is a Golden Image candidate for image
+          {{ (workbench_adopted.stdout | from_json).image_id }}. Shut it down,
+          then seal it with playbooks/workbench-seal.yml.
+
+- name: Capture, generalize and stage the candidate
+  when: workbench_operation == 'seal'
+  block:
+    - name: Capture and generalize a copy of the shut-off disk
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ workbench_tool }}"
+          - --root
+          - "{{ workbench_root }}"
+          - seal
+          - --repo
+          - "{{ workbench_repository_root }}"
+          - --domain
+          - "{{ workbench_domain }}"
+      environment:
+        # Run the libguestfs appliance directly rather than through libvirt.
+        LIBGUESTFS_BACKEND: direct
+      register: workbench_sealed
+      changed_when: true
+
+    - name: Read the capture result
+      ansible.builtin.set_fact:
+        workbench_capture: "{{ workbench_sealed.stdout | from_json }}"
+
+    - name: Read the rendered image manifest
+      ansible.builtin.slurp:
+        path: "{{ workbench_capture.manifest }}"
+      register: workbench_manifest
+
+    - name: Put the manifest in the checkout for review
+      become: false
+      ansible.builtin.copy:
+        content: "{{ workbench_manifest.content | b64decode }}"
+        dest: "{{ workbench_repository_root }}/images/{{ workbench_capture.image_id }}.yml"
+        mode: "0644"
+        force: false
+
+    - name: Show the import commands
+      ansible.builtin.debug:
+        msg:
+          - "Generalized, scanned and staged: {{ workbench_capture.staged_image }}"
+          - "sha256: {{ workbench_capture.sha256 }}"
+          - "Review images/{{ workbench_capture.image_id }}.yml, then import it:"
+          - >-
+            ansible-playbook -K playbooks/image-prepare.yml
+            -e image_factory_manifest=images/{{ workbench_capture.image_id }}.yml
+            -e image_factory_local_source={{ workbench_capture.staged_image }}
+            -e image_factory_source_sha256={{ workbench_capture.sha256 }}
+
+- name: Release the candidate and its staging
+  when: workbench_operation == 'release'
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ workbench_tool }}"
+      - --root
+      - "{{ workbench_root }}"
+      - release
+      - --domain
+      - "{{ workbench_domain }}"
+  changed_when: true
+
+- name: Record that the workbench brick is available
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: workbench

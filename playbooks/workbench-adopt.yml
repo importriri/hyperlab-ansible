@@ -1,0 +1,13 @@
+---
+- name: Adopt one domain as a Golden Image candidate
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    workbench_operation: adopt
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: workbench
+    - workbench

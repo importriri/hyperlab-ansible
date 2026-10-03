@@ -19,6 +19,7 @@ brick_requires:
   image_store: [kvm_host, bootstrap_storage]
   windows_workshop: [image_store, looking_glass]
   image_factory: [image_store]
+  workbench: [image_store]
   guest: [image_factory, network_domains]
   service_registry: [image_store, network_domains]
   service_exposure: [service_registry]
@@ -51,6 +52,7 @@ brick_playbooks:
   image_store: playbooks/image-store.yml
   windows_workshop: playbooks/windows-workshop.yml
   image_factory: playbooks/image-prepare.yml
+  workbench: playbooks/workbench-adopt.yml
   guest: playbooks/vm-create.yml
   service_registry: playbooks/service-register.yml
   service_exposure: playbooks/jellyfin.yml
