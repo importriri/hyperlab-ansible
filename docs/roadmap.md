@@ -205,6 +205,19 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [ ] the ladder still guarantees that a lower-trust GPU use never precedes a
       higher-trust use in the same host boot
 
+### Showcase: from Golden Image to running Machine
+
+Once 5 and 5b are done on Nitro, a short public demonstration of the
+platform, recorded on the host:
+
+- [ ] storyboard of 60 to 90 seconds: create a Machine from
+      `workstation-dev` in the shell, first boot with the rice, the GPU lease,
+      Looking Glass, the Desks, the host frame showing trust and network
+- [ ] a demo script that runs the steps in order, so the take is clean
+- [ ] recording on the host, editing, captions
+- [ ] review before publishing: no host name, user name, address or private
+      path on screen
+
 ### 6. Controlled data crossing
 
 - [ ] host → guest clipboard: copy on the host, a dedicated host key, pick
