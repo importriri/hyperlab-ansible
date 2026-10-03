@@ -35,10 +35,20 @@ SHA_RE = re.compile(r"^[a-f0-9]{64}$")
 STATES = ("candidate", "captured")
 PROFILE_NETWORK = {"dev": "dev", "gaming-clean": "clean", "gaming-dirty": "dirty"}
 
-# Generalization of the copy. `user-account` removes every non-root account
-# and its home; the deletes cover what the default operations do not.
+# Every ordinary account (UID_MIN..UID_MAX of login.defs) and its home goes,
+# removed by the guest's own userdel inside the copy. virt-sysprep's
+# `user-account` operation is not used: its Augeas lens cannot read Arch's
+# /etc/login.defs and fails with "aug_get: no matching node".
+REMOVE_USERS = (
+    "awk -F: '$3 >= 1000 && $3 < 60000 {print $1}' /etc/passwd"
+    " | while read -r name; do userdel -r \"$name\" 2>/dev/null || userdel \"$name\"; done"
+)
+
+# Generalization of the copy: the default operations, the users, and the
+# deletes that cover what the default operations do not.
 SYSPREP_ARGS = [
-    "--operations", "defaults,user-account",
+    "--operations", "defaults",
+    "--run-command", REMOVE_USERS,
     "--delete", "/home/*",
     "--delete", "/root/.ssh",
     "--delete", "/root/.gnupg",

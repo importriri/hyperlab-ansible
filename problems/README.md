@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`workbench-sysprep-user-account-arch.md`](workbench-sysprep-user-account-arch.md):
+  `virt-sysprep`'s user-account operation cannot read Arch's `login.defs`; the
+  Workbench removes users with the guest's own `userdel`.
 - [`workbench-sysprep-format-order.md`](workbench-sysprep-format-order.md): the
   first Workbench seal failed because `--format` followed `-a`, and the error
   was hidden behind the tool's bug-report advice.

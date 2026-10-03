@@ -12,7 +12,7 @@ leaves behind:
      generalized copy the leftover scan does not pass, and a refused seal
      leaves no staging behind;
   3. a seal only ever reads the source disk, generalizes the copy with every
-     user account removed, and renders a schema-valid local-import manifest
+     ordinary user account removed by the guest's userdel, and renders a schema-valid local-import manifest
      with the digest of the staged image;
   4. the scan recognises each kind of leftover it promises to catch;
   5. release removes the record and its staging;
@@ -180,7 +180,10 @@ def check_seal(lab: Lab) -> None:
     assert len(sysprep) == 1
     args = sysprep[0]
     assert args[args.index("-a") + 1].endswith(".qcow2.new"), "sysprep must run on the copy"
-    assert "defaults,user-account" in args and "/home/*" in args
+    assert args[args.index("--operations") + 1] == "defaults", "user-account fails on Arch"
+    assert "/home/*" in args
+    command = args[args.index("--run-command") + 1]
+    assert "userdel -r" in command and "$3 >= 1000 && $3 < 60000" in command
     assert not any(str(lab.disk) == arg for arg in args), "sysprep touched the source disk"
     guestfish = [call for call in lab.calls() if call[0] == "guestfish"]
     assert guestfish and "--ro" in guestfish[0]

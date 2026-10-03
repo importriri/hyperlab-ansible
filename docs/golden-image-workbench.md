@@ -45,8 +45,9 @@ The playbook installs `guestfs-tools` on the host, and:
    file disk;
 2. copies the disk, flattened, to `/var/lib/hyperlab-workbench/staging/<id>/`
    (root only);
-3. generalizes the copy with `virt-sysprep`: every user account and home
-   directory, machine identity, SSH host keys, logs, shell histories,
+3. generalizes the copy with `virt-sysprep`: every ordinary user account
+   (UID 1000 to 59999) and its home directory, removed with the guest's own
+   `userdel`, machine identity, SSH host keys, logs, shell histories,
    temporary files, the pacman cache, root's SSH, GnuPG and keyring
    directories, cloud-init instance state and the cloud-init sudoers file;
 4. scans the copy read-only and refuses on any leftover of those;

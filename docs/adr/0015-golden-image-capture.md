@@ -49,7 +49,8 @@ one transaction under a lock:
    disk is only read; the domain keeps working exactly as before;
 3. generalize the copy offline with `virt-sysprep`: machine identity, SSH host
    keys, logs, shell histories, temporary files, package caches, cloud-init
-   instance state, and **every user account with its home directory**. The
+   instance state, and **every ordinary user account with its home
+   directory**, removed by the guest's own `userdel` inside the copy. The
    rice is not carried in a home directory; it is reapplied to the new user
    of each Machine by that Machine's profile playbook;
 4. scan the generalized copy and refuse on any leftover: a home directory,
