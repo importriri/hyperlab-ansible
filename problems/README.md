@@ -135,5 +135,8 @@ proof.
 - [`dkms-module-signing-trust.md`](dkms-module-signing-trust.md):
   signed out-of-tree modules still lack a proved kernel trust path for a future
   stricter lockdown/module-enforcement policy.
+- [`managed-machine-provenance-claim.md`](managed-machine-provenance-claim.md):
+  a self-asserted `managed-machine` tag let a dirty plan write a clean
+  root-owned GPU handoff policy.
 
 Author: [importriri](https://github.com/importriri).

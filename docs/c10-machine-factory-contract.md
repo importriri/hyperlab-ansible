@@ -124,6 +124,21 @@ Network profile and GPU capability are independent. The current rule excluding
 `services` from VFIO is superseded by C10. A future service Machine may request GPU when its Template, Golden Image,
 detected hardware and host-owned GPU policy permit it. C10 does not invent a trust rank for `services`.
 
+A `gpu_handoff_profile` may lower, never raise, the contamination class that a
+ranked network identity already implies: a `dirty` Machine may hand off as
+`dirty` or `lab`, never as `dev` or `clean`. The Machine factory, `guest_plan.py`
+and the root-owned `tools/gpu_handoff_policy.py` each enforce this, so the
+privileged tool holds the rule even for a plan that did not come from the
+factory. Removal is exempt so a stale policy can always be cleaned up.
+
+The `managed-machine` tag on a projected VM-spec is a provenance claim, not a
+security boundary. Anyone who can write `vm-specs/` and run the guest lifecycle
+with sudo can write that tag. What the privileged path enforces regardless of
+provenance is the ceiling above, the reviewed trust levels, the exact
+`device_profile=vfio` request and the fail-closed policy-directory checks. The
+Template allowlist for a `services` Machine is enforced by the factory and by
+review of the checked-in Template; the root tool does not re-derive it.
+
 Looking Glass is an explicit cross-OS presentation capability, not a consequence
 of Windows. Runtime transport availability remains backend-authoritative.
 

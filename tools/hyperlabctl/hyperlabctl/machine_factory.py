@@ -20,6 +20,10 @@ from .machine_registry import (
     validate_machine_record,
 )
 
+# The reviewed contamination ladder. A handoff profile may lower, never raise,
+# the class a ranked network identity implies; services is not ranked.
+GPU_HANDOFF_LADDER = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
+
 
 ID_RE = re.compile(
     r"^[a-z0-9][a-z0-9-]*$"
@@ -978,6 +982,17 @@ def materialize_machine(
         raise ContractError(
             f"Template does not permit network "
             f"{selected_network}"
+        )
+
+    if (
+        selected_device == "vfio"
+        and selected_network in GPU_HANDOFF_LADDER
+        and GPU_HANDOFF_LADDER[selected_gpu_handoff]
+        > GPU_HANDOFF_LADDER[selected_network]
+    ):
+        raise ContractError(
+            f"GPU handoff profile {selected_gpu_handoff} "
+            f"ranks above network {selected_network}"
         )
 
     if selected_resources not in profiles:

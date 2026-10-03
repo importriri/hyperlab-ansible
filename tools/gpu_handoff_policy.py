@@ -254,6 +254,7 @@ def static_domains(
 
 def validate_payload(
     payload: Any,
+    trust_levels: dict[str, int] | None = None,
 ) -> tuple[str, str]:
     require(
         isinstance(payload, dict),
@@ -306,6 +307,34 @@ def validate_payload(
         "guest plan requires an explicit "
         "gpu_handoff_profile",
     )
+
+    if trust_levels is not None:
+        # Removal needs only the name; granting or verifying a policy must
+        # not trust the plan's own provenance tag. A handoff class may lower,
+        # never raise, the class a ranked network identity implies.
+        network = payload.get(
+            "network_profile"
+        )
+
+        require(
+            isinstance(network, str)
+            and NAME_RE.fullmatch(network)
+            is not None,
+            "guest plan requires a network_profile",
+        )
+
+        require(
+            profile in trust_levels,
+            f"gpu_handoff_profile {profile} is not a reviewed trust level",
+        )
+
+        require(
+            network not in trust_levels
+            or trust_levels[profile]
+            <= trust_levels[network],
+            f"gpu_handoff_profile {profile} ranks above "
+            f"network {network}",
+        )
 
     return name, profile
 
@@ -809,7 +838,12 @@ def main() -> int:
         )
 
         name, profile = validate_payload(
-            payload
+            payload,
+            (
+                None
+                if args.action == "remove"
+                else trust_levels
+            ),
         )
 
         if args.action == "create":

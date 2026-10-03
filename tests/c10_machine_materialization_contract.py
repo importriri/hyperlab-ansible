@@ -429,6 +429,27 @@ def verify_transport_and_policy_refusals() -> None:
         expect_contract_error(
             lambda: materialize(
                 root,
+                network_profile="dev",
+                gpu_handoff_profile="clean",
+            ),
+            "dev network Machine was allowed "
+            "a cleaner GPU handoff profile",
+        )
+
+        require(
+            materialize(
+                root,
+                network_profile="dev",
+                gpu_handoff_profile="dirty",
+            )["gpu_handoff_profile"]
+            == "dirty",
+            "a handoff below the network "
+            "class was refused",
+        )
+
+        expect_contract_error(
+            lambda: materialize(
+                root,
                 looking_glass_mode="windows",
             ),
             "Linux Template accepted "

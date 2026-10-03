@@ -289,6 +289,20 @@ def test_vfio_plan() -> None:
         assert vfio["cpu_pinning"]["emulator_cpuset"] == "0,4"
         assert vfio["cpu_pinning"]["iothread_cpuset"] == "0,4"
 
+        data = yaml.safe_load(spec.read_text())
+        data["gpu_handoff_profile"] = "clean"
+        data["network_profile"] = "lab"
+        write_yaml(spec, data)
+        manifest_path = root / "images/win11clean.yml"
+        manifest_data = yaml.safe_load(manifest_path.read_text())
+        manifest_data["network_allowlist"] = ["clean", "lab"]
+        write_yaml(manifest_path, manifest_data)
+        refused = run(sys.executable, str(PLAN), "--root", str(root), "--spec", str(spec), "--store", str(store))
+        assert refused.returncode == 2 and "ranks above network lab" in refused.stderr, refused.stderr
+        data["network_profile"] = "clean"
+        data.pop("gpu_handoff_profile")
+        write_yaml(spec, data)
+
         mismatch = build_vfio_plan(plan, report, profiles, trust, build="B7-999-g0123456789")
         assert mismatch.returncode == 2 and "differs" in mismatch.stderr
 

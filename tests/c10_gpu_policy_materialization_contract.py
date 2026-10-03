@@ -409,6 +409,69 @@ def verify_policy_tool() -> None:
             "GPU policy authority",
         )
 
+        # The managed-machine tag is self-asserted by the plan, so the root
+        # tool must not let a ranked network claim a cleaner GPU handoff.
+        forged = payload(
+            "forged-dirty-01",
+            "clean",
+        )
+        forged["network_profile"] = "dirty"
+
+        refused = invoke(
+            directory,
+            static_file,
+            "ensure",
+            forged,
+        )
+
+        require(
+            refused.returncode == 2
+            and "ranks above network dirty"
+            in refused.stderr
+            and not (
+                directory / "forged-dirty-01.conf"
+            ).exists(),
+            "dirty network was granted a "
+            "clean GPU handoff policy",
+        )
+
+        lowered = payload(
+            "dev-lowered-01",
+            "dirty",
+        )
+        lowered["network_profile"] = "dev"
+
+        accepted = invoke(
+            directory,
+            static_file,
+            "ensure",
+            lowered,
+            dry_run=True,
+        )
+
+        require(
+            accepted.returncode == 0,
+            "a handoff below its network "
+            "class was refused: "
+            + accepted.stderr,
+        )
+
+        unnamed = payload()
+        del unnamed["network_profile"]
+
+        refused = invoke(
+            directory,
+            static_file,
+            "ensure",
+            unnamed,
+        )
+
+        require(
+            refused.returncode == 2,
+            "GPU policy was granted without "
+            "a network identity",
+        )
+
         removed = invoke(
             directory,
             static_file,

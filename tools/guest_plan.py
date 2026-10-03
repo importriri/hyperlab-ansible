@@ -23,6 +23,9 @@ class PlanError(ValueError):
     """A checked-in contract cannot be turned into a safe guest plan."""
 
 
+GPU_HANDOFF_LADDER = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
+
+
 def load_mapping(path: Path, label: str) -> dict[str, Any]:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -153,8 +156,16 @@ def build_plan(
             gpu_handoff_profile = network
         else:
             require(
-                gpu_handoff_profile in {"clean", "dev", "dirty", "lab"},
+                gpu_handoff_profile in GPU_HANDOFF_LADDER,
                 "unsupported gpu_handoff_profile",
+            )
+            # The handoff class may lower, never raise, the contamination class a
+            # ranked network identity already implies. A dirty guest claiming a
+            # clean handoff would let a later clean guest take a contaminated GPU.
+            require(
+                network not in GPU_HANDOFF_LADDER
+                or GPU_HANDOFF_LADDER[gpu_handoff_profile] <= GPU_HANDOFF_LADDER[network],
+                f"gpu_handoff_profile {gpu_handoff_profile} ranks above network {network}",
             )
     else:
         require(
