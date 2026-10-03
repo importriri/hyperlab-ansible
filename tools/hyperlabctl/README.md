@@ -17,6 +17,11 @@ registry does not expose.
 | `hyperlabctl vm list` | managed/unmanaged domain state |
 | `hyperlabctl net list` | five trust-domain networks |
 | `hyperlabctl image list` | image manifests and sealed-base state |
+| `hyperlabctl machine templates` | product Templates and whether each is ready |
+| `hyperlabctl machine list` | persistent product Machine records |
+| `hyperlabctl machine inventory` | product Machines merged with matching runtime observations |
+| `hyperlabctl machine create <template> <id>` | record Machine intent from a ready Template |
+| `hyperlabctl machine project <id>` | write the derived VM-spec adapter for one Machine |
 | `hyperlabctl trust` | current GPU trust owner and allowed transitions |
 | `hyperlabctl logs --level warn` | warning-or-higher HyperLab events |
 | `hyperlabctl schema` | discovered status providers and fields |
@@ -25,6 +30,11 @@ registry does not expose.
 
 `preflight.yml` must have selected a hardware profile before hardware-dependent
 sections can be complete.
+
+`machine create` records intent only; it does not define or start a VM. The
+Machine registry lives below `$XDG_STATE_HOME/hyperlab/machines` and is the
+only source of product membership. A libvirt domain without a Machine record is
+not a product Machine, however it was defined.
 
 ## Read boundary
 

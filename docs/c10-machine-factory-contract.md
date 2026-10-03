@@ -139,6 +139,9 @@ provenance is the ceiling above, the reviewed trust levels, the exact
 Template allowlist for a `services` Machine is enforced by the factory and by
 review of the checked-in Template; the root tool does not re-derive it.
 
+The ladder, the policy surfaces and the field vocabulary are recorded in
+[`gpu-handoff-policy.md`](gpu-handoff-policy.md).
+
 Looking Glass is an explicit cross-OS presentation capability, not a consequence
 of Windows. Runtime transport availability remains backend-authoritative.
 

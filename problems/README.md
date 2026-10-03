@@ -141,5 +141,8 @@ proof.
 - [`product-inventory-hid-fixture-domains.md`](product-inventory-hid-fixture-domains.md):
   product-only Machines hid running fixture domains while the empty state
   promised they were in Diagnostics.
+- [`c10-contract-fixtures-behind-runtime.md`](c10-contract-fixtures-behind-runtime.md):
+  the focused C10 gate passed while three discovered contracts still encoded
+  pre-C10 fixtures.
 
 Author: [importriri](https://github.com/importriri).

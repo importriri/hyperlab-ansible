@@ -50,6 +50,51 @@ works.
 - **M13 — seamless guest applications:** future work and must not be described
   as providing Qubes OS security properties.
 
+## C10 — Machine Factory
+
+Contract: [`c10-machine-factory-contract.md`](c10-machine-factory-contract.md).
+GPU policy: [`gpu-handoff-policy.md`](gpu-handoff-policy.md).
+
+Software-verified:
+
+- [x] Template and Machine record schemas
+- [x] Template catalogue with sealed Golden Image digest pins
+- [x] user-owned Machine registry (intent and membership only)
+- [x] Machine materialization and Machine to VM-spec projection
+- [x] network identity separated from GPU handoff policy
+- [x] root-owned managed GPU policy surface merged by the qemu hook
+- [x] GPU handoff ceiling enforced by factory, planner and root tool
+- [x] product Machine CLI and registry-backed inventory
+- [x] root GPU-policy observability and remedies
+- [x] Diagnostics lists libvirt domains outside the product inventory
+- [x] complete discovered contract suite green
+
+Open before C10 can be used as a product path:
+
+- [ ] a captured, generalized and sealed workstation Golden Image; the
+      upstream `arch` cloud image is a base, not the workstation
+- [ ] the first published Template pinned to that Golden Image
+- [ ] a Machine created, projected, defined and started on Nitro, with its
+      managed `domains.d` policy written and verified by the hook
+- [ ] the hook refuses an unmapped domain that carries the GPU (see
+      [`gpu-handoff-policy.md`](gpu-handoff-policy.md#known-open-work))
+- [ ] physical acceptance of the product-only Machines workspace and the
+      Diagnostics outside-domain list
+
+## Next milestone — Golden Image capture
+
+The Image Factory prepares and validates upstream images. It cannot yet turn a
+finished workstation guest into a reusable Golden Image. The next milestone
+adds that path:
+
+1. capture a shut-off workstation disk into the image store;
+2. generalize it: machine identity, SSH host keys, cloud-init state, logs,
+   shell history and any personal data removed, with a reviewed checklist;
+3. seal it with a digest and a manifest that records its source guest and the
+   commits that built it;
+4. publish the first Template against it;
+5. prove permanent and disposable Machines from it on Nitro.
+
 ## Canonical completion order
 
 The candidate is completed in dependency order so later security and performance
