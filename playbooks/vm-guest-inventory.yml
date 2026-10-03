@@ -11,6 +11,8 @@
       {{ guest_inventory_repository_root }}/tools/guest_plan.py
     guest_inventory_address_tool: >-
       {{ guest_inventory_repository_root }}/tools/guest_agent_address.py
+    guest_inventory_host_key_tool: >-
+      {{ guest_inventory_repository_root }}/tools/guest_host_key.py
     guest_inventory_resource_profiles_file: >-
       {{ guest_inventory_repository_root }}/group_vars/all/vm-resource-profiles.yml
     guest_inventory_python_bin: /usr/bin/python
@@ -147,6 +149,33 @@
       register: guest_inventory_address
       changed_when: false
       check_mode: false
+
+    # A new Machine generates its SSH host keys on first boot. The key is read
+    # over the hypervisor's QEMU Guest Agent channel, never accepted from the
+    # network, and pinned to the address just resolved; a stale key for a
+    # reused address is replaced.
+    - name: Read the guest SSH host key through QEMU Guest Agent
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_inventory_python_bin }}"
+          - "{{ guest_inventory_host_key_tool }}"
+          - --virsh-bin
+          - "{{ guest_inventory_virsh_bin }}"
+          - --domain
+          - "{{ guest_inventory_plan.name }}"
+          - --address
+          - "{{ guest_inventory_address.stdout }}"
+      register: guest_inventory_host_key
+      changed_when: false
+      check_mode: false
+
+    - name: Pin the guest SSH host key for strict checking
+      ansible.builtin.known_hosts:
+        path: "{{ guest_inventory_operator_home }}/.ssh/known_hosts"
+        name: "{{ guest_inventory_address.stdout }}"
+        key: "{{ guest_inventory_host_key.stdout }}"
+        hash_host: false
+        state: present
 
     - name: Build the strict runtime workstation inventory record
       ansible.builtin.set_fact:

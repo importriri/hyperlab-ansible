@@ -2,7 +2,9 @@
 """Host-independent contract for managed guest runtime inventory."""
 from __future__ import annotations
 
+import base64
 import importlib.util
+import json
 from pathlib import Path
 
 import yaml
@@ -26,6 +28,44 @@ def expect_refusal(function, *args: str) -> None:
     except ValueError:
         return
     raise AssertionError(f"expected refusal for {args!r}")
+
+
+def ed25519_line(seed: int = 7) -> str:
+    blob = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes([seed]) * 32
+    return "ssh-ed25519 " + base64.b64encode(blob).decode() + " root@dev-01"
+
+
+def check_host_key_tool() -> None:
+    spec = importlib.util.spec_from_file_location("guest_host_key", ROOT / "tools" / "guest_host_key.py")
+    assert spec is not None and spec.loader is not None
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+
+    line = ed25519_line()
+    pinned = tool.known_hosts_line("10.10.3.131", line + "\n")
+    assert pinned == "10.10.3.131 " + " ".join(line.split()[:2]), pinned
+    expect_refusal(tool.known_hosts_line, "dev-01", line)
+    expect_refusal(tool.known_hosts_line, "10.10.3.131", line + "\n" + ed25519_line(8))
+    expect_refusal(tool.known_hosts_line, "10.10.3.131", "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB root@x")
+    short = "ssh-ed25519 " + base64.b64encode(b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x10" + b"x" * 16).decode()
+    expect_refusal(tool.known_hosts_line, "10.10.3.131", short)
+
+    calls = []
+
+    def agent(argv):
+        assert argv[:5] == ["/usr/bin/virsh", "-c", "qemu:///system", "qemu-agent-command", "dev-01"]
+        command = json.loads(argv[5])
+        calls.append(command["execute"])
+        if command["execute"] == "guest-file-open":
+            assert command["arguments"] == {"path": "/etc/ssh/ssh_host_ed25519_key.pub", "mode": "r"}
+            return json.dumps({"return": 5})
+        if command["execute"] == "guest-file-read":
+            return json.dumps({"return": {"count": len(line), "eof": True,
+                                          "buf-b64": base64.b64encode(line.encode()).decode()}})
+        return json.dumps({"return": {}})
+
+    content = tool.read_guest_file(agent, Path("/usr/bin/virsh"), "dev-01", tool.HOST_KEY_PATH)
+    assert content == line and calls == ["guest-file-open", "guest-file-read", "guest-file-close"]
 
 
 def main() -> int:
@@ -76,6 +116,8 @@ def main() -> int:
         "10.10.3.0/24",
     )
 
+    check_host_key_tool()
+
     playbook = yaml.safe_load(
         (ROOT / "playbooks" / "vm-guest-inventory.yml").read_text(
             encoding="utf-8"
@@ -91,6 +133,16 @@ def main() -> int:
     names = [task["name"] for task in tasks]
     assert "Resolve the unique managed guest address through QEMU Guest Agent" in names
     assert "Publish the strict runtime workstation inventory" in names
+    read = names.index("Read the guest SSH host key through QEMU Guest Agent")
+    pin = names.index("Pin the guest SSH host key for strict checking")
+    resolve = names.index("Resolve the unique managed guest address through QEMU Guest Agent")
+    assert resolve < read < pin < names.index("Build the strict runtime workstation inventory record")
+    pin_task = tasks[pin]["ansible.builtin.known_hosts"]
+    assert pin_task["state"] == "present" and pin_task["hash_host"] is False
+    assert pin_task["name"] == "{{ guest_inventory_address.stdout }}"
+    assert "ssh-keyscan" not in (ROOT / "playbooks" / "vm-guest-inventory.yml").read_text(), (
+        "a host key is never accepted from the network"
+    )
 
     rendered_source = (ROOT / "playbooks" / "vm-guest-inventory.yml").read_text(
         encoding="utf-8"

@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-host-key-unknown-after-first-boot.md`](guest-host-key-unknown-after-first-boot.md):
+  a new Machine's SSH host key is now read through QEMU Guest Agent and
+  pinned, never accepted from the network.
 - [`vfio-registry-refused-second-definition.md`](vfio-registry-refused-second-definition.md):
   a second VFIO Machine was refused while the first was shut off; the GPU
   is now owned only by the running domain.
