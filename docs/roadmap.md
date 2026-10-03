@@ -134,15 +134,22 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 
 ### 3. Golden Image Workbench and capture (M12, first half)
 
-- [ ] **Workbench** in Machines: an operator explicitly adopts an existing
-      domain as a Golden Image candidate; it can be started, stopped, opened
-      and sealed from the shell, and it is never a product Machine
-- [ ] capture a shut-off workstation disk into the image store
-- [ ] generalize with a reviewed checklist: machine-id, SSH host keys,
-      cloud-init state, logs, shell history, browser profiles, keyrings,
-      tokens and any personal data removed, and the result scanned for leftovers
-- [ ] seal: digest, manifest with source guest, build commits and package
-      list; the candidate leaves the Workbench once sealed
+Decision: [`adr/0015-golden-image-capture.md`](adr/0015-golden-image-capture.md).
+Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
+
+- [x] explicit adoption into a root-owned Workbench registry, read without
+      privilege by `hyperlabctl workbench list` (software-verified)
+- [x] capture a shut-off disk as a flat copy outside the store; the source is
+      only read (software-verified)
+- [x] generalize the copy offline with `virt-sysprep`, every user account and
+      home removed, and refuse on any leftover the scan finds
+      (software-verified)
+- [x] digest and a local-import manifest for the existing image factory
+      (software-verified)
+- [ ] the first real seal of `arch-dev-vfio` on Nitro, imported and validated
+- [ ] **Workbench** section in the shell: start, stop, open and seal a
+      candidate, never shown as a product Machine
+- [ ] build commits and the package list in the image manifest
 - [ ] a sealed image is read-only and verified by digest at every use
 
 ### 4. Templates

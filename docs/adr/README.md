@@ -32,6 +32,8 @@ entered the pipeline.
     — stage-1 storage ownership and cross-repository evidence freeze.
 14. [`0014-cockpit-surface.md`](0014-cockpit-surface.md) — one read-only cockpit
     model rendered by Waybar, Rofi and the terminal panel.
+15. [`0015-golden-image-capture.md`](0015-golden-image-capture.md) — the
+    Workbench and the capture, generalization and seal of a Golden Image.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
