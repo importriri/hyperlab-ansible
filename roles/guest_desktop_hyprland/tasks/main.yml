@@ -79,6 +79,23 @@
     guest_desktop_hyprland_selected_profile: >-
       {{ guest_desktop_hyprland_profiles[guest_desktop_hyprland_profile] }}
 
+# An identity theme names a kind of Machine and its network. A guest carries
+# only its own: the others are neither installed nor offered, so a dev
+# Machine can never wear the clean or dirty identity.
+- name: Select the themes this guest may wear
+  ansible.builtin.set_fact:
+    guest_desktop_hyprland_foreign_identity_themes: >-
+      {{ guest_desktop_hyprland_profiles.values() | map(attribute='theme')
+         | reject('equalto', guest_desktop_hyprland_selected_profile.theme)
+         | list }}
+    guest_desktop_hyprland_guest_themes: >-
+      {{ guest_desktop_hyprland_theme_order
+         | reject('in', guest_desktop_hyprland_profiles.values()
+                        | map(attribute='theme')
+                        | reject('equalto', guest_desktop_hyprland_selected_profile.theme)
+                        | list)
+         | list }}
+
 - name: Validate the guest desktop shell policy
   ansible.builtin.assert:
     that:
@@ -363,7 +380,7 @@
     mode: "0755"
   loop: >-
     {{
-      guest_desktop_hyprland_theme_order
+      guest_desktop_hyprland_guest_themes
       | product(['desktop', 'lockscreen'])
       | list
     }}
@@ -381,7 +398,7 @@
     guest_theme_palette: "{{ guest_desktop_hyprland_palettes[item.0] }}"
   loop: >-
     {{
-      guest_desktop_hyprland_theme_order
+      guest_desktop_hyprland_guest_themes
       | product(['desktop', 'lockscreen'])
       | list
     }}
@@ -406,7 +423,7 @@
       - "/usr/share/backgrounds/privatestack-guest/{{ item.0 }}/{{ item.1 }}/bootstrap.png"
   loop: >-
     {{
-      guest_desktop_hyprland_theme_order
+      guest_desktop_hyprland_guest_themes
       | product(['desktop', 'lockscreen'])
       | list
     }}
@@ -416,7 +433,7 @@
     - >-
       guest_desktop_hyprland_bootstrap_sources is changed or
       guest_desktop_hyprland_bootstrap_pngs.matched | int !=
-      guest_desktop_hyprland_theme_order | length * 2
+      guest_desktop_hyprland_guest_themes | length * 2
 
 - name: Normalize rendered bootstrap wallpaper ownership
   ansible.builtin.file:
@@ -427,7 +444,7 @@
     mode: "0644"
   loop: >-
     {{
-      guest_desktop_hyprland_theme_order
+      guest_desktop_hyprland_guest_themes
       | product(['desktop', 'lockscreen'])
       | list
     }}
@@ -467,20 +484,32 @@
   loop_control:
     label: "{{ item.item.key }}"
 
-# Every profile theme gets its wallpaper on every guest, so ALT+SHIFT+T can
-# move between them; 01.png sorts before the generated bootstrap image.
-- name: Install the identity wallpaper of each profile theme
+# Only this guest's identity wallpaper is installed; 01.png sorts before the
+# generated bootstrap image.
+- name: Install the identity wallpaper of this guest's profile
   ansible.builtin.copy:
-    src: "{{ guest_desktop_hyprland_identity_assets }}/{{ item.0.value.wallpaper }}"
-    dest: "/usr/share/backgrounds/privatestack-guest/{{ item.0.value.theme }}/{{ item.1 }}/01.png"
+    src: "{{ guest_desktop_hyprland_identity_assets }}/{{ guest_desktop_hyprland_selected_profile.wallpaper }}"
+    dest: "/usr/share/backgrounds/privatestack-guest/{{ guest_desktop_hyprland_selected_profile.theme }}/{{ item }}/01.png"
     owner: root
     group: root
     mode: "0644"
-  loop: >-
-    {{ guest_desktop_hyprland_profiles | dict2items
-    | product(['desktop', 'lockscreen']) | list }}
-  loop_control:
-    label: "{{ item.0.value.theme }}/{{ item.1 }}"
+  loop:
+    - desktop
+    - lockscreen
+
+- name: Remove the identity themes of other kinds of Machine
+  ansible.builtin.file:
+    path: "/usr/share/backgrounds/privatestack-guest/{{ item }}"
+    state: absent
+  loop: "{{ guest_desktop_hyprland_foreign_identity_themes }}"
+
+- name: Record the identity theme this guest may wear
+  ansible.builtin.copy:
+    content: "{{ guest_desktop_hyprland_selected_profile.theme }}\n"
+    dest: /etc/privatestack/guest-identity-theme
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Create guest user configuration directories
   ansible.builtin.file:

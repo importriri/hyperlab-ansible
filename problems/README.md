@@ -19,6 +19,10 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-foreign-identity-themes.md`](guest-foreign-identity-themes.md):
+  a guest now carries and offers only its own identity theme.
+- [`guest-launcher-opened-rofi.md`](guest-launcher-opened-rofi.md): rofi
+  stands in only for a guest shell that is not running.
 - [`surface-provenance-missed-projected-machines.md`](surface-provenance-missed-projected-machines.md):
   the host bar could not resolve a Machine's window because the resolver
   ignored projected specs.

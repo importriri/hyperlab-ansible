@@ -32,7 +32,6 @@
       "keys": [
         { "keys": "ALT+Space", "does": "Launcher: apps, projects, actions" },
         { "keys": "ALT+E", "does": "Files" },
-        { "keys": "ALT+R", "does": "Plain app menu (rofi)" },
         { "keys": "ALT+H", "does": "This sheet" }
       ]
     },

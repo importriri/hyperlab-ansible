@@ -29,9 +29,15 @@ class of the handoff ladder and do not share the clipboard.
 
 Wallpapers are the wordless `02` images of the reviewed `hyperlab-trust-v2`
 identity set in this repository. The role checks each one against the
-manifest digest before installing it, and installs all three on every guest,
-so `ALT+SHIFT+T` can move between the profile themes. A guest with no theme
-of its own yet starts on its profile's theme; one you already chose is kept.
+manifest digest before installing it. A guest carries only its own
+profile's identity theme: the identity of another kind of Machine is never
+installed nor offered, so a dev Machine cannot wear the clean or dirty
+identity. `ALT+SHIFT+T` moves between that identity theme and the neutral
+themes (`sakura-circuit`, `neon-terminal`, `moon-library`, `glitch-lab`).
+The role records the identity in `/etc/privatestack/guest-identity-theme`,
+root-owned. A guest starts on its profile's theme; a choice you made among
+the allowed themes is kept, and a choice another kind of Machine owns is
+dropped.
 
 The playbooks run the full Arch sync and the Zen kernel on every run and keep
 the stock kernel as the recovery boot entry, so no extra flags are needed.
@@ -173,8 +179,10 @@ generated `bootstrap.png`. More wallpapers for a theme go in
 Nothing depends on the shell being up:
 
 - every key calls `hyperlab-workspace` or `hyperlab-desk`, never the shell
-  directly; without the shell the launcher is rofi and the overview and
-  new-project prompts are rofi menus;
+  directly; rofi stands in only when the shell is not running: the launcher,
+  the overview and the new-project prompt then become rofi menus. A shell
+  that is running but slow is asked again, never replaced, and no key opens
+  rofi directly;
 - `hyperlab-workspace session` restarts a shell that crashes after a normal
   run, and starts Waybar if the shell fails three times in a row;
 - the lock is hyprlock, a separate program, so a shell crash can never leave

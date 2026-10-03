@@ -71,6 +71,16 @@ THEMES = {
 }
 
 ORDER = tuple(THEMES)
+# A HyperLab identity theme names a kind of Machine and the network it sits
+# on. A guest offers only its own; the others never appear in it, so a dev
+# Machine can never wear the clean or dirty identity. The role writes the
+# guest's identity theme, root-owned, before the first prepare.
+IDENTITY_THEMES = (
+    "hyperlab-workstation",
+    "hyperlab-gaming-clean",
+    "hyperlab-gaming-dirty",
+)
+IDENTITY_FILE = Path("/etc/privatestack/guest-identity-theme")
 HOME = Path.home()
 CONFIG = HOME / ".config"
 STATE_DIR = HOME / ".local/state/privatestack-guest-theme"
@@ -488,6 +498,11 @@ def apply_theme(
             f"Unknown guest theme: {theme}"
         )
 
+    if theme not in allowed_themes():
+        raise RuntimeError(
+            f"{theme} is the identity of another kind of Machine"
+        )
+
     previous_state = load_state()
     previous_desktop = str(
         previous_state.get("desktop_wallpaper", "")
@@ -556,30 +571,51 @@ def apply_theme(
     return changed
 
 
+def identity_theme() -> str:
+    try:
+        value = IDENTITY_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return value if value in IDENTITY_THEMES else ""
+
+
+def allowed_themes() -> tuple[str, ...]:
+    """This guest's identity theme, then the neutral themes."""
+    own = identity_theme()
+    return tuple(
+        theme
+        for theme in ORDER
+        if theme not in IDENTITY_THEMES or theme == own
+    )
+
+
 def current_theme(default: str = "") -> str:
+    allowed = allowed_themes()
     state = load_state()
     theme = state.get("theme")
 
-    if isinstance(theme, str) and theme in THEMES:
+    # A recorded choice another kind of Machine owns is dropped.
+    if isinstance(theme, str) and theme in allowed:
         return theme
 
     # A guest with no recorded choice starts on its profile's theme.
-    if default in THEMES:
+    if default in allowed:
         return default
 
-    return ORDER[0]
+    return allowed[0]
 
 
 def next_theme() -> str:
+    allowed = allowed_themes()
     current = current_theme()
-    current_index = ORDER.index(current)
-    return ORDER[(current_index + 1) % len(ORDER)]
+    current_index = allowed.index(current)
+    return allowed[(current_index + 1) % len(allowed)]
 
 
 def rofi_menu() -> None:
     process = subprocess.run(
         ["rofi", "-dmenu", "-p", "Guest theme"],
-        input="\n".join(ORDER) + "\n",
+        input="\n".join(allowed_themes()) + "\n",
         text=True,
         capture_output=True,
         check=False,
@@ -587,7 +623,7 @@ def rofi_menu() -> None:
 
     selected = process.stdout.strip()
 
-    if selected in THEMES:
+    if selected in allowed_themes():
         apply_theme(
             selected,
             runtime=True,
@@ -676,4 +712,5 @@ def main() -> None:
     )
 
 
-main()
+if __name__ == "__main__":
+    main()

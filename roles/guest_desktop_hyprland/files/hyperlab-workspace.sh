@@ -18,9 +18,25 @@ config=hyperlab-workspace
 keys_file=/etc/xdg/quickshell/hyperlab-workspace/keys.json
 state_dir="${XDG_STATE_HOME:-${HOME}/.local/state}/hyperlab-workspace"
 
+shell_running() {
+    pgrep -u "$(id -u)" -f "(^|/)qs -c ${config}\$" >/dev/null 2>&1
+}
+
+# Reach the running shell. A shell that is up but slow to answer is asked
+# again, never replaced by rofi: the plain tools are only for a session
+# whose shell is really not running.
 shell_call() {
     command -v qs >/dev/null 2>&1 || return 1
-    qs -c "${config}" ipc call workspace "$1" >/dev/null 2>&1
+    attempt=0
+    while [ "${attempt}" -lt 3 ]; do
+        qs -c "${config}" ipc call workspace "$1" >/dev/null 2>&1 && return 0
+        shell_running || return 1
+        attempt=$(( attempt + 1 ))
+        sleep 0.2
+    done
+    mkdir -p "${state_dir}"
+    echo "hyperlab-workspace: the running shell did not answer $1" >>"${state_dir}/shell.log"
+    return 0
 }
 
 pick_desk() {

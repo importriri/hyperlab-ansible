@@ -261,11 +261,113 @@ def check_role() -> None:
             "theme.lua colours must be single rgba() values under the Lua configuration")
 
 
+def check_identity_themes() -> None:
+    """A guest offers its own identity theme and the neutral ones, never another's."""
+    import importlib.util
+    import json
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location("guest_theme", ROLE / "files/privatestack-guest-theme.py")
+    theme = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(theme)
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        theme.IDENTITY_FILE = root / "guest-identity-theme"
+        theme.STATE_FILE = root / "state.json"
+
+        theme.IDENTITY_FILE.write_text("hyperlab-workstation\n")
+        allowed = theme.allowed_themes()
+        require(allowed[0] == "hyperlab-workstation", f"dev guest starts elsewhere: {allowed}")
+        require("hyperlab-gaming-clean" not in allowed and "hyperlab-gaming-dirty" not in allowed,
+                f"a dev guest offers another identity: {allowed}")
+        require("sakura-circuit" in allowed, "neutral themes disappeared")
+
+        # A choice recorded before the fix falls back to the guest's own identity.
+        theme.STATE_FILE.write_text(json.dumps({"theme": "hyperlab-gaming-clean"}))
+        require(theme.current_theme("hyperlab-workstation") == "hyperlab-workstation",
+                "a foreign identity choice survived")
+        seen = set()
+        current = "hyperlab-workstation"
+        for _ in range(len(allowed)):
+            theme.STATE_FILE.write_text(json.dumps({"theme": current}))
+            current = theme.next_theme()
+            seen.add(current)
+        require(seen == set(allowed), f"ALT+SHIFT+T leaves the allowed themes: {seen}")
+        try:
+            theme.apply_theme("hyperlab-gaming-dirty", runtime=False, rotate=False)
+        except RuntimeError as exc:
+            require("another kind of Machine" in str(exc), str(exc))
+        else:
+            raise AssertionError("a dev guest applied the dirty identity")
+
+        # Without a recorded identity no identity theme is offered at all.
+        theme.IDENTITY_FILE.unlink()
+        require(not set(theme.allowed_themes()) & set(theme.IDENTITY_THEMES),
+                "an unknown guest offered an identity theme")
+
+    tasks = (ROLE / "tasks/main.yml").read_text()
+    require("Remove the identity themes of other kinds of Machine" in tasks, "foreign identities stay installed")
+    require("dest: /etc/privatestack/guest-identity-theme" in tasks, "the guest identity is not recorded")
+    require(tasks.index("Record the identity theme this guest may wear")
+            < tasks.index("Prepare the selected theme without requiring a graphical session"),
+            "the identity must be recorded before the first prepare")
+
+
+def check_launcher_fallback() -> None:
+    """rofi stands in only for a shell that is not running."""
+    import os
+    import subprocess
+    import tempfile
+
+    script = ROLE / "files/hyperlab-workspace.sh"
+    require('hl.dsp.exec_cmd("rofi' not in (ROLE / "templates/hyprland.lua.j2").read_text(),
+            "a key opens rofi directly on the preferred path")
+
+    def run(qs_answers: str, running: bool) -> tuple[str, str]:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            log = root / "calls"
+            answers = root / "answers"
+            answers.write_text(qs_answers)
+            fakes = {
+                # Answers in order: 0 succeeds, anything else fails.
+                "qs": f'echo "qs $*" >>{log}; a=$(head -c1 {answers}); '
+                      f'tail -c +2 {answers} >{answers}.n; mv {answers}.n {answers}; [ "$a" = 0 ]',
+                "pgrep": f'echo "pgrep $*" >>{log}; exit {0 if running else 1}',
+                "rofi": f'echo "rofi $*" >>{log}',
+                "sleep": "exit 0",
+            }
+            for name, body in fakes.items():
+                path = bin_dir / name
+                path.write_text("#!/bin/sh\n" + body + "\n")
+                path.chmod(0o755)
+            env = {**os.environ, "PATH": f"{bin_dir}:/usr/bin:/bin", "XDG_STATE_HOME": str(root / "state")}
+            subprocess.run(["sh", str(script), "launcher"], env=env, check=False, timeout=10)
+            state = root / "state/hyperlab-workspace/shell.log"
+            return (log.read_text() if log.exists() else "", state.read_text() if state.exists() else "")
+
+    calls, _ = run("0", running=True)
+    require("rofi" not in calls and calls.count("ipc call workspace launcher") == 1,
+            f"a reachable shell was not used: {calls}")
+    calls, _ = run("110", running=True)
+    require("rofi" not in calls and calls.count("ipc call workspace launcher") == 3,
+            f"a slow running shell was not asked again: {calls}")
+    calls, log = run("111", running=True)
+    require("rofi" not in calls and "did not answer launcher" in log,
+            f"a running shell that never answered was replaced by rofi: {calls}")
+    calls, _ = run("1", running=False)
+    require("rofi -show drun" in calls, f"a session without its shell got no launcher: {calls}")
+
+
 def main() -> int:
     check_shell_sources()
     check_hyprland_wiring()
     check_keys_sheet()
     check_role()
+    check_identity_themes()
+    check_launcher_fallback()
     print("HyperLab guest workspace shell contract: OK")
     return 0
 
