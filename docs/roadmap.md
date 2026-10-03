@@ -167,6 +167,22 @@ profiles it allows; the ceiling rule applies.
 | `browser-disposable` | dirty | none | throwaway browsing, reset on shutdown |
 | `services` | services | per Template | appliances such as Jellyfin |
 
+The catalogue is a matrix of ready combinations, each a few clicks from a
+Machine. Every Template still pins one sealed image:
+
+| Kind | Arch | Debian | Fedora | GPU | Desktop |
+|---|---|---|---|---|---|
+| server (SSH only) | `server-arch` | `server-debian` | `server-fedora` | no | no |
+| workstation | `workstation-dev`, `workstation-dev-standard` | later | later | yes / no | Workspace Shell |
+| gaming | `gaming-clean`, `gaming-dirty` | | | yes | Workspace Shell |
+| services | `svc-*` | `svc-*` | | per Template | no |
+| disposable | `browser-disposable` | | | no | minimal |
+
+Server Templates need no Workbench capture: they use the sealed upstream
+cloud images with cloud-init. At creation the operator chooses name, network
+and resources (profile or custom RAM, vCPUs and disk) within what the
+Template allows.
+
 Store accounts live only in `gaming-clean`. A modded or offline game never
 shares a disk, a network or a Machine with an account that owns purchases.
 Within one boot the GPU goes clean → dev → dirty → lab, never back up.
@@ -177,6 +193,9 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       rice applied by the dev profile playbook, second pass `changed=0`
 - [x] Arch rice profiles `dev`, `gaming-clean` and `gaming-dirty` on one set
       of roles, with their playbooks and VM specs (software-verified)
+- [ ] `server-arch`, `server-debian` and `server-fedora`: SSH-only Machines
+      from the sealed upstream images, standard device, no desktop
+- [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles
 - [ ] `browser-disposable` with reset on shutdown

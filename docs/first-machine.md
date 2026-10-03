@@ -32,6 +32,18 @@ hyperlabctl machine create workstation-dev dev-01 \
 hyperlabctl machine project dev-01
 ```
 
+Resources come from the Template's profiles (`balanced` by default). To
+choose them yourself:
+
+```bash
+hyperlabctl machine create workstation-dev dev-02 \
+  --looking-glass-mode linux-experimental \
+  --resource-profile custom --memory-mb 24576 --vcpus 6 --disk-gib 200
+```
+
+The disk can never be smaller than the image (100 GiB here); memory is
+checked against the live host budget when the domain is created.
+
 `create` only records intent outside Git: Template version, image id and
 digest, network, GPU class, resources. `project` writes the derived VM spec,
 pinned to the same digest; it refuses if the image was sealed again since.
@@ -59,6 +71,10 @@ ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
 ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
   playbooks/guest-arch-dev-vfio.yml
 ```
+
+The inventory step also reads the new Machine's SSH host key through QEMU
+Guest Agent and pins it in `~/.ssh/known_hosts` for its address, so the
+strict SSH check never trusts a key shown on the network.
 
 The dev profile playbook is the one that built `arch-dev-vfio`. Every
 package is already in the image, so the first pass mostly configures the new
