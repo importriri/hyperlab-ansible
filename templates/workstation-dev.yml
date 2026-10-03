@@ -1,0 +1,46 @@
+---
+schema_version: 1
+id: workstation-dev
+display_name: Development Workstation
+version: "1.0"
+status: ready
+image: arch-dev-20261003
+description: >-
+  Everyday Arch development on the dev network with the dedicated GPU and the
+  Guest Workspace Shell. Created from the dev workstation captured through the
+  Workbench; the account comes from cloud-init and the rice from the dev
+  profile playbook.
+
+lifecycles:
+  permanent: true
+  disposable: false
+
+device_capabilities:
+  standard: false
+  vfio: true
+
+gpu_handoff_profiles:
+  clean: false
+  dev: true
+  dirty: false
+  lab: false
+
+network_allowlist: [dev]
+
+resource_profiles:
+  minimum: false
+  balanced: true
+  performance: true
+  custom: true
+
+presentation:
+  looking_glass_mode: linux-experimental
+  recovery_console: true
+  workspace_profile: dev
+
+defaults:
+  lifecycle: permanent
+  device_capability: vfio
+  gpu_handoff_profile: dev
+  network_profile: dev
+  resource_profile: balanced

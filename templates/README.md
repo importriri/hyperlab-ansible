@@ -9,8 +9,17 @@ The product hierarchy is:
 A Template is checked-in product policy. It is not a running VM and does not
 carry runtime observations.
 
-No Development Workstation Template is published yet. C10 first establishes
-the Template contract and generalized Arch Workstation recipe.
+## Published Templates
+
+| Template | Golden Image | Machines it offers |
+| --- | --- | --- |
+| [`workstation-dev`](workstation-dev.yml) | `arch-dev-20261003` | permanent, VFIO, dev network, GPU class `dev`, Linux Looking Glass |
+
+`workstation-dev` offers only VFIO Machines: its image carries the
+NVIDIA-only session of the workstation it was captured from. Disposable
+Machines are not offered until a disposable Machine really discards its
+writable layer on shutdown. Creating a Machine from it:
+[`../docs/first-machine.md`](../docs/first-machine.md).
 
 Checked-in VM specs remain development and hardware fixtures.
 
