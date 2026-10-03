@@ -63,14 +63,26 @@ with the key, and the guest generates a new machine-id and SSH host keys.
 
 ## 3. The rice
 
+cloud-init creates `sid` with a locked password: only the SSH key works. A
+workstation needs a password for the lock screen and the console, so the
+first pass takes it as a SHA-512 hash from a file that lives only in memory
+and is deleted after the run:
+
 ```bash
 ansible-playbook -K playbooks/vm-guest-inventory.yml \
   -e guest_spec=vm-specs/.generated/dev-01.yml
+umask 077
+H=$(openssl passwd -6) && printf "workstation_access_password_hash: '%s'\n" "$H" \
+  > /run/user/$UID/dev-01-access.yml; unset H
 ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
-  playbooks/guest-arch-dev-vfio.yml
+  playbooks/guest-arch-dev-vfio.yml -e @/run/user/$UID/dev-01-access.yml
+rm -v /run/user/$UID/dev-01-access.yml
 ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
   playbooks/guest-arch-dev-vfio.yml
 ```
+
+`openssl passwd -6` asks twice without echo and prints only the hash. Later
+passes need no password: the account is already usable.
 
 The inventory step also reads the new Machine's SSH host key through QEMU
 Guest Agent and pins it in `~/.ssh/known_hosts` for its address, so the
