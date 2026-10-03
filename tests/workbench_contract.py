@@ -218,6 +218,20 @@ def check_seal(lab: Lab) -> None:
     assert not staged.parent.exists() and lab.run("list")["candidates"] == []
 
 
+def check_failure_detail() -> None:
+    sysprep = (
+        "[   0.0] Examining the guest ...\n"
+        "virt-sysprep: error: libguestfs error: could not create appliance through "
+        "libvirt.\n\n"
+        "If reporting bugs, run virt-sysprep with debugging enabled and include the\n"
+        "complete output:\n\n  virt-sysprep -v -x [...]\n"
+    )
+    detail = workbench.failure_detail(sysprep)
+    assert "could not create appliance" in detail, detail
+    assert "reporting bugs" not in detail
+    assert workbench.failure_detail("plain failure\n") == "plain failure"
+
+
 def check_scan_rules() -> None:
     assert workbench.evaluate_scan(CLEAN_SCAN) == []
     cases = {
@@ -261,6 +275,7 @@ def check_wiring() -> None:
 
 def main() -> int:
     check_wiring()
+    check_failure_detail()
     check_scan_rules()
     with tempfile.TemporaryDirectory(prefix="hyperlab-workbench-") as temporary:
         lab = Lab(Path(temporary))

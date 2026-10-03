@@ -218,11 +218,17 @@ def cmd_show(args: argparse.Namespace) -> dict[str, Any]:
     return read_record(Path(args.root), args.domain)
 
 
+def failure_detail(text: str) -> str:
+    """The lines that say what went wrong, not the tool's closing advice."""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    errors = [line for line in lines if "error" in line.lower() and "reporting bugs" not in line.lower()]
+    return " | ".join((errors or lines)[-4:])
+
+
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(argv, capture_output=True, text=True, check=False, **kwargs)
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip().splitlines()[-3:]
-        raise WorkbenchError(f"{Path(argv[0]).name} failed: " + " | ".join(detail))
+        raise WorkbenchError(f"{Path(argv[0]).name} failed: " + failure_detail(result.stderr or result.stdout))
     return result
 
 
