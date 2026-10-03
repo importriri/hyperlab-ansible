@@ -22,6 +22,8 @@ proof.
 - [`surface-provenance-missed-projected-machines.md`](surface-provenance-missed-projected-machines.md):
   the host bar could not resolve a Machine's window because the resolver
   ignored projected specs.
+- [`guest-clock-in-utc.md`](guest-clock-in-utc.md): guests ran in UTC; they
+  now follow the hypervisor's time zone.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

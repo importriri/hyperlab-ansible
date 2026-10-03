@@ -247,6 +247,39 @@
   ansible.builtin.systemd_service:
     daemon_reload: true
 
+- name: Read the hypervisor time zone
+  when: workstation_access_timezone | length == 0
+  ansible.builtin.stat:
+    path: /etc/localtime
+    follow: false
+  delegate_to: localhost
+  become: false
+  register: workstation_access_host_localtime
+
+- name: Resolve the workstation time zone
+  ansible.builtin.set_fact:
+    workstation_access_resolved_timezone: >-
+      {{ workstation_access_timezone
+         if workstation_access_timezone | length > 0
+         else (workstation_access_host_localtime.stat.lnk_target | default('')
+               | regex_replace('^.*/zoneinfo/', '')) }}
+
+- name: Refuse an unknown workstation time zone
+  ansible.builtin.assert:
+    that:
+      - workstation_access_resolved_timezone | length > 0
+      - >-
+        workstation_access_resolved_timezone is match(
+        workstation_access_timezone_pattern)
+      - "'..' not in workstation_access_resolved_timezone"
+    fail_msg: >-
+      The hypervisor /etc/localtime does not name an IANA time zone; set
+      workstation_access_timezone explicitly.
+
+- name: Follow the hypervisor time zone
+  community.general.timezone:
+    name: "{{ workstation_access_resolved_timezone }}"
+
 - name: Record that the workstation_access brick landed
   ansible.builtin.include_role:
     name: brick_guard

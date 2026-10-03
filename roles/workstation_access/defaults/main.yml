@@ -4,5 +4,11 @@
 workstation_access_password_hash: ""
 workstation_access_rotate_password: false
 
+# Empty follows the hypervisor's own time zone, so a guest clock never reads
+# UTC beside a local host clock. An IANA name such as Europe/Rome overrides it.
+workstation_access_timezone: ""
+workstation_access_timezone_pattern: >-
+  ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$
+
 workstation_access_password_hash_pattern: >-
   ^\$6\$[^$]{1,16}\$[./A-Za-z0-9]{86}$

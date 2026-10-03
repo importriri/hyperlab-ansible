@@ -52,6 +52,17 @@ def main() -> int:
     access = text("roles/workstation_access/tasks/main.yml")
     assert "passwd" in access
     assert "workstation_access_password_hash_pattern" in access
+    # A guest clock follows the hypervisor time zone, read on the controller.
+    zone_read = access.index("- name: Read the hypervisor time zone")
+    assert "delegate_to: localhost" in access[zone_read:zone_read + 400]
+    assert access.index("- name: Refuse an unknown workstation time zone") < access.index(
+        "- name: Follow the hypervisor time zone")
+    assert "community.general.timezone:" in access
+    access_defaults = mapping("roles/workstation_access/defaults/main.yml")
+    assert access_defaults["workstation_access_timezone"] == ""
+    zone = re.compile(access_defaults["workstation_access_timezone_pattern"].strip())
+    assert zone.fullmatch("Europe/Rome") and zone.fullmatch("UTC")
+    assert not zone.fullmatch("") and not zone.fullmatch("Europe/Rome; rm -rf /")
     assert "^root (L|NP)( |$)" in access
     assert "brick_guard_brick: workstation_access" in access
 
