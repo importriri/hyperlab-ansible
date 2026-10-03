@@ -171,7 +171,10 @@ Store accounts live only in `gaming-clean`. A modded or offline game never
 shares a disk, a network or a Machine with an account that owns purchases.
 Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 
-- [ ] first published Template, `workstation-dev`, pinned to the sealed image
+- [x] first published Template, `workstation-dev`, pinned to the sealed image
+      `arch-dev-20261003` (software-verified)
+- [ ] first Machine, `dev-01`, created from `workstation-dev` on Nitro, the
+      rice applied by the dev profile playbook, second pass `changed=0`
 - [x] Arch rice profiles `dev`, `gaming-clean` and `gaming-dirty` on one set
       of roles, with their playbooks and VM specs (software-verified)
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux

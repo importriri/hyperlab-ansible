@@ -87,5 +87,6 @@ The leftover scan checks known secret locations. A secret you stored in an
 unusual system path is not detected; keep personal files in your home
 directory, which never reaches the image.
 
-The shell's Workbench section (phase 2) and the first Template,
-`workstation-dev`, pinned to a sealed image (phase 3) follow.
+The first sealed image, `arch-dev-20261003`, is published through the
+`workstation-dev` Template; [`first-machine.md`](first-machine.md) creates a
+Machine from it. The shell's Workbench section (phase 2) follows.

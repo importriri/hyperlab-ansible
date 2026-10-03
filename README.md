@@ -127,6 +127,7 @@ Operator and architecture references:
 - [`docs/nitro-secure-boot-acceptance.md`](docs/nitro-secure-boot-acceptance.md) — Nitro Secure Boot enrollment, recovery and hardware acceptance;
 - [`docs/golden-image-control-center-contract.md`](docs/golden-image-control-center-contract.md) — golden-image discovery and Control Center lifecycle contract;
 - [`docs/golden-image-workbench.md`](docs/golden-image-workbench.md) — adopting a workstation and capturing, generalizing and sealing it as a Golden Image;
+- [`docs/first-machine.md`](docs/first-machine.md) — creating a Machine from the `workstation-dev` Template;
 - [`docs/c10-machine-factory-contract.md`](docs/c10-machine-factory-contract.md) — Golden Image, Template and Machine lifecycle, the Machine registry and GPU handoff policy;
 - [`docs/gpu-handoff-policy.md`](docs/gpu-handoff-policy.md) — the per-boot GPU contamination ladder, its policy surfaces and the field vocabulary;
 - [`docs/nitro-control-backend.md`](docs/nitro-control-backend.md) — privileged Nitro broker boundary and runtime protocol;
