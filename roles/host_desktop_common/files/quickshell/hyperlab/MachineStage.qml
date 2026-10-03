@@ -315,10 +315,10 @@ Item {
                     tokens: stage.tokens
                     theme: stage.theme
                     kind: "empty"
-                    title: "No machines defined"
+                    title: "No Machines yet"
                     description:
-                        "This host has no libvirt domains. "
-                        + "A defined machine appears here automatically."
+                        "Create a Machine from a reviewed Template. "
+                        + "Fixture and external libvirt domains stay in Diagnostics."
                 }
 
                 EmptyState {

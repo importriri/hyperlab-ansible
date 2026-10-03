@@ -29,7 +29,12 @@ usable() {
 once() {
     local field="$1" payload
     usable || return 0
-    if ! payload="$(${cli} waybar --field "${field}" 2>/dev/null)"; then
+    if [[ ${field} == vms ]]; then
+        if ! payload="$(${cli} machine inventory --json 2>/dev/null)"; then
+            fallback "hyperlabctl Machine inventory failed"
+            return 0
+        fi
+    elif ! payload="$(${cli} waybar --field "${field}" 2>/dev/null)"; then
         fallback "hyperlabctl failed: run ${cli} doctor in a terminal"
         return 0
     fi
