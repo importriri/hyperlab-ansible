@@ -63,20 +63,54 @@ change, reviewed on its own, never a side effect.
 7. **Evidence before claims.** Software-verified and hardware-accepted are
    separate checkboxes; a milestone closes only with both.
 
+## Machine catalogue
+
+Every VM the platform defines today, where it stands and what it waits on. In
+the product model each of them becomes a Template over a sealed Golden Image;
+until then the VM specs below are the reviewed definitions.
+
+| VM spec | OS image (manifest) | Network | GPU class | Lifecycle | Today | Next |
+|---|---|---|---|---|---|---|
+| `arch-dev-vfio` | arch (sealed upstream base) | dev | dev | permanent | NVIDIA, kvmfr, Looking Glass, Workspace Shell accepted on Nitro | pre-login and input gate, audio proof, seal as `workstation-dev` |
+| `arch-dev` | arch | dev | none | permanent | Nitro lifecycle gate passed | move onto the shared workstation roles |
+| `arch-gaming-clean` | arch | clean | clean | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
+| `arch-gaming-dirty` | arch | dirty | dirty | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
+| `debian-dev` | debian (not built) | dev | none | permanent | spec only | prepare and seal the Debian image, first boot |
+| `fedora-dev` | fedora (not built) | dev | none | permanent | spec only | prepare and seal the Fedora image, first boot |
+| `parrot-disposable` | parrot (not built) | lab | none | disposable | spec only | prepare and seal the Parrot image, prove reset |
+| `svc-jellyfin` | debian (not built) | services | optional | permanent | service contracts green | service and recovery hardware gates |
+| `win11clean-valley` | win11clean (not built) | clean | clean | permanent | Windows workshop flow exists | seal the master, VFIO benchmark |
+| `win11dirty-disposable` | win11dirty (not built) | dirty | dirty | disposable | Windows workshop flow exists | seal the master, prove reset |
+| `arch-minimal-ssh` | arch | dev | none | test fixture | used by inventory and SSH gates | move onto the shared roles |
+| future `local-ai` | to decide | services | GPU-capable | permanent | requirement only | needs the GPU lease model below |
+| future `gaming-offline` | to decide | lab | lab | permanent | requirement only | Template after the gaming images |
+
 ## Platform checklist
 
 The milestones run in dependency order. Each one is software-verified first,
 then accepted on Nitro; Predator replays the frozen result.
 
+### 0. Architecture decisions before the product surfaces
+
+- [ ] canonical ADR: Image Factory, Golden Image, Template and Machine
+      lifecycle; empty Machines on a fresh install; Machine, Desk and Project
+- [ ] ADR: network trust versus GPU transition policy, GPU-capable SERVICES
+      and the boot-scoped GPU lease
+- [ ] ADR: decide whether a separate PLAY identity is needed for gaming, or
+      whether `gaming-clean` / `gaming-dirty` on clean and dirty suffice
+- [ ] an independent architecture review that actually reads the
+      repository (the earlier attempt could not open it and does not count)
+
 ### 1. Finish `arch-dev-vfio` (the reference workstation)
 
 - [ ] pre-login display recovery and input isolation accepted
 - [ ] physical audio proof
-- [ ] idempotence: a second run of `guest-arch-dev-vfio.yml` reports
-      `changed=0`
+- [x] idempotence: repeated runs of `guest-arch-dev-vfio.yml` report
+      `changed=0` (Nitro, 2026-10-03)
 - [x] guest package installs run as one full Arch transaction
       (software-verified)
-- [ ] Guest Workspace Shell accepted on the guest (see below)
+- [x] Guest Workspace Shell on the guest: Desks, tiling, theme, identity
+      wallpaper and key sheet (Nitro, 2026-10-03)
 - [ ] extract reusable workstation behaviour from the VFIO-specific path;
       finish `arch-dev` and `arch-minimal-ssh` on the same roles
 
@@ -84,7 +118,11 @@ then accepted on Nitro; Predator replays the frozen result.
 
 Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 
-- [ ] physical acceptance; layer blur behind the islands
+- [x] physical acceptance of the shell, Desk keys, tiling and theme
+      (Nitro, 2026-10-03)
+- [ ] physical acceptance of the launcher, Desks overview, lock and the
+      Waybar fallback, one by one
+- [ ] layer blur behind the islands
 - [ ] `hypridle` DPMS through the reviewed Lua dispatcher form
 - [ ] project restore: a project reopens the windows it had, not only its
       launch commands
@@ -131,6 +169,11 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles
 - [ ] `browser-disposable` with reset on shutdown
+- [ ] Debian, Fedora and Parrot images prepared and sealed; `debian-dev`,
+      `fedora-dev` and `parrot-disposable` proven from them
+- [ ] Windows masters sealed through the workshop; `win11clean` and
+      `win11dirty` Templates
+- [ ] `svc-jellyfin` as a services Template
 - [ ] Template review gate: a Template cannot request a network, GPU profile
       or device its class forbids
 
@@ -142,6 +185,17 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       started on Nitro from a Template
 - [ ] disposable Machines discard their writable layer on shutdown
 - [ ] Create view in the shell behind its feature gate
+
+### 5b. GPU as a capability and a boot-scoped lease
+
+- [ ] a Machine declares `gpu_capable`; owning the GPU is a host-owned lease
+      for one run, so a dev Machine can start without the GPU and restart
+      with it for Blender or CUDA
+- [ ] SERVICES Machines may be GPU-capable through a reviewed handoff
+      profile; the static rule that excludes them is replaced
+- [ ] `local-ai` service Machine (local inference) on that model
+- [ ] the ladder still guarantees that a lower-trust GPU use never precedes a
+      higher-trust use in the same host boot
 
 ### 6. Controlled data crossing
 
@@ -221,7 +275,13 @@ Measured with the complete security plane active.
 ### 14. Release qualification and the Doppiari release
 
 - [ ] release qualification: idempotence, reboot, cold start, recovery and
-      hardware gates
+      hardware gates, in the checked-in order: repository-software,
+      bootstrap-dry-run, bootstrap-clean-install, storage-handoff,
+      host-idempotence, network-isolation, standard-vm-lifecycle,
+      vfio-trust-lifecycle, looking-glass, jellyfin-service, service-recovery,
+      sanitized-publication
+- [ ] `arch-bootstrap` frozen at the same campaign; `arch-hypervisor-lab`
+      receives only the sanitized evidence
 - [ ] threat model document: what HyperLab protects against and what it does
       not; no claim of Qubes OS security properties
 - [ ] `SECURITY.md` and private vulnerability reporting enabled before the
