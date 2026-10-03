@@ -22,6 +22,8 @@ proof.
 - [`focus-accent-kept-old-resolver.md`](focus-accent-kept-old-resolver.md):
   the border and keyboard service now follows a resolver pulled into the
   checkout.
+- [`guest-theme-replaced-identity-wallpaper.md`](guest-theme-replaced-identity-wallpaper.md):
+  a guest theme changes colours only; the identity wallpaper stays.
 - [`guest-foreign-identity-themes.md`](guest-foreign-identity-themes.md):
   a guest now carries and offers only its own identity theme.
 - [`guest-launcher-opened-rofi.md`](guest-launcher-opened-rofi.md): rofi

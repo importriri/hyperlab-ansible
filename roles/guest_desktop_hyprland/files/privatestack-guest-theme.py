@@ -511,14 +511,18 @@ def apply_theme(
         previous_state.get("lock_wallpaper", "")
     )
 
+    # A theme changes colours and style; the wallpaper stays the guest's
+    # identity, whatever theme it wears. A guest without one uses the
+    # theme's own pool.
+    wallpaper_theme = identity_theme() or theme
     desktop_wallpaper = choose_image(
-        theme,
+        wallpaper_theme,
         "desktop",
         previous_desktop,
         rotate,
     )
     lock_wallpaper = choose_image(
-        theme,
+        wallpaper_theme,
         "lockscreen",
         previous_lock,
         rotate,
@@ -627,7 +631,7 @@ def rofi_menu() -> None:
         apply_theme(
             selected,
             runtime=True,
-            rotate=True,
+            rotate=False,
         )
 
 
@@ -678,7 +682,7 @@ def main() -> None:
         apply_theme(
             selected,
             runtime=True,
-            rotate=True,
+            rotate=False,
         )
         print(selected)
         return
@@ -688,7 +692,7 @@ def main() -> None:
         apply_theme(
             selected,
             runtime=True,
-            rotate=True,
+            rotate=False,
         )
         print(selected)
         return

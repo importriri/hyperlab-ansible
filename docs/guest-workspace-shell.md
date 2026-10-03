@@ -33,7 +33,9 @@ manifest digest before installing it. A guest carries only its own
 profile's identity theme: the identity of another kind of Machine is never
 installed nor offered, so a dev Machine cannot wear the clean or dirty
 identity. `ALT+SHIFT+T` moves between that identity theme and the neutral
-themes (`sakura-circuit`, `neon-terminal`, `moon-library`, `glitch-lab`).
+themes (`sakura-circuit`, `neon-terminal`, `moon-library`, `glitch-lab`); a
+theme changes colours and style only, the wallpaper stays the guest's
+identity wallpaper. `ALT+SHIFT+W` moves between the identity wallpapers.
 The role records the identity in `/etc/privatestack/guest-identity-theme`,
 root-owned. A guest starts on its profile's theme; a choice you made among
 the allowed themes is kept, and a choice another kind of Machine owns is

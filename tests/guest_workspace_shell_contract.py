@@ -300,6 +300,24 @@ def check_identity_themes() -> None:
         else:
             raise AssertionError("a dev guest applied the dirty identity")
 
+        # A theme changes colours, never the identity wallpaper.
+        theme.HOME = root / "home"
+        theme.CONFIG = theme.HOME / ".config"
+        theme.STATE_DIR = root / "state-dir"
+        theme.STATE_FILE = theme.STATE_DIR / "state.json"
+        theme.WALL_ROOT = root / "walls"
+        for pool in ("hyperlab-workstation", "sakura-circuit"):
+            for surface in ("desktop", "lockscreen"):
+                (theme.WALL_ROOT / pool / surface).mkdir(parents=True)
+                (theme.WALL_ROOT / pool / surface / "01.png").write_bytes(b"png")
+        theme.apply_theme("hyperlab-workstation", runtime=False, rotate=False)
+        theme.apply_theme("sakura-circuit", runtime=False, rotate=False)
+        state = json.loads(theme.STATE_FILE.read_text())
+        require(state["theme"] == "sakura-circuit", f"the theme did not change: {state}")
+        require("/hyperlab-workstation/desktop/" in state["desktop_wallpaper"]
+                and "/hyperlab-workstation/lockscreen/" in state["lock_wallpaper"],
+                f"a theme change replaced the identity wallpaper: {state}")
+
         # Without a recorded identity no identity theme is offered at all.
         theme.IDENTITY_FILE.unlink()
         require(not set(theme.allowed_themes()) & set(theme.IDENTITY_THEMES),
