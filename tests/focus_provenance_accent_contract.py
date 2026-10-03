@@ -1139,6 +1139,37 @@ def check_static() -> None:
             "VFIO console wording lost")
 
 
+def check_resolver_follows_checkout(accent) -> None:
+    """A resolver pulled into the checkout is used without a new session."""
+    import shutil
+
+    with tempfile.TemporaryDirectory() as name:
+        root = Path(name)
+        repo = root / "repo"
+        (repo / "tools").mkdir(parents=True)
+        shutil.copy(ROOT / "tools/surface_provenance.py", repo / "tools/surface_provenance.py")
+        (repo / "themes/trust-model/rendered").mkdir(parents=True)
+        shutil.copy(ROOT / "themes/trust-model/rendered/hyperlab-rgb-map.json",
+                    repo / "themes/trust-model/rendered/hyperlab-rgb-map.json")
+        config = root / "config"
+        config.mkdir()
+        actuator = accent.Actuator(repo, config, root / "registry.json", root / "state")
+        first = actuator.resolver
+
+        actuator.ensure_current_resolver()
+        assert actuator.resolver is first, "an unchanged resolver was reloaded"
+
+        source = repo / "tools/surface_provenance.py"
+        source.write_text(source.read_text() + "\nPULLED_MARKER = True\n")
+        actuator.ensure_current_resolver()
+        assert getattr(actuator.resolver, "PULLED_MARKER", False), "a pulled resolver was ignored"
+
+        good = actuator.resolver
+        source.write_text("def broken(:\n")
+        actuator.ensure_current_resolver()
+        assert actuator.resolver is good, "a broken resolver replaced the last good one"
+
+
 def main() -> int:
     os.environ["HYPERLAB_COMPOSITOR_BACKEND"] = "hyprland"
     os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "contract-instance"
@@ -1165,6 +1196,7 @@ def run_checks() -> int:
     check_private_child(accent)
     check_repaint_bound(accent)
     check_static()
+    check_resolver_follows_checkout(accent)
     print("HyperLab focus provenance accent contract: OK")
     return 0
 

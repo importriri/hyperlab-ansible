@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`focus-accent-kept-old-resolver.md`](focus-accent-kept-old-resolver.md):
+  the border and keyboard service now follows a resolver pulled into the
+  checkout.
 - [`guest-foreign-identity-themes.md`](guest-foreign-identity-themes.md):
   a guest now carries and offers only its own identity theme.
 - [`guest-launcher-opened-rofi.md`](guest-launcher-opened-rofi.md): rofi

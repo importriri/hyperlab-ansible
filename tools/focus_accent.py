@@ -581,6 +581,7 @@ class Actuator:
                  state_dir: Path | None = None) -> None:
         self.repo = repo
         self.resolver = load_resolver(repo)
+        self.resolver_identity = self.resolver_file_identity()
         self.colours = load_trust_map(
             repo / "themes/trust-model/rendered/hyperlab-rgb-map.json"
         )
@@ -645,6 +646,29 @@ class Actuator:
         self.refresh_inputs()
         return token == self.correlation()
 
+    def resolver_file_identity(self) -> tuple[int, int] | None:
+        try:
+            info = (self.repo / "tools/surface_provenance.py").stat()
+        except OSError:
+            return None
+        return (info.st_mtime_ns, info.st_size)
+
+    def ensure_current_resolver(self) -> None:
+        """Follow the checkout: a pulled resolver is used from the next focus on.
+
+        The service runs for a whole session while the resolver lives in the
+        checkout, so without this a fix to provenance would wait for a new
+        login. A resolver that fails to load keeps the previous one.
+        """
+        identity = self.resolver_file_identity()
+        if identity is None or identity == self.resolver_identity:
+            return
+        try:
+            self.resolver = load_resolver(self.repo)
+        except Exception:  # noqa: BLE001 - keep the last good resolver
+            return
+        self.resolver_identity = identity
+
     def on_focus(self, raw: str) -> None:
         self.focus_generation += 1
         self.invalidate_intent()
@@ -674,6 +698,7 @@ class Actuator:
         token = self.correlation()
         if self.focus_pending:
             surface = dict(self.surface)
+            self.ensure_current_resolver()
             answer = resolve_focus(self.resolver, self.repo, surface, self.registry)
             if not self.current(token):
                 return
