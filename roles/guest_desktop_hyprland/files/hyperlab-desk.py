@@ -281,15 +281,41 @@ def hyprctl_json(*args: str) -> Any:
         raise DeskError(f"hyprctl returned unreadable output: {error}") from None
 
 
-def dispatch(*args: str) -> None:
+def lua_string(text: str) -> str:
+    """Quote text as a Lua long string that its content cannot close."""
+    level = 0
+    while "]" + "=" * level + "]" in text:
+        level += 1
+    fence = "=" * level
+    return f"[{fence}[{text}]{fence}]"
+
+
+def dispatch(expression: str) -> None:
+    """Run one Hyprland dispatcher.
+
+    With a Lua configuration, `hyprctl dispatch X` evaluates
+    `hl.dispatch(X)`, so X is a Lua dispatcher expression such as
+    `hl.dsp.focus({workspace = 11})`, never the classic `workspace 11`.
+    """
     result = subprocess.run(
-        ["hyprctl", "dispatch", *args],
+        ["hyprctl", "dispatch", expression],
         capture_output=True, text=True, timeout=5, check=False,
     )
-    if result.returncode != 0 or result.stdout.strip() not in ("", "ok"):
-        raise DeskError(
-            "Hyprland refused: " + (result.stdout.strip() or result.stderr.strip())
-        )
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or output not in ("", "ok"):
+        raise DeskError("Hyprland refused: " + output)
+
+
+def focus_workspace(workspace: int) -> None:
+    dispatch(f"hl.dsp.focus({{workspace = {int(workspace)}}})")
+
+
+def move_to_workspace(workspace: int) -> None:
+    dispatch(f"hl.dsp.window.move({{workspace = {int(workspace)}}})")
+
+
+def exec_command(command: str) -> None:
+    dispatch(f"hl.dsp.exec_cmd({lua_string(command)})")
 
 
 def split_workspace(workspace: int) -> tuple[int, int] | None:
@@ -411,7 +437,7 @@ def go_desk(model: dict[str, Any], desk: int, current: int) -> dict[str, Any]:
     remember_slot(current)
     target = desk * 10 + last_slot(desk)
     if target != current:
-        dispatch("workspace", str(target))
+        focus_workspace(target)
     return describe(model, target)
 
 
@@ -433,7 +459,7 @@ def command_workspace(args: argparse.Namespace) -> dict[str, Any]:
     current = active_workspace()
     target = current_desk(current) * 10 + args.slot
     if target != current:
-        dispatch("workspace", str(target))
+        focus_workspace(target)
     remember_slot(target)
     return describe(model, target)
 
@@ -441,7 +467,7 @@ def command_workspace(args: argparse.Namespace) -> dict[str, Any]:
 def command_move_workspace(args: argparse.Namespace) -> dict[str, Any]:
     model = load_model()
     target = current_desk(active_workspace()) * 10 + args.slot
-    dispatch("movetoworkspace", str(target))
+    move_to_workspace(target)
     remember_slot(target)
     return describe(model, target)
 
@@ -451,16 +477,13 @@ def command_move_desk(args: argparse.Namespace) -> dict[str, Any]:
     require_desk(model, args.desk)
     target = args.desk * 10 + last_slot(args.desk)
     remember_slot(active_workspace())
-    dispatch("movetoworkspace", str(target))
+    move_to_workspace(target)
     return describe(model, target)
 
 
-def launch_line(workspace: int, cwd: str, command: str) -> str:
+def launch_line(cwd: str, command: str) -> str:
     directory = os.path.expanduser(cwd)
-    return (
-        f"[workspace {workspace}] cd -- {shlex.quote(directory)} 2>/dev/null; "
-        f"exec {command}"
-    )
+    return f"cd -- {shlex.quote(directory)} 2>/dev/null; exec {command}"
 
 
 def command_project_open(args: argparse.Namespace) -> dict[str, Any]:
@@ -475,12 +498,14 @@ def command_project_open(args: argparse.Namespace) -> dict[str, Any]:
     current = active_workspace()
     remember_slot(current)
     if target != current:
-        dispatch("workspace", str(target))
+        focus_workspace(target)
     remember_slot(target)
+    # The project's workspace is now the active one, so its programs open
+    # there without a window rule.
     launched = 0
     if window_counts().get(target, 0) == 0:
         for command in project["launch"]:
-            dispatch("exec", launch_line(target, project["cwd"], command))
+            exec_command(launch_line(project["cwd"], command))
             launched += 1
     result = describe(model, target)
     result["launched"] = launched

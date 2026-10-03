@@ -84,6 +84,12 @@ def check_shell_sources() -> None:
     require("It is organisation, not isolation" in overview,
             "the overview must say a Desk is organisation, not isolation")
 
+    # Under Hyprland's Lua configuration `hyprctl dispatch` takes Lua, so the
+    # classic dispatcher syntax must not come back anywhere in the shell.
+    for name, text in sources.items():
+        require("hyprctl\", \"dispatch" not in code_only(text) and "hyprctl dispatch" not in code_only(text),
+                f"{name} uses classic hyprctl dispatch syntax")
+
     # Mutations go through the helper; the shell never dispatches by itself.
     for name, text in sources.items():
         require("Hyprland.dispatch" not in code_only(text),
@@ -95,6 +101,10 @@ def check_shell_sources() -> None:
     helper = (ROLE / "files/hyperlab-desk.py").read_text()
     require("divmod(workspace, 10)" in helper and "desk * 10 + " in helper,
             "hyperlab-desk no longer maps Desk n to workspaces n*10+slot")
+
+    require("hl.dsp.focus(" in helper and "hl.dsp.window.move(" in helper
+            and "hl.dsp.exec_cmd(" in helper,
+            "hyperlab-desk must dispatch Lua expressions to Hyprland")
 
     launcher = sources["Launcher.qml"]
     for action in ("logout", "reboot", "poweroff"):

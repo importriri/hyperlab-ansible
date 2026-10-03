@@ -85,6 +85,7 @@ then accepted on Nitro; Predator replays the frozen result.
 Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 
 - [ ] physical acceptance; layer blur behind the islands
+- [ ] `hypridle` DPMS through the reviewed Lua dispatcher form
 - [ ] project restore: a project reopens the windows it had, not only its
       launch commands
 - [ ] keybinding cheatsheet surface in the guest (`ALT+/`)

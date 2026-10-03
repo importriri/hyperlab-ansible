@@ -158,7 +158,9 @@ PanelWindow {
                 "lock": ["loginctl", "lock-session"],
                 "theme": ["privatestack-guest-theme", "next"],
                 "wallpaper": ["privatestack-guest-theme", "wallpaper-next"],
-                "logout": ["hyprctl", "dispatch", "exit"],
+                // Not `hyprctl dispatch exit`: with a Lua configuration
+                // dispatch takes Lua, and logind is the session's owner.
+                "logout": ["sh", "-c", "loginctl terminate-session \"$XDG_SESSION_ID\""],
                 "reboot": ["systemctl", "reboot"],
                 "poweroff": ["systemctl", "poweroff"]
             };

@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-hyprctl-dispatch-takes-lua.md`](guest-hyprctl-dispatch-takes-lua.md):
+  Desk keys did nothing because `hyprctl dispatch` takes a Lua expression under
+  Hyprland's Lua configuration.
 - [`guest-stale-package-database.md`](guest-stale-package-database.md): new
   guest packages were requested against a stale sync database and the mirrors
   answered 404; the install is now one full system transaction.

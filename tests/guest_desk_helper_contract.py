@@ -14,7 +14,10 @@ What it proves:
   3. projects get the first free slot, names are unique per Desk, and opening
      a project launches its programs only when its workspace is empty, in its
      directory, on its own workspace, with the path shell-quoted;
-  4. the helper refuses a Desk that does not exist rather than inventing one.
+  4. every dispatch is a Lua dispatcher expression that a real Lua
+     interpreter accepts, as Hyprland 0.56 with a Lua configuration requires,
+     including commands that contain Lua's own string delimiters;
+  5. the helper refuses a Desk that does not exist rather than inventing one.
 """
 
 from __future__ import annotations
@@ -29,27 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "roles/guest_desktop_hyprland/files/hyperlab-desk.py"
 
-FAKE_HYPRCTL = r"""#!/usr/bin/env python3
-import json, os, sys
-state_path = os.environ["FAKE_HYPR_STATE"]
-state = json.load(open(state_path))
-args = sys.argv[1:]
-with open(os.environ["FAKE_HYPR_LOG"], "a") as log:
-    log.write(json.dumps(args) + "\n")
-if args[:2] == ["-j", "activeworkspace"]:
-    print(json.dumps({"id": state["active"]}))
-elif args[:2] == ["-j", "workspaces"]:
-    print(json.dumps([{"id": int(k), "windows": v} for k, v in state["windows"].items()]))
-elif args[:2] == ["dispatch", "workspace"]:
-    state["active"] = int(args[2]); print("ok")
-elif args[:2] == ["dispatch", "movetoworkspace"]:
-    state["active"] = int(args[2]); print("ok")
-elif args[:2] == ["dispatch", "exec"]:
-    print("ok")
-else:
-    print("unknown request", file=sys.stderr); sys.exit(3)
-json.dump(state, open(state_path, "w"))
-"""
+FAKE_HYPRCTL = ROOT / "tests/fixtures/fake_hyprctl_lua.py"
 
 
 class Lab:
@@ -60,7 +43,7 @@ class Lab:
         self.bin = base / "bin"
         self.bin.mkdir()
         hyprctl = self.bin / "hyprctl"
-        hyprctl.write_text(FAKE_HYPRCTL)
+        hyprctl.write_text(FAKE_HYPRCTL.read_text())
         hyprctl.chmod(0o755)
         self.state = base / "hypr.json"
         self.log = base / "hypr.log"
@@ -128,7 +111,7 @@ def check_mapping(lab: Lab) -> None:
 
     lab.json("desk", "1")
     lab.json("move-to-workspace", "7")
-    assert ["dispatch", "movetoworkspace", "17"] in lab.calls()
+    assert ["move", "17"] in lab.calls()
 
     lab.run("desk", "5", ok=False)
     lab.run("desk", "0", ok=False)
@@ -168,17 +151,25 @@ def check_projects(lab: Lab) -> None:
     lab.set(active=25, windows={})
     opened = lab.json("project-open", "1", "1")
     assert opened["launched"] == 1 and lab.active == 11
-    execs = [call for call in lab.calls() if call[:2] == ["dispatch", "exec"]]
+    execs = [call for call in lab.calls() if call[0] == "exec"]
     home = str(lab.home)
     assert execs == [[
-        "dispatch", "exec",
-        f"[workspace 11] cd -- '{home}/src/hyper lab' 2>/dev/null; exec kitty",
+        "exec", f"cd -- '{home}/src/hyper lab' 2>/dev/null; exec kitty",
     ]], execs
+
+    # A launch command that contains Lua's own closing delimiters stays one
+    # intact string.
+    lab.json("project-new", "1", "Tricky", "--slot", "5", "--launch", "echo ']]' ']=]' done")
+    lab.set(active=25, windows={})
+    lab.json("project-open", "1", "5")
+    execs = [call for call in lab.calls() if call[0] == "exec"]
+    assert execs and execs[-1][1].endswith("exec echo ']]' ']=]' done"), execs
+    lab.json("project-remove", "1", "5")
 
     # A project that already has windows is only focused.
     lab.set(active=25, windows={"11": 3})
     assert lab.json("project-open", "1", "1")["launched"] == 0
-    assert not [call for call in lab.calls() if call[:2] == ["dispatch", "exec"]]
+    assert not [call for call in lab.calls() if call[0] == "exec"]
     lab.run("project-open", "1", "9", ok=False)
 
     assert lab.json("project-remove", "1", "2")["removed"] is True
