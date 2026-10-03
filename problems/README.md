@@ -135,6 +135,19 @@ proof.
 - [`dkms-module-signing-trust.md`](dkms-module-signing-trust.md):
   signed out-of-tree modules still lack a proved kernel trust path for a future
   stricter lockdown/module-enforcement policy.
+- [`guest-hyprland-autologin-regex-validation.md`](guest-hyprland-autologin-regex-validation.md):
+  the guest Ly autologin guard rejected the valid absolute path
+  `/usr/bin/Hyprland` because of its regular expression.
+- [`linuwu-sense-linux-7.2-strncpy-removal.md`](linuwu-sense-linux-7.2-strncpy-removal.md):
+  the pinned Nitro platform driver stopped building on Linux 7.2 at its
+  remaining `strncpy()` calls; reboot stayed blocked until a module for the new
+  kernel was proved.
+- [`nitro-sense-settings-after-driver-reload.md`](nitro-sense-settings-after-driver-reload.md):
+  a managed driver reload left the persistent Nitro settings unapplied, and the
+  role fell into its full rollback path.
+- [`looking-glass-linux-prelogin-primary-handoff.md`](looking-glass-linux-prelogin-primary-handoff.md):
+  Looking Glass's built-in SPICE fallback was unreliable for login input; login
+  now goes through an owned console before handing over to Looking Glass.
 - [`managed-machine-provenance-claim.md`](managed-machine-provenance-claim.md):
   a self-asserted `managed-machine` tag let a dirty plan write a clean
   root-owned GPU handoff policy.
