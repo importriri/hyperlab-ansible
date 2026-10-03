@@ -89,7 +89,23 @@ def parse_domain(xml_text):
         "hostdevs": hostdevs,
         "vfio": bool(hostdevs),
         "managed": metadata is not None,
+        "product_managed": (
+            None
+            if metadata is None
+            else metadata.get("product-machine") == "true"
+        ),
+        "image": None if metadata is None else metadata.get("image"),
+        "image_sha256": (
+            None
+            if metadata is None
+            else metadata.get("image-sha256")
+        ),
         "device_profile": None if metadata is None else metadata.get("device-profile"),
         "lifecycle": None if metadata is None else metadata.get("lifecycle"),
         "network_profile": None if metadata is None else metadata.get("network-profile"),
+        "gpu_handoff_profile": (
+            None
+            if metadata is None
+            else metadata.get("gpu-handoff-profile") or None
+        ),
     }

@@ -140,6 +140,7 @@ def vfio_fixture(root: Path) -> tuple[Path, Path, Path, dict[str, Any], dict[str
         "autostart": False,
         "qemu_guest_agent": True,
         "looking_glass": True,
+        "looking_glass_mode": "windows",
         "clipboard": True,
         "shared_folders": False,
         "usb_allowlist": [],

@@ -136,6 +136,10 @@ def main():
             "tester",
         )
         assert_true(windows["looking_glass"] is True, "Windows VFIO lacks LG")
+        assert_true(
+            windows.get("looking_glass_mode") == "windows",
+            "legacy Windows VFIO composition lacks explicit LG mode",
+        )
 
         try:
             build_spec(

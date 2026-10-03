@@ -14,10 +14,14 @@ REMEDIES = {
     "gpu.not_bound": "reboot into the Vfio boot entry",
     "networks.missing": "ansible-playbook playbooks/network-domains.yml -K",
     "networks.inactive": "virsh -c qemu:///system net-start <name>",
-    "domains.unguarded_vfio": "add the domain to gpu_domain_profiles in "
+    "domains.unguarded_vfio": "add the fixture domain to gpu_domain_profiles in "
                               "group_vars/all/networks.yml, then re-run foundation.yml",
-    "domains.trust_conflict": "make the guest's vm-specs network_profile and its "
-                              "gpu_domain_profiles entry agree, then re-apply the guest",
+    "domains.gpu_policy_unverified": "re-apply the managed Machine through the reviewed "
+                                     "guest lifecycle so its root-owned GPU handoff "
+                                     "policy matches gpu_handoff_profile",
+    "domains.gpu_policy_unexpected": "remove the stale managed GPU handoff policy through "
+                                     "the reviewed Machine lifecycle before treating this "
+                                     "standard Machine as reconciled",
     "domains.network_identity_mismatch": "re-apply the guest from its vm-spec so its "
                                          "interfaces match its network_profile",
     "store.low_space": "prune {root}/cache and {root}/exports, or grow the volume",

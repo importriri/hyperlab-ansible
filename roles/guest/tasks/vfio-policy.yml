@@ -1,0 +1,57 @@
+---
+- name: Refuse an invalid managed GPU policy request
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_handoff_policy_action in ['create', 'ensure', 'verify', 'remove']
+      - guest_plan.device_profile == 'vfio'
+      - "'managed-machine' in guest_plan.tags"
+      - guest_plan.gpu_handoff_profile in gpu_trust_levels
+    fail_msg: >-
+      C10 GPU policy materialization is only for a validated managed-machine
+      VFIO plan with an explicit reviewed gpu_handoff_profile.
+
+- name: Inspect the root-owned managed GPU policy directory
+  ansible.builtin.stat:
+    path: "{{ guest_gpu_handoff_policy_dir }}"
+  register: guest_gpu_handoff_policy_dir_stat
+
+- name: Refuse an unsafe managed GPU policy directory
+  ansible.builtin.assert:
+    that:
+      - guest_gpu_handoff_policy_dir_stat.stat.exists | default(false)
+      - guest_gpu_handoff_policy_dir_stat.stat.isdir | default(false)
+      - not (guest_gpu_handoff_policy_dir_stat.stat.islnk | default(false))
+      - guest_gpu_handoff_policy_dir_stat.stat.pw_name == 'root'
+      - guest_gpu_handoff_policy_dir_stat.stat.gr_name == 'root'
+      - guest_gpu_handoff_policy_dir_stat.stat.mode == '0755'
+    fail_msg: >-
+      {{ guest_gpu_handoff_policy_dir }} must be the root-owned 0755 directory
+      installed by the gpu_handoff brick.
+
+- name: Reconcile or verify the root-owned managed GPU policy
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          guest_python_bin,
+          guest_gpu_handoff_policy_tool,
+          guest_gpu_handoff_policy_action,
+          '--directory',
+          guest_gpu_handoff_policy_dir,
+          '--static-domains',
+          guest_gpu_handoff_static_domains,
+          '--trust-levels-json',
+          gpu_trust_levels | to_json
+        ]
+        + (
+          ['--dry-run']
+          if ansible_check_mode and
+             guest_gpu_handoff_policy_action in ['create', 'ensure', 'remove']
+          else []
+        )
+      }}
+    stdin: "{{ guest_plan | to_json }}"
+  register: guest_gpu_handoff_policy_command
+  changed_when: >-
+    (guest_gpu_handoff_policy_command.stdout | from_json).changed | bool
+  check_mode: false

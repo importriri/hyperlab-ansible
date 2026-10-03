@@ -302,7 +302,7 @@ def build_spec(
         if tag and tag not in tags:
             tags.append(tag)
 
-    return {
+    spec = {
         "schema_version": 1,
         "name": name,
         "image": image_id,
@@ -323,6 +323,11 @@ def build_spec(
         "snapshot_policy": "none" if lifecycle == "disposable" else "manual",
         "backup_policy": "none" if lifecycle == "disposable" else "manual",
     }
+
+    if looking_glass:
+        spec["looking_glass_mode"] = "windows"
+
+    return spec
 
 
 def generated_root(repo_root, create=False):

@@ -10,6 +10,15 @@
       {{ guest_plan.name }} is {{ guest_domain_state }}. Start accepts only a
       managed shut-off domain or an already-running idempotent target.
 
+- name: Reconcile GPU policy before a managed Machine may start
+  when:
+    - guest_domain_state == 'shut off'
+    - guest_plan.device_profile == 'vfio'
+    - "'managed-machine' in guest_plan.tags"
+  ansible.builtin.include_tasks: vfio-policy.yml
+  vars:
+    guest_gpu_handoff_policy_action: ensure
+
 - name: Check VFIO ownership in start check mode
   when:
     - guest_domain_state == 'shut off'

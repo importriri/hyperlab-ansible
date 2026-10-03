@@ -105,20 +105,42 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check([d.get("name") for d in domains if d.get("forward") == "isolated"] == ["lab"], "lab must be the only isolated domain")
     trust_levels = networks.get("gpu_trust_levels", {})
     domain_profiles = networks.get("gpu_domain_profiles", {})
-    check("services" not in trust_levels, "services must never receive the GPU")
+    check(
+        "services" not in trust_levels,
+        "services must not become a GPU handoff contamination class",
+    )
     check(
         set(domain_profiles)
         == {"win11clean-valley", "arch-dev-vfio", "win11dirty-disposable"},
         "reviewed VFIO domain map drift",
     )
     check(set(domain_profiles.values()) <= set(trust_levels), "every VFIO domain must map to a reviewed GPU trust level")
-    check("services" not in domain_profiles.values(), "no VFIO domain may map to services")
-    for vm_name, network_name in domain_profiles.items():
+    check(
+        "services" not in domain_profiles.values(),
+        "services must not be used as a GPU handoff contamination class",
+    )
+    for vm_name, handoff_profile in domain_profiles.items():
         spec_path = ROOT / "vm-specs" / f"{vm_name}.yml"
         spec = load_mapping(spec_path, errors)
-        check(spec.get("device_profile") == "vfio", f"{vm_name} must remain a VFIO spec")
-        check(spec.get("network_profile") == network_name, f"{vm_name} trust mapping must equal its VM network")
-        check(spec.get("looking_glass") is True, f"{vm_name} must request Looking Glass")
+        check(
+            spec.get("device_profile") == "vfio",
+            f"{vm_name} must remain a VFIO spec",
+        )
+        declared_handoff = spec.get("gpu_handoff_profile")
+        if declared_handoff is None:
+            check(
+                spec.get("network_profile") == handoff_profile,
+                f"{vm_name} legacy GPU handoff fallback drift",
+            )
+        else:
+            check(
+                declared_handoff == handoff_profile,
+                f"{vm_name} GPU handoff profile drift",
+            )
+        check(
+            spec.get("looking_glass") is True,
+            f"{vm_name} fixture must request Looking Glass",
+        )
     rotation = (ROOT / "roles/gpu_handoff/templates/rotation.j2").read_text()
     domain_allowlist = (ROOT / "roles/gpu_handoff/templates/domains.j2").read_text()
     gpu_tasks = (ROOT / "roles/gpu_handoff/tasks/main.yml").read_text()

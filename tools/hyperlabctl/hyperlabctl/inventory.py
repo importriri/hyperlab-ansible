@@ -53,8 +53,10 @@ def domains(ctx):
                     {"name": name, "state": "unknown", "memory_mb": None,
                      "vcpus": None,
                      "networks": None, "hostdevs": [], "vfio": None,
-                     "managed": None, "device_profile": None,
-                     "lifecycle": None, "network_profile": None}
+                     "managed": None, "product_managed": None,
+                     "image": None, "image_sha256": None,
+                     "device_profile": None, "lifecycle": None,
+                     "network_profile": None, "gpu_handoff_profile": None}
                 )
         ctx.cache["inventory.domains"] = collected
     return ctx.cache["inventory.domains"]

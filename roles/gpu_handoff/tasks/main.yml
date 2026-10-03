@@ -7,6 +7,14 @@
     group: root
     mode: "0755"
 
+- name: Create the managed Machine GPU policy directory
+  ansible.builtin.file:
+    path: /etc/gpu-handoff/domains.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the network trust rotation
   ansible.builtin.template:
     src: rotation.j2

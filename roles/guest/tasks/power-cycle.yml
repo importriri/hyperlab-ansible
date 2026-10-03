@@ -12,6 +12,14 @@
       It accepts only a running managed guest and exact confirmation
       guest_confirm_power_cycle={{ guest_plan.name }}.
 
+- name: Reconcile GPU policy before replacement QEMU is allowed
+  when:
+    - guest_plan.device_profile == 'vfio'
+    - "'managed-machine' in guest_plan.tags"
+  ansible.builtin.include_tasks: vfio-policy.yml
+  vars:
+    guest_gpu_handoff_policy_action: ensure
+
 - name: Predict the full QEMU power cycle in check mode
   when: ansible_check_mode
   ansible.builtin.debug:

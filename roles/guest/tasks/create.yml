@@ -29,9 +29,23 @@
   when: guest_transaction_complete
   ansible.builtin.include_tasks: validate.yml
 
+- name: Reconcile GPU policy for an existing managed Machine transaction
+  when:
+    - guest_transaction_complete
+    - guest_plan.device_profile == 'vfio'
+    - "'managed-machine' in guest_plan.tags"
+  ansible.builtin.include_tasks: vfio-policy.yml
+  vars:
+    guest_gpu_handoff_policy_action: ensure
+
 - name: Freeze ownership of a new guest transaction
   ansible.builtin.set_fact:
     guest_create_new_transaction: "{{ guest_transaction_clean }}"
+
+- name: Initialize new-transaction GPU policy ownership
+  when: guest_create_new_transaction
+  ansible.builtin.set_fact:
+    guest_gpu_handoff_policy_created_by_transaction: false
 
 - name: Create a new standard guest transaction
   when: guest_create_new_transaction
@@ -240,6 +254,26 @@
               - "{{ guest_plan.xml_path }}"
           changed_when: false
 
+        - name: Claim GPU policy before defining a managed Machine domain
+          when:
+            - guest_plan.device_profile == 'vfio'
+            - "'managed-machine' in guest_plan.tags"
+          ansible.builtin.include_tasks: vfio-policy.yml
+          vars:
+            guest_gpu_handoff_policy_action: create
+
+        - name: Record GPU policy ownership by this new transaction
+          when:
+            - guest_plan.device_profile == 'vfio'
+            - "'managed-machine' in guest_plan.tags"
+            - guest_gpu_handoff_policy_command is defined
+            - guest_gpu_handoff_policy_command.rc | default(1) == 0
+            - >-
+              (guest_gpu_handoff_policy_command.stdout | from_json).status
+              == 'created'
+          ansible.builtin.set_fact:
+            guest_gpu_handoff_policy_created_by_transaction: true
+
         - name: Define the persistent libvirt domain
           ansible.builtin.command:
             argv:
@@ -293,6 +327,18 @@
           ansible.builtin.include_tasks: validate.yml
 
       rescue:
+        - name: Remove GPU policy owned by the failed new Machine transaction
+          when:
+            - guest_plan.device_profile == 'vfio'
+            - "'managed-machine' in guest_plan.tags"
+            - >-
+              guest_gpu_handoff_policy_created_by_transaction
+              | default(false)
+              | bool
+          ansible.builtin.include_tasks: vfio-policy.yml
+          vars:
+            guest_gpu_handoff_policy_action: remove
+
         - name: Undefine a domain created by the failed transaction
           when:
             - guest_domain_define is defined

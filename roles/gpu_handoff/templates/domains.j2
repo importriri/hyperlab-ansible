@@ -1,5 +1,5 @@
 # Managed by hyperlab-ansible (roles/gpu_handoff).
-# exact-libvirt-domain network-profile
+# exact-libvirt-domain gpu-handoff-profile
 {% for domain_name, network_profile in gpu_domain_profiles.items() %}
 {{ domain_name }} {{ network_profile }}
 {% endfor %}

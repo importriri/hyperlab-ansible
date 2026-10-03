@@ -13,6 +13,14 @@
       NVRAM and TPM identity. Repeat with
       -e guest_confirm_reset={{ guest_plan.name }}.
 
+- name: Reconcile GPU policy before destructive Machine reset
+  when:
+    - guest_plan.device_profile == 'vfio'
+    - "'managed-machine' in guest_plan.tags"
+  ansible.builtin.include_tasks: vfio-policy.yml
+  vars:
+    guest_gpu_handoff_policy_action: ensure
+
 - name: Predict the disposable reset in check mode
   when: ansible_check_mode
   ansible.builtin.debug:

@@ -31,6 +31,12 @@ fields:
   tags: {type: list, of: str, min_items: 1, unique_items: true}
 
 optional:
+  image_sha256:
+    type: str
+    pattern: "^[a-f0-9]{64}$"
+  gpu_handoff_profile:
+    type: str
+    enum: [clean, dev, dirty, lab]
   looking_glass_mode:
     type: str
     enum: [windows, linux-experimental]

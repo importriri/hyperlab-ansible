@@ -5,9 +5,12 @@
     <hyperlab:instance xmlns:hyperlab="https://github.com/importriri/hyperlab-ansible/hyperlab/1"
       schema="1"
       image="{{ guest_plan.image }}"
+      image-sha256="{{ guest_plan.image_sha256 }}"
       lifecycle="{{ guest_plan.lifecycle }}"
       device-profile="{{ guest_plan.device_profile }}"
-      network-profile="{{ guest_plan.network_profile }}"/>
+      network-profile="{{ guest_plan.network_profile }}"
+      product-machine="{{ 'true' if 'managed-machine' in guest_plan.tags else 'false' }}"
+      gpu-handoff-profile="{{ guest_plan.gpu_handoff_profile | default('', true) }}"/>
   </metadata>
   <memory unit="MiB">{{ guest_resolved_memory_mb }}</memory>
   <currentMemory unit="MiB">{{ guest_resolved_memory_mb }}</currentMemory>

@@ -228,12 +228,31 @@ def build_vfio_plan(
             "hardware report summary and VFIO device list disagree")
 
     network = plan.get("network_profile")
-    require(isinstance(network, str) and network in trust_levels,
-            f"VFIO network {network!r} has no GPU trust level")
-    require(network != "services", "services domains can never own the GPU")
-    trust_level = trust_levels[network]
-    require(isinstance(trust_level, int) and not isinstance(trust_level, bool) and trust_level >= 0,
-            "GPU trust level must be a non-negative integer")
+    require(
+        isinstance(network, str) and network,
+        "VFIO plan needs a network_profile",
+    )
+
+    gpu_handoff_profile = plan.get(
+        "gpu_handoff_profile"
+    )
+
+    require(
+        isinstance(gpu_handoff_profile, str)
+        and gpu_handoff_profile in trust_levels,
+        "VFIO gpu_handoff_profile has no reviewed GPU trust level",
+    )
+
+    trust_level = trust_levels[
+        gpu_handoff_profile
+    ]
+
+    require(
+        isinstance(trust_level, int)
+        and not isinstance(trust_level, bool)
+        and trust_level >= 0,
+        "GPU trust level must be a non-negative integer",
+    )
 
     require(spice_host == "127.0.0.1", "VFIO SPICE recovery must stay loopback-only")
     require(spice_port == 5900, "VFIO recovery console requires fixed SPICE port 5900")
@@ -260,12 +279,11 @@ def build_vfio_plan(
                 "Looking Glass shared memory must be a reviewed power of two from 32 to 512 MiB")
         lg_bytes = lg_shm_mb * 1024 * 1024
     else:
-        require(plan.get("os_family") == "linux",
-                "Windows VFIO guests require Looking Glass; only Linux may use SPICE-only VFIO")
-        require(plan.get("looking_glass_mode") is None,
-                "SPICE-only Linux VFIO must not carry a Looking Glass mode")
-        require(required_build in (None, ""),
-                "SPICE-only Linux VFIO must not carry a Looking Glass build pin")
+        require(
+            plan.get("looking_glass_mode") is None,
+            "disabled Looking Glass must not carry a mode",
+        )
+        required_build = None
         lg_build = None
         lg_device = None
         lg_shm_mb = None
@@ -278,6 +296,7 @@ def build_vfio_plan(
         "audio": audio,
         "devices": [gpu, audio],
         "network_profile": network,
+        "gpu_handoff_profile": gpu_handoff_profile,
         "trust_level": trust_level,
         "cpu_pinning": cpu_pinning,
         "looking_glass_enabled": looking_glass,

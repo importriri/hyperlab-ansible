@@ -51,12 +51,14 @@ def test_vfio_guest_whose_authorities_agree_is_classified():
     check("agreed_no_problem", not any(p.startswith("domains.") for p in _ids(problems)))
 
 
-def test_conflicting_authorities_give_no_identity():
+def test_managed_network_identity_is_independent_from_gpu_handoff_profile():
     rows, problems = _domains([{"name": "win11clean-valley", "state": "running",
                                 "memory_mb": 1024, "vfio": True, "network": "dirty",
                                 "metadata": world.managed_metadata("dirty", "vfio")}])
-    equals("conflict_identity", rows["win11clean-valley"]["trust_profile"], None)
-    check("conflict_flagged", "domains.trust_conflict" in _ids(problems))
+    equals("split_identity", rows["win11clean-valley"]["trust_profile"], "dirty")
+    equals("split_source", rows["win11clean-valley"]["trust_source"], "network-profile")
+    equals("split_gpu_gate", rows["win11clean-valley"]["gpu_trust_profile"], "clean")
+    check("split_no_conflict", "domains.trust_conflict" not in _ids(problems))
 
 
 def test_metadata_that_disagrees_with_attached_network_invents_nothing():

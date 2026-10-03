@@ -101,6 +101,25 @@ def build_plan(
             f"sealed image {image_id} needs a lowercase sha256")
     require(manifest.get("format") == "qcow2", "guest lifecycle supports qcow2 bases only")
 
+    pinned_image_sha256 = spec.get("image_sha256")
+
+    if pinned_image_sha256 is not None:
+        require(
+            isinstance(pinned_image_sha256, str)
+            and re.fullmatch(
+                r"[a-f0-9]{64}",
+                pinned_image_sha256,
+            )
+            is not None,
+            "spec.image_sha256 must be a lowercase sha256",
+        )
+
+        require(
+            pinned_image_sha256 == sha256,
+            "VM spec Golden Image digest does not match "
+            f"sealed image {image_id}",
+        )
+
     filename = manifest.get("filename")
     require(isinstance(filename, str) and filename == Path(filename).name and filename.endswith(".qcow2"),
             "sealed qcow2 filename must be one basename ending in .qcow2")
@@ -122,8 +141,26 @@ def build_plan(
     allowlist = manifest.get("network_allowlist", [])
     require(isinstance(network, str) and network in allowlist,
             f"network {network!r} is outside image {image_id} allowlist")
+
+    gpu_handoff_profile = spec.get("gpu_handoff_profile")
+
     if device_profile == "vfio":
-        require(network != "services", "services domains can never own the GPU")
+        if gpu_handoff_profile is None:
+            require(
+                network in {"clean", "dev", "dirty", "lab"},
+                "services VFIO requires explicit gpu_handoff_profile",
+            )
+            gpu_handoff_profile = network
+        else:
+            require(
+                gpu_handoff_profile in {"clean", "dev", "dirty", "lab"},
+                "unsupported gpu_handoff_profile",
+            )
+    else:
+        require(
+            gpu_handoff_profile is None,
+            "standard guests cannot carry gpu_handoff_profile",
+        )
 
     clipboard = strict_bool(spec, "clipboard", "spec")
     shared_folders = strict_bool(spec, "shared_folders", "spec")
@@ -244,20 +281,33 @@ def build_plan(
     if device_profile == "vfio":
         require(not memory_overcommit, "VFIO guests cannot request memory overcommit")
         require(not autostart, "VFIO guests cannot autostart; GPU trust state starts at an operator action")
-        if os_family == "windows":
-            require(looking_glass, "Windows VFIO guests require Looking Glass")
-            require(looking_glass_mode in (None, "windows"),
-                    "Windows VFIO requires looking_glass_mode=windows")
-            looking_glass_mode = "windows"
-            require(isinstance(lg_required, str) and LG_BUILD_RE.fullmatch(lg_required) is not None,
-                    "Windows VFIO image needs a pinned looking_glass_host_build_required")
-        else:
-            if looking_glass:
-                require(looking_glass_mode == "linux-experimental",
-                        "Linux Looking Glass requires explicit linux-experimental mode")
+
+        if looking_glass:
+            if os_family == "windows":
+                require(
+                    looking_glass_mode == "windows",
+                    "Windows Looking Glass requires explicit windows mode",
+                )
+                require(
+                    isinstance(lg_required, str)
+                    and LG_BUILD_RE.fullmatch(lg_required) is not None,
+                    "Windows Looking Glass image needs a pinned host build",
+                )
             else:
-                require(looking_glass_mode is None,
-                        "SPICE-only Linux VFIO cannot carry a Looking Glass mode")
+                require(
+                    os_family == "linux",
+                    "unsupported Looking Glass guest family",
+                )
+                require(
+                    looking_glass_mode == "linux-experimental",
+                    "Linux Looking Glass requires explicit linux-experimental mode",
+                )
+                lg_required = None
+        else:
+            require(
+                looking_glass_mode is None,
+                "disabled Looking Glass cannot carry a mode",
+            )
             lg_required = None
     else:
         require(not looking_glass, "standard guests cannot request Looking Glass")
@@ -295,6 +345,7 @@ def build_plan(
         "lifecycle": lifecycle,
         "device_profile": device_profile,
         "network_profile": network,
+        "gpu_handoff_profile": gpu_handoff_profile,
         "resource_profile": selected_resource_profile,
         "memory_request": memory_request,
         "image_min_memory_mb": manifest.get("min_memory_mb"),

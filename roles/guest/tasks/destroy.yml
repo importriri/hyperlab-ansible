@@ -42,6 +42,14 @@
         - "{{ guest_plan.xml_path }}"
         - "{{ guest_plan.state_path }}"
 
+    - name: Remove root-owned GPU policy after managed Machine destruction
+      when:
+        - guest_plan.device_profile == 'vfio'
+        - "'managed-machine' in guest_plan.tags"
+      ansible.builtin.include_tasks: vfio-policy.yml
+      vars:
+        guest_gpu_handoff_policy_action: remove
+
     - name: Refresh observations after managed destruction
       ansible.builtin.include_tasks: inspect.yml
 

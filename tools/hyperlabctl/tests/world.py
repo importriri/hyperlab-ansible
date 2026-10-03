@@ -66,11 +66,46 @@ HOSTDEV = """<hostdev mode='subsystem' type='pci'>
     </hostdev>"""
 
 
-def managed_metadata(network, device="standard",
-                     namespace="https://github.com/importriri/hyperlab-ansible/hyperlab/1"):
-    return ("<metadata><hyperlab:instance xmlns:hyperlab='%s' schema='1' image='arch' "
-            "lifecycle='permanent' device-profile='%s' network-profile='%s'/></metadata>"
-            % (namespace, device, network))
+def managed_metadata(
+    network,
+    device="standard",
+    namespace="https://github.com/importriri/hyperlab-ansible/hyperlab/1",
+    *,
+    product_machine=False,
+    gpu_handoff_profile=None,
+    image_sha256=None,
+):
+    extras = []
+
+    if product_machine:
+        extras.append(
+            " product-machine='true'"
+        )
+
+    if gpu_handoff_profile is not None:
+        extras.append(
+            " gpu-handoff-profile='%s'"
+            % gpu_handoff_profile
+        )
+
+    if image_sha256 is not None:
+        extras.append(
+            " image-sha256='%s'"
+            % image_sha256
+        )
+
+    return (
+        "<metadata><hyperlab:instance "
+        "xmlns:hyperlab='%s' schema='1' image='arch' "
+        "lifecycle='permanent' device-profile='%s' "
+        "network-profile='%s'%s/></metadata>"
+        % (
+            namespace,
+            device,
+            network,
+            "".join(extras),
+        )
+    )
 
 
 def build(domains=None, trust=None, memtotal_kb=7948000, drivers=None,

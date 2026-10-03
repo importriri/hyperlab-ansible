@@ -13,6 +13,7 @@ from .errors import ContractError, HyperlabError, Missing, Unavailable
 DEFAULTS = {
     "hardware_profile_report": "/etc/privatestack/hardware-profile.yml",
     "gpu_handoff_state": "/run/gpu-handoff/trust",
+    "gpu_handoff_managed_dir": "/etc/gpu-handoff/domains.d",
     "brick_stamp_dir": "/etc/privatestack/bricks",
     "sysfs_pci": "/sys/bus/pci/devices",
     "proc_meminfo": "/proc/meminfo",

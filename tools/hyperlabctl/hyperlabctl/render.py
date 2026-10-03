@@ -204,8 +204,9 @@ def waybar_field(document, field):
     return payload
 
 
-# The reviewed GPU handoff ladder. SERVICES sits outside the GPU handoff and can
-# never hold a boot claim; HOST is the control plane, never a rung.
+# The reviewed GPU handoff contamination ladder. SERVICES is a network identity,
+# not a rung and never a boot claim by itself; a SERVICES Machine may separately
+# request one of these reviewed handoff profiles. HOST is the control plane.
 GPU_LADDER = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
 
 

@@ -6,7 +6,9 @@ setup() {
     TESTDIR="$(mktemp -d)"
     export GPU_HANDOFF_ROTATION="${TESTDIR}/rotation"
     export GPU_HANDOFF_DOMAINS="${TESTDIR}/domains"
+    export GPU_HANDOFF_MANAGED_DIR="${TESTDIR}/domains.d"
     export GPU_HANDOFF_STATE_DIR="${TESTDIR}/state"
+    mkdir -m 0755 "${GPU_HANDOFF_MANAGED_DIR}"
     HOOK="${BATS_TEST_DIRNAME}/../roles/gpu_handoff/files/qemu"
     cat > "${GPU_HANDOFF_ROTATION}" <<EOF
 # network trust
@@ -152,4 +154,52 @@ state() {
     run "${HOOK}" win11clean-valley started
     [ "$status" -eq 0 ]
     [ "$(state)" = "1" ]
+}
+
+@test "a C10 managed SERVICES Machine may use reviewed dev GPU handoff" {
+    printf 'services-workload-01 dev\n' \
+        > "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+    chmod 0644 "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+
+    run "${HOOK}" services-workload-01 prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "2" ]
+}
+
+@test "duplicate static and managed domain policy fails closed" {
+    printf 'arch-dev-vfio dev\n' \
+        > "${GPU_HANDOFF_MANAGED_DIR}/arch-dev-vfio.conf"
+    chmod 0644 "${GPU_HANDOFF_MANAGED_DIR}/arch-dev-vfio.conf"
+
+    run "${HOOK}" arch-dev-vfio prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"duplicate domain"* ]]
+}
+
+@test "a redirected managed Machine policy fails closed" {
+    printf 'services-workload-01 dev\n' > "${TESTDIR}/redirected"
+    ln -s "${TESTDIR}/redirected" \
+        "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+
+    run "${HOOK}" services-workload-01 prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unsafe managed policy"* ]]
+}
+
+@test "a managed policy filename must match its exact domain" {
+    printf 'other-machine dev\n' \
+        > "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+    chmod 0644 "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+
+    run "${HOOK}" services-workload-01 prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"expected services-workload-01"* ]]
+}
+
+@test "missing managed policy directory fails closed" {
+    rm -rf "${GPU_HANDOFF_MANAGED_DIR}"
+
+    run "${HOOK}" svc-jellyfin prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"missing or redirected"* ]]
 }

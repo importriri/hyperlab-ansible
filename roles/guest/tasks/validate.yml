@@ -413,3 +413,12 @@
         state: absent
       changed_when: false
       check_mode: false
+
+- name: Verify root-owned GPU policy during explicit Machine validation
+  when:
+    - guest_operation == 'validate'
+    - guest_plan.device_profile == 'vfio'
+    - "'managed-machine' in guest_plan.tags"
+  ansible.builtin.include_tasks: vfio-policy.yml
+  vars:
+    guest_gpu_handoff_policy_action: verify

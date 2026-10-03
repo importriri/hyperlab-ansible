@@ -31,6 +31,10 @@ guest_resource_profiles_file: >-
 
 guest_plan_tool: "{{ guest_repository_root }}/tools/guest_plan.py"
 guest_vfio_plan_tool: "{{ guest_repository_root }}/tools/vfio_plan.py"
+guest_gpu_handoff_policy_tool: >-
+  {{ guest_repository_root }}/tools/gpu_handoff_policy.py
+guest_gpu_handoff_policy_dir: /etc/gpu-handoff/domains.d
+guest_gpu_handoff_static_domains: /etc/gpu-handoff/domains
 guest_kvmfr_size_tool: "{{ guest_repository_root }}/tools/kvmfr_size.py"
 guest_vfio_registry_tool: "{{ guest_repository_root }}/tools/vfio_registry.py"
 guest_image_plan_tool: "{{ guest_repository_root }}/tools/image_plan.py"
