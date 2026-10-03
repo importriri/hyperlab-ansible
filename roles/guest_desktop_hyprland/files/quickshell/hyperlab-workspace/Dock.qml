@@ -27,6 +27,25 @@ Island {
             width: deskRow.width
             height: 40
 
+            // A soft light under the active Desk.
+            Rectangle {
+                x: deskGlide.x - 10
+                y: -8
+                width: deskGlide.width + 20
+                height: parent.height + 16
+                radius: height / 2
+                visible: deskGlide.visible
+                opacity: 0.55
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 0.5; color: dock.theme.accentSoft }
+                    GradientStop { position: 1; color: "transparent" }
+                }
+
+                Behavior on x { NumberAnimation { duration: dock.theme.normal; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: dock.theme.normal; easing.type: Easing.OutCubic } }
+            }
+
             Rectangle {
                 id: deskGlide
 

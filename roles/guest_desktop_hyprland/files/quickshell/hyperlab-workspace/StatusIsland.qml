@@ -13,6 +13,11 @@ Island {
     enterDelay: 90
     enterFrom: Qt.point(18, 0)
 
+    // A readout that runs hot turns to the urgent colour.
+    function heat(percent) {
+        return percent !== null && percent >= 85 ? status.theme.urgent : status.theme.textSoft;
+    }
+
     SystemClock {
         id: clock
         precision: SystemClock.Minutes
@@ -27,6 +32,7 @@ Island {
             theme: status.theme
             label: "GPU"
             value: status.stats.gpu ? status.stats.gpu.load + "%" : ""
+            valueColor: status.heat(status.stats.gpu ? status.stats.gpu.load : null)
         }
 
         Row {
@@ -39,6 +45,7 @@ Island {
                 theme: status.theme
                 label: "CPU"
                 value: status.stats.cpu !== null ? status.stats.cpu + "%" : ""
+                valueColor: status.heat(status.stats.cpu)
             }
 
             Sparkline {
@@ -53,6 +60,8 @@ Island {
             visible: status.stats.memory !== null
             theme: status.theme
             label: "RAM"
+            valueColor: status.heat(status.stats.memory
+                ? Math.round(100 * status.stats.memory.usedGiB / status.stats.memory.totalGiB) : null)
             value: status.stats.memory
                 ? status.stats.memory.usedGiB.toFixed(1) + " / " + status.stats.memory.totalGiB.toFixed(1) + " G"
                 : ""

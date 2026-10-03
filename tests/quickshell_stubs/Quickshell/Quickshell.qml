@@ -5,7 +5,9 @@ QtObject {
     property var screens: [{ "name": "HEADLESS-0", "width": 1920, "height": 1080 }]
 
     function env(name) {
-        return name === "HOME" ? "/home/test" : "";
+        if (name === "HOME")
+            return "/home/test";
+        return name === "USER" ? "sid" : "";
     }
 
     function execDetached(argv) {

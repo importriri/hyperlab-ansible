@@ -17,6 +17,12 @@ Item {
     property bool clickable: false
 
     signal clicked()
+
+    // A highlight sweeps across the island once.
+    function shine() {
+        if (island.theme.normal > 0)
+            sweep.restart();
+    }
     default property alias content: holder.data
 
     implicitWidth: holder.childrenRect.width + padding * 2
@@ -80,6 +86,51 @@ Item {
                 GradientStop { position: 1; color: "transparent" }
             }
         }
+    }
+
+    Item {
+        anchors.fill: body
+        clip: true
+
+        Rectangle {
+            id: sheen
+
+            width: body.width * 0.45
+            height: body.height * 3
+            y: -body.height
+            x: -width
+            rotation: 18
+            opacity: 0.0
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: "transparent" }
+                GradientStop { position: 0.5; color: Qt.rgba(island.theme.accent.r, island.theme.accent.g, island.theme.accent.b, 0.28) }
+                GradientStop { position: 1; color: "transparent" }
+            }
+        }
+
+        SequentialAnimation {
+            id: sweep
+
+            PropertyAction { target: sheen; property: "opacity"; value: 1 }
+            NumberAnimation {
+                target: sheen; property: "x"; from: -sheen.width; to: body.width
+                duration: island.theme.slow * 2.2; easing.type: Easing.InOutCubic
+            }
+            PropertyAction { target: sheen; property: "opacity"; value: 0 }
+        }
+    }
+
+    onEnteredChanged: {
+        if (entered)
+            shineDelay.start();
+    }
+
+    Timer {
+        id: shineDelay
+
+        interval: island.theme.slow
+        onTriggered: island.shine()
     }
 
     MouseArea {

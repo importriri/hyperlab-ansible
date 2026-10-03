@@ -16,7 +16,10 @@ Island {
 
     Connections {
         target: context.deskState
-        function onDeskEntered(desk) { mark.pulse(); }
+        function onDeskEntered(desk) {
+            mark.pulse();
+            context.shine();
+        }
     }
 
     clickable: true

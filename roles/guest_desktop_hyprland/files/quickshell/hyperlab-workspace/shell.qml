@@ -7,6 +7,7 @@
 // every surface:
 //
 //   Workspace Shell
+//   ├── DesktopLayer   clock and greeting under the windows
 //   ├── TopLayer       context island (Desk / Project) and status island
 //   ├── DockLayer      Desks, workspaces of the current Desk, launcher
 //   ├── DeskOverview   ALT+D, every Desk and its projects
@@ -52,6 +53,15 @@ ShellRoot {
             return true;
         const focused = Hyprland.focusedMonitor ? String(Hyprland.focusedMonitor.name) : "";
         return screen !== null && screen !== undefined && String(screen.name) === focused;
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        DesktopLayer {
+            theme: sharedTheme
+            deskState: sharedDesks
+        }
     }
 
     Variants {

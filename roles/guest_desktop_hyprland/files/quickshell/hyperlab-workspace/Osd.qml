@@ -52,8 +52,11 @@ PanelWindow {
         osd.showing = true;
         hide.interval = duration;
         hide.restart();
-        if (osd.theme.normal > 0)
+        if (osd.theme.normal > 0) {
             sweep.restart();
+            if (kind === "desk")
+                spread.restart();
+        }
     }
 
     Timer {
@@ -105,7 +108,7 @@ PanelWindow {
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: (1 - osd.shown) * -14
-        width: Math.max(300, Math.min(parent.width, content.implicitWidth + 64))
+        width: Math.max(360, Math.min(parent.width, content.implicitWidth + 96))
         height: content.implicitHeight + 40
         radius: 18
         opacity: osd.shown
@@ -120,12 +123,26 @@ PanelWindow {
             spacing: 8
 
             UiText {
+                id: titleText
+
                 anchors.horizontalCenter: parent.horizontalCenter
                 theme: osd.theme
                 text: osd.title
-                font.pixelSize: osd.kind === "desk" ? 30 : 20
-                font.weight: Font.DemiBold
+                font.pixelSize: osd.kind === "desk" ? 40 : 20
+                font.weight: osd.kind === "desk" ? Font.Light : Font.DemiBold
+                font.letterSpacing: 0
                 color: osd.kind === "error" ? osd.theme.urgent : osd.theme.text
+
+                // A new Desk's name settles into place from wide spacing.
+                NumberAnimation on font.letterSpacing {
+                    id: spread
+
+                    running: false
+                    from: 14
+                    to: 0.5
+                    duration: osd.theme.slow * 1.6
+                    easing.type: Easing.OutCubic
+                }
             }
 
             UiText {

@@ -36,22 +36,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from jinja2 import Environment, StrictUndefined
 
 ROOT = Path(__file__).resolve().parents[1]
 SHELL = ROOT / "roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace"
 STUBS = ROOT / "tests/quickshell_stubs"
-WALLPAPER = ROOT / "roles/guest_desktop_hyprland/templates/bootstrap-wallpaper.svg.j2"
+WALLPAPER = ROOT / "themes/assets/hyperlab-trust-v2/images/dev/02.png"
 OUT = os.environ.get("HYPERLAB_RENDER_OUT")
-
-PALETTE = {
-    "background": "05070b",
-    "foreground": "e6ebf5",
-    "surface": "0a0e16",
-    "accent": "5b8cff",
-    "accent_alt": "8fb0ff",
-    "urgent": "ff5c7a",
-}
 
 MODEL = {
     "version": 1,
@@ -108,6 +98,7 @@ Item {
     height: 1080
 
     property int failures: 0
+    property bool showWindows: true
     property int stepIndex: 0
     property var steps: []
 
@@ -196,30 +187,38 @@ Item {
 
     Image {
         anchors.fill: parent
-        source: "wallpaper.svg"
-        sourceSize: Qt.size(1920, 1080)
+        source: "wallpaper.png"
+        fillMode: Image.PreserveAspectCrop
     }
 
     // Two stand-in windows where Hyprland would tile them, for the capture.
+    // Once the shell loads they are moved between its desktop layer and the
+    // rest, the order layer-shell gives them in Hyprland.
+    Item {
+        id: windowsLayer
+
+        anchors.fill: parent
+
     Repeater {
         model: [
-            { "x": 12, "w": 940, "title": "kitty — ~/src/hyperlab-ansible",
+            { "x": 16, "w": 936, "title": "kitty — ~/src/hyperlab-ansible",
               "body": "sid@arch-dev-vfio ~/src/hyperlab-ansible (main) $ ./verify.sh\n== static contract                     OK\n== schemas                             OK\n== guest workspace shell runtime       OK\n== bats                                OK\n\nVERIFY: ALL GREEN\nsid@arch-dev-vfio ~/src/hyperlab-ansible (main) $ _" },
-            { "x": 964, "w": 944, "title": "docs/guest-workspace-shell.md — nvim",
+            { "x": 968, "w": 936, "title": "docs/guest-workspace-shell.md — nvim",
               "body": "# Guest Workspace Shell\n\nA Desk groups projects and their windows inside\none guest. It is organisation, never isolation.\n\n    Desk d    workspaces d*10+1 .. d*10+9\n    slot s    workspace  d*10+s" }
         ]
 
         Rectangle {
             required property var modelData
 
+            visible: root.showWindows
             x: modelData.x
-            y: 60 + 12
+            y: 60 + 16
             width: modelData.w
-            height: 1080 - 60 - 76 - 24
+            height: 1080 - 60 - 76 - 32
             radius: 10
-            color: "#f00a0e16"
+            color: "#d90a0e16"
             border.width: 2
-            border.color: modelData.x < 100 ? "#5b8cff" : "#2a3954"
+            border.color: modelData.x < 100 ? "#5b8cff" : "#1c2638"
 
             Text {
                 x: 18; y: 12
@@ -240,12 +239,27 @@ Item {
         }
     }
 
+    }
+
     Loader {
         id: shellLoader
 
         anchors.fill: parent
         active: false
         source: "shell/shell.qml"
+
+        onLoaded: {
+            const kids = item.children;
+            for (let i = 0; i < kids.length; i++)
+                kids[i].z = 2;
+            let desktop = findWith("user");
+            while (desktop && desktop.parent !== item)
+                desktop = desktop.parent;
+            if (desktop)
+                desktop.z = 0;
+            windowsLayer.parent = item;
+            windowsLayer.z = 1;
+        }
     }
 
     function baseFixtures() {
@@ -480,6 +494,20 @@ SCENARIOS = {
         ];
     }
 """,
+    "empty-desk": r"""
+    function scenario() {
+        showWindows = false;
+        steps = [
+            { "wait": 2600, "run": done => {
+                check(visibleText("GOOD AFTERNOON, SID"), "the desktop does not greet the user");
+                check(visibleText("16:52"), "the desktop clock is missing");
+                check(visibleText("Saturday 3 October"), "the desktop date is missing");
+                check(visibleText("DESK 1  ·  PROGRAMMING  /  HYPERLAB"), "the desktop does not say where you are");
+                capture("empty-desk", done);
+            } }
+        ];
+    }
+""",
     "helper-missing": r"""
     function scenario() {
         QsHarness.processes = Object.assign({}, QsHarness.processes,
@@ -511,12 +539,8 @@ def stage(directory: Path) -> None:
             source = re.sub(r"(?m)^\s*WlrLayershell\.[^\n]*\n", "", source)
         path.write_text(source)
 
-    wallpaper = Environment(undefined=StrictUndefined).from_string(WALLPAPER.read_text())
-    (directory / "wallpaper.svg").write_text(wallpaper.render(
-        guest_theme_name="hyperlab-workstation",
-        guest_theme_surface="desktop",
-        guest_theme_palette=PALETTE,
-    ))
+    # The dev profile's reviewed identity wallpaper, as the guest installs it.
+    shutil.copyfile(WALLPAPER, directory / "wallpaper.png")
 
 
 def scene(name: str) -> str:
