@@ -16,11 +16,12 @@ commands.
 ## Before
 
 - `arch-dev-vfio` is shut off: there is one GPU and one Looking Glass
-  device.
+  device. Both domains may name the GPU; only one may run with it
+  ([ADR 0016](adr/0016-gpu-shared-definition-running-lease.md)).
 - In this host boot the GPU has not yet gone to a `dirty` or `lab` Machine;
   the ladder never lets it climb back to `dev`.
-- You know the SSH public key you use for guests. cloud-init gives it to the
-  account `sid` of the new Machine.
+- The SSH public key you use for guests, here `~/.ssh/hyperlab_ed25519.pub`.
+  cloud-init gives it to the account `sid` of the new Machine.
 
 ## 1. The Machine
 
@@ -41,7 +42,7 @@ pinned to the same digest; it refuses if the image was sealed again since.
 ansible-playbook -K playbooks/vm-create.yml \
   -e guest_spec=vm-specs/.generated/dev-01.yml \
   -e guest_start_after_create=true \
-  -e "{\"guest_cloud_init_ssh_public_keys\":[\"$(cat ~/.ssh/id_ed25519.pub)\"]}"
+  -e "{\"guest_cloud_init_ssh_public_keys\":[\"$(command cat ~/.ssh/hyperlab_ed25519.pub)\"]}"
 ```
 
 A permanent Machine gets an independent copy of the sealed base, so later

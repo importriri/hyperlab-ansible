@@ -283,6 +283,10 @@ platform, recorded on the host:
 - [ ] finish the host-owned visual provenance and trust model: every focused
       surface named by the host, including fullscreen guests
 - [ ] the host frame visible around a Looking Glass window at all times
+- [ ] study: Looking Glass as the everyday window for Linux Machines without
+      a GPU too (the PipeWire sender captures any guest desktop), one kvmfr
+      device per running Machine, SPICE kept as recovery only; Windows needs
+      a GPU for its capture
 
 ### 12. Security plane
 
