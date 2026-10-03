@@ -116,8 +116,8 @@ snapshots because drawer destruction removes the object from the application
 cache through the existing `destroy` signal.
 
 The v6.1 Nitro replay proved that a fresh drawer object alone was insufficient.
-Deployment and idempotence passed, but after Firefox/ChatGPT owned input focus
-during a GitHub-selector interaction, the visible drawer again received no
+Deployment and idempotence passed, but after Firefox owned input focus
+during an external browser interaction, the visible drawer again received no
 Escape dismissal. The fresh surface was still created as `ON_DEMAND` and only
 promoted to `EXCLUSIVE` from its GTK `map` callback. That first mapped commit
 could therefore preserve the browser's keyboard ownership.

@@ -12,7 +12,7 @@
 
 Independent C9 review, 2026-09-27
 
-Reviewed the local candidate at `53489ee` with uncommitted C9 changes. Claude continued editing during this review: the initial terminal-owned runner was replaced with a worker/observer design, and a guest colour patch arrived. Results below distinguish reproduced initial defects, fixes verified against the revised source, and outstanding runtime evidence. No branch, commit, push, reset, deployment, VM operation, or destructive cleanup was performed by this reviewer.
+Reviewed the local candidate at `53489ee` with uncommitted C9 changes. Concurrent implementation continued during this review: the initial terminal-owned runner was replaced with a worker/observer design, and a guest colour patch arrived. Results below distinguish reproduced initial defects, fixes verified against the revised source, and outstanding runtime evidence. No branch, commit, push, reset, deployment, VM operation, or destructive cleanup was performed by this reviewer.
 
 ```text
 C9.3_LIFECYCLE=PARTIAL
@@ -30,7 +30,7 @@ FINDING=terminal-owned-operation
 SEVERITY=high
 EVIDENCE=privatestack-operation.py launch()/run(); independent terminal-hangup regression
 WHY=The initial unit owned Foot, and runner SIGHUP handling terminated its child. Closing the terminal could stop accepted work.
-FIX=Claude replaced that hierarchy with a systemd worker owning the command/PTY and a separate observer unit. Worker ignores SIGHUP; explicit unit stop still interrupts.
+FIX=The implementation replaced that hierarchy with a systemd worker owning the command/PTY and a separate observer unit. Worker ignores SIGHUP; explicit unit stop still interrupts.
 TEST=test_terminal_hangup_does_not_terminate_execution failed before the revision and passes after it. Revised host_operation_lifecycle_contract.py also exercises real PTY authentication, detach, and reattach.
 ```
 
@@ -39,7 +39,7 @@ FINDING=dispatch-timeout-is-not-failure
 SEVERITY=high
 EVIDENCE=privatestack-operation.py launch(); timeout-after-acceptance regression
 WHY=systemd-run can time out after acceptance. The initial handler wrote an immutable failed record; the worker then refused that accepted operation and a retry could launch another unit.
-FIX=Claude now leaves the operation dispatched on timeout; backend unit recovery resolves its status.
+FIX=The implementation now leaves the operation dispatched on timeout; backend unit recovery resolves its status.
 TEST=test_timeout_after_unit_acceptance_is_not_a_terminal_failure failed initially and now passes, including duplicate refusal while the accepted unit is active.
 ```
 
@@ -75,7 +75,7 @@ FINDING=SDR-marked-as-HDR-PQ
 SEVERITY=medium
 EVIDENCE=installed Looking Glass source at 0140a3f6fb616c5636d6c430eb71b8a7d5338e39, PipeWire streamParamChangedCallback; client main.c and Wayland/gl.c; installed SPA headers
 WHY=The sender bitmasks sequential format enum values and always sets hdrPQ=true. RGBx=7, BGRx=8, RGBA=11 and BGRA=12 all falsely test as HDR. The client separately emits PQ/BT.2020 Wayland metadata; disabling EGL tone mapping does not disable this metadata path.
-FIX=Claude's new sender patch uses format equality and only asserts PQ for its selected HDR formats. Rebuild/deploy and verify SDR output before claiming the live issue fixed. Genuine HDR/FP16 transfer semantics remain outside this SDR fix.
+FIX=The sender patch uses format equality and only asserts PQ for its selected HDR formats. Rebuild/deploy and verify SDR output before claiming the live issue fixed. Genuine HDR/FP16 transfer semantics remain outside this SDR fix.
 TEST=An independent compiled check against installed SPA headers reproduced all four false positives and their correction. Linux capture and hardware-gate source contracts pass. Live frame/protocol evidence remains required.
 ```
 
@@ -96,7 +96,7 @@ The revised lifecycle has strong software evidence for allowlisted command resol
 
 Records and transcripts are boot/session runtime data under XDG_RUNTIME_DIR, not a durable cross-reboot audit store. Transcript output is capped at 1 MiB and late replay at 64 KiB; after that cap, replay cannot show the newest output. Recovery uses unit liveness and does not invent success from an absent unit. QML maps execution success to verification and checks fresh inventory, but its verb-to-target-state mapping remains presentation-side completion policy. A future typed backend outcome should own that policy, especially for reboot. Reset correctly means recreating a shut-off disposable guest, not a hardware reboot; no reset change was warranted.
 
-The authority graph now implemented by Claude is:
+The implemented authority graph is:
 
 - Managed VM spec `network_profile` becomes libvirt `network-profile` metadata through the guest XML template. Domain telemetry accepts it only when declared and consistent with attached networks; shell machine badges consume the backend identity.
 - `gpu_domain_profiles` remains the GPU admission/ownership map. Domain diagnostics use the separate `gpu_trust_profile` when checking missing VFIO guards. The CLI start gate and handoff hook still require the GPU map; a network identity does not grant GPU access.
@@ -128,6 +128,6 @@ Reviewer-authored changes only:
 
 The other uncommitted lifecycle, trust, RGB, UI and colour changes belong to the concurrent implementation work.
 
-Validation: independent regressions 5/5 pass; revised lifecycle, integration and QML contracts pass; hyperlabctl custom harness reports 1,295 passed, zero failed; relevant VFIO, trust-model, desktop-action, Linux capture, headless-picker and hardware-gate contracts pass. Targeted Ruff passes. Both full verifier runs failed on generated bytecode sent to ShellCheck and on missing sudo credentials for render. The discovery defect was subsequently reproduced and fixed; the complete discovered ShellCheck set and five independent tests were rerun successfully. All other stages in the last full run passed. VERIFY remains FAIL because render is unverified, not because a render assertion failed. The last full log, preceding the discovery fix, is `/tmp/hyperlab-independent-review-verify-final.log`. `git diff --check` also reports a whitespace-only context line inside Claude's new nested colour patch; this reviewer did not rewrite that patch or its checksum.
+Validation: independent regressions 5/5 pass; revised lifecycle, integration and QML contracts pass; hyperlabctl custom harness reports 1,295 passed, zero failed; relevant VFIO, trust-model, desktop-action, Linux capture, headless-picker and hardware-gate contracts pass. Targeted Ruff passes. Both full verifier runs failed on generated bytecode sent to ShellCheck and on missing sudo credentials for render. The discovery defect was subsequently reproduced and fixed; the complete discovered ShellCheck set and five independent tests were rerun successfully. All other stages in the last full run passed. VERIFY remains FAIL because render is unverified, not because a render assertion failed. The last full log, preceding the discovery fix, is `/tmp/hyperlab-independent-review-verify-final.log`. `git diff --check` also reports a whitespace-only context line inside the nested colour patch; this reviewer did not rewrite that patch or its checksum.
 
 Local evidence: `/tmp/hyperlab-independent-review-regressions-final.log`, `/tmp/hyperlab-independent-review-hyperlabctl.log`, `/tmp/hyperlab-colour-enum-evidence.txt`, and the verifier logs. Since the shared worktree changed during review, rerun the relevant gates after any subsequent implementation edits.
