@@ -182,6 +182,8 @@ def check_seal(lab: Lab) -> None:
     assert args[args.index("-a") + 1].endswith(".qcow2.new"), "sysprep must run on the copy"
     assert args[args.index("--operations") + 1] == "defaults", "user-account fails on Arch"
     assert "/home/*" in args
+    for path in ("/root/.config", "/root/.cache", "/root/.npm"):
+        assert args[args.index(path) - 1] == "--delete", path
     command = args[args.index("--run-command") + 1]
     assert "userdel -r" in command and "$3 >= 1000 && $3 < 60000" in command
     assert args[-2:] == ["--truncate", "/etc/machine-id"], "the machine-id must be emptied last"
@@ -248,6 +250,8 @@ def check_scan_rules() -> None:
         "/root/.ssh remains": CLEAN_SCAN.replace(".bashrc", ".ssh"),
         "/root/.bash_history remains": CLEAN_SCAN.replace(".bashrc", ".bash_history"),
         "/root/.gnupg remains": CLEAN_SCAN.replace(".bashrc", ".gnupg"),
+        "/root/.config remains": CLEAN_SCAN.replace(".bashrc", ".config"),
+        "/root/.npm remains": CLEAN_SCAN.replace(".bashrc", ".npm"),
         "machine-id is not empty": CLEAN_SCAN.replace("@@machine-id\n", "@@machine-id\n3f2a\n"),
         "SSH host keys remain": CLEAN_SCAN.replace("@@ssh-hostkeys\n", "@@ssh-hostkeys\n/etc/ssh/ssh_host_ed25519_key\n"),
         "cloud-init instance state remains": CLEAN_SCAN.replace("@@cloud-instances\n", "@@cloud-instances\niid-arch\n"),

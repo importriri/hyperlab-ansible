@@ -54,7 +54,7 @@ one transaction under a lock:
    rice is not carried in a home directory; it is reapplied to the new user
    of each Machine by that Machine's profile playbook;
 4. scan the generalized copy and refuse on any leftover: a home directory,
-   root's SSH directory, an SSH host key, a non-empty machine-id, a shell
+   root's SSH, configuration, cache or npm directory, an SSH host key, a non-empty machine-id, a shell
    history, a keyring, a GnuPG or SSH directory, a cloud-init instance or a
    sudoers file naming a removed user;
 5. check the image, hash it, and write a manifest `images/<image>.yml` into the

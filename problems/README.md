@@ -19,6 +19,9 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`workbench-root-dotfiles-in-image.md`](workbench-root-dotfiles-in-image.md):
+  root's configuration, cache and npm directories reached the first captured
+  image; the seal deletes them and the scan refuses them.
 - [`workbench-machine-id-after-run-command.md`](workbench-machine-id-after-run-command.md):
   the sealed image kept a machine-id written after the generalization; the
   seal now empties it last.

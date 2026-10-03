@@ -55,6 +55,9 @@ SYSPREP_ARGS = [
     "--delete", "/root/.ssh",
     "--delete", "/root/.gnupg",
     "--delete", "/root/.local/share/keyrings",
+    "--delete", "/root/.config",
+    "--delete", "/root/.cache",
+    "--delete", "/root/.npm",
     "--delete", "/var/lib/cloud/instance",
     "--delete", "/var/lib/cloud/instances",
     "--delete", "/var/lib/cloud/data",
@@ -74,7 +77,7 @@ SCAN_PROBES = (
     ("sudoers-cloud-init", "-is-file /etc/sudoers.d/90-cloud-init-users"),
     ("passwd", "-cat /etc/passwd"),
 )
-ROOT_FORBIDDEN = re.compile(r"^(\.ssh|\.gnupg|\.local|\..*_history|\.netrc|\.git-credentials|\.aws|\.kube|\.docker)$")
+ROOT_FORBIDDEN = re.compile(r"^(\.ssh|\.gnupg|\.local|\.config|\.cache|\.npm|\..*_history|\.netrc|\.git-credentials|\.aws|\.kube|\.docker)$")
 
 
 class WorkbenchError(Exception):
