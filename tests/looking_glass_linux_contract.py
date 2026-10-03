@@ -237,7 +237,15 @@ def main() -> int:
     assert "-DUSE_XCB=OFF" in tasks
     assert "-DUSE_PIPEWIRE=ON" in tasks
     assert "runtime_enabled: false" in tasks
-    assert "systemd_service" not in tasks
+    # The experimental sender is never a service. The only service the role
+    # touches is udev, restarted when its rules predate the workstation account.
+    assert tasks.count("systemd_service") == 1, "the sender must not become a service"
+    assert "ansible.builtin.systemd_service:\n        name: systemd-udevd.service\n        state: restarted" in tasks
+    restat = tasks.index("Re-read udev rules created before the workstation account existed")
+    assert tasks.index("- name: Inspect the guest kvmfr device\n") < restat < tasks.index("Require the PCI-backed guest transport")
+    assert "register: guest_looking_glass_linux_kvmfr_restat" in tasks, (
+        "a skipped second inspection must not overwrite the first"
+    )
     assert "xdph-headless-picker.sh.j2" in tasks
     assert "xdph.conf.j2" in tasks
     assert 'mode: "0755"' in tasks

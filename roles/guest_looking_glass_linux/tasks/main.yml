@@ -175,6 +175,44 @@
     follow: false
   register: guest_looking_glass_linux_kvmfr_stat
 
+# udev resolves OWNER and GROUP names when it loads its rules. On the first
+# boot of a Machine from a sealed image the rules load before cloud-init
+# creates the account, and a reload keeps unchanged rules, so the device stays
+# root's. Restarting udev re-reads them now that the account exists.
+- name: Re-read udev rules created before the workstation account existed
+  when:
+    - guest_looking_glass_linux_kvmfr_stat.stat.exists | default(false)
+    - >-
+      guest_looking_glass_linux_kvmfr_stat.stat.pw_name != admin_user or
+      guest_looking_glass_linux_kvmfr_stat.stat.gr_name != admin_user
+  block:
+    - name: Restart udev so it resolves the workstation account
+      ansible.builtin.systemd_service:
+        name: systemd-udevd.service
+        state: restarted
+
+    - name: Apply guest kvmfr device policy with the resolved account
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/udevadm
+          - trigger
+          - --subsystem-match=kvmfr
+          - --action=change
+          - --settle
+      changed_when: true
+
+    # A skipped task would overwrite a register it shares, so the second
+    # inspection has its own and is published only when it ran.
+    - name: Inspect the guest kvmfr device again
+      ansible.builtin.stat:
+        path: "{{ guest_looking_glass_linux_kvmfr_device }}"
+        follow: false
+      register: guest_looking_glass_linux_kvmfr_restat
+
+    - name: Publish the device state after udev resolved the account
+      ansible.builtin.set_fact:
+        guest_looking_glass_linux_kvmfr_stat: "{{ guest_looking_glass_linux_kvmfr_restat }}"
+
 - name: Require the PCI-backed guest transport
   ansible.builtin.assert:
     that:
