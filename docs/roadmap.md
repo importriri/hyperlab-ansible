@@ -39,16 +39,199 @@ works.
 8. start reusable workstation or golden-image work only after the host release is
    coherent.
 
-## Later work
+## Security rules every milestone keeps
 
-- **M10 — domain manager and VM composition:** implemented; the live workload
-  gate remains part of the release campaign.
-- **M11 — desktop shell and Control Center:** implemented; the corrected Nitro
-  drawer placement still needs its visual recheck.
-- **M12 — snapshots, backups and golden images:** planned after the host release
-  is coherent.
-- **M13 — seamless guest applications:** future work and must not be described
-  as providing Qubes OS security properties.
+These hold for every item below. A change that weakens one is a design
+change, reviewed on its own, never a side effect.
+
+1. **The host decides, the guest never claims.** Trust, provenance and GPU
+   state are shown only by host-owned surfaces. Nothing a guest paints or
+   reports raises its own trust.
+2. **Fail closed.** A missing, unreadable, redirected or duplicated policy
+   input is a refusal, never a default.
+3. **Nothing is adopted implicitly.** A libvirt domain does not become a
+   Machine, and a disk does not become a Golden Image, because it exists. Each
+   step is an explicit, recorded operator action.
+4. **Lower, never raise.** Network identity and the GPU handoff ladder can only
+   lower a class within a boot; raising one takes a host reboot.
+5. **Cross-boundary data moves only on request.** Clipboard, files and devices
+   cross between host and guests, or between guests, only through an explicit,
+   one-shot, host-mediated action aimed at one named target.
+6. **Least plane.** No guest gets a channel into the hypervisor beyond what its
+   Template needs: no shared clipboard, no guest-agent command execution, no
+   USB or audio input unless requested.
+7. **Evidence before claims.** Software-verified and hardware-accepted are
+   separate checkboxes; a milestone closes only with both.
+
+## Platform checklist
+
+The milestones run in dependency order. Each one is software-verified first,
+then accepted on Nitro; Predator replays the frozen result.
+
+### 1. Finish `arch-dev-vfio` (the reference workstation)
+
+- [ ] pre-login display recovery and input isolation accepted
+- [ ] physical audio proof
+- [ ] idempotence: a second run of `guest-arch-dev-vfio.yml` reports
+      `changed=0`
+- [x] guest package installs run as one full Arch transaction
+      (software-verified)
+- [ ] Guest Workspace Shell accepted on the guest (see below)
+- [ ] extract reusable workstation behaviour from the VFIO-specific path;
+      finish `arch-dev` and `arch-minimal-ssh` on the same roles
+
+### 2. Guest Workspace Shell
+
+Details and status: [Guest Workspace Shell](#guest-workspace-shell).
+
+- [ ] physical acceptance; layer blur behind the islands
+- [ ] project restore: a project reopens the windows it had, not only its
+      launch commands
+- [ ] keybinding cheatsheet surface in the guest (`ALT+/`)
+- [ ] shell-owned notifications with a do-not-disturb mode per Desk
+- [ ] the same shell on every workstation Template, not only `arch-dev-vfio`
+
+### 3. Golden Image Workbench and capture (M12, first half)
+
+- [ ] **Workbench** in Machines: an operator explicitly adopts an existing
+      domain as a Golden Image candidate; it can be started, stopped, opened
+      and sealed from the shell, and it is never a product Machine
+- [ ] capture a shut-off workstation disk into the image store
+- [ ] generalize with a reviewed checklist: machine-id, SSH host keys,
+      cloud-init state, logs, shell history, browser profiles, keyrings,
+      tokens and any personal data removed, and the result scanned for leftovers
+- [ ] seal: digest, manifest with source guest, build commits and package
+      list; the candidate leaves the Workbench once sealed
+- [ ] a sealed image is read-only and verified by digest at every use
+
+### 4. Templates
+
+Every Template pins one Golden Image digest, one network identity and the GPU
+profiles it allows; the ceiling rule applies.
+
+| Template | Network | GPU | Purpose |
+|---|---|---|---|
+| `workstation-dev` | dev | dev | everyday development, the Workspace Shell |
+| `gaming-clean` | clean | clean | official stores with real accounts: Steam, Epic, GOG; nothing else installed |
+| `gaming-modded` | dirty | dirty | modded games and third-party launchers; never the store accounts |
+| `gaming-offline` | lab (no internet) | lab | untrusted or cracked software, offline |
+| `browser-disposable` | dirty | none | throwaway browsing, reset on shutdown |
+| `services` | services | per Template | appliances such as Jellyfin |
+
+Store accounts live only in `gaming-clean`. A modded or offline game never
+shares a disk, a network or a Machine with an account that owns purchases.
+Within one boot the GPU goes clean → dev → dirty → lab, never back up.
+
+- [ ] first published Template, `workstation-dev`, pinned to the sealed image
+- [ ] `gaming-clean`, `gaming-modded` and `gaming-offline` Templates for Linux
+      and Windows
+- [ ] `browser-disposable` with reset on shutdown
+- [ ] Template review gate: a Template cannot request a network, GPU profile
+      or device its class forbids
+
+### 5. C10 Machine Factory to product
+
+Details: [C10 — Machine Factory](#c10--machine-factory).
+
+- [ ] permanent and disposable Machines created, projected, defined and
+      started on Nitro from a Template
+- [ ] disposable Machines discard their writable layer on shutdown
+- [ ] Create view in the shell behind its feature gate
+
+### 6. Controlled data crossing
+
+- [ ] host → guest clipboard: copy on the host, a dedicated host key, pick
+      the target Machine, the text is delivered once and nowhere else
+- [ ] guest → host and guest → guest clipboard through the same host action;
+      moving data from a lower trust class to a higher one asks for
+      confirmation and is logged
+- [ ] file transfer into a guest through a host-mediated drop folder, one file
+      set and one target per action
+- [ ] USB passthrough per Machine through an explicit host action, with a
+      host-side device allowlist
+- [ ] microphone and camera off by default; on only per Machine and per
+      session, with a host indicator while active
+- [ ] host keybinding cheatsheet that includes the crossing keys
+
+### 7. Snapshots, backups and recovery (M12, second half)
+
+- [ ] snapshots for permanent Machines, from the shell, with retention
+- [ ] encrypted backups of Machines, the Machine registry and host
+      configuration, to a target that the guests cannot reach
+- [ ] restore drill: a Machine restored onto a clean host from a backup
+- [ ] Golden Image and Template catalogue backed up with their digests
+
+### 8. VM lifecycle and Control Center (M10, M11)
+
+- [ ] VM lifecycle and Control Center operational and recovery surfaces
+      complete (M10 domain manager and M11 shell are implemented; their live
+      gates remain)
+- [ ] the drawer placement visual recheck on Nitro
+- [ ] reviewed desktop-entry catalogue and app-launch bridge on the host
+
+### 9. Network security topology
+
+- [ ] frozen allowed-flow matrix between clean, dev, dirty, lab and services
+- [ ] `lab` enforced offline at the host, not only by guest configuration
+- [ ] per-network DNS, with no network able to query another's resolver
+- [ ] optional per-network VPN egress with a kill switch: if the tunnel
+      drops, that network has no internet
+- [ ] host firewall default deny for guest-to-host traffic, with the reviewed
+      exceptions listed
+
+### 10. Hypervisor hardening
+
+- [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed
+- [ ] QEMU guest agent restricted to the commands HyperLab uses; no guest
+      command execution
+- [ ] SPICE channels a Template does not need disabled (clipboard, file
+      transfer, USB redirection)
+- [ ] VM disks at rest on the encrypted host volume only, with swap and
+      temporary files of guests never on unencrypted storage
+- [ ] firmware updates through `fwupd`, with a recorded result on Nitro
+- [ ] host USB device policy so a new device is not trusted automatically
+
+### 11. Visual provenance and trust model
+
+- [ ] finish the host-owned visual provenance and trust model: every focused
+      surface named by the host, including fullscreen guests
+- [ ] the host frame visible around a Looking Glass window at all times
+
+### 12. Security plane
+
+- [ ] endpoint HIDS with measured overhead and no hypervisor remote-command
+      plane
+- [ ] passive NIDS that is never an inline routing dependency
+- [ ] HyperLab Security Plane correlating endpoint and network evidence, shown
+      in Diagnostics
+
+### 13. Performance and gaming tuning
+
+Measured with the complete security plane active.
+
+- [ ] CPU pinning and isolation profiles for gaming Templates
+- [ ] huge pages and memory policy for GPU guests
+- [ ] latency and frame-time benchmarks recorded per Template
+
+### 14. Release qualification and the Doppiari release
+
+- [ ] release qualification: idempotence, reboot, cold start, recovery and
+      hardware gates
+- [ ] threat model document: what HyperLab protects against and what it does
+      not; no claim of Qubes OS security properties
+- [ ] `SECURITY.md` and private vulnerability reporting enabled before the
+      release
+- [ ] licence and authorship reviewed for publication under Doppiari
+- [ ] wallpaper and polish, screenshots, video and release documentation
+- [ ] sanitized Nitro evidence sealed with the exact public `main` commits
+      exercised on hardware; Predator replayed and published separately
+
+### Later
+
+- **M13 — seamless guest applications:** future work, and never described as
+  providing Qubes OS security properties.
+- per-Desk focus modes and time tracking in the guest shell
+- Sway native parity acceptance (Sway remains the recovery session)
 
 ## C10 — Machine Factory
 
@@ -106,50 +289,7 @@ Open:
       launcher, lock, theme change, Waybar fallback
 - [ ] Hyprland layer blur behind the islands
 
-## Next milestone — Golden Image capture
-
-The Image Factory prepares and validates upstream images. It cannot yet turn a
-finished workstation guest into a reusable Golden Image. The next milestone
-adds that path:
-
-1. capture a shut-off workstation disk into the image store;
-2. generalize it: machine identity, SSH host keys, cloud-init state, logs,
-   shell history and any personal data removed, with a reviewed checklist;
-3. seal it with a digest and a manifest that records its source guest and the
-   commits that built it;
-4. publish the first Template against it;
-5. prove permanent and disposable Machines from it on Nitro.
-
-## Canonical completion order
-
-The candidate is completed in dependency order so later security and performance
-work is measured against stable workloads rather than moving targets:
-
-1. finish `arch-dev-vfio`, including pre-login display recovery, input
-   isolation, physical audio proof, gaming stack readiness and idempotence;
-2. extract reusable workstation behavior from the VFIO-specific path;
-3. finish `arch-dev`;
-4. finish `arch-minimal-ssh`;
-5. seal and validate golden images, clone identity and clone lifecycle;
-6. finish VM lifecycle and the Control Center operational/recovery surfaces;
-7. freeze network security topology and the explicit allowed-flow matrix;
-8. finish the host-owned visual provenance and trust model;
-9. add endpoint HIDS with measured overhead and no hypervisor remote-command
-   plane;
-10. add passive NIDS without turning the sensor into an inline routing
-    dependency;
-11. correlate endpoint and network evidence in the HyperLab Security Plane;
-12. perform final gaming/performance tuning with the complete security plane
-    active;
-13. run release qualification, idempotence, reboot, cold-start, recovery and
-    hardware gates;
-14. finish wallpaper/polish, screenshots, video and release documentation;
-15. seal the sanitized release evidence and record the exact public `main`
-    commits that were exercised on hardware.
-
-Performance tuning comes after HIDS/NIDS so the final benchmark includes the
-monitoring cost. HIDS/NIDS come after the network and VM contracts so normal
-behavior is defined before anomaly detection is tuned.
+## Decisions and closed milestones
 
 ### Linux VFIO PRIMARY display decision
 
