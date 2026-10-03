@@ -153,7 +153,12 @@ hl.on("hyprland.start", function()
         "systemctl --user start hyprpolkitagent.service"
     )
 
+{% if guest_desktop_hyprland_shell == 'quickshell' %}
+    -- The Workspace Shell; it falls back to Waybar on its own if it fails.
+    hl.exec_cmd("hyperlab-workspace session")
+{% else %}
     hl.exec_cmd("waybar")
+{% endif %}
     hl.exec_cmd("mako")
     hl.exec_cmd("hypridle")
 
@@ -165,6 +170,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd(
         "wl-paste --type text --watch cliphist store"
     )
+
+    -- Land on Desk 1 rather than on the unassigned workspace 1.
+    hl.exec_cmd("hyperlab-desk desk 1")
 end)
 
 hl.bind(
@@ -177,9 +185,21 @@ hl.bind(
     hl.dsp.exec_cmd("thunar")
 )
 
+-- Desks overview, launcher and new project. The helper reaches the
+-- Workspace Shell and falls back to rofi when the shell is not running.
 hl.bind(
     main_mod .. " + D",
-    hl.dsp.exec_cmd("hyprlauncher")
+    hl.dsp.exec_cmd("hyperlab-workspace overview")
+)
+
+hl.bind(
+    main_mod .. " + space",
+    hl.dsp.exec_cmd("hyperlab-workspace launcher")
+)
+
+hl.bind(
+    main_mod .. " + N",
+    hl.dsp.exec_cmd("hyperlab-workspace new-project")
 )
 
 hl.bind(
@@ -295,23 +315,46 @@ hl.bind(
     })
 )
 
-for workspace = 1, 9 do
-    local key = tostring(workspace)
+-- Desks and their workspaces. Desk d owns workspaces d*10+1 .. d*10+9;
+-- hyperlab-desk does the arithmetic and remembers the last slot of each
+-- Desk, so a key never needs to know which Desk is current.
+--   ALT + n                 go to Desk n
+--   ALT + SHIFT + n         move the window to Desk n
+--   ALT + CTRL + n          go to workspace n of this Desk
+--   ALT + CTRL + SHIFT + n  move the window to workspace n of this Desk
+for index = 1, 9 do
+    local key = tostring(index)
 
     hl.bind(
         main_mod .. " + " .. key,
-        hl.dsp.focus({
-            workspace = workspace,
-        })
+        hl.dsp.exec_cmd("hyperlab-desk desk " .. key)
     )
 
     hl.bind(
         main_mod .. " + SHIFT + " .. key,
-        hl.dsp.window.move({
-            workspace = workspace,
-        })
+        hl.dsp.exec_cmd("hyperlab-desk move-to-desk " .. key)
+    )
+
+    hl.bind(
+        main_mod .. " + CTRL + " .. key,
+        hl.dsp.exec_cmd("hyperlab-desk workspace " .. key)
+    )
+
+    hl.bind(
+        main_mod .. " + CTRL + SHIFT + " .. key,
+        hl.dsp.exec_cmd("hyperlab-desk move-to-workspace " .. key)
     )
 end
+
+hl.bind(
+    main_mod .. " + Page_Down",
+    hl.dsp.exec_cmd("hyperlab-desk desk-next")
+)
+
+hl.bind(
+    main_mod .. " + Page_Up",
+    hl.dsp.exec_cmd("hyperlab-desk desk-prev")
+)
 
 hl.bind(
     main_mod .. " + mouse:272",

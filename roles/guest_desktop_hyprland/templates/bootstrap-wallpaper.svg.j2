@@ -1,3 +1,50 @@
+{% if guest_theme_name == 'hyperlab-workstation' %}
+{#- The HyperLab Workstation wallpaper: a quiet lattice under a cold glow.
+    No words, no trust colour: the guest never paints who it is. -#}
+{% set glow_x = 1460 if guest_theme_surface == 'desktop' else 960 %}
+{% set glow_y = 250 if guest_theme_surface == 'desktop' else 470 %}
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070a12"/>
+      <stop offset="1" stop-color="#{{ guest_theme_palette.background }}"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="{{ glow_x }}" cy="{{ glow_y }}" r="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#{{ guest_theme_palette.accent }}" stop-opacity="0.34"/>
+      <stop offset="0.35" stop-color="#{{ guest_theme_palette.accent }}" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#{{ guest_theme_palette.accent }}" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="{{ glow_x }}" cy="{{ glow_y }}" r="1150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#{{ guest_theme_palette.background }}" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#{{ guest_theme_palette.background }}" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#{{ guest_theme_palette.background }}" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="horizon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#{{ guest_theme_palette.accent }}" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#{{ guest_theme_palette.accent_alt }}" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#{{ guest_theme_palette.accent }}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#ground)"/>
+  <g stroke="#{{ guest_theme_palette.accent_alt }}" stroke-opacity="0.12" stroke-width="1">
+{% for step in range(-1080, 1920, 96) %}
+    <path d="M{{ step }} 0 {{ step + 1080 }} 1080"/>
+    <path d="M{{ step + 1080 }} 0 {{ step }} 1080"/>
+{% endfor %}
+  </g>
+  <rect width="1920" height="1080" fill="url(#vignette)"/>
+  <rect width="1920" height="1080" fill="url(#glow)"/>
+
+  <g transform="translate({{ glow_x }} {{ glow_y }})" fill="none" stroke="#{{ guest_theme_palette.accent_alt }}">
+    <path d="M0 -300 300 0 0 300 -300 0Z" stroke-opacity="0.22" stroke-width="1.5"/>
+    <path d="M0 -186 186 0 0 186 -186 0Z" stroke-opacity="0.14" stroke-width="1"/>
+    <circle r="64" stroke-opacity="0.26" stroke-width="1.5"/>
+  </g>
+
+  <rect x="0" y="{{ 760 if guest_theme_surface == 'desktop' else 820 }}" width="1920" height="1" fill="url(#horizon)"/>
+</svg>
+{% else %}
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
@@ -25,3 +72,4 @@
     <text x="101" y="955" font-size="25" opacity="0.72" font-family="monospace">guest workstation · {{ guest_theme_surface }}</text>
   </g>
 </svg>
+{% endif %}

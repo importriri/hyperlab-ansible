@@ -58,6 +58,21 @@
     fail_msg: >-
       The optional Hyprland headless monitor policy is incomplete.
 
+- name: Validate the guest desktop shell policy
+  ansible.builtin.assert:
+    that:
+      - guest_desktop_hyprland_shell in ['quickshell', 'waybar']
+      - guest_desktop_hyprland_quickshell_series is match('^[0-9]+\\.[0-9]+$')
+      - guest_desktop_hyprland_workspace_desks | length >= 1
+      - guest_desktop_hyprland_workspace_desks | length <= 9
+      - >-
+        guest_desktop_hyprland_workspace_desks | map(attribute='name')
+        | map('lower') | unique | length ==
+        guest_desktop_hyprland_workspace_desks | length
+    fail_msg: >-
+      The guest shell must be quickshell or waybar, and the image must
+      define between one and nine Desks with distinct names.
+
 - name: Install the official Hyprland guest stack
   community.general.pacman:
     name: "{{ guest_desktop_hyprland_packages }}"
@@ -98,6 +113,29 @@
   loop_control:
     label: "{{ item.item }}"
   when: not ansible_check_mode
+
+- name: Read package facts for the Workspace Shell runtime
+  ansible.builtin.package_facts:
+    manager: auto
+  when:
+    - guest_desktop_hyprland_shell == 'quickshell'
+    - not ansible_check_mode
+
+- name: Verify the reviewed Quickshell API series
+  ansible.builtin.assert:
+    that:
+      - "'quickshell' in ansible_facts.packages"
+      - >-
+        ansible_facts.packages['quickshell'][0].version is
+        match('^' ~ (guest_desktop_hyprland_quickshell_series | regex_escape) ~ '\\.')
+    fail_msg: >-
+      The Workspace Shell was written against the Quickshell
+      {{ guest_desktop_hyprland_quickshell_series }} API series. A different
+      series needs review first; set guest_desktop_hyprland_shell to waybar
+      to keep the plain bar meanwhile.
+  when:
+    - guest_desktop_hyprland_shell == 'quickshell'
+    - not ansible_check_mode
 
 - name: Inspect guest desktop integration files
   ansible.builtin.stat:
@@ -231,6 +269,9 @@
     - /usr/share/privatestack-guest
     - /usr/share/privatestack-guest/themes
     - /usr/share/backgrounds/privatestack-guest
+    - /etc/hyperlab-workspace
+    - /etc/xdg/quickshell
+    - /etc/xdg/quickshell/hyperlab-workspace
 
 - name: Create every guest theme wallpaper pool
   ansible.builtin.file:
@@ -328,6 +369,7 @@
     - .config/gtk-3.0
     - .config/gtk-4.0
     - .config/privatestack-guest
+    - .config/hyperlab-workspace
     - .local/state/privatestack-guest-theme
 
 - name: Deploy the managed Hyprland guest configuration
@@ -362,6 +404,36 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Install the Desk helper and the Workspace Shell entry point
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/bin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: hyperlab-desk.py, dest: hyperlab-desk }
+    - { src: hyperlab-workspace.sh, dest: hyperlab-workspace }
+
+- name: Install the image default Desks
+  ansible.builtin.copy:
+    content: >-
+      {{ {'version': 1, 'desks': guest_desktop_hyprland_workspace_desks}
+      | to_nice_json(indent=2) }}
+    dest: /etc/hyperlab-workspace/desks.json
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/local/bin/hyperlab-desk check %s
+
+- name: Install the HyperLab Workspace Shell source
+  ansible.builtin.copy:
+    src: quickshell/hyperlab-workspace/
+    dest: /etc/xdg/quickshell/hyperlab-workspace/
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Prepare the selected theme without requiring a graphical session
   become: true

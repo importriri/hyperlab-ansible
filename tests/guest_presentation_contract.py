@@ -60,10 +60,11 @@ for key in pairs(bindings) do
 end
 local bars = 0
 for _, cmd in ipairs(starts) do
-    if cmd == "waybar" then bars = bars + 1 end
+    -- The Workspace Shell entry point falls back to Waybar on its own.
+    if cmd == "waybar" or cmd == "hyperlab-workspace session" then bars = bars + 1 end
     assert(not cmd:match("kill.*waybar"), "fullscreen must not kill the bar")
 end
-assert(bars == 1, "normal guest desktop must still launch Waybar")
+assert(bars == 1, "normal guest desktop must launch exactly one bar")
 for _, rule in ipairs(rules) do
     assert(rule.immediate ~= true, "unreviewed immediate presentation rule")
 end
@@ -72,12 +73,13 @@ assert(#monitors == 1)
 '''
 
 
-def check(source: str, bar: dict, headless: bool) -> None:
+def check(source: str, bar: dict, headless: bool, shell: str = 'quickshell') -> None:
     assert bar['layer'] == 'top', 'guest bar must not become an overlay'
     assert bar.get('exclusive', True) is True, 'ordinary windows must reserve bar space'
     assert bar.get('mode', 'dock') == 'dock', 'normal desktop bar must remain visible'
     defaults = yaml.safe_load((GUEST / 'defaults/main.yml').read_text())
     defaults['guest_desktop_hyprland_headless_monitor'] = headless
+    defaults['guest_desktop_hyprland_shell'] = shell
     rendered = Environment(undefined=StrictUndefined).from_string(source).render(**defaults)
     monitor_assert = (
         'assert(monitors[1].output == "HEADLESS-0" and '
@@ -94,9 +96,9 @@ def check(source: str, bar: dict, headless: bool) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def rejected(source: str, bar: dict, label: str) -> None:
+def rejected(source: str, bar: dict, label: str, shell: str = 'quickshell') -> None:
     try:
-        check(source, bar, True)
+        check(source, bar, True, shell)
     except AssertionError:
         return
     raise AssertionError('regression not detected: ' + label)
@@ -106,7 +108,8 @@ def main() -> None:
     source = (GUEST / 'templates/hyprland.lua.j2').read_text()
     bar = json.loads((GUEST / 'files/waybar.jsonc').read_text())
     for headless in (False, True):
-        check(source, bar, headless)
+        for shell in ('quickshell', 'waybar'):
+            check(source, bar, headless, shell)
     rejected(source.replace('mode = "fullscreen"', 'mode = "maximized"'), bar, 'maximize')
     old_dispatch = re.sub(
         r'hl\.dsp\.window\.fullscreen\(\{.*?\}\)',
@@ -118,7 +121,10 @@ def main() -> None:
     rejected(source.replace('allow_tearing = false,', ''), bar, 'implicit tearing policy')
     rejected(source, dict(bar, layer='overlay'), 'overlay bar')
     rejected(source, dict(bar, exclusive=False), 'lost work area')
-    rejected(source.replace('hl.exec_cmd("waybar")', ''), bar, 'disabled bar')
+    rejected(source.replace('hl.exec_cmd("waybar")', ''), bar, 'disabled bar', 'waybar')
+    rejected(source.replace('hl.exec_cmd("hyperlab-workspace session")', ''), bar, 'disabled shell')
+    rejected(source.replace('{% else %}\n    hl.exec_cmd("waybar")', '\n    hl.exec_cmd("waybar")'),
+             bar, 'two bars')
 
     host = (ROOT / 'roles/host_desktop_hyprland/templates/hyprland.lua.j2').read_text()
     host = re.sub(r'--[^\n]*', '', host)

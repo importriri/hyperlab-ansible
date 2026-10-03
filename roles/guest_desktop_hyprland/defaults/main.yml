@@ -8,6 +8,8 @@ guest_desktop_hyprland_packages:
   - hyprpolkitagent
   - hyprsunset
   - awww
+  - quickshell
+  - ttf-ibm-plex
   - waybar
   - rofi
   - rofi-calc
@@ -43,7 +45,33 @@ guest_desktop_hyprland_packages:
   - lua
   - ly
 
-guest_desktop_hyprland_theme_default: sakura-circuit
+guest_desktop_hyprland_theme_default: hyperlab-workstation
+
+# The desktop shell. `quickshell` runs the HyperLab Workspace Shell (Desks,
+# launcher, status islands) and falls back to Waybar on its own when the
+# shell fails; `waybar` keeps the plain bar.
+guest_desktop_hyprland_shell: quickshell
+
+# Quickshell API series the Workspace Shell was written against. Another
+# series needs review before the shell is installed.
+guest_desktop_hyprland_quickshell_series: "0.3"
+
+# The image's default Desks. A user's own
+# ~/.config/hyperlab-workspace/desks.json takes precedence. Desk n owns
+# Hyprland workspaces n*10+1 .. n*10+9; at most nine Desks.
+guest_desktop_hyprland_workspace_desks:
+  - name: Programming
+    blurb: Code, repositories and the terminals around them.
+    projects: []
+  - name: 3D Design
+    blurb: Blender and CAD, with the GPU when the machine has one.
+    projects: []
+  - name: Research
+    blurb: Reading, notes and documentation.
+    projects: []
+  - name: Systems
+    blurb: Ansible, networking and infrastructure work.
+    projects: []
 
 # Ordinary workstation guests keep interactive login. Dedicated appliance-style
 # guests may opt into a persistent graphical session.
@@ -66,12 +94,20 @@ guest_desktop_hyprland_headless_position: "0x0"
 guest_desktop_hyprland_headless_scale: 1
 
 guest_desktop_hyprland_theme_order:
+  - hyperlab-workstation
   - sakura-circuit
   - neon-terminal
   - moon-library
   - glitch-lab
 
 guest_desktop_hyprland_palettes:
+  hyperlab-workstation:
+    background: "05070b"
+    foreground: "e6ebf5"
+    surface: "0a0e16"
+    accent: "5b8cff"
+    accent_alt: "8fb0ff"
+    urgent: "ff5c7a"
   sakura-circuit:
     background: "17111d"
     foreground: "f7e8ff"

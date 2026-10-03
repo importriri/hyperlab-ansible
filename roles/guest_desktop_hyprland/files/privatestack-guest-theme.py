@@ -10,6 +10,15 @@ import time
 from pathlib import Path
 
 THEMES = {
+    # The HyperLab Workstation look, and the default for new guests.
+    "hyperlab-workstation": {
+        "background": "05070b",
+        "foreground": "e6ebf5",
+        "surface": "0a0e16",
+        "accent": "5b8cff",
+        "accent_alt": "8fb0ff",
+        "urgent": "ff5c7a",
+    },
     "sakura-circuit": {
         "background": "17111d",
         "foreground": "f7e8ff",
@@ -314,7 +323,7 @@ element selected {{
     text-color: #{background};
 }}
 """,
-        CONFIG / "mako/config": f"""font=JetBrainsMono Nerd Font 11
+        CONFIG / "mako/config": f"""font=IBM Plex Sans 11
 background-color=#{background}ee
 text-color=#{foreground}
 border-color=#{accent}
@@ -328,6 +337,12 @@ max-visible=5
 """,
         CONFIG / "gtk-3.0/gtk.css": generated_gtk_css,
         CONFIG / "gtk-4.0/gtk.css": generated_gtk_css,
+        # Read live by the Workspace Shell; keys mirror THEMES exactly.
+        CONFIG / "privatestack-guest/palette.json": json.dumps(
+            palette,
+            indent=2,
+            sort_keys=True,
+        ) + "\n",
         CONFIG / "privatestack-guest/current-desktop-wallpaper": (
             f"{desktop_wallpaper}\n"
         ),
@@ -382,7 +397,17 @@ def runtime_refresh(desktop_wallpaper: Path) -> None:
             check=False,
         )
 
-    if wayland_active:
+    # Waybar reads its colours once, so it is restarted, but only where it
+    # is the running bar. The Workspace Shell follows palette.json itself,
+    # and starting Waybar beside it would draw two bars.
+    waybar_running = subprocess.run(
+        ["pgrep", "-x", "waybar"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+    if wayland_active and waybar_running:
         subprocess.run(
             ["pkill", "-x", "waybar"],
             check=False,
