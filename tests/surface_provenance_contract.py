@@ -114,6 +114,63 @@ def registry_entry(
     }
 
 
+def check_projected_machine(resolver) -> None:
+    """A Machine projected into vm-specs/.generated/ resolves like a fixture."""
+    with tempfile.TemporaryDirectory(prefix="hyperlab-provenance-machine-") as temp_name:
+        temp = Path(temp_name)
+        repo = temp / "repo"
+        generated = repo / "vm-specs" / ".generated"
+        generated.mkdir(parents=True)
+        proc = temp / "proc"
+        proc.mkdir()
+        lg_real = temp / "looking-glass-client"
+        lg_real.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        lg_real.chmod(0o755)
+        resolver.EXPECTED_EXECUTABLES["looking-glass"] = str(lg_real.resolve())
+
+        machine = {
+            "schema_version": 1,
+            "name": "dev-01",
+            "image": "arch-dev-20261003",
+            "device_profile": "vfio",
+            "network_profile": "dev",
+            "looking_glass": True,
+            "looking_glass_mode": "linux-experimental",
+            "tags": ["managed-machine", "linux", "dev"],
+        }
+        spec = generated / "dev-01.yml"
+        spec.write_text(yaml.safe_dump(machine, sort_keys=False), encoding="utf-8")
+        write_proc(proc, pid=45001, start_ticks="1234", executable=lg_real)
+        surface = {"pid": 45001, "app_id": "looking-glass", "window_id": "0xdef", "title": "dev-01"}
+
+        def answer():
+            registry = {"version": 1, "entries": [registry_entry(
+                pid=45001, start="1234", executable=str(lg_real.resolve()),
+                kind="looking-glass", domain="dev-01", spec_sha=spec_hash(spec))]}
+            return resolver.resolve(repo=repo, surface=surface, registry=registry, proc_root=proc)
+
+        result = answer()
+        require(result["resolved"] is True and result["trust"] == "dev",
+                f"projected Machine did not resolve: {result}")
+        require(result["spec"].endswith("vm-specs/.generated/dev-01.yml"), "wrong spec resolved")
+
+        # Without the managed-machine tag a generated file is not a Machine.
+        spec.write_text(yaml.safe_dump({**machine, "tags": ["linux"]}, sort_keys=False), encoding="utf-8")
+        result = answer()
+        require(result["resolved"] is False
+                and result["reason"] == "registered-domain-spec-unavailable",
+                f"untagged generated spec resolved: {result}")
+
+        # One name, two specs: refuse rather than choose.
+        spec.write_text(yaml.safe_dump(machine, sort_keys=False), encoding="utf-8")
+        (repo / "vm-specs" / "dev-01.yml").write_text(
+            yaml.safe_dump({**machine, "tags": []}, sort_keys=False), encoding="utf-8")
+        result = answer()
+        require(result["resolved"] is False
+                and result["reason"] == "registered-domain-spec-unavailable",
+                f"ambiguous Machine name resolved: {result}")
+
+
 def main() -> int:
     require(RESOLVER.is_file(), "resolver missing")
     require(
@@ -437,6 +494,8 @@ def main() -> int:
             required in source,
             f"resolver invariant missing: {required}",
         )
+
+    check_projected_machine(load_module())
 
     print(
         "HyperLab host-owned focused-surface provenance contract: OK"

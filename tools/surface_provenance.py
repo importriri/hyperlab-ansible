@@ -27,6 +27,8 @@ import yaml
 
 
 SCHEMA_VERSION = 1
+GENERATED_SPECS = ".generated"
+MANAGED_MACHINE_TAG = "managed-machine"
 
 TRUST_IDENTITIES = (
     "clean",
@@ -427,11 +429,30 @@ def spec_for_domain(
 
     matches: list[tuple[Path, dict[str, Any]]] = []
 
-    for path in sorted(vm_specs.glob("*.yml")):
+    # Checked-in fixtures live in vm-specs/; product Machines are projected
+    # into vm-specs/.generated/ from their records. A generated spec counts
+    # only as a projected Machine, and a name may resolve to one spec only.
+    candidates = [(path, False) for path in sorted(vm_specs.glob("*.yml"))]
+    generated = vm_specs / GENERATED_SPECS
+    if generated.is_dir() and not generated.is_symlink():
+        candidates += [(path, True) for path in sorted(generated.glob("*.yml"))]
+
+    for path, projected in candidates:
+        if path.is_symlink() or not path.is_file():
+            continue
+
         spec = load_yaml(path)
 
-        if spec.get("name") == domain:
-            matches.append((path, spec))
+        if spec.get("name") != domain:
+            continue
+
+        tags = spec.get("tags")
+        if projected and not (
+            isinstance(tags, list) and MANAGED_MACHINE_TAG in tags
+        ):
+            continue
+
+        matches.append((path, spec))
 
     require(
         len(matches) == 1,
