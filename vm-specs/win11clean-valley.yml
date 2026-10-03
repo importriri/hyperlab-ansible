@@ -16,6 +16,7 @@ memory_overcommit: false
 autostart: false
 qemu_guest_agent: true
 looking_glass: true
+looking_glass_mode: windows
 clipboard: true
 shared_folders: false
 usb_allowlist: []

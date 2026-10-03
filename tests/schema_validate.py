@@ -23,6 +23,7 @@ SECRET_HINTS = ("password", "passwd", "token", "secret", "api_key", "private_key
 class ValidationResult:
     errors: list[str] = field(default_factory=list)
     image_count: int = 0
+    template_count: int = 0
     spec_count: int = 0
 
     @property
@@ -235,6 +236,159 @@ class RepositoryValidator:
         if status == "sealed" and required_build and not observed_build:
             self.fail(where, "a sealed Looking Glass image must record the observed host build")
 
+    def validate_template_policy(
+        self,
+        path: Path,
+        template: dict[str, Any],
+        images: dict[str, dict[str, Any]],
+    ) -> None:
+        where = self.relative(path)
+        image_id = template.get("image")
+        image = images.get(image_id)
+
+        if image is None:
+            self.fail(where, f"image {image_id!r} has no manifest")
+            return
+
+        if not image.get("generalized"):
+            self.fail(where, "a product Template requires a generalized image")
+
+        if image.get("contains_personal_data"):
+            self.fail(where, "a product Template cannot use a personal image")
+
+        if template.get("status") == "ready":
+            if image.get("status") != "sealed" or not image.get("sha256"):
+                self.fail(
+                    where,
+                    "a ready Template requires a sealed image with a digest",
+                )
+
+        lifecycles = template.get("lifecycles", {})
+        if not any(
+            lifecycles.get(name) is True
+            for name in ("permanent", "disposable")
+        ):
+            self.fail(where, "Template enables no lifecycle")
+
+        if (
+            image.get("instance_policy") == "singleton"
+            and lifecycles.get("disposable") is True
+        ):
+            self.fail(
+                where,
+                "a singleton image cannot back a disposable Template",
+            )
+
+        devices = template.get("device_capabilities", {})
+        if not any(
+            devices.get(name) is True
+            for name in ("standard", "vfio")
+        ):
+            self.fail(where, "Template enables no device capability")
+
+        image_supports = image.get("supports", {})
+
+        for device in ("standard", "vfio"):
+            if devices.get(device) and not image_supports.get(device):
+                self.fail(
+                    where,
+                    f"Template enables {device} but image does not support it",
+                )
+
+        gpu_handoff_profiles = template.get(
+            "gpu_handoff_profiles",
+            {},
+        )
+
+        enabled_gpu_handoff_profiles = [
+            name
+            for name in ("clean", "dev", "dirty", "lab")
+            if gpu_handoff_profiles.get(name) is True
+        ]
+
+        if (
+            devices.get("vfio") is True
+            and not enabled_gpu_handoff_profiles
+        ):
+            self.fail(
+                where,
+                "VFIO Template enables no GPU handoff profile",
+            )
+
+        networks = template.get("network_allowlist") or []
+        image_networks = image.get("network_allowlist") or []
+
+        for network in networks:
+            if network not in image_networks:
+                self.fail(
+                    where,
+                    f"network {network!r} is not permitted by image {image_id}",
+                )
+
+        resources = template.get("resource_profiles", {})
+        defaults = template.get("defaults", {})
+
+        default_lifecycle = defaults.get("lifecycle")
+        if default_lifecycle and lifecycles.get(default_lifecycle) is not True:
+            self.fail(where, "default lifecycle is not enabled")
+
+        default_device = defaults.get("device_capability")
+        if default_device and devices.get(default_device) is not True:
+            self.fail(where, "default device capability is not enabled")
+
+        default_gpu_handoff = defaults.get(
+            "gpu_handoff_profile"
+        )
+
+        if default_device == "vfio":
+            if default_gpu_handoff not in enabled_gpu_handoff_profiles:
+                self.fail(
+                    where,
+                    "default GPU handoff profile is not enabled",
+                )
+        elif default_gpu_handoff is not None:
+            self.fail(
+                where,
+                "standard default cannot carry gpu_handoff_profile",
+            )
+
+        default_network = defaults.get("network_profile")
+        if default_network and default_network not in networks:
+            self.fail(where, "default network is not in Template allowlist")
+
+        default_resource = defaults.get("resource_profile")
+        if default_resource and resources.get(default_resource) is not True:
+            self.fail(where, "default resource profile is not enabled")
+
+        presentation = template.get("presentation", {})
+        looking_glass_mode = presentation.get("looking_glass_mode")
+
+        if (
+            looking_glass_mode != "disabled"
+            and devices.get("vfio") is not True
+        ):
+            self.fail(
+                where,
+                "Looking Glass presentation requires VFIO capability",
+            )
+
+        os_family = image.get("os_family")
+
+        if looking_glass_mode == "windows" and os_family != "windows":
+            self.fail(
+                where,
+                "Windows Looking Glass mode requires a Windows image",
+            )
+
+        if (
+            looking_glass_mode == "linux-experimental"
+            and os_family != "linux"
+        ):
+            self.fail(
+                where,
+                "Linux Looking Glass mode requires a Linux image",
+            )
+
     def validate_spec_policy(self, path: Path, spec: dict[str, Any], image: dict[str, Any], client_build: str) -> None:
         where = self.relative(path)
         network = spec.get("network_profile")
@@ -245,6 +399,32 @@ class RepositoryValidator:
         supports = image.get("supports", {})
         if device in {"standard", "vfio"} and not supports.get(device):
             self.fail(where, f"{device} requested, image does not support it")
+
+        gpu_handoff_profile = spec.get("gpu_handoff_profile")
+
+        if device == "vfio":
+            if gpu_handoff_profile is None:
+                if network == "services":
+                    self.fail(
+                        where,
+                        "services VFIO requires explicit gpu_handoff_profile",
+                    )
+            elif gpu_handoff_profile not in {
+                "clean",
+                "dev",
+                "dirty",
+                "lab",
+            }:
+                self.fail(
+                    where,
+                    "unsupported gpu_handoff_profile",
+                )
+        elif gpu_handoff_profile is not None:
+            self.fail(
+                where,
+                "standard guests cannot carry gpu_handoff_profile",
+            )
+
         if device == "vfio" and spec.get("memory_overcommit"):
             self.fail(where, "overcommit on vfio is forbidden")
         if device == "vfio" and spec.get("autostart"):
@@ -253,16 +433,28 @@ class RepositoryValidator:
         looking_glass = spec.get("looking_glass") is True
         looking_glass_mode = spec.get("looking_glass_mode")
         if device == "vfio":
-            if os_family == "windows":
-                if not looking_glass:
-                    self.fail(where, "Windows VFIO guests require Looking Glass")
-                if looking_glass_mode not in (None, "windows"):
-                    self.fail(where, "Windows VFIO requires looking_glass_mode: windows")
-            elif looking_glass:
-                if looking_glass_mode != "linux-experimental":
-                    self.fail(where, "Linux Looking Glass requires linux-experimental mode")
+            if looking_glass:
+                if (
+                    os_family == "windows"
+                    and looking_glass_mode != "windows"
+                ):
+                    self.fail(
+                        where,
+                        "Windows Looking Glass requires looking_glass_mode: windows",
+                    )
+                elif (
+                    os_family == "linux"
+                    and looking_glass_mode != "linux-experimental"
+                ):
+                    self.fail(
+                        where,
+                        "Linux Looking Glass requires linux-experimental mode",
+                    )
             elif looking_glass_mode is not None:
-                self.fail(where, "SPICE-only Linux VFIO cannot carry a Looking Glass mode")
+                self.fail(
+                    where,
+                    "disabled Looking Glass cannot carry a mode",
+                )
         elif looking_glass or looking_glass_mode is not None:
             self.fail(where, "standard guests cannot request Looking Glass")
         if spec.get("qemu_guest_agent") and not supports.get("qemu_guest_agent"):
@@ -305,6 +497,7 @@ class RepositoryValidator:
     def validate(self) -> ValidationResult:
         self.valid_domains = self.domains()
         image_schema = self.load_yaml(self.root / "schemas/image-manifest.v1.yml")
+        template_schema = self.load_yaml(self.root / "schemas/template.v1.yml")
         spec_schema = self.load_yaml(self.root / "schemas/vm-spec.v1.yml")
         looking_contract = self.load_yaml(self.root / "group_vars/all/looking-glass.yml")
         client_build = looking_contract.get("hyperlab_looking_glass_build", "")
@@ -323,6 +516,27 @@ class RepositoryValidator:
         self.result.image_count = len(images)
         for image_id, image in images.items():
             self.validate_manifest_policy(image_id, image, client_build)
+
+        templates: dict[str, dict[str, Any]] = {}
+        template_paths = sorted((self.root / "templates").glob("*.yml"))
+        self.result.template_count = len(template_paths)
+
+        for path in template_paths:
+            document = self.load_yaml(path)
+            self.check_document(path, document, template_schema)
+            where = self.relative(path)
+            template_id = document.get("id", path.stem)
+
+            if template_id in templates:
+                self.fail(where, f"duplicate Template id {template_id!r}")
+
+            templates[template_id] = document
+
+            if document.get("id") != path.stem:
+                self.fail(where, "id must equal the file name")
+
+            self.validate_template_policy(path, document, images)
+
         singleton_references: dict[str, list[str]] = {}
         spec_paths = sorted((self.root / "vm-specs").glob("*.yml"))
         self.result.spec_count = len(spec_paths)
@@ -357,7 +571,12 @@ def main() -> int:
         for error in result.errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print(f"schemas: OK ({result.image_count} images, {result.spec_count} specs)")
+    print(
+        "schemas: OK "
+        f"({result.image_count} images, "
+        f"{result.template_count} templates, "
+        f"{result.spec_count} specs)"
+    )
     return 0
 
 

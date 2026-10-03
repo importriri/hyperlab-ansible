@@ -125,6 +125,7 @@ Operator and architecture references:
 - [`docs/performance-security-contract.md`](docs/performance-security-contract.md) — performance tuning under a fixed host security floor;
 - [`docs/nitro-secure-boot-acceptance.md`](docs/nitro-secure-boot-acceptance.md) — Nitro Secure Boot enrollment, recovery and hardware acceptance;
 - [`docs/golden-image-control-center-contract.md`](docs/golden-image-control-center-contract.md) — golden-image discovery and Control Center lifecycle contract;
+- [`docs/c10-machine-factory-contract.md`](docs/c10-machine-factory-contract.md) — Golden Image, Template and Machine lifecycle, the Machine registry and GPU handoff policy;
 - [`docs/nitro-control-backend.md`](docs/nitro-control-backend.md) — privileged Nitro broker boundary and runtime protocol;
 - [`docs/nitro-control-panel.md`](docs/nitro-control-panel.md) — normal-user Nitro Control Board and desktop-theme integration;
 - [`docs/visual-trust-contract.md`](docs/visual-trust-contract.md) — semantic trust colors and their separation from appearance themes;

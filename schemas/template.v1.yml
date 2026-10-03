@@ -1,0 +1,84 @@
+---
+schema_version: 1
+kind: machine-template
+
+fields:
+  schema_version: {type: int, enum: [1]}
+  id:
+    type: str
+    min_length: 1
+    pattern: "^[a-z0-9][a-z0-9-]*$"
+  display_name: {type: str, min_length: 1}
+  version:
+    type: str
+    min_length: 1
+    pattern: "^[0-9]+([.][0-9]+){0,2}$"
+  status: {type: str, enum: [draft, ready]}
+  image:
+    type: str
+    min_length: 1
+    pattern: "^[a-z0-9][a-z0-9-]*$"
+
+  lifecycles:
+    type: map
+    fields:
+      permanent: {type: bool}
+      disposable: {type: bool}
+
+  device_capabilities:
+    type: map
+    fields:
+      standard: {type: bool}
+      vfio: {type: bool}
+
+  gpu_handoff_profiles:
+    type: map
+    fields:
+      clean: {type: bool}
+      dev: {type: bool}
+      dirty: {type: bool}
+      lab: {type: bool}
+
+  network_allowlist:
+    type: list
+    of: str
+    domain: true
+    unique_items: true
+    min_items: 1
+
+  resource_profiles:
+    type: map
+    fields:
+      minimum: {type: bool}
+      balanced: {type: bool}
+      performance: {type: bool}
+      custom: {type: bool}
+
+  presentation:
+    type: map
+    fields:
+      looking_glass_mode:
+        type: str
+        enum: [disabled, windows, linux-experimental]
+      recovery_console: {type: bool}
+      workspace_profile:
+        type: str
+        min_length: 1
+        pattern: "^[a-z0-9][a-z0-9-]*$"
+
+  defaults:
+    type: map
+    fields:
+      lifecycle: {type: str, enum: [permanent, disposable]}
+      device_capability: {type: str, enum: [standard, vfio]}
+      gpu_handoff_profile:
+        type: str
+        nullable: true
+        enum: [clean, dev, dirty, lab]
+      network_profile: {type: str, domain: true}
+      resource_profile:
+        type: str
+        enum: [minimum, balanced, performance, custom]
+
+optional:
+  description: {type: str, min_length: 1}
