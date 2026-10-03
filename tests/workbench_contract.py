@@ -58,6 +58,10 @@ elif name == "qemu-img":
     elif sys.argv[1] == "info":
         print(json.dumps({"format": "qcow2", "virtual-size": 107374182400}))
 elif name == "virt-sysprep":
+    # The real tool refuses a --format given after the -a it should apply to.
+    if "--format" in sys.argv and sys.argv.index("--format") > sys.argv.index("-a"):
+        print("virt-sysprep: error: --format parameter must appear before -a parameter", file=sys.stderr)
+        sys.exit(1)
     image = sys.argv[sys.argv.index("-a") + 1]
     with open(image, "ab") as handle:
         handle.write(b"generalized")
@@ -269,7 +273,8 @@ def check_wiring() -> None:
         assert play["roles"][0]["vars"]["brick_guard_brick"] == "workbench"
     # The source disk is read, never generalized in place.
     source = TOOL.read_text()
-    assert '"qemu-img", "convert"' in source and 'run(["virt-sysprep", "-a", str(partial)' in source
+    assert '"qemu-img", "convert"' in source
+    assert 'run(["virt-sysprep", "--format", "qcow2", "-a", str(partial)' in source
     assert '"guestfish", "--ro"' in source
 
 

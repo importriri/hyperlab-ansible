@@ -366,7 +366,8 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
         try:
             partial = staging / f"{record['image_id']}.qcow2.new"
             run(["qemu-img", "convert", "-O", "qcow2", str(source), str(partial)])
-            run(["virt-sysprep", "-a", str(partial), "--format", "qcow2", *SYSPREP_ARGS])
+            # virt-sysprep applies --format only to the -a that follows it.
+            run(["virt-sysprep", "--format", "qcow2", "-a", str(partial), *SYSPREP_ARGS])
             scan = run(["guestfish", "--ro", "-a", str(partial), "-i"], input=scan_script())
             problems = evaluate_scan(scan.stdout)
             require(not problems, "the generalized image still holds: " + "; ".join(problems))
