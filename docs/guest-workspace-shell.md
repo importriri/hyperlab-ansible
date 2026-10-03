@@ -1,0 +1,171 @@
+# Guest Workspace Shell
+
+The HyperLab Workspace Shell is the desktop of a HyperLab guest workstation.
+It runs inside the guest on Hyprland and Quickshell, and replaces the plain
+Waybar session on the preferred path. It looks like a workstation of the
+HyperLab platform, not like the host: floating islands instead of the host's
+full-width rail, IBM Plex type, one accent colour.
+
+The guest never shows trust. There is no trust badge, no provenance colour
+and no GPU ownership in the guest shell: a guest can paint anything, so only
+the host frame around it may say what the machine is and what it may reach.
+
+## Machine, Desk, Project
+
+```text
+Machine        one guest, started from the host, with one network and one trust
+└── Desk       a group of related work: Programming, 3D Design, Research ...
+    └── Project    a named workspace of that Desk, with a folder and programs
+        └── windows
+```
+
+A Desk is organisation, never a security boundary. Every Desk of a machine
+shares the same machine, network and trust. Work that needs a different trust
+level belongs in a different Machine, started from the host.
+
+The mapping onto Hyprland is fixed and has no hidden state:
+
+| | Hyprland workspaces |
+| --- | --- |
+| Desk `d` | `d*10+1` to `d*10+9` |
+| slot `s` of Desk `d` | `d*10+s` |
+
+So Desk 1 is workspaces 11 to 19, Desk 2 is 21 to 29, and the current Desk and
+project are always read back from the active workspace. A Project owns one
+slot; a slot without a project is just "Workspace n".
+
+## Keys
+
+The guest keeps the `ALT` namespace. `SUPER` belongs to the host and
+`RIGHTCTRL` to the Looking Glass escape.
+
+| Keys | Action |
+| --- | --- |
+| `ALT+1` … `ALT+9` | go to Desk n, on the slot last used there |
+| `ALT+SHIFT+1` … `9` | move the focused window to Desk n |
+| `ALT+CTRL+1` … `9` | go to workspace (project slot) n of this Desk |
+| `ALT+CTRL+SHIFT+1` … `9` | move the focused window to slot n of this Desk |
+| `ALT+Page_Down` / `ALT+Page_Up` | next / previous Desk |
+| `ALT+D` | Desks overview |
+| `ALT+Space` | launcher: applications, projects, actions |
+| `ALT+N` | new project in the current Desk |
+| `ALT+L` | lock (hyprlock) |
+| `ALT+Return` | terminal |
+
+Inside the overview: `1`–`9` go to a Desk, arrows move, `Enter` opens the
+selected Desk or project, `N` adds a project, `Esc` closes. Inside the
+launcher: arrows move, `Tab` jumps to the next section, `Enter` opens.
+Log out, restart and power off ask for a second `Enter`.
+
+## Surfaces
+
+| Surface | What it shows | Source |
+| --- | --- | --- |
+| Context island (top left) | the mark, `WORKSTATION`, Desk / Project | `hyperlab-desk model` + active workspace |
+| Status island (top right) | GPU, CPU with a short trace, RAM, volume, network, date and time | see below |
+| Dock (bottom) | the Desks, the slots of the current Desk, the launcher | `hyperlab-desk model` + Hyprland |
+| Desks overview | every Desk with its projects and live window counts | same |
+| Launcher | applications, projects of every Desk, actions | desktop entries, the model |
+| OSD | Desk changes, volume, helper outcomes | Desk state, PipeWire |
+| Lock | time, date, password, where you were | hyprlock, `hyperlab-desk lock-label` |
+
+Every number comes from a real source inside the guest, and a source that
+cannot be read hides its readout instead of showing a made-up value:
+
+| Readout | Source |
+| --- | --- |
+| CPU | `/proc/stat`, sampled every two seconds |
+| RAM | `/proc/meminfo` (`MemTotal - MemAvailable`) |
+| NET | the interface holding the default route in `/proc/net/route`; `offline` when there is none |
+| GPU | `nvidia-smi` utilisation, only when the guest has an NVIDIA driver |
+| VOL | the default PipeWire sink |
+
+## Configuring Desks and projects
+
+`hyperlab-desk` owns the configuration. The first readable source wins:
+
+1. `~/.config/hyperlab-workspace/desks.json` — your own Desks;
+2. `/etc/hyperlab-workspace/desks.json` — the image default, rendered from
+   `guest_desktop_hyprland_workspace_desks`;
+3. the built-in four Desks.
+
+A file that does not validate is never half-applied: the next source is used
+and the overview says that your file was refused and why. A later edit never
+overwrites a refused file.
+
+```sh
+hyperlab-desk project-new 1 HyperLab --cwd ~/src/hyperlab-ansible
+hyperlab-desk project-new 2 "Blender renders" --cwd ~/renders --launch blender
+hyperlab-desk project-remove 1 3
+hyperlab-desk model            # what the shell sees
+hyperlab-desk check FILE       # validate a desks.json before using it
+```
+
+Opening a project goes to its workspace and, only when that workspace is
+empty, starts its programs there in its folder (`kitty` by default).
+
+## Files
+
+| Path | Role |
+| --- | --- |
+| `/etc/xdg/quickshell/hyperlab-workspace/` | the shell (`qs -c hyperlab-workspace`) |
+| `/usr/local/bin/hyperlab-desk` | Desks, projects and workspace arithmetic |
+| `/usr/local/bin/hyperlab-workspace` | session start and the key entry points |
+| `/etc/hyperlab-workspace/desks.json` | the image default Desks |
+| `~/.config/privatestack-guest/palette.json` | the active guest theme, read live by the shell |
+| `~/.local/state/hyperlab-workspace/shell.log` | the shell's own log |
+
+Source: `roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace/`.
+`shell.qml` wires one theme, one Desk state, one set of readouts and one
+surface controller into every surface. Logic that does not need Quickshell
+lives in `desks.js`, `stats.js` and `launcher.js` and is tested directly.
+
+## Themes
+
+The shell follows the active guest theme through `palette.json`, written by
+`privatestack-guest-theme`, so `ALT+SHIFT+T` recolours it without a restart.
+`hyperlab-workstation` is the default theme: the shell's own palette and a
+generated wallpaper with no words and no trust colour. Your own wallpapers for
+it go in `/usr/share/backgrounds/privatestack-guest/hyperlab-workstation/desktop/`
+and `.../lockscreen/` as `01.png`, `02.png` and so on; they sort before the
+generated `bootstrap.png`.
+
+## Recovery
+
+Nothing depends on the shell being up:
+
+- every key calls `hyperlab-workspace` or `hyperlab-desk`, never the shell
+  directly; without the shell the launcher is rofi and the overview and
+  new-project prompts are rofi menus;
+- `hyperlab-workspace session` restarts a shell that crashes after a normal
+  run, and starts Waybar if the shell fails three times in a row;
+- the lock is hyprlock, a separate program, so a shell crash can never leave
+  the session unlocked or unlockable;
+- `guest_desktop_hyprland_shell: waybar` keeps the plain bar.
+
+The role installs the shell only for the reviewed Quickshell API series
+(`guest_desktop_hyprland_quickshell_series`, currently 0.3).
+
+## Verification
+
+| Contract | Proves |
+| --- | --- |
+| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, refused configuration |
+| `tests/guest_workspace_shell_runtime_contract.py` | the real QML in an offscreen scene: readouts, Desks, overview, launcher, refusals |
+| `tests/guest_workspace_shell_contract.py` | no trust or host knowledge in the guest, lock in hyprlock, keys and fallbacks, role wiring |
+| `tests/guest_presentation_contract.py` | exactly one bar, fullscreen and tearing policy |
+| `tests/keybinding_namespace_security_contract.py` | every guest key stays in `ALT` |
+
+With `HYPERLAB_RENDER_OUT=dir`, the runtime contract saves a capture of each
+scenario. The Quickshell stand-ins it uses are described in
+[`tests/quickshell_stubs/README.md`](../tests/quickshell_stubs/README.md).
+
+Not proven in software, and therefore physical acceptance on a guest: the
+real Quickshell runtime, layer-shell keyboard focus, Hyprland IPC events,
+PipeWire, and the look with IBM Plex installed.
+
+Known gaps:
+
+- the islands are translucent but not blurred; Hyprland layer blur needs a
+  layer rule in the Lua configuration once its form is reviewed;
+- notifications are still mako, styled by the theme rather than the shell.

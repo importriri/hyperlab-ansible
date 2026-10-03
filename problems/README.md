@@ -19,6 +19,15 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-shell-stale-place-at-signal.md`](guest-shell-stale-place-at-signal.md):
+  the Desk OSD read a binding before Qt re-evaluated it and announced the
+  project of the Desk being left.
+- [`guest-theme-change-second-bar.md`](guest-theme-change-second-bar.md): the
+  guest theme controller always restarted Waybar, which would have drawn a
+  second bar beside the Workspace Shell.
+- [`guest-shell-offscreen-harness.md`](guest-shell-offscreen-harness.md): the
+  offscreen harness found a shadowed `palette`, a binding loop and a refused
+  anchor in the guest shell before any guest ran it.
 - [`guest-waybar-over-fullscreen.md`](guest-waybar-over-fullscreen.md):
   the guest shortcut requested maximization instead of true fullscreen; the
   native fullscreen correction is software-verified, deployed and physically

@@ -82,6 +82,30 @@ Open before C10 can be used as a product path:
 - [ ] physical acceptance of the product-only Machines workspace and the
       Diagnostics outside-domain list
 
+## Guest Workspace Shell
+
+Reference: [`guest-workspace-shell.md`](guest-workspace-shell.md).
+
+The workstation guest gets its own desktop before it is sealed into the first
+Golden Image, so every Machine made from it starts with it.
+
+Software-verified:
+
+- [x] Machine → Desk → Project model; Desk n owns workspaces n*10+1..n*10+9
+- [x] `hyperlab-desk` helper with validated, never half-applied configuration
+- [x] Quickshell shell: context and status islands, dock, Desks overview,
+      launcher, OSD; every readout from a real guest source
+- [x] `hyperlab-workstation` theme, palette followed live, generated wallpaper
+- [x] hyprlock restyled; the lock stays outside the shell
+- [x] every key works without the shell; a failing shell falls back to Waybar
+- [x] offscreen runtime contract over the real QML with Quickshell stand-ins
+
+Open:
+
+- [ ] physical acceptance on `arch-dev-vfio`: shell start, keys, overview,
+      launcher, lock, theme change, Waybar fallback
+- [ ] Hyprland layer blur behind the islands
+
 ## Next milestone — Golden Image capture
 
 The Image Factory prepares and validates upstream images. It cannot yet turn a

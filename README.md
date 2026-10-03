@@ -122,6 +122,7 @@ Operator and architecture references:
 - [`docs/hardware-profiles.md`](docs/hardware-profiles.md) — reviewed laptop boundaries;
 - [`docs/network-reconciliation.md`](docs/network-reconciliation.md) — network ownership and drift handling;
 - [`docs/arch-dev-acceleration.md`](docs/arch-dev-acceleration.md) — accelerated Arch guest policy;
+- [`docs/guest-workspace-shell.md`](docs/guest-workspace-shell.md) — the guest workstation desktop: Desks, projects, launcher and keys;
 - [`docs/performance-security-contract.md`](docs/performance-security-contract.md) — performance tuning under a fixed host security floor;
 - [`docs/nitro-secure-boot-acceptance.md`](docs/nitro-secure-boot-acceptance.md) — Nitro Secure Boot enrollment, recovery and hardware acceptance;
 - [`docs/golden-image-control-center-contract.md`](docs/golden-image-control-center-contract.md) — golden-image discovery and Control Center lifecycle contract;
