@@ -1,0 +1,34 @@
+---
+schema_version: 1
+id: arch-dev-20261003
+display_name: HyperLab dev workstation
+os_family: linux
+os_variant: archlinux
+version: '20261003'
+format: qcow2
+status: sealed
+sha256: f016ef0a888fb30db1edb88ea6486fe2af3e5e7072c7128eb199877d4480194e
+private: true
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+source_type: local
+source_url: null
+source_checksum_url: null
+source_sha256: f016ef0a888fb30db1edb88ea6486fe2af3e5e7072c7128eb199877d4480194e
+filename: arch-dev-20261003.qcow2
+virtual_size_gib: 100
+minimum_size_gib: 100
+min_memory_mb: 4096
+supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
+network_allowlist: [dev]
+licensing: {redistributable: false}
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: 'Captured through the Workbench from arch-dev-vfio (dev profile) over the arch
+  base. Generalized offline with virt-sysprep: no user account, home directory, SSH
+  key, machine identity, history or cloud-init instance; the leftover scan passed.
+  Machines from this image get their account from cloud-init and their rice from the
+  profile playbook.'

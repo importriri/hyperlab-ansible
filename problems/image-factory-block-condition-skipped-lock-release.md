@@ -2,8 +2,9 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: corrected in source and covered by the image factory contract. The
-physical rerun on Nitro is pending.
+Status: corrected in source and covered by the image factory contract.
+Verified on Nitro: `arch-dev-vfio` sealed as `arch-dev-20261003`, imported
+and validated.
 
 ## Symptom
 

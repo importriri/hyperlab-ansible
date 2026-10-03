@@ -2,9 +2,9 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: corrected in source and covered by the Workbench contract. The
-image already imported was discarded before it was sealed and is captured
-again with the fix.
+Status: corrected in source and covered by the Workbench contract.
+Verified on Nitro: `arch-dev-vfio` sealed as `arch-dev-20261003`, imported
+and validated.
 
 ## Symptom
 
@@ -24,6 +24,9 @@ CLIs, registries), so it must not travel into every Machine.
 
 The seal deletes `/root/.config`, `/root/.cache` and `/root/.npm`, and the
 scan refuses an image that still holds any of them.
+
+The image already imported had not been sealed and nothing used it. It was
+removed from the store and captured again with the fix.
 
 ## Regression proof
 

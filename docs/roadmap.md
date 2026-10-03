@@ -146,7 +146,8 @@ Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
       (software-verified)
 - [x] digest and a local-import manifest for the existing image factory
       (software-verified)
-- [ ] the first real seal of `arch-dev-vfio` on Nitro, imported and validated
+- [x] the first real seal of `arch-dev-vfio` on Nitro, imported and validated
+      as `arch-dev-20261003` (Nitro-verified)
 - [ ] **Workbench** section in the shell: start, stop, open and seal a
       candidate, never shown as a product Machine
 - [ ] build commits and the package list in the image manifest

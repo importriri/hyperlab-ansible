@@ -2,8 +2,9 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: corrected in source and covered by the Workbench contract. The
-physical seal on Nitro is pending.
+Status: corrected in source and covered by the Workbench contract.
+Verified on Nitro: `arch-dev-vfio` sealed as `arch-dev-20261003`, imported
+and validated.
 
 ## Symptom
 
