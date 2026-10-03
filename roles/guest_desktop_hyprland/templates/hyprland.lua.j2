@@ -99,26 +99,6 @@ hl.curve(
     }
 )
 
-hl.curve(
-    "guestLinear",
-    {
-        type = "bezier",
-        points = {
-            {0, 0},
-            {1, 1},
-        },
-    }
-)
-
--- The active border's gradient turns slowly, once every ten seconds.
-hl.animation({
-    leaf = "borderangle",
-    enabled = true,
-    speed = 100,
-    bezier = "guestLinear",
-    style = "loop",
-})
-
 hl.animation({
     leaf = "windows",
     enabled = true,
@@ -227,6 +207,11 @@ hl.bind(
 hl.bind(
     main_mod .. " + N",
     hl.dsp.exec_cmd("hyperlab-workspace new-project")
+)
+
+hl.bind(
+    main_mod .. " + H",
+    hl.dsp.exec_cmd("hyperlab-workspace cheatsheet")
 )
 
 hl.bind(

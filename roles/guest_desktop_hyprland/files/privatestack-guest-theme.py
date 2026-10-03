@@ -200,12 +200,14 @@ def palette_files(
     )
 
     return {
-        # The active window wears the theme: a slowly turning gradient
-        # border and a glow in the accent; inactive windows recede.
+        # The active window wears the theme: an accent border and a glow of
+        # the same colour; inactive windows recede. Under the Lua
+        # configuration a colour is one rgba() value; the classic
+        # space-separated gradient string is refused.
         CONFIG / "hypr/theme.lua": f"""hl.config({{
     general = {{
         col = {{
-            active_border = "rgba({accent}ff) rgba({accent_alt}ff) rgba({accent}ff) 45deg",
+            active_border = "rgba({accent}ff)",
             inactive_border = "rgba({surface}cc)",
         }},
     }},

@@ -19,6 +19,8 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-lua-gradient-border.md`](guest-lua-gradient-border.md): Hyprland's
+  Lua configuration refused the classic gradient border string.
 - [`guest-hyprctl-dispatch-takes-lua.md`](guest-hyprctl-dispatch-takes-lua.md):
   Desk keys did nothing because `hyprctl dispatch` takes a Lua expression under
   Hyprland's Lua configuration.
