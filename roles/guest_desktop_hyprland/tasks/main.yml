@@ -73,10 +73,20 @@
       The guest shell must be quickshell or waybar, and the image must
       define between one and nine Desks with distinct names.
 
-- name: Install the official Hyprland guest stack
+# Arch supports one package state only. Installing new packages against a
+# stale sync database asks mirrors for versions they no longer carry, and a
+# refresh without an upgrade is a partial upgrade. The install is therefore
+# one full transaction: refresh, upgrade, install.
+- name: Install the official Hyprland guest stack in a full system transaction
   community.general.pacman:
     name: "{{ guest_desktop_hyprland_packages }}"
     state: present
+    update_cache: true
+    upgrade: true
+  register: guest_desktop_hyprland_package_transaction
+  changed_when: >-
+    guest_desktop_hyprland_package_transaction.packages | default([])
+    | length > 0
 
 - name: Inspect official guest desktop entrypoints
   ansible.builtin.stat:

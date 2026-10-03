@@ -10,8 +10,9 @@ that keep it safe and coherent, so a later edit cannot quietly undo them:
   3. every guest key goes through the ALT namespace and through the
      helpers, so the keys keep working when the shell is not running, and a
      failing shell falls back to Waybar;
-  4. the role installs every piece it wires, pins the reviewed Quickshell
-     API series, validates the image Desks and keeps Waybar deployed;
+  4. the role installs every piece it wires in one full Arch transaction,
+     pins the reviewed Quickshell API series, validates the image Desks and
+     keeps Waybar deployed;
   5. Desk n owns workspaces n*10+1..n*10+9 in the helper and in the shell
      alike.
 """
@@ -163,6 +164,10 @@ def check_role() -> None:
         "{ src: hyprlock.conf, dest: hypr/hyprlock.conf }",
     ):
         require(needle in tasks, f"the role no longer does: {needle}")
+
+    install = tasks.split("- name: Install the official Hyprland guest stack", 1)[1].split("\n- name:", 1)[0]
+    require("update_cache: true" in install and "upgrade: true" in install,
+            "new guest packages must be installed in one full system transaction")
 
     controller = (ROLE / "files/privatestack-guest-theme.py").read_text()
     require('"privatestack-guest/palette.json"' in controller,
