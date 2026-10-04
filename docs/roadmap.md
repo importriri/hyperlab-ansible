@@ -104,6 +104,9 @@ then accepted on Nitro; Predator replays the frozen result.
       ([ADR 0023](adr/0023-gaming-identities.md), accepted)
 - [ ] an independent architecture review that actually reads the
       repository (the earlier attempt could not open it and does not count)
+- [x] the reviewer's package: verification, repository map, trust
+      boundaries, proposed decisions and the maintainer's questions
+      ([`independent-review-package.md`](independent-review-package.md))
 
 ### 1. Finish `arch-dev-vfio` (the reference workstation)
 
