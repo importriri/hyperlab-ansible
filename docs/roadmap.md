@@ -206,6 +206,8 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       Nitro; `server-debian` and `server-fedora` ready
 - [ ] a Machine from `server-debian` and one from `server-fedora` reached
       over SSH on Nitro
+- [x] every new Linux Machine, server or workstation, starts in the host's
+      time zone from cloud-init (software-verified)
 - [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles

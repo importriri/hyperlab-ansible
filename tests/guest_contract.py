@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -366,6 +367,16 @@ def test_domain_templates() -> None:
         ))
         assert state["cloud_init_user"] == "sid"
         assert state["cloud_init_ssh_public_keys"] == public_keys
+
+        user_data = yaml.safe_load(env.get_template("user-data.j2").render(
+            guest_plan=plan,
+            guest_cloud_init_user="sid",
+            guest_cloud_init_ssh_public_keys=public_keys,
+            guest_resolved_timezone="Europe/Rome",
+        ))
+        assert user_data["timezone"] == "Europe/Rome"
+        assert user_data["users"][0]["lock_passwd"] is True
+        assert user_data["ssh_pwauth"] is False
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -851,6 +862,23 @@ def test_role_structure() -> None:
     assert "cloud_init_ssh_public_keys | default([])" in validate
     assert "runtime key while reusing an old seed" in validate
     assert "cloud_init_ssh_public_keys:" in state
+    zone_read = create.index("Read the hypervisor time zone for a new Machine")
+    zone_check = create.index("Refuse an unknown time zone before any seed is written")
+    assert zone_read < zone_check < create.index("Render secret-free cloud-init user data")
+    zone_block = create[zone_read:zone_check]
+    assert "follow: false" in zone_block
+    assert "guest_create_new_transaction" in zone_block
+    assert "'UTC' if not guest_host_localtime.stat.exists" in zone_block
+    assert "guest_resolved_timezone is match(guest_timezone_pattern)" in create
+    assert "'..' not in guest_resolved_timezone" in create
+    assert "timezone" not in validate and "timezone" not in state
+    guest_vars = yaml.safe_load((ROOT / "group_vars/all/guest.yml").read_text(encoding="utf-8"))
+    assert guest_vars["guest_cloud_init_timezone"] == ""
+    zone = re.compile(guest_vars["guest_timezone_pattern"].strip())
+    for good in ("Europe/Rome", "UTC", "America/Argentina/Buenos_Aires", "Etc/GMT+1"):
+        assert zone.fullmatch(good), good
+    for bad in ("", "Europe/Rome\nruncmd: [x]", "/etc/passwd", "Europe/../x", "a b"):
+        assert not zone.fullmatch(bad), bad
     assert "- -F\n              - qcow2" in create
     assert "guest_plan.base_path" not in "\n".join(
         line for line in create.splitlines() if "state: absent" in line

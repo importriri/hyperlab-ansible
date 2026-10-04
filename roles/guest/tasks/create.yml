@@ -42,6 +42,41 @@
   ansible.builtin.set_fact:
     guest_create_new_transaction: "{{ guest_transaction_clean }}"
 
+- name: Read the hypervisor time zone for a new Machine
+  when:
+    - guest_create_new_transaction
+    - guest_plan.cloud_init
+    - guest_cloud_init_timezone | length == 0
+  ansible.builtin.stat:
+    path: /etc/localtime
+    follow: false
+  register: guest_host_localtime
+
+- name: Resolve the new Machine's time zone
+  when:
+    - guest_create_new_transaction
+    - guest_plan.cloud_init
+  ansible.builtin.set_fact:
+    guest_resolved_timezone: >-
+      {{ guest_cloud_init_timezone
+         if guest_cloud_init_timezone | length > 0
+         else ('UTC' if not guest_host_localtime.stat.exists
+               else (guest_host_localtime.stat.lnk_target | default('')
+                     | regex_replace('^.*/zoneinfo/', ''))) }}
+
+- name: Refuse an unknown time zone before any seed is written
+  when:
+    - guest_create_new_transaction
+    - guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_resolved_timezone | length > 0
+      - guest_resolved_timezone is match(guest_timezone_pattern)
+      - "'..' not in guest_resolved_timezone"
+    fail_msg: >-
+      The hypervisor /etc/localtime does not name an IANA time zone; set
+      guest_cloud_init_timezone explicitly.
+
 - name: Initialize new-transaction GPU policy ownership
   when: guest_create_new_transaction
   ansible.builtin.set_fact:

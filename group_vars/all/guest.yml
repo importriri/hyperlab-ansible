@@ -13,6 +13,12 @@ guest_confirm_stop: ""
 guest_confirm_destroy: ""
 guest_cloud_init_ssh_public_keys: []
 guest_cloud_init_user: sid
+# Empty follows the hypervisor's own time zone on a new Machine's first boot.
+# An IANA name such as Europe/Rome overrides it. Existing Machines keep the
+# zone their seed was built with; the workstation profile follows the host.
+guest_cloud_init_timezone: ""
+guest_timezone_pattern: >-
+  ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$
 
 guest_required_packages:
   - cloud-image-utils

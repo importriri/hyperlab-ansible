@@ -59,7 +59,8 @@ ansible-playbook -K playbooks/vm-create.yml \
 
 A permanent Machine gets an independent copy of the sealed base, so later
 changes to the store never reach it and the base is never written. On first boot cloud-init names the Machine `dev-01`, creates `sid`
-with the key, and the guest generates a new machine-id and SSH host keys.
+with the key, sets the host's time zone, and the guest generates a new
+machine-id and SSH host keys.
 
 ## 3. The rice
 

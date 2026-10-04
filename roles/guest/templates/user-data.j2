@@ -2,6 +2,7 @@
 hostname: {{ guest_plan.name | to_json }}
 manage_etc_hosts: true
 preserve_hostname: false
+timezone: {{ guest_resolved_timezone | to_json }}
 ssh_pwauth: false
 disable_root: true
 users:
