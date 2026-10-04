@@ -92,12 +92,17 @@ then accepted on Nitro; Predator replays the frozen result.
 
 ### 0. Architecture decisions before the product surfaces
 
-- [ ] canonical ADR: Image Factory, Golden Image, Template and Machine
+- [x] canonical ADR: Image Factory, Golden Image, Template and Machine
       lifecycle; empty Machines on a fresh install; Machine, Desk and Project
-- [ ] ADR: network trust versus GPU transition policy, GPU-capable SERVICES
+      ([ADR 0021](adr/0021-product-lifecycle.md))
+- [x] ADR: network trust versus GPU transition policy, GPU-capable SERVICES
       and the boot-scoped GPU lease
+      ([ADR 0022](adr/0022-network-trust-and-gpu-policy.md),
+      [ADR 0019](adr/0019-gpu-lease.md))
 - [ ] ADR: decide whether a separate PLAY identity is needed for gaming, or
       whether `gaming-clean` / `gaming-dirty` on clean and dirty suffice
+      (proposed in [ADR 0023](adr/0023-gaming-identities.md): no PLAY
+      identity; waits for the operator's decision)
 - [ ] an independent architecture review that actually reads the
       repository (the earlier attempt could not open it and does not count)
 

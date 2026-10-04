@@ -47,6 +47,14 @@ entered the pipeline.
 20. [`0020-host-to-guest-clipboard.md`](0020-host-to-guest-clipboard.md) —
     host-to-guest clipboard is one host action aimed at one Machine, over
     the pinned SSH channel to a fixed receiver.
+21. [`0021-product-lifecycle.md`](0021-product-lifecycle.md) — the canonical
+    map from Image Factory to Golden Image, Template, Machine, Desk and
+    Project; a fresh install has no Machines.
+22. [`0022-network-trust-and-gpu-policy.md`](0022-network-trust-and-gpu-policy.md)
+    — network identity and GPU handoff class are separate authorities; the
+    ladder, the ceiling rule, services and the per-run lease.
+23. [`0023-gaming-identities.md`](0023-gaming-identities.md) — proposed:
+    gaming uses clean, dirty and lab, not a separate PLAY identity.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
