@@ -118,6 +118,11 @@ ansible srv-01 -i inventory.ini -i /run/user/$UID/srv-01.ini -m ping
 The inventory step pins the new host key, so plain `ssh` to the address it
 wrote works with strict checking too.
 
+`--lifecycle disposable` makes a server Machine that forgets everything it
+wrote whenever it stops ([ADR 0018](adr/0018-disposable-discards-on-stop.md)).
+Every start is a first boot with new SSH host keys, so run the inventory
+step again after each start to pin the new key.
+
 ## 4. Looking at it
 
 ```bash

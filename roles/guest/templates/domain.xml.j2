@@ -82,6 +82,10 @@
         <seclabel model="dac" relabel="no"/>
       </source>
       <target dev="vda" bus="virtio"/>
+{% if guest_plan.lifecycle == 'disposable' %}
+      <!-- ADR 0018: QEMU writes to a temporary overlay libvirt deletes on stop. -->
+      <transient/>
+{% endif %}
     </disk>
 {% if guest_plan.cloud_init %}
     <disk type="file" device="cdrom">

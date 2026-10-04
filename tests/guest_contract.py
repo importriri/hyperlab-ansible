@@ -343,6 +343,17 @@ def test_domain_templates() -> None:
         )
         domain = ET.fromstring(rendered)
         assert domain.find("./devices/hostdev") is None
+        # ADR 0018: a disposable disk is transient, so every stop discards it.
+        assert plan["lifecycle"] == "disposable"
+        assert domain.find("./devices/disk[@device='disk']/transient") is not None
+        assert domain.find("./devices/disk[@device='cdrom']/transient") is None
+        with tempfile.TemporaryDirectory() as xml_dir:
+            expected = Path(xml_dir) / "expected.xml"
+            actual = Path(xml_dir) / "actual.xml"
+            expected.write_text(rendered, encoding="utf-8")
+            actual.write_text(rendered.replace("<transient/>", ""), encoding="utf-8")
+            kept = run(sys.executable, str(XML_CONTRACT), "--expected", str(expected), "--actual", str(actual))
+            assert kept.returncode == 1 and "disk_transient" in kept.stderr, kept.stderr
         disk_source = domain.find("./devices/disk[@device='disk']/source")
         disk_dac = disk_source.find("./seclabel[@model='dac']")
         assert disk_dac is not None and disk_dac.get("relabel") == "no"
@@ -403,6 +414,8 @@ def test_domain_templates() -> None:
         domain = ET.fromstring(rendered)
         hostdevs = domain.findall("./devices/hostdev")
         assert len(hostdevs) == 2
+        assert plan["lifecycle"] == "permanent"
+        assert domain.find("./devices/disk[@device='disk']/transient") is None
         assert all(node.get("managed") == "yes" for node in hostdevs)
         disk_source = domain.find("./devices/disk[@device='disk']/source")
         disk_dac = disk_source.find("./seclabel[@model='dac']")

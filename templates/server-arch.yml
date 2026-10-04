@@ -12,7 +12,7 @@ description: >-
 
 lifecycles:
   permanent: true
-  disposable: false
+  disposable: true
 
 device_capabilities:
   standard: true

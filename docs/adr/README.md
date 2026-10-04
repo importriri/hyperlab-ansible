@@ -39,6 +39,9 @@ entered the pipeline.
 17. [`0017-shell-machine-creation.md`](0017-shell-machine-creation.md) — the
     shell creates a Machine through the reviewed bridge and one durable
     operation; the password and the become prompt stay in its terminal.
+18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
+    — a disposable Machine's disk is a libvirt transient disk, so every stop
+    discards its writes.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

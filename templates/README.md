@@ -14,15 +14,20 @@ carry runtime observations.
 | Template | Golden Image | Machines it offers |
 | --- | --- | --- |
 | [`workstation-dev`](workstation-dev.yml) | `arch-dev-20261003` | permanent, VFIO, dev network, GPU class `dev`, Linux Looking Glass |
-| [`server-arch`](server-arch.yml) | `arch` | permanent, standard device, dev, services or lab network, SSH only |
-| [`server-debian`](server-debian.yml) | `debian` | permanent, standard device, dev, services or lab network, SSH only |
-| [`server-fedora`](server-fedora.yml) | `fedora` | permanent, standard device, dev or lab network, SSH only |
+| [`server-arch`](server-arch.yml) | `arch` | permanent or disposable, standard device, dev, services or lab network, SSH only |
+| [`server-debian`](server-debian.yml) | `debian` | permanent or disposable, standard device, dev, services or lab network, SSH only |
+| [`server-fedora`](server-fedora.yml) | `fedora` | permanent or disposable, standard device, dev or lab network, SSH only |
 
 `workstation-dev` offers only VFIO Machines: its image carries the
-NVIDIA-only session of the workstation it was captured from. Disposable
-Machines are not offered until a disposable Machine really discards its
-writable layer on shutdown. Creating a Machine from it:
-[`../docs/first-machine.md`](../docs/first-machine.md).
+NVIDIA-only session of the workstation it was captured from. It offers no
+disposable Machines: its account and rice are applied after the first boot
+and a disposable Machine discards everything at every stop. Creating a
+Machine from it: [`../docs/first-machine.md`](../docs/first-machine.md).
+
+The server Templates offer disposable Machines too. Their disk is a libvirt
+transient disk, so every stop throws away what the Machine wrote and every
+start is a first boot from the sealed image, with new SSH host keys
+([ADR 0018](../docs/adr/0018-disposable-discards-on-stop.md)).
 
 Checked-in VM specs remain development and hardware fixtures.
 

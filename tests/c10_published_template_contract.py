@@ -62,7 +62,8 @@ def check_catalogue() -> None:
     assert template["device_capabilities"] == {"standard": False, "vfio": True}
     assert template["network_allowlist"] == ["dev"]
     assert [name for name, on in template["gpu_handoff_profiles"].items() if on] == ["dev"]
-    # Disposable Machines do not discard their writable layer yet.
+    # Its account and rice are applied after the first boot; a disposable
+    # Machine would lose them at every stop (ADR 0018).
     assert template["lifecycles"]["disposable"] is False
     assert template["presentation"]["workspace_profile"] == "dev"
 
@@ -140,6 +141,26 @@ def check_server_arch() -> None:
         assert plan["device_profile"] == "standard" and plan["network_profile"] == "services"
         assert plan["looking_glass"] is False and plan["cloud_init"] is True
         assert plan["base_path"].endswith("/bases/linux/arch.qcow2")
+
+    # Server Templates offer disposable Machines: a transient overlay over the
+    # sealed base, no snapshots, no backups (ADR 0018).
+    for template_id in ("server-arch", "server-debian", "server-fedora"):
+        lifecycles = yaml.safe_load((ROOT / f"templates/{template_id}.yml").read_text())["lifecycles"]
+        assert lifecycles == {"permanent": True, "disposable": True}, template_id
+    throwaway = materialize_machine(ROOT, template_id="server-debian", machine_id="lab-tmp-01",
+                                    owner="sid", created_at=CREATED_AT, lifecycle="disposable",
+                                    network_profile="lab", resource_profile="balanced")
+    assert throwaway["lifecycle"] == "disposable"
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        for name in ("images", "templates", "vm-specs", "group_vars", "schemas"):
+            shutil.copytree(ROOT / name, root / name, ignore=shutil.ignore_patterns(".generated"))
+        path = write_projected_vm_spec(root, throwaway)
+        spec = yaml.safe_load((root / path).read_text())
+        assert spec["lifecycle"] == "disposable"
+        assert spec["snapshot_policy"] == "none" and spec["backup_policy"] == "none"
+        plan = guest_plan.build_plan(root, path, root / "store")
+        assert plan["lifecycle"] == "disposable" and "/disposable/" in plan["disk_path"]
 
 
 def main() -> int:

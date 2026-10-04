@@ -210,6 +210,7 @@ def signature(path: Path) -> dict[str, Any]:
         "disk_discard": None if disk_driver is None else disk_driver.get("discard"),
         "disk_target": None if disk_target is None else disk_target.get("dev"),
         "disk_bus": None if disk_target is None else disk_target.get("bus"),
+        "disk_transient": disk is not None and disk.find("./transient") is not None,
         "seed": None if seed_source is None else seed_source.get("file"),
         "seed_target": None if seed_target is None else seed_target.get("dev"),
         "seed_bus": None if seed_target is None else seed_target.get("bus"),

@@ -230,7 +230,12 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 
 - [ ] permanent and disposable Machines created, projected, defined and
       started on Nitro from a Template
-- [ ] disposable Machines discard their writable layer on shutdown
+- [x] disposable Machines discard their writable layer on every stop: a
+      libvirt transient disk over the lifecycle overlay; server Templates
+      offer them ([ADR 0018](adr/0018-disposable-discards-on-stop.md),
+      software-verified)
+- [ ] a disposable Machine proven on Nitro: a file written in the guest is
+      gone after a stop and start, and no temporary overlay is left behind
 - [x] Create view in the shell: Template, name, network and resources
       within the Template's limits, provisioned as one durable operation;
       password and become prompt only in the operation window
