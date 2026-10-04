@@ -39,6 +39,8 @@ def log(entry):
 log(args)
 if args[:2] == ["-j", "activeworkspace"]:
     print(json.dumps({"id": state["active"]}))
+elif args[:2] == ["-j", "clients"]:
+    print(json.dumps(state.get("clients", [])))
 elif args[:2] == ["-j", "workspaces"]:
     print(json.dumps([{"id": int(k), "windows": v} for k, v in state["windows"].items()]))
 elif args[:1] == ["dispatch"] and len(args) == 2:

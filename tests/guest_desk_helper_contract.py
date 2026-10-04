@@ -17,7 +17,10 @@ What it proves:
   4. every dispatch is a Lua dispatcher expression that a real Lua
      interpreter accepts, as Hyprland 0.56 with a Lua configuration requires,
      including commands that contain Lua's own string delimiters;
-  5. the helper refuses a Desk that does not exist rather than inventing one.
+  5. the helper refuses a Desk that does not exist rather than inventing one;
+  6. a project remembers the applications its workspace held when it was
+     left, as desktop entry ids only, and reopens them from their entries
+     in its folder; nothing it cannot map, and no process argument, is kept.
 """
 
 from __future__ import annotations
@@ -49,8 +52,10 @@ class Lab:
         self.log = base / "hypr.log"
         self.set(active=1, windows={})
 
-    def set(self, active: int, windows: dict[str, int]) -> None:
-        self.state.write_text(json.dumps({"active": active, "windows": windows}))
+    def set(self, active: int, windows: dict[str, int], clients: list | None = None) -> None:
+        self.state.write_text(json.dumps(
+            {"active": active, "windows": windows, "clients": clients or []}
+        ))
         self.log.write_text("")
 
     @property
@@ -67,6 +72,8 @@ class Lab:
             "FAKE_HYPR_STATE": str(self.state),
             "FAKE_HYPR_LOG": str(self.log),
             "HYPERLAB_DESK_SYSTEM_CONFIG": str(self.base / "etc-desks.json"),
+            "XDG_DATA_HOME": str(self.base / "data-home"),
+            "XDG_DATA_DIRS": str(self.base / "data-dirs"),
         }
         result = subprocess.run(
             [sys.executable, str(HELPER), *args],
@@ -176,6 +183,99 @@ def check_projects(lab: Lab) -> None:
     lab.run("project-remove", "1", "2", ok=False)
 
 
+def application(lab: Lab, where: str, ident: str, body: str) -> None:
+    directory = lab.base / where / "applications"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{ident}.desktop").write_text("[Desktop Entry]\n" + body)
+
+
+def client(window_class: str, workspace: int, pid: int = 4242) -> dict:
+    return {"class": window_class, "initialClass": window_class,
+            "workspace": {"id": workspace, "name": str(workspace)}, "pid": pid}
+
+
+def check_restore(lab: Lab) -> None:
+    application(lab, "data-dirs", "kitty", "Type=Application\nExec=kitty\n")
+    application(lab, "data-dirs", "org.mozilla.firefox",
+                "Type=Application\nExec=/usr/lib/firefox/firefox %u\n")
+    application(lab, "data-dirs", "gimp",
+                "Type=Application\nStartupWMClass=Gimp-2.10\nExec=gimp-2.10 %U\n")
+    application(lab, "data-dirs", "inline",
+                "Type=Application\nExec=sh -c 'open --file=%f'\n")
+    application(lab, "data-dirs", "ghost",
+                "Type=Application\nHidden=true\nExec=ghost\n")
+    # The user's own entry wins over the system one with the same id.
+    application(lab, "data-home", "kitty",
+                "Type=Application\nExec=kitty --single-instance\n")
+    lab.json("project-new", "1", "Restore", "--slot", "3", "--cwd", "~/r",
+             "--launch", "fallback-tool")
+    home = str(lab.home)
+    state = lab.home / ".local/state/hyperlab-workspace/desks-state.json"
+
+    # Leaving the project's workspace records what maps to an application.
+    lab.set(active=13, windows={"13": 5}, clients=[
+        client("org.mozilla.firefox", 13), client("firefox", 13),
+        client("unmapped-tool", 13), client("Gimp-2.10", 13),
+        client("ghost", 13), client("kitty", 14),
+    ])
+    lab.json("workspace", "4")
+    saved = json.loads(state.read_text())["windows"]["13"]
+    assert saved == ["org.mozilla.firefox", "org.mozilla.firefox", "gimp"], saved
+    assert "4242" not in state.read_text() and "pid" not in state.read_text()
+
+    # An empty project workspace reopens them from their entries, in its folder.
+    lab.set(active=14, windows={})
+    opened = lab.json("project-open", "1", "3")
+    assert opened["restored"] is True and opened["launched"] == 3, opened
+    execs = [call[1] for call in lab.calls() if call[0] == "exec"]
+    assert execs == [
+        f"cd -- {home}/r 2>/dev/null; exec /usr/lib/firefox/firefox",
+        f"cd -- {home}/r 2>/dev/null; exec /usr/lib/firefox/firefox",
+        f"cd -- {home}/r 2>/dev/null; exec gimp-2.10",
+    ], execs
+
+    # Passing through the empty workspace of a fresh session keeps the memory;
+    # a slot that is not a project records nothing.
+    lab.set(active=13, windows={})
+    lab.json("workspace", "4")
+    assert json.loads(state.read_text())["windows"]["13"] == saved
+    lab.set(active=16, windows={"16": 1}, clients=[client("kitty", 16)])
+    lab.json("workspace", "4")
+    assert "16" not in json.loads(state.read_text())["windows"]
+
+    # project-save records now; the user's entry for an id wins.
+    lab.set(active=13, windows={"13": 1}, clients=[client("kitty", 13)])
+    assert lab.json("project-save", "1", "3")["applications"] == ["kitty"]
+    lab.set(active=14, windows={})
+    lab.json("project-open", "1", "3")
+    execs = [call[1] for call in lab.calls() if call[0] == "exec"]
+    assert execs == [f"cd -- {home}/r 2>/dev/null; exec kitty --single-instance"], execs
+    lab.set(active=13, windows={"13": 1}, clients=[client("unmapped-tool", 13)])
+    lab.run("project-save", "1", "3", ok=False)
+    lab.run("project-save", "1", "8", ok=False)
+
+    # An entry with an embedded field code, a tampered id or a vanished entry
+    # is never run; with nothing usable the launch commands apply.
+    for remembered in (["inline"], ["../../../bin/sh"], ["gone"]):
+        data = json.loads(state.read_text())
+        data["windows"]["13"] = remembered
+        state.write_text(json.dumps(data))
+        lab.set(active=14, windows={})
+        opened = lab.json("project-open", "1", "3")
+        assert opened["restored"] is False, remembered
+        execs = [call[1] for call in lab.calls() if call[0] == "exec"]
+        assert execs == [f"cd -- {home}/r 2>/dev/null; exec fallback-tool"], execs
+
+    # Forgetting, and removing the project, clear the memory.
+    lab.set(active=13, windows={"13": 1}, clients=[client("kitty", 13)])
+    lab.json("project-save", "1", "3")
+    assert lab.json("project-forget", "1", "3")["forgotten"] is True
+    assert "13" not in json.loads(state.read_text())["windows"]
+    lab.json("project-save", "1", "3")
+    lab.json("project-remove", "1", "3")
+    assert "13" not in json.loads(state.read_text())["windows"]
+
+
 def check_refused_configuration(lab: Lab) -> None:
     good = lab.user_config.read_text()
     broken = json.loads(good)
@@ -220,6 +320,7 @@ def main() -> int:
         lab = Lab(Path(temporary))
         check_mapping(lab)
         check_projects(lab)
+        check_restore(lab)
         check_refused_configuration(lab)
     print("HyperLab guest Desk helper contract: OK")
     return 0

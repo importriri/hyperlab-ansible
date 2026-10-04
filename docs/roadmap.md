@@ -137,8 +137,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 - [x] `hypridle` DPMS through the reviewed Lua dispatcher form: the host
       adapter only, checked against the Hyprland 0.56.2 source; guests never
       touch display power (software-verified)
-- [ ] project restore: a project reopens the windows it had, not only its
-      launch commands
+- [x] project restore: a project reopens the applications it had, from
+      their desktop entries, not only its launch commands; desktop ids only,
+      never process arguments (software-verified)
 - [x] keybinding sheet in the guest (`ALT+H`), from one `keys.json` that the
       contract checks against the bound keys
 - [ ] a reviewed Lua form for a gradient active border

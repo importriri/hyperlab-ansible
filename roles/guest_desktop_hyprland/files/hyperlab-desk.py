@@ -11,6 +11,12 @@ workspaces ``d*10+1`` to ``d*10+9`` and slot ``s`` of that Desk is workspace
 ``d*10+s``. The current Desk and Project are therefore always read back from
 the compositor's active workspace, never remembered separately.
 
+A Project also remembers which applications its workspace held when it was
+left, as desktop entry ids and nothing else: never a process's arguments,
+which can carry tokens. Opening an empty Project reopens those applications
+from their desktop entries in the Project's folder, or its launch commands
+when nothing usable was remembered.
+
 Configuration, first match wins:
 
     $XDG_CONFIG_HOME/hyperlab-workspace/desks.json   the user's own Desks
@@ -28,6 +34,7 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -42,6 +49,9 @@ MAX_NAME = 40
 MAX_BLURB = 140
 MAX_LAUNCH = 8
 MAX_COMMAND = 512
+MAX_RESTORE = MAX_LAUNCH
+DESKTOP_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+FIELD_CODE = re.compile(r"^%[fFuUdDnNickvm]$")
 
 HOME = Path.home()
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
@@ -52,6 +62,8 @@ SYSTEM_CONFIG = Path(
     or "/etc/hyperlab-workspace/desks.json"
 )
 STATE_FILE = STATE_HOME / "hyperlab-workspace/desks-state.json"
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+DATA_DIRS = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
 
 BUILTIN = {
     "version": VERSION,
@@ -365,6 +377,138 @@ def remember_slot(workspace: int) -> None:
         pass  # Returning to slot 1 is the only consequence.
 
 
+def read_entry(path: Path) -> dict[str, str] | None:
+    """The unlocalised keys of a desktop entry's [Desktop Entry] group."""
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    fields: dict[str, str] = {}
+    group = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            group = line[1:-1]
+        elif group == "Desktop Entry" and "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            fields.setdefault(key.strip(), value.strip())
+    usable = (
+        fields.get("Type") == "Application"
+        and fields.get("Hidden", "false") != "true"
+        and fields.get("Exec")
+    )
+    return fields if usable else None
+
+
+def desktop_entries() -> dict[str, dict[str, str]]:
+    """Applications by desktop id; an earlier XDG data directory wins."""
+    directories = [DATA_HOME] + [Path(item) for item in DATA_DIRS.split(":") if item]
+    entries: dict[str, dict[str, str]] = {}
+    for directory in directories:
+        try:
+            paths = sorted((directory / "applications").glob("*.desktop"))
+        except OSError:
+            continue
+        for path in paths:
+            if path.stem in entries or not DESKTOP_ID.match(path.stem):
+                continue
+            fields = read_entry(path)
+            if fields is not None:
+                entries[path.stem] = fields
+    return entries
+
+
+def entry_for_class(entries: dict[str, dict[str, str]], window_class: str) -> str | None:
+    wanted = window_class.casefold()
+    if not wanted:
+        return None
+    for matches in (
+        lambda ident, fields: fields.get("StartupWMClass", "").casefold() == wanted,
+        lambda ident, fields: ident.casefold() == wanted,
+        lambda ident, fields: ident.casefold().endswith("." + wanted),
+    ):
+        found = sorted(ident for ident, fields in entries.items() if matches(ident, fields))
+        if found:
+            return found[0]
+    return None
+
+
+def entry_command(fields: dict[str, str]) -> str | None:
+    """The entry's Exec as a shell command, its field codes dropped."""
+    try:
+        argv = shlex.split(fields["Exec"])
+    except ValueError:
+        return None
+    command = []
+    for argument in argv:
+        if FIELD_CODE.match(argument):
+            continue
+        if "%" in argument.replace("%%", ""):
+            return None  # an embedded field code has no safe expansion here
+        command.append(argument.replace("%%", "%"))
+    return shlex.join(command) if command else None
+
+
+def workspace_applications(workspace: int) -> list[str]:
+    clients = hyprctl_json("clients")
+    entries: dict[str, dict[str, str]] | None = None
+    found = []
+    for client in clients if isinstance(clients, list) else []:
+        if not isinstance(client, dict):
+            continue
+        place = client.get("workspace")
+        if not isinstance(place, dict) or place.get("id") != workspace:
+            continue
+        window_class = client.get("initialClass") or client.get("class")
+        if not isinstance(window_class, str):
+            continue
+        if entries is None:
+            entries = desktop_entries()
+        ident = entry_for_class(entries, window_class)
+        if ident is not None and len(found) < MAX_RESTORE:
+            found.append(ident)
+    return found
+
+
+def saved_applications(workspace: int) -> list[str]:
+    saved = load_state().get("windows")
+    items = saved.get(str(workspace)) if isinstance(saved, dict) else None
+    if not isinstance(items, list):
+        return []
+    return [
+        item for item in items[:MAX_RESTORE]
+        if isinstance(item, str) and DESKTOP_ID.match(item)
+    ]
+
+
+def store_applications(workspace: int, applications: list[str] | None) -> None:
+    state = load_state()
+    saved = state.get("windows") if isinstance(state.get("windows"), dict) else {}
+    if applications:
+        saved[str(workspace)] = applications
+    else:
+        saved.pop(str(workspace), None)
+    state["windows"] = saved
+    write_json(STATE_FILE, state)
+
+
+def remember_applications(model: dict[str, Any], workspace: int) -> None:
+    """Record what a Project's workspace holds as the user leaves it.
+
+    An empty workspace, or one with nothing that maps to a desktop entry,
+    leaves the memory as it was: a fresh session must not forget a Project
+    just because the user passed through its empty workspace.
+    """
+    if not describe(model, workspace)["project_name"]:
+        return
+    try:
+        applications = workspace_applications(workspace)
+        if applications:
+            store_applications(workspace, applications)
+    except (DeskError, OSError, subprocess.TimeoutExpired):
+        pass  # Navigation never fails because memory could not be written.
+
+
 def last_slot(desk: int) -> int:
     last = load_state().get("last_slot")
     slot = last.get(str(desk)) if isinstance(last, dict) else None
@@ -435,6 +579,7 @@ def command_lock_label(_: argparse.Namespace) -> str:
 def go_desk(model: dict[str, Any], desk: int, current: int) -> dict[str, Any]:
     require_desk(model, desk)
     remember_slot(current)
+    remember_applications(model, current)
     target = desk * 10 + last_slot(desk)
     if target != current:
         focus_workspace(target)
@@ -459,6 +604,7 @@ def command_workspace(args: argparse.Namespace) -> dict[str, Any]:
     current = active_workspace()
     target = current_desk(current) * 10 + args.slot
     if target != current:
+        remember_applications(model, current)
         focus_workspace(target)
     remember_slot(target)
     return describe(model, target)
@@ -498,18 +644,52 @@ def command_project_open(args: argparse.Namespace) -> dict[str, Any]:
     current = active_workspace()
     remember_slot(current)
     if target != current:
+        remember_applications(model, current)
         focus_workspace(target)
     remember_slot(target)
     # The project's workspace is now the active one, so its programs open
     # there without a window rule.
-    launched = 0
+    commands: list[str] = []
+    restored = False
     if window_counts().get(target, 0) == 0:
-        for command in project["launch"]:
+        saved = saved_applications(target)
+        entries = desktop_entries() if saved else {}
+        commands = [
+            command for command in (
+                entry_command(entries[ident]) for ident in saved if ident in entries
+            ) if command
+        ]
+        restored = bool(commands)
+        if not restored:
+            commands = list(project["launch"])
+        for command in commands:
             exec_command(launch_line(project["cwd"], command))
-            launched += 1
     result = describe(model, target)
-    result["launched"] = launched
+    result["launched"] = len(commands)
+    result["restored"] = restored
     return result
+
+
+def require_project(model: dict[str, Any], desk_number: int, slot: int) -> int:
+    desk = require_desk(model, desk_number)
+    if not any(item["slot"] == slot for item in desk["projects"]):
+        raise DeskError(f"Desk {desk['name']} has no project in slot {slot}")
+    return desk_number * 10 + slot
+
+
+def command_project_save(args: argparse.Namespace) -> dict[str, Any]:
+    target = require_project(load_model(), args.desk, args.slot)
+    applications = workspace_applications(target)
+    if not applications:
+        raise DeskError("nothing on that workspace maps to an application to remember")
+    store_applications(target, applications)
+    return {"desk": args.desk, "slot": args.slot, "applications": applications}
+
+
+def command_project_forget(args: argparse.Namespace) -> dict[str, Any]:
+    target = require_project(load_model(), args.desk, args.slot)
+    store_applications(target, None)
+    return {"desk": args.desk, "slot": args.slot, "forgotten": True}
 
 
 def command_project_new(args: argparse.Namespace) -> dict[str, Any]:
@@ -549,6 +729,10 @@ def command_project_remove(args: argparse.Namespace) -> dict[str, Any]:
             raise DeskError(f"Desk {desk['name']} has no project in slot {args.slot}")
         desk["projects"] = kept
         write_json(USER_CONFIG, storable(validate(storable(model))))
+    try:
+        store_applications(args.desk * 10 + args.slot, None)
+    except OSError:
+        pass  # A later project in this slot starts from its launch commands anyway.
     return {"desk": args.desk, "slot": args.slot, "removed": True}
 
 
@@ -594,6 +778,16 @@ def parser() -> argparse.ArgumentParser:
     new.add_argument("--cwd")
     new.add_argument("--launch", action="append",
                      help="a command that opens the project; repeat for more")
+
+    for name, handler, help_text in (
+        ("project-save", command_project_save,
+         "remember the applications on a project's workspace now"),
+        ("project-forget", command_project_forget,
+         "forget a project's remembered applications"),
+    ):
+        remembered = add(name, handler, help_text)
+        remembered.add_argument("desk", type=int)
+        remembered.add_argument("slot", type=int, choices=SLOTS)
 
     removed = add("project-remove", command_project_remove, "remove a project")
     removed.add_argument("desk", type=int)

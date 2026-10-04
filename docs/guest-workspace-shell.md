@@ -134,12 +134,33 @@ overwrites a refused file.
 hyperlab-desk project-new 1 HyperLab --cwd ~/src/hyperlab-ansible
 hyperlab-desk project-new 2 "Blender renders" --cwd ~/renders --launch blender
 hyperlab-desk project-remove 1 3
+hyperlab-desk project-save 1 1      # remember the applications open there now
+hyperlab-desk project-forget 1 1    # back to the launch commands
 hyperlab-desk model            # what the shell sees
 hyperlab-desk check FILE       # validate a desks.json before using it
 ```
 
 Opening a project goes to its workspace and, only when that workspace is
 empty, starts its programs there in its folder (`kitty` by default).
+
+A project also remembers the applications it had. When you leave a
+project's workspace, the helper records which applications are open there,
+matching each window's class to a desktop entry (`StartupWMClass`, then the
+entry id, then a reverse-DNS id ending in the class). Only the entry ids are
+kept, in `~/.local/state/hyperlab-workspace/desks-state.json`: never a
+process's arguments, which can carry tokens, and nothing for a window that
+matches no entry. Opening the project on an empty workspace then starts
+those entries' `Exec` lines in the project's folder, field codes dropped,
+instead of the launch commands.
+
+- Leaving an empty workspace keeps the memory, so passing through a project
+  at the start of a session does not forget it; `project-forget` does.
+- An entry that is gone, hidden, or has a field code embedded in an argument
+  is never run; if nothing usable is left, the launch commands apply.
+- Removing a project forgets its applications.
+- This reopens applications, not their documents or window layout; an
+  application that restores its own session (a browser, an editor) does that
+  part itself.
 
 ## Files
 
@@ -208,7 +229,7 @@ The role installs the shell only for the reviewed Quickshell API series
 
 | Contract | Proves |
 | --- | --- |
-| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, refused configuration |
+| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, remembered applications, refused configuration |
 | `tests/guest_workspace_shell_runtime_contract.py` | the real QML in an offscreen scene: readouts, Desks, overview, launcher, refusals |
 | `tests/guest_workspace_shell_contract.py` | no trust or host knowledge in the guest, lock in hyprlock, keys and fallbacks, role wiring |
 | `tests/guest_presentation_contract.py` | exactly one bar, fullscreen and tearing policy |
