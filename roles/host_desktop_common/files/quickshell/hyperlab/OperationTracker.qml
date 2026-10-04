@@ -6,6 +6,10 @@ QtObject {
     property var records: []
     property var inventory: []
     property real inventoryObservedAt: 0
+    // Workbench candidates as the bridge last reported them; a seal is
+    // verified against the registry, never against the domain's power state.
+    property var workbench: []
+    property real workbenchObservedAt: 0
     property real now: Date.now()
     property bool known: false
     readonly property int settlingMs: 60000
@@ -13,7 +17,7 @@ QtObject {
         "vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
         "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
         "vm.power-cycle": "power-cycle", "vm.reset": "reset",
-        "machine.provision": "provision"
+        "machine.provision": "provision", "workbench.seal": "seal"
     })
     signal changed(var record)
     signal refreshRequested()
@@ -115,6 +119,7 @@ QtObject {
             const machine = tracker.inventory.find(m => m.name === record.machine);
             const needsTransitionProof =
                 ["reboot", "power-cycle"].indexOf(record.verb) >= 0;
+            const candidate = tracker.workbench.find(c => c.domain === record.machine);
             // Provisioning creates and starts the domain, so it ends Running.
             const wanted = record.verb === "start" || record.verb === "provision"
                 ? "running" : "shut off";
@@ -124,7 +129,22 @@ QtObject {
             // requested lifecycle boundary occurred. Until the backend
             // publishes a typed transition proof, execution success is kept
             // explicit and fails closed as unverified presentation state.
-            if (needsTransitionProof) {
+            if (record.verb === "seal") {
+                // A seal leaves the domain shut off; only the Workbench
+                // registry, read after it finished, shows the capture.
+                if (!newer && candidate
+                    && tracker.workbenchObservedAt >= record.updated
+                    && tracker.workbenchObservedAt <= record.updated + tracker.settlingMs
+                    && candidate.state === "captured") {
+                    record.phase = "completed";
+                    record.detail = "Execution succeeded; the Workbench shows the capture";
+                } else if (newer || tracker.now - record.updated >= tracker.settlingMs) {
+                    record.phase = "unverified";
+                    record.detail = "Execution succeeded; the Workbench did not show the capture";
+                } else {
+                    continue;
+                }
+            } else if (needsTransitionProof) {
                 record.phase = "unverified";
                 record.detail =
                     "Execution succeeded; lifecycle transition was not independently verified";
@@ -147,5 +167,6 @@ QtObject {
         }
     }
     onInventoryObservedAtChanged: tracker.reconcile()
+    onWorkbenchObservedAtChanged: tracker.reconcile()
     onNowChanged: tracker.reconcile()
 }

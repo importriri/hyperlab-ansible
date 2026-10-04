@@ -33,7 +33,7 @@ POINTER = Path("/etc/hyperlabctl/checkout")
 ACTIONS = {"vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
            "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
            "vm.power-cycle": "power-cycle", "vm.reset": "reset",
-           "machine.provision": "provision"}
+           "machine.provision": "provision", "workbench.seal": "seal"}
 # Provisioning is the one action that is not a single playbook: the reviewed
 # provisioner runs the documented steps, each -K playbook asking in the PTY.
 PROVISION = "/usr/local/bin/privatestack-machine-provision"

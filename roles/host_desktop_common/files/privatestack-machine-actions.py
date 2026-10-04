@@ -16,6 +16,12 @@ The host clipboard crosses it as one more operation (ADR 0020):
 
   clipboard NAME     send the host clipboard text to this machine, once
 
+The Workbench crosses it as two more (ADR 0015); its candidates are never
+product Machines, and start, shutdown and console reach them as any domain:
+
+  workbench          Golden Image candidates with their live state
+  seal NAME          capture a shut-off candidate through the operation runner
+
 Creation crosses it as two more questions (ADR 0017):
 
   create-plan                                   what may be created, within which limits
@@ -452,6 +458,45 @@ def create(args: list[str]) -> None:
     privileged("machine.provision", name)
 
 
+def workbench() -> dict[str, Any]:
+    """The Workbench registry joined with live state, for presentation only."""
+    payload = cli_json("workbench", "list")
+    rows = cli_json("vm", "list")
+    if not isinstance(payload, dict) or not isinstance(rows, list):
+        raise Refused("invalid Workbench or live inventory")
+    live = {row.get("name"): row for row in rows if isinstance(row, dict)}
+    candidates = []
+    for row in payload.get("candidates") or []:
+        if not isinstance(row, dict):
+            continue
+        machine = live.get(row.get("domain"))
+        runtime = str(machine.get("state") or "unknown").lower() if machine else "missing"
+        candidates.append({**row, "runtime": runtime})
+    return {
+        "phase": "workbench",
+        "available": payload.get("available") is True,
+        "candidates": candidates,
+        "errors": [str(error) for error in payload.get("errors") or []],
+    }
+
+
+def seal(name: str) -> None:
+    """Hand one shut-off candidate to the reviewed seal playbook."""
+    payload = cli_json("workbench", "list")
+    if not isinstance(payload, dict):
+        raise Refused("invalid Workbench registry")
+    matches = [row for row in payload.get("candidates") or []
+               if isinstance(row, dict) and row.get("domain") == name]
+    if len(matches) != 1:
+        raise Refused("not a Workbench candidate")
+    if matches[0].get("state") != "candidate":
+        raise Refused("already captured; release it before sealing again")
+    state = str(live_machine(name).get("state") or "unknown").lower()
+    if state != "shut off":
+        raise Refused("shut the candidate down before sealing it")
+    privileged("workbench.seal", name)
+
+
 def checkout() -> str:
     value = CHECKOUT_POINTER.read_text(encoding="utf-8").strip()
     candidate = Path(value)
@@ -480,6 +525,13 @@ def main() -> int:
     if len(sys.argv) == 3 and sys.argv[1] == "operation-view":
         # Reattach an observer; the runner validates the id and owns nothing new.
         os.execv(OPERATION, [OPERATION, "view", sys.argv[2]])
+    if sys.argv[1:] == ["workbench"]:
+        emit(workbench())
+        return 0
+    if len(sys.argv) == 3 and sys.argv[1] == "seal":
+        valid_name(sys.argv[2])
+        seal(sys.argv[2])
+        return 127
     if sys.argv[1:] == ["create-plan"]:
         emit({"phase": "create-plan", "plan": create_plan()})
         return 0

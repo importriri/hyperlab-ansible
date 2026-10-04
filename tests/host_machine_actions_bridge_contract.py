@@ -338,6 +338,59 @@ def creation_cases(bridge) -> None:
     check("password" not in source.lower(), "the bridge handles a password")
 
 
+def workbench_cases(bridge) -> None:
+    registry = {"available": True, "errors": ["bad.json: invalid state or profile"], "candidates": [
+        {"domain": "arch-dev", "image_id": "arch-dev-standard", "base_image": "arch",
+         "profile": "dev", "state": "candidate", "adopted_at": "", "sha256": None},
+        {"domain": "arch-old", "image_id": "arch-old-1", "base_image": "arch",
+         "profile": "dev", "state": "captured", "adopted_at": "", "sha256": "a" * 64},
+        {"domain": "gone-01", "image_id": "gone-1", "base_image": "arch",
+         "profile": "dev", "state": "candidate", "adopted_at": "", "sha256": None},
+    ]}
+    live = [{"name": "arch-dev", "state": "shut off"}, {"name": "arch-old", "state": "running"},
+            {"name": "dev-01", "state": "running"}]
+    launched: list[tuple[str, str]] = []
+
+    def fake_cli(*args):
+        if args == ("workbench", "list"):
+            return registry
+        if args == ("vm", "list"):
+            return live
+        raise AssertionError("unexpected hyperlabctl call %r" % (args,))
+
+    bridge.cli_json = fake_cli
+    bridge.privileged = lambda action, name: launched.append((action, name))
+
+    payload = bridge.workbench()
+    check(payload["phase"] == "workbench" and payload["available"] is True, "Workbench payload shape")
+    runtime = {row["domain"]: row["runtime"] for row in payload["candidates"]}
+    check(runtime == {"arch-dev": "shut off", "arch-old": "running", "gone-01": "missing"},
+          "candidates not joined with live state: %r" % runtime)
+    check("dev-01" not in runtime, "a product Machine was listed in the Workbench")
+    check(payload["errors"] == registry["errors"], "refused registry records were hidden")
+
+    bridge.seal("arch-dev")
+    check(launched == [("workbench.seal", "arch-dev")], "a shut-off candidate was not sealed: %r" % launched)
+    for name, reason in (("dev-01", "not a Workbench candidate"),
+                         ("arch-old", "already captured"),
+                         ("gone-01", "not uniquely present")):
+        launched.clear()
+        try:
+            bridge.seal(name)
+            result = "launched"
+        except bridge.Refused as exc:
+            result = str(exc)
+        check(reason in result and not launched, "seal %s: expected %r, got %r" % (name, reason, result))
+    live[0]["state"] = "running"
+    launched.clear()
+    try:
+        bridge.seal("arch-dev")
+        result = "launched"
+    except bridge.Refused as exc:
+        result = str(exc)
+    check("shut the candidate down" in result and not launched, "a running candidate was sealed")
+
+
 def main() -> int:
     bridge = load_bridge()
     choose_action_cases(bridge)
@@ -345,6 +398,7 @@ def main() -> int:
     capability_cases(bridge)
     static_cases(bridge)
     creation_cases(bridge)
+    workbench_cases(bridge)
 
     if FAILURES:
         for failure in FAILURES:

@@ -157,6 +157,42 @@ BODY = r'''
             check(recovery.records[0].phase === "completed",
                   "fresh Running did not verify the provisioned Machine");
 
+            // A Workbench seal is its own known operation. The domain stays
+            // shut off, so only a fresh Workbench registry reading that shows
+            // the candidate captured verifies it.
+            recovery.records = [];
+            recovery.inventory = [];
+            recovery.workbench = [{domain: "arch-dev", state: "candidate"}];
+            recovery.workbenchObservedAt = (epoch + 1) * 1000;
+            recovery.now = (epoch + 1) * 1000;
+            const seven = "1".repeat(32);
+            check(recovery.snapshot({schema: 1, operations: [
+                payload(seven, "arch-dev", "running", 1, null, "workbench.seal")]}),
+                  "a seal record made the operation snapshot unknown");
+            check(recovery.known && recovery.busyFor("arch-dev")
+                  && recovery.records[0].verb === "seal",
+                  "the seal was not tracked as its own operation");
+            recovery.apply(payload(seven, "arch-dev", "succeeded", 2, 0, "workbench.seal"), seven);
+            recovery.inventory = [{name: "arch-dev", state: "shut off"}];
+            recovery.inventoryObservedAt = (epoch + 3) * 1000;
+            check(recovery.records[0].phase === "verifying",
+                  "a shut-off domain was taken as proof of a seal");
+            recovery.workbenchObservedAt = (epoch + 3) * 1000;
+            check(recovery.records[0].phase === "verifying",
+                  "a candidate not yet captured verified the seal");
+            recovery.workbench = [{domain: "arch-dev", state: "captured"}];
+            recovery.workbenchObservedAt = (epoch + 4) * 1000;
+            check(recovery.records[0].phase === "completed" && !recovery.busyFor("arch-dev"),
+                  "a captured candidate did not verify the seal");
+            recovery.records = [];
+            recovery.workbench = [];
+            recovery.snapshot({schema: 1, operations: [
+                payload(seven, "arch-dev", "succeeded", 2, 0, "workbench.seal")]});
+            recovery.now = (epoch + 2 + 61) * 1000;
+            check(recovery.records[0].phase === "unverified"
+                  && recovery.records[0].detail.indexOf("did not show the capture") >= 0,
+                  "an unobserved seal was not reported unverified");
+
 
 '''
 

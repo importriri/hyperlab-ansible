@@ -324,6 +324,16 @@ ACTIONS = [
         "requires": "playbooks/image-validate.yml",
     },
     {
+        "id": "workbench.seal",
+        "label": "Capture, generalize and stage a Workbench candidate",
+        "command": ["ansible-playbook", "playbooks/workbench-seal.yml", "-K",
+                    "-e", "workbench_domain={domain}"],
+        "privileged": True,
+        "destructive": False,
+        "target": "spec",
+        "requires": "playbooks/workbench-seal.yml",
+    },
+    {
         "id": "store.layout",
         "label": "Lay out and verify the image store",
         "command": ["ansible-playbook", "playbooks/image-store.yml", "-K"],

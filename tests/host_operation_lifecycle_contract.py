@@ -197,6 +197,7 @@ def main():
         (repo / 'playbooks').mkdir()
         for name in ('start', 'shutdown', 'reboot', 'stop', 'power-cycle', 'reset', 'create'):
             (repo / f'playbooks/vm-{name}.yml').write_text('---\n')
+        (repo / 'playbooks/workbench-seal.yml').write_text('---\n')
         for machine in ('one', 'two'):
             (repo / f'vm-specs/{machine}.yml').write_text(f'name: {machine}\n')
         (repo / 'vm-specs/.generated').mkdir()
@@ -371,6 +372,11 @@ def main():
                 argv, _, _ = op.resolve(action, 'two', repo)
                 require(argv[0] == '/usr/bin/ansible-playbook' and '-K' in argv,
                         'lifecycle action lost reviewed binary/authentication')
+            # A Workbench seal names only the candidate's own domain.
+            argv, _, _ = op.resolve('workbench.seal', 'two', repo)
+            require(argv == ['/usr/bin/ansible-playbook', 'playbooks/workbench-seal.yml', '-K',
+                             '-e', 'workbench_domain=two'],
+                    'the seal command is not the reviewed playbook: %r' % argv)
             # Provisioning runs the reviewed provisioner on a Machine's own
             # projection only; a checked-in fixture spec is never provisioned.
             argv, _, spec_hash = op.resolve('machine.provision', 'made-01', repo)
