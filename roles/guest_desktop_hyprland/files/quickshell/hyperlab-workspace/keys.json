@@ -8,7 +8,8 @@
         { "keys": "ALT+CTRL+1 … 9", "does": "Go to project slot n of this Desk" },
         { "keys": "ALT+Page Down / Up", "does": "Next / previous Desk" },
         { "keys": "ALT+D", "does": "Desks overview" },
-        { "keys": "ALT+N", "does": "New project in this Desk" }
+        { "keys": "ALT+N", "does": "New project in this Desk" },
+        { "keys": "ALT+SHIFT+N", "does": "Quiet this Desk: notifications wait" }
       ]
     },
     {

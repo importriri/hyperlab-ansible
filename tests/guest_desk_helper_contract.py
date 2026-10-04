@@ -20,7 +20,10 @@ What it proves:
   5. the helper refuses a Desk that does not exist rather than inventing one;
   6. a project remembers the applications its workspace held when it was
      left, as desktop entry ids only, and reopens them from their entries
-     in its folder; nothing it cannot map, and no process argument, is kept.
+     in its folder; nothing it cannot map, and no process argument, is kept;
+  7. a quiet Desk puts the notification daemon in its do-not-disturb mode
+     whenever that Desk comes to the front, and takes it out when another
+     Desk does.
 """
 
 from __future__ import annotations
@@ -48,6 +51,15 @@ class Lab:
         hyprctl = self.bin / "hyprctl"
         hyprctl.write_text(FAKE_HYPRCTL.read_text())
         hyprctl.chmod(0o755)
+        # Recording stand-ins: the contract never reaches a real session bus.
+        for tool in ("makoctl", "gdbus"):
+            stand_in = self.bin / tool
+            stand_in.write_text(
+                "#!/bin/sh\n"
+                f'printf "%s\\n" "{tool} $*" >> "$FAKE_NOTIFY_LOG"\n'
+            )
+            stand_in.chmod(0o755)
+        self.notify_log = base / "notify.log"
         self.state = base / "hypr.json"
         self.log = base / "hypr.log"
         self.set(active=1, windows={})
@@ -74,6 +86,7 @@ class Lab:
             "HYPERLAB_DESK_SYSTEM_CONFIG": str(self.base / "etc-desks.json"),
             "XDG_DATA_HOME": str(self.base / "data-home"),
             "XDG_DATA_DIRS": str(self.base / "data-dirs"),
+            "FAKE_NOTIFY_LOG": str(self.notify_log),
         }
         result = subprocess.run(
             [sys.executable, str(HELPER), *args],
@@ -276,6 +289,58 @@ def check_restore(lab: Lab) -> None:
     assert "13" not in json.loads(state.read_text())["windows"]
 
 
+def check_quiet(lab: Lab) -> None:
+    def modes() -> list[str]:
+        lines = lab.notify_log.read_text().splitlines() if lab.notify_log.exists() else []
+        lab.notify_log.write_text("")
+        return [line for line in lines if line.startswith("makoctl")]
+
+    lab.set(active=11, windows={})
+    modes()
+    quiet = lab.json("quiet", "on")
+    assert quiet == {"desk": 1, "desk_name": "Programming", "quiet": True}, quiet
+    assert modes() == ["makoctl mode -a do-not-disturb"]
+    assert lab.json("status")["quiet"] is True
+
+    # Another Desk in front lifts the mode; coming back restores it.
+    lab.json("desk", "2")
+    assert modes() == ["makoctl mode -r do-not-disturb"]
+    assert lab.json("status")["quiet"] is False
+    lab.json("desk", "1")
+    assert modes() == ["makoctl mode -a do-not-disturb"]
+    lab.set(active=21, windows={"11": 1})
+    lab.json("project-open", "1", "1")
+    assert modes() == ["makoctl mode -a do-not-disturb"]
+
+    # A slot of the same Desk changes nothing; a Desk set from elsewhere
+    # changes the mode only when it is in front.
+    lab.json("workspace", "2")
+    assert modes() == []
+    lab.json("quiet", "on", "--desk", "3")
+    assert modes() == []
+    lab.json("desk", "3")
+    assert modes() == ["makoctl mode -a do-not-disturb"]
+    assert lab.json("quiet", "toggle")["quiet"] is False
+    assert modes() == ["makoctl mode -r do-not-disturb"]
+
+    # The confirmation names the helper, which the quiet mode never hides.
+    log = lab.notify_log
+    lab.json("quiet", "toggle")
+    notices = [line for line in log.read_text().splitlines() if line.startswith("gdbus")]
+    assert notices and "Notify hyperlab-desk 0" in notices[-1], notices
+
+    # A session start applies the Desk in front.
+    lab.set(active=31, windows={})
+    modes()
+    assert lab.json("quiet", "sync") == {"desk": 3, "quiet": True}
+    assert modes() == ["makoctl mode -a do-not-disturb"]
+
+    lab.run("quiet", "on", "--desk", "9", ok=False)
+    lab.run("quiet", "loud", ok=False)
+    for desk in (1, 3):
+        lab.json("quiet", "off", "--desk", str(desk))
+
+
 def check_refused_configuration(lab: Lab) -> None:
     good = lab.user_config.read_text()
     broken = json.loads(good)
@@ -321,6 +386,7 @@ def main() -> int:
         check_mapping(lab)
         check_projects(lab)
         check_restore(lab)
+        check_quiet(lab)
         check_refused_configuration(lab)
     print("HyperLab guest Desk helper contract: OK")
     return 0

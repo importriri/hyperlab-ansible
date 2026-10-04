@@ -80,6 +80,7 @@ there.
 | --- | --- |
 | [0019](adr/0019-gpu-lease.md) | a GPU-capable Machine choosing per run whether it owns the GPU |
 | [0025](adr/0025-host-key-without-agent-file-reads.md) | pinning host keys without agent file reads |
+| [0027](adr/0027-guest-notification-owner.md) | whether mako or the guest shell owns notifications |
 
 ## 5. Questions the maintainer wants answered
 

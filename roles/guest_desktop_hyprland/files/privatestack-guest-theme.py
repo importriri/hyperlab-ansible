@@ -367,6 +367,17 @@ default-timeout=6000
 anchor=top-right
 width=360
 max-visible=5
+
+# A quiet Desk (hyperlab-desk quiet): notifications are hidden, not dropped,
+# except critical ones and the helper's own confirmation (mako(5)).
+[mode=do-not-disturb]
+invisible=1
+
+[mode=do-not-disturb urgency=critical]
+invisible=0
+
+[mode=do-not-disturb app-name=hyperlab-desk]
+invisible=0
 """,
         CONFIG / "gtk-3.0/gtk.css": generated_gtk_css,
         CONFIG / "gtk-4.0/gtk.css": generated_gtk_css,

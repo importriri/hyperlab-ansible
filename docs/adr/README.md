@@ -64,6 +64,9 @@ entered the pipeline.
 26. [`0026-offline-derived-images.md`](0026-offline-derived-images.md) — the
     Workbench derives a Golden Image offline from a sealed base with a
     reviewed package list, never booting it.
+27. [`0027-guest-notification-owner.md`](0027-guest-notification-owner.md)
+    — proposed: mako keeps owning guest notifications and the shell drives
+    it; a quiet Desk is built on mako's do-not-disturb mode.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

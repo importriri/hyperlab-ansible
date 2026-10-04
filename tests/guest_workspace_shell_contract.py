@@ -191,10 +191,16 @@ def check_keys_sheet() -> None:
                   "ALT+CTRL+SHIFT+1 … 9", "ALT+arrows", "ALT+SHIFT+arrows",
                   "ALT+Page Down / Up", "ALT+SHIFT+T", "ALT+SHIFT+W", "Right CTRL"):
         require(chord in listed, f"keys.json lost {chord}")
+    for key in set(re.findall(r'main_mod \.\. " \+ SHIFT \+ ([A-Za-z])"', lua)):
+        require("ALT+SHIFT+" + key.upper() in listed,
+                f"ALT+SHIFT binding {key!r} is missing from keys.json")
     # The sheet only promises keys that exist.
     for chord in listed:
         if chord.startswith("ALT+") and len(chord) == 5:
             require(f'main_mod .. " + {chord[-1]}"' in lua,
+                    f"keys.json lists {chord}, which is not bound")
+        if chord.startswith("ALT+SHIFT+") and len(chord) == 11:
+            require(f'main_mod .. " + SHIFT + {chord[-1]}"' in lua,
                     f"keys.json lists {chord}, which is not bound")
 
 
@@ -328,6 +334,20 @@ def check_theme_lua() -> None:
             result = subprocess.run(["lua", str(check), str(rendered)],
                                     capture_output=True, text=True, check=False)
             require(result.returncode == 0, f"theme {name}: {result.stderr.strip()}")
+            # In mako a later matching section wins: hide everything in the
+            # quiet mode first, then let critical notices and the helper's
+            # own confirmation through.
+            mako = files[theme.CONFIG / "mako/config"]
+            order = [mako.find(section) for section in (
+                "[mode=do-not-disturb]\ninvisible=1\n",
+                "[mode=do-not-disturb urgency=critical]\ninvisible=0\n",
+                "[mode=do-not-disturb app-name=hyperlab-desk]\ninvisible=0\n",
+            )]
+            require(-1 not in order and order == sorted(order),
+                    f"theme {name}: the mako quiet mode sections are missing or out of order")
+    helper = (ROLE / "files/hyperlab-desk.py").read_text()
+    require('QUIET_MODE = "do-not-disturb"' in helper and 'APP_NAME = "hyperlab-desk"' in helper,
+            "the Desk helper and the mako quiet mode disagree on names")
 
 
 def check_identity_themes() -> None:

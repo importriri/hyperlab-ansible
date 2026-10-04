@@ -145,7 +145,10 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 - [x] a reviewed Lua form for a gradient active border: the `HL.Gradient`
       table of Hyprland 0.56, executed per theme by the contract
       (software-verified)
-- [ ] shell-owned notifications with a do-not-disturb mode per Desk
+- [x] a do-not-disturb mode per Desk, through mako's documented quiet mode
+      (software-verified)
+- [ ] shell-owned notifications: who owns them is
+      [ADR 0027](adr/0027-guest-notification-owner.md), proposed
 - [ ] the same shell on every workstation Template, not only `arch-dev-vfio`
 
 ### 3. Golden Image Workbench and capture (M12, first half)

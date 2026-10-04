@@ -167,6 +167,8 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("waybar")
 {% endif %}
     hl.exec_cmd("mako")
+    -- The Desk in front may be quiet; mako starts out of its quiet mode.
+    hl.exec_cmd("hyperlab-desk quiet sync")
 {% if not guest_desktop_hyprland_headless_monitor %}
     hl.exec_cmd("hypridle")
 {% else %}
@@ -213,6 +215,11 @@ hl.bind(
 hl.bind(
     main_mod .. " + N",
     hl.dsp.exec_cmd("hyperlab-workspace new-project")
+)
+
+hl.bind(
+    main_mod .. " + SHIFT + N",
+    hl.dsp.exec_cmd("hyperlab-desk quiet toggle")
 )
 
 hl.bind(

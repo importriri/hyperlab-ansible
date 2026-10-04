@@ -83,6 +83,7 @@ The guest keeps the `ALT` namespace. `SUPER` belongs to the host and
 | `ALT+D` | Desks overview |
 | `ALT+Space` | launcher: applications, projects, actions |
 | `ALT+N` | new project in the current Desk |
+| `ALT+SHIFT+N` | quiet the Desk in front: notifications wait |
 | `ALT+H` | the key sheet: every guest key, grouped |
 | `ALT+L` | lock (hyprlock) |
 | `ALT+Return` | terminal |
@@ -136,6 +137,8 @@ hyperlab-desk project-new 2 "Blender renders" --cwd ~/renders --launch blender
 hyperlab-desk project-remove 1 3
 hyperlab-desk project-save 1 1      # remember the applications open there now
 hyperlab-desk project-forget 1 1    # back to the launch commands
+hyperlab-desk quiet toggle          # quiet the Desk in front (ALT+SHIFT+N)
+hyperlab-desk quiet on --desk 2     # quiet Desk 2 whenever it is in front
 hyperlab-desk model            # what the shell sees
 hyperlab-desk check FILE       # validate a desks.json before using it
 ```
@@ -161,6 +164,14 @@ instead of the launch commands.
 - This reopens applications, not their documents or window layout; an
   application that restores its own session (a browser, an editor) does that
   part itself.
+
+A Desk can be quiet. While a quiet Desk is in front, mako is in its
+`do-not-disturb` mode: notifications are hidden, not dropped, except critical
+ones and the helper's own confirmation; those still pending show again when
+another Desk comes to the front. The helper sets the mode whenever the Desk
+in front changes, and Hyprland runs `hyperlab-desk quiet sync` at session
+start. `hyperlab-desk status` reports `quiet`. Who draws notifications, mako
+or the shell, is [ADR 0027](adr/0027-guest-notification-owner.md), proposed.
 
 ## Files
 
@@ -231,7 +242,7 @@ The role installs the shell only for the reviewed Quickshell API series
 
 | Contract | Proves |
 | --- | --- |
-| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, remembered applications, refused configuration |
+| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, remembered applications, quiet Desks, refused configuration |
 | `tests/guest_workspace_shell_runtime_contract.py` | the real QML in an offscreen scene: readouts, Desks, overview, launcher, refusals |
 | `tests/guest_workspace_shell_contract.py` | no trust or host knowledge in the guest, lock in hyprlock, keys and fallbacks, role wiring |
 | `tests/guest_presentation_contract.py` | exactly one bar, fullscreen and tearing policy |
@@ -247,4 +258,6 @@ PipeWire, and the look with IBM Plex installed.
 
 Known gaps:
 
-- notifications are still mako, styled by the theme rather than the shell.
+- notifications are still drawn by mako, styled by the theme rather than the
+  shell, and the shell does not show the quiet state yet
+  ([ADR 0027](adr/0027-guest-notification-owner.md), proposed).

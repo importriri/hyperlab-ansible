@@ -17,6 +17,12 @@ which can carry tokens. Opening an empty Project reopens those applications
 from their desktop entries in the Project's folder, or its launch commands
 when nothing usable was remembered.
 
+A Desk can be quiet: while it is the current Desk, notifications are kept
+out of sight (critical ones still show); those still pending show again when
+another Desk comes to the front.
+The notification daemon does the hiding through its ``do-not-disturb``
+mode; this helper only sets the mode when the current Desk changes.
+
 Configuration, first match wins:
 
     $XDG_CONFIG_HOME/hyperlab-workspace/desks.json   the user's own Desks
@@ -36,6 +42,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,6 +59,8 @@ MAX_COMMAND = 512
 MAX_RESTORE = MAX_LAUNCH
 DESKTOP_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 FIELD_CODE = re.compile(r"^%[fFuUdDnNickvm]$")
+QUIET_MODE = "do-not-disturb"
+APP_NAME = "hyperlab-desk"
 
 HOME = Path.home()
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
@@ -509,6 +518,47 @@ def remember_applications(model: dict[str, Any], workspace: int) -> None:
         pass  # Navigation never fails because memory could not be written.
 
 
+def quiet_desks() -> set[int]:
+    quiet = load_state().get("quiet")
+    if not isinstance(quiet, list):
+        return set()
+    return {
+        desk for desk in quiet
+        if isinstance(desk, int) and not isinstance(desk, bool) and 1 <= desk <= MAX_DESKS
+    }
+
+
+def apply_quiet(desk: int) -> bool:
+    """Put the notification daemon in the mode of the Desk now in front."""
+    quiet = desk in quiet_desks()
+    if shutil.which("makoctl"):
+        try:
+            subprocess.run(
+                ["makoctl", "mode", "-a" if quiet else "-r", QUIET_MODE],
+                capture_output=True, timeout=5, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass  # Navigation never fails because of notifications.
+    return quiet
+
+
+def notify(summary: str) -> None:
+    """One short notice from the helper; its app name is never hidden."""
+    if not shutil.which("gdbus"):
+        return
+    try:
+        subprocess.run(
+            ["gdbus", "call", "--session",
+             "--dest", "org.freedesktop.Notifications",
+             "--object-path", "/org/freedesktop/Notifications",
+             "--method", "org.freedesktop.Notifications.Notify",
+             APP_NAME, "0", "", summary, "", "[]", "{}", "2500"],
+            capture_output=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def last_slot(desk: int) -> int:
     last = load_state().get("last_slot")
     slot = last.get(str(desk)) if isinstance(last, dict) else None
@@ -549,6 +599,7 @@ def describe(model: dict[str, Any], workspace: int | None) -> dict[str, Any]:
         "slot": position[1] if position else None,
         "desk_name": desk["name"] if desk else "",
         "project_name": project["name"] if project else "",
+        "quiet": bool(position) and position[0] in quiet_desks(),
     }
 
 
@@ -583,6 +634,7 @@ def go_desk(model: dict[str, Any], desk: int, current: int) -> dict[str, Any]:
     target = desk * 10 + last_slot(desk)
     if target != current:
         focus_workspace(target)
+    apply_quiet(desk)
     return describe(model, target)
 
 
@@ -606,6 +658,8 @@ def command_workspace(args: argparse.Namespace) -> dict[str, Any]:
     if target != current:
         remember_applications(model, current)
         focus_workspace(target)
+        if split_workspace(current) is None:
+            apply_quiet(current_desk(target))  # from outside the Desks onto Desk 1
     remember_slot(target)
     return describe(model, target)
 
@@ -646,6 +700,7 @@ def command_project_open(args: argparse.Namespace) -> dict[str, Any]:
     if target != current:
         remember_applications(model, current)
         focus_workspace(target)
+        apply_quiet(args.desk)
     remember_slot(target)
     # The project's workspace is now the active one, so its programs open
     # there without a window rule.
@@ -736,6 +791,29 @@ def command_project_remove(args: argparse.Namespace) -> dict[str, Any]:
     return {"desk": args.desk, "slot": args.slot, "removed": True}
 
 
+def command_quiet(args: argparse.Namespace) -> dict[str, Any]:
+    model = load_model()
+    here = current_desk(active_workspace())
+    desk = here if args.desk is None else args.desk
+    name = require_desk(model, desk)["name"]
+    if args.action == "sync":
+        apply_quiet(here)
+        return {"desk": here, "quiet": here in quiet_desks()}
+    quiet = quiet_desks()
+    wanted = desk not in quiet if args.action == "toggle" else args.action == "on"
+    if wanted:
+        quiet.add(desk)
+    else:
+        quiet.discard(desk)
+    state = load_state()
+    state["quiet"] = sorted(quiet)
+    write_json(STATE_FILE, state)
+    if desk == here:
+        apply_quiet(desk)
+    notify(f"Desk {name}: " + ("quiet, notifications wait" if wanted else "notifications on"))
+    return {"desk": desk, "desk_name": name, "quiet": wanted}
+
+
 def command_check(args: argparse.Namespace) -> dict[str, Any]:
     model = validate(json.loads(Path(args.path).read_text()))
     return {"valid": True, "desks": len(model["desks"])}
@@ -792,6 +870,11 @@ def parser() -> argparse.ArgumentParser:
     removed = add("project-remove", command_project_remove, "remove a project")
     removed.add_argument("desk", type=int)
     removed.add_argument("slot", type=int, choices=SLOTS)
+
+    quiet = add("quiet", command_quiet,
+                "keep notifications out of sight while a Desk is in front")
+    quiet.add_argument("action", choices=("on", "off", "toggle", "sync"))
+    quiet.add_argument("--desk", type=int)
 
     add("check", command_check, "validate a desks.json file").add_argument("path")
     return root
