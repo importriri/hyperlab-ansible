@@ -3,7 +3,7 @@ schema_version: 1
 id: server-fedora
 display_name: Fedora Server
 version: "1.0"
-status: draft
+status: ready
 image: fedora
 description: >-
   A headless Fedora Machine reached over SSH only: the sealed upstream Fedora

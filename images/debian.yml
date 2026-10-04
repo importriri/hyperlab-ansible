@@ -7,8 +7,8 @@ os_variant: debian13
 version: "20261001-2618"
 format: qcow2
 
-status: not-built
-sha256: null
+status: sealed
+sha256: b2aca2bee42c7082fd6aba4a5bb1a89612087a405e99896920f3346f7b23b9d1
 
 private: false
 contains_personal_data: false

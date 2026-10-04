@@ -3,7 +3,7 @@ schema_version: 1
 id: server-debian
 display_name: Debian Server
 version: "1.0"
-status: draft
+status: ready
 image: debian
 description: >-
   A headless Debian Machine reached over SSH only: the sealed upstream Debian

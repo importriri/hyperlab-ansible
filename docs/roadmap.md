@@ -202,8 +202,10 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [x] Debian 13 and Fedora 44 cloud images pinned from downloads verified on
       Nitro against the official checksums; `server-debian` and
       `server-fedora` published as drafts
-- [ ] Debian and Fedora images prepared and sealed; `server-debian` and
-      `server-fedora` ready and proven with a Machine each
+- [x] Debian 13 and Fedora 44 images prepared, validated and sealed on
+      Nitro; `server-debian` and `server-fedora` ready
+- [ ] a Machine from `server-debian` and one from `server-fedora` reached
+      over SSH on Nitro
 - [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles

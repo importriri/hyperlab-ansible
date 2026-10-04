@@ -15,8 +15,8 @@ carry runtime observations.
 | --- | --- | --- |
 | [`workstation-dev`](workstation-dev.yml) | `arch-dev-20261003` | permanent, VFIO, dev network, GPU class `dev`, Linux Looking Glass |
 | [`server-arch`](server-arch.yml) | `arch` | permanent, standard device, dev, services or lab network, SSH only |
-| [`server-debian`](server-debian.yml) | `debian` (draft until sealed) | permanent, standard device, dev, services or lab network, SSH only |
-| [`server-fedora`](server-fedora.yml) | `fedora` (draft until sealed) | permanent, standard device, dev or lab network, SSH only |
+| [`server-debian`](server-debian.yml) | `debian` | permanent, standard device, dev, services or lab network, SSH only |
+| [`server-fedora`](server-fedora.yml) | `fedora` | permanent, standard device, dev or lab network, SSH only |
 
 `workstation-dev` offers only VFIO Machines: its image carries the
 NVIDIA-only session of the workstation it was captured from. Disposable

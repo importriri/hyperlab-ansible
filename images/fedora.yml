@@ -7,8 +7,8 @@ os_variant: fedora44
 version: "44-1.7"
 format: qcow2
 
-status: not-built
-sha256: null
+status: sealed
+sha256: 28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f
 
 private: false
 contains_personal_data: false
