@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / 'roles/guest_desktop_hyprland'
 LUA = r'''
 package.preload.theme = function() return {} end
-local configs, bindings, starts, monitors, rules = {}, {}, {}, {}, {}
+local configs, bindings, starts, monitors, rules, layers = {}, {}, {}, {}, {}, {}
 local function action(name)
     return function(value) return {kind = name, value = value} end
 end
@@ -37,6 +37,7 @@ hl = {
     curve = function() end,
     animation = function() end,
     window_rule = function(value) rules[#rules + 1] = value end,
+    layer_rule = function(value) layers[#layers + 1] = value end,
     dsp = {
         exec_cmd = action("exec"), focus = action("focus"), layout = action("layout"),
         window = {
@@ -73,6 +74,17 @@ for _, rule in ipairs(rules) do
     end
 end
 assert(suppressed, "maximize requests must be suppressed so new windows tile")
+local blurred = {}
+for _, layer in ipairs(layers) do
+    local namespace = layer.match and layer.match.namespace or ""
+    assert(namespace:match("^%^hyperlab%-workspace%-[a-z]+%$$"), "unreviewed layer rule match: " .. namespace)
+    assert(namespace ~= "^hyperlab-workspace-desktop$", "the wallpaper layer must not be blurred")
+    assert(layer.blur == true and type(layer.ignore_alpha) == "number" and layer.ignore_alpha > 0,
+           "a layer rule must blur only translucent pixels")
+    blurred[namespace] = true
+end
+assert(blurred["^hyperlab-workspace-top$"] and blurred["^hyperlab-workspace-dock$"],
+       "the Workspace Shell islands must be blurred")
 assert(#monitors == 1)
 @@MONITOR_ASSERT@@
 '''
