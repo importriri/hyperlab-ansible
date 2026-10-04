@@ -33,16 +33,45 @@ def require(ok: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+# What logind reported on dev-01 when the first send was refused: the systemd
+# user manager, two SSH logins (one closing) and the seated Wayland session.
+DEV01_SESSIONS = {
+    "1": {"Type": "unspecified", "Remote": "no", "Seat": "", "Class": "manager", "State": "active"},
+    "12": {"Type": "tty", "Remote": "yes", "Seat": "", "Class": "user", "State": "active"},
+    "5": {"Type": "tty", "Remote": "yes", "Seat": "", "Class": "user", "State": "closing"},
+    "c1": {"Type": "wayland", "Remote": "no", "Seat": "seat0", "Class": "user", "State": "active"},
+}
+# ... and its runtime directory: the compositor socket, awww's socket beside
+# it with the same prefix, and the compositor lock.
+DEV01_RUNTIME = ("wayland-1", "wayland-1-awww-daemon.sock")
+
+
+def fake_loginctl(path: Path, sessions: dict) -> None:
+    lines = ["#!/usr/bin/python3", "import sys", f"sessions = {sessions!r}",
+             "args = sys.argv[1:]",
+             "if args[0] == 'show-user':",
+             "    print('Sessions=' + ' '.join(sessions))",
+             "elif args[0] == 'show-session':",
+             "    info = sessions[args[1]]",
+             "    for arg in args[2:]:",
+             "        key = arg.split('=', 1)[1]",
+             "        print(f'{key}={info[key]}')",
+             "else:",
+             "    sys.exit(1)"]
+    path.write_text("\n".join(lines) + "\n")
+    path.chmod(0o755)
+
+
 def receiver_cases() -> None:
-    def run(data: bytes, sockets: int = 1) -> tuple[int, str, bytes | None]:
+    def run(data: bytes, sockets=DEV01_RUNTIME, sessions=DEV01_SESSIONS) -> tuple[int, str, bytes | None]:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
             runtime = base / "runtime"
             runtime.mkdir(mode=0o700)
             listeners = []
-            for index in range(sockets):
+            for name in sockets:
                 listener = socket.socket(socket.AF_UNIX)
-                listener.bind(str(runtime / f"wayland-{index + 1}"))
+                listener.bind(str(runtime / name))
                 listeners.append(listener)
             (runtime / "wayland-1.lock").write_text("")
             bin_dir = base / "bin"
@@ -51,26 +80,56 @@ def receiver_cases() -> None:
             (bin_dir / "wl-copy").write_text(
                 f"#!/bin/sh\n[ \"$WAYLAND_DISPLAY\" = wayland-1 ] || exit 9\ncat > {got}\n")
             (bin_dir / "wl-copy").chmod(0o755)
+            loginctl = bin_dir / "loginctl"
+            fake_loginctl(loginctl, sessions)
+            # The receiver runs with the real loginctl path; only that constant
+            # is pointed at the fake.
+            wrapper = base / "receive.py"
+            wrapper.write_text(
+                "import runpy, sys\n"
+                f"module = runpy.run_path({str(RECEIVER)!r}, run_name='receiver')\n"
+                f"module['LOGINCTL'] = {str(loginctl)!r}\n"
+                "module['session_display'].__defaults__ = (module['LOGINCTL'],)\n"
+                "try:\n"
+                "    sys.exit(module['main']())\n"
+                "except RuntimeError as exc:\n"
+                "    print(f'HyperLab clipboard refused: {exc}', file=sys.stderr)\n"
+                "    sys.exit(2)\n")
             result = subprocess.run(
-                [sys.executable, str(RECEIVER)], input=data, capture_output=True, check=False,
+                [sys.executable, str(wrapper)], input=data, capture_output=True, check=False,
                 env={"PATH": f"{bin_dir}:/usr/bin", "XDG_RUNTIME_DIR": str(runtime)})
             for listener in listeners:
                 listener.close()
             return result.returncode, result.stderr.decode(), got.read_bytes() if got.exists() else None
 
-    rc, _, got = run(TEXT)
-    require(rc == 0 and got == TEXT, f"the receiver did not hand the text to wl-copy: {rc} {got!r}")
+    # The real dev-01 case that was refused: it must now be delivered.
+    rc, error, got = run(TEXT)
+    require(rc == 0 and got == TEXT,
+            f"the receiver refused dev-01's real session layout: {rc} {error} {got!r}")
     for data, reason in ((b"", "nothing was sent"), (b"x" * ((1 << 20) + 1), "larger than 1 MiB"),
                          (b"\xff\xfe", "not UTF-8"), (b"a\x00b", "NUL")):
         rc, error, got = run(data)
         require(rc == 2 and reason in error and got is None, f"receiver accepted {reason}: {error}")
-    for count in (0, 2):
-        rc, error, got = run(TEXT, sockets=count)
-        require(rc == 2 and "no single graphical session" in error and got is None,
-                f"receiver guessed a session among {count}")
+
+    second = dict(DEV01_SESSIONS, c2={"Type": "wayland", "Remote": "no", "Seat": "seat0",
+                                      "Class": "user", "State": "online"})
+    ssh_only = {key: value for key, value in DEV01_SESSIONS.items() if key != "c1"}
+    remote = dict(ssh_only, c3={"Type": "wayland", "Remote": "yes", "Seat": "", "Class": "user",
+                                "State": "active"})
+    for sessions, label in ((second, "two local graphical sessions"), (ssh_only, "SSH logins only"),
+                            (remote, "a remote Wayland session")):
+        rc, error, got = run(TEXT, sessions=sessions)
+        require(rc == 2 and "no single local graphical session" in error and got is None,
+                f"receiver delivered with {label}: {error}")
+    for sockets, label in (((), "no compositor socket"), (("wayland-1", "wayland-2"), "two compositor sockets"),
+                           (("wayland-1-awww-daemon.sock",), "only a helper socket")):
+        rc, error, got = run(TEXT, sockets=sockets)
+        require(rc == 2 and "no single Wayland display socket" in error and got is None,
+                f"receiver guessed a display with {label}: {error}")
     source = RECEIVER.read_text(encoding="utf-8")
     require("shell=True" not in source and "os.system" not in source and "eval(" not in source,
             "the receiver gained a way to execute what it receives")
+    require('LOGINCTL = "/usr/bin/loginctl"' in source, "the receiver no longer asks logind")
 
 
 def sender_cases() -> None:

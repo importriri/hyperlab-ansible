@@ -9,6 +9,7 @@ wl-copy, which keeps serving it after this program exits.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -16,18 +17,50 @@ import sys
 from pathlib import Path
 
 LIMIT = 1 << 20
+LOGINCTL = "/usr/bin/loginctl"
+# The compositor's display socket. Other programs put their own sockets beside
+# it with the same prefix (awww's wayland-1-awww-daemon.sock); they are not a
+# session.
+DISPLAY_SOCKET = re.compile(r"^wayland-[0-9]+$")
 
 
-def session_display(runtime: Path) -> str:
-    """The one Wayland socket of this account's session, or refuse."""
+def properties(argv: list[str]) -> dict[str, str]:
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=5, check=False)
+    if result.returncode != 0:
+        raise RuntimeError("logind did not answer")
+    return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+
+
+def local_graphical_sessions(loginctl: str = LOGINCTL) -> list[str]:
+    """This account's local, seated, active Wayland sessions, from logind."""
+    user = properties([loginctl, "show-user", str(os.getuid()), "--property=Sessions"])
+    found = []
+    for session in user.get("Sessions", "").split():
+        info = properties([loginctl, "show-session", session, "--property=Type",
+                           "--property=Remote", "--property=Seat", "--property=Class",
+                           "--property=State"])
+        if (info.get("Type") == "wayland" and info.get("Remote") == "no"
+                and info.get("Seat", "") != "" and info.get("Class") == "user"
+                and info.get("State") in ("active", "online")):
+            found.append(session)
+    return found
+
+
+def session_display(runtime: Path, loginctl: str = LOGINCTL) -> str:
+    """The one compositor socket of this account's one local session, or refuse.
+
+    An SSH login is a session too, but not a graphical one; it never counts.
+    """
+    if len(local_graphical_sessions(loginctl)) != 1:
+        raise RuntimeError("no single local graphical session is running for this account")
     sockets = sorted(
-        path.name for path in runtime.glob("wayland-*")
-        if not path.name.endswith(".lock")
+        path.name for path in runtime.iterdir()
+        if DISPLAY_SOCKET.fullmatch(path.name)
         and stat.S_ISSOCK(path.lstat().st_mode)
         and path.lstat().st_uid == os.getuid()
     )
     if len(sockets) != 1:
-        raise RuntimeError("no single graphical session is running for this account")
+        raise RuntimeError("the graphical session has no single Wayland display socket")
     return sockets[0]
 
 

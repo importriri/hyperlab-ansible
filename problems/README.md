@@ -48,6 +48,9 @@ proof.
 - [`sealed-image-claimed-guest-agent.md`](sealed-image-claimed-guest-agent.md):
   the Debian image was sealed claiming a QEMU Guest Agent it does not carry;
   the claim is now checked inside the image before sealing.
+- [`clipboard-receiver-counted-helper-socket.md`](clipboard-receiver-counted-helper-socket.md):
+  the clipboard receiver took awww's socket for a second session; it now asks
+  logind for the one local graphical session.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.
