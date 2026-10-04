@@ -41,6 +41,10 @@ proof.
 - [`refusal-example-image-got-sealed.md`](refusal-example-image-got-sealed.md):
   sealing Debian broke the unsealed-image refusal suite; the example now uses
   an unbuilt image and a contract checks that it stays unsealed.
+- [`guest-account-not-polkit-admin.md`](guest-account-not-polkit-admin.md):
+  the Machine account was outside the polkit administrator group, so polkit
+  asked for root's password; cloud-init now adds it to its distribution's
+  group.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

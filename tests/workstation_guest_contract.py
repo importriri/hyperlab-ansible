@@ -58,7 +58,11 @@ def main() -> int:
     assert access.index("- name: Refuse an unknown workstation time zone") < access.index(
         "- name: Follow the hypervisor time zone")
     assert "community.general.timezone:" in access
+    admin = access.split("- name: Make the workstation account a polkit administrator", 1)[1].split("\n- name:", 1)[0]
+    assert "ansible.builtin.user:" in admin and "append: true" in admin
+    assert 'groups: "{{ workstation_access_admin_group }}"' in admin
     access_defaults = mapping("roles/workstation_access/defaults/main.yml")
+    assert access_defaults["workstation_access_admin_group"] == "wheel"
     assert access_defaults["workstation_access_timezone"] == ""
     zone = re.compile(access_defaults["workstation_access_timezone_pattern"].strip())
     assert zone.fullmatch("Europe/Rome") and zone.fullmatch("UTC")

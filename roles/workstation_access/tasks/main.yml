@@ -247,6 +247,16 @@
   ansible.builtin.systemd_service:
     daemon_reload: true
 
+# polkit on Arch treats only wheel as administrators. Outside it, flatpak and
+# every other polkit action ask for root's password, which does not exist
+# and must not. Machines seeded before cloud-init added the group converge
+# here.
+- name: Make the workstation account a polkit administrator
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: "{{ workstation_access_admin_group }}"
+    append: true
+
 - name: Read the hypervisor time zone
   when: workstation_access_timezone | length == 0
   ansible.builtin.stat:

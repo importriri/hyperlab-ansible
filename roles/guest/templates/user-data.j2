@@ -8,6 +8,7 @@ disable_root: true
 users:
   - name: {{ guest_cloud_init_user | to_json }}
     sudo: "ALL=(ALL:ALL) NOPASSWD:ALL"
+    groups: {{ [guest_admin_group] | to_json }}
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:

@@ -77,6 +77,27 @@
       The hypervisor /etc/localtime does not name an IANA time zone; set
       guest_cloud_init_timezone explicitly.
 
+- name: Resolve the administrator group of the new Machine's distribution
+  when:
+    - guest_create_new_transaction
+    - guest_plan.cloud_init
+  ansible.builtin.set_fact:
+    guest_admin_group: >-
+      {{ guest_admin_groups[guest_plan.os_variant | regex_replace('[0-9.]+$', '')]
+         | default('') }}
+
+- name: Refuse a distribution without a reviewed administrator group
+  when:
+    - guest_create_new_transaction
+    - guest_plan.cloud_init
+  ansible.builtin.assert:
+    that:
+      - guest_admin_group is match('^[a-z_][a-z0-9_-]{0,30}$')
+    fail_msg: >-
+      {{ guest_plan.os_variant }} has no reviewed administrator group in
+      guest_admin_groups; refusing to create an account polkit would not
+      recognise.
+
 - name: Initialize new-transaction GPU policy ownership
   when: guest_create_new_transaction
   ansible.builtin.set_fact:

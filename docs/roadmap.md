@@ -209,6 +209,9 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       over SSH on Nitro
 - [x] every new Linux Machine, server or workstation, starts in the host's
       time zone from cloud-init (software-verified)
+- [x] the Machine account is in its distribution's polkit administrator
+      group (`wheel`, or `sudo` on Debian), so polkit never asks for root
+      (software-verified)
 - [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles
@@ -304,6 +307,9 @@ platform, recorded on the host:
 - [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed
 - [ ] QEMU guest agent restricted to the commands HyperLab uses; no guest
       command execution
+- [ ] decide whether a Machine account keeps passwordless sudo after its
+      first provisioning; without it every later profile pass asks for the
+      guest password, and sudo is only as strong as that password
 - [ ] SPICE channels a Template does not need disabled (clipboard, file
       transfer, USB redirection)
 - [ ] VM disks at rest on the encrypted host volume only, with swap and

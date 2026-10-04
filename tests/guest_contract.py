@@ -373,8 +373,12 @@ def test_domain_templates() -> None:
             guest_cloud_init_user="sid",
             guest_cloud_init_ssh_public_keys=public_keys,
             guest_resolved_timezone="Europe/Rome",
+            guest_admin_group="wheel",
         ))
         assert user_data["timezone"] == "Europe/Rome"
+        assert user_data["users"][0]["groups"] == ["wheel"]
+        assert "password" not in json.dumps(user_data).lower().replace("ssh_pwauth", "")
+        assert user_data["disable_root"] is True
         assert user_data["users"][0]["lock_passwd"] is True
         assert user_data["ssh_pwauth"] is False
 
@@ -872,7 +876,21 @@ def test_role_structure() -> None:
     assert "guest_resolved_timezone is match(guest_timezone_pattern)" in create
     assert "'..' not in guest_resolved_timezone" in create
     assert "timezone" not in validate and "timezone" not in state
+    admin_read = create.index("Resolve the administrator group of the new Machine's distribution")
+    admin_check = create.index("Refuse a distribution without a reviewed administrator group")
+    assert admin_read < admin_check < create.index("Render secret-free cloud-init user data")
+    assert "guest_create_new_transaction" in create[admin_read:admin_check]
+    assert "guest_admin_group" not in validate and "guest_admin_group" not in state
     guest_vars = yaml.safe_load((ROOT / "group_vars/all/guest.yml").read_text(encoding="utf-8"))
+    admin_groups = guest_vars["guest_admin_groups"]
+    assert admin_groups["archlinux"] == "wheel" and admin_groups["fedora"] == "wheel"
+    assert admin_groups["debian"] == "sudo"
+    assert "root" not in admin_groups.values()
+    for manifest in sorted((ROOT / "images").glob("*.yml")):
+        image = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+        if image.get("os_family") == "linux":
+            family = re.sub(r"[0-9.]+$", "", image["os_variant"])
+            assert family in admin_groups, f"{manifest.name}: no administrator group for {family}"
     assert guest_vars["guest_cloud_init_timezone"] == ""
     zone = re.compile(guest_vars["guest_timezone_pattern"].strip())
     for good in ("Europe/Rome", "UTC", "America/Argentina/Buenos_Aires", "Etc/GMT+1"):

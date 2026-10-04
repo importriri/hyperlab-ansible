@@ -19,6 +19,15 @@ guest_cloud_init_user: sid
 guest_cloud_init_timezone: ""
 guest_timezone_pattern: >-
   ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$
+# The group polkit and sudo treat as administrators, by os_variant without its
+# release number. cloud-init puts the account in it on first boot, so a
+# polkit action asks for the account's own password, never for root's, and
+# root never gets one. A variant missing here refuses before any seed.
+guest_admin_groups:
+  archlinux: wheel
+  fedora: wheel
+  debian: sudo
+  parrot: sudo
 
 guest_required_packages:
   - cloud-image-utils
