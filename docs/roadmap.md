@@ -99,10 +99,9 @@ then accepted on Nitro; Predator replays the frozen result.
       and the boot-scoped GPU lease
       ([ADR 0022](adr/0022-network-trust-and-gpu-policy.md),
       [ADR 0019](adr/0019-gpu-lease.md))
-- [ ] ADR: decide whether a separate PLAY identity is needed for gaming, or
-      whether `gaming-clean` / `gaming-dirty` on clean and dirty suffice
-      (proposed in [ADR 0023](adr/0023-gaming-identities.md): no PLAY
-      identity; waits for the operator's decision)
+- [x] ADR: no separate PLAY identity; `gaming-clean`, `gaming-dirty` and
+      `gaming-offline` on clean, dirty and lab
+      ([ADR 0023](adr/0023-gaming-identities.md), accepted)
 - [ ] an independent architecture review that actually reads the
       repository (the earlier attempt could not open it and does not count)
 
@@ -259,7 +258,8 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       with it for Blender or CUDA
 - [x] the lease decided in [ADR 0019](adr/0019-gpu-lease.md) (proposed:
       it waits for an image with a session on both shapes, a Nitro test of
-      define-then-start and the choice of Templates)
+      define-then-start and the choice of Templates; it comes after
+      `workstation-dev-standard` and the Create view proven on Nitro)
 - [ ] SERVICES Machines may be GPU-capable through a reviewed handoff
       profile; the static rule that excludes them is replaced
 - [ ] `local-ai` service Machine (local inference) on that model
@@ -328,9 +328,10 @@ platform, recorded on the host:
 - [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed
 - [ ] QEMU guest agent restricted to the commands HyperLab uses; no guest
       command execution
-- [ ] decide whether a Machine account keeps passwordless sudo after its
-      first provisioning; without it every later profile pass asks for the
-      guest password, and sudo is only as strong as that password
+- [ ] remove the Machine account's passwordless sudo at the end of its
+      first provisioning, so every Machine ends without `NOPASSWD`; later
+      profile passes then ask for the guest account's password (decided
+      2026-10-04)
 - [ ] SPICE channels a Template does not need disabled (clipboard, file
       transfer, USB redirection)
 - [ ] VM disks at rest on the encrypted host volume only, with swap and
@@ -501,7 +502,8 @@ work explicitly requires it.
       transitional application launcher)
 - [ ] reviewed focused-window targeting (fullscreen/opacity stay compositor
       shortcuts; the shell cannot request them)
-- [ ] native Create, Networks and Nitro hardware views behind their feature gates
+- [ ] native Networks and Nitro hardware views behind their feature gates
+      (the Create view needs none: it runs the same steps as the CLI)
 - [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
 - [ ] shell-owned notifications (mako remains the reviewed daemon)
 - [ ] complete keybinding cheatsheet surface

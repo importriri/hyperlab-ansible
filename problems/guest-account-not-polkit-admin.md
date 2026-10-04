@@ -36,15 +36,15 @@ The manual fix on Nitro was `usermod -aG wheel sid` on `dev-01`.
 Root still has no password: the account authenticates polkit actions with
 its own password, the one the workstation profile sets.
 
-## Not changed: passwordless sudo
+## Not changed yet: passwordless sudo
 
-cloud-init also gives the account `NOPASSWD` sudo. The profile playbooks
-need it: they reach the guest over SSH with the key and become root without
-a password. Removing it after the first provisioning means every later
-profile pass must ask for the guest account's password, and the Machine's
-sudo becomes as strong as that password instead of the SSH key. That is a
-hypervisor-hardening decision, recorded in roadmap milestone 10, not a
-side effect of this fix.
+cloud-init also gives the account `NOPASSWD` sudo. The first provisioning
+needs it: the profile playbooks reach the guest over SSH with the key and
+become root without a password. The operator decided on 2026-10-04 that it
+is removed at the end of that first provisioning, so every Machine ends
+without `NOPASSWD` and later profile passes ask for the guest account's
+password. That change belongs to roadmap milestone 10 (hypervisor
+hardening), not to this fix.
 
 ## Regression proof
 

@@ -1,7 +1,9 @@
 # ADR 0019 - A GPU-capable Machine leases the GPU for one run
 
 Status: proposed. The decision is recorded; implementation waits for the
-preconditions below.
+preconditions below. Order agreed on 2026-10-04: first
+`workstation-dev-standard`, then the Create view proven on Nitro, then the
+lease.
 
 ## Context
 

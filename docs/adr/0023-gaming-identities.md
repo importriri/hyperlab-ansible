@@ -1,7 +1,6 @@
 # ADR 0023 - Gaming uses the existing trust identities, not a PLAY identity
 
-Status: proposed. The operator confirms or rejects it before the gaming
-Templates are published.
+Status: accepted by the operator on 2026-10-04.
 
 ## Context
 

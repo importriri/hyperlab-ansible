@@ -53,8 +53,8 @@ entered the pipeline.
 22. [`0022-network-trust-and-gpu-policy.md`](0022-network-trust-and-gpu-policy.md)
     — network identity and GPU handoff class are separate authorities; the
     ladder, the ceiling rule, services and the per-run lease.
-23. [`0023-gaming-identities.md`](0023-gaming-identities.md) — proposed:
-    gaming uses clean, dirty and lab, not a separate PLAY identity.
+23. [`0023-gaming-identities.md`](0023-gaming-identities.md) — gaming
+    uses clean, dirty and lab, not a separate PLAY identity.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
