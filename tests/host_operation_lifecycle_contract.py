@@ -140,6 +140,50 @@ def detach_contract(op, root, base):
             item.close()
 
 
+def observer_race_contract(op, base):
+    """PTY output and an observer's hangup in one select round.
+
+    Output goes out first; sending to the departed observer fails and
+    detaches it. Its own readiness in the same round must then be skipped,
+    not treated as a second departure: removing it twice raised, and a
+    successful operation was recorded as failed with rc 125.
+    """
+    master_r, master_w = os.pipe()
+    listener = socket.socket(socket.AF_UNIX)
+    listener.bind(str(base / 'race.sock'))
+    listener.listen(1)
+    listener.setblocking(False)
+    peer = socket.socket(socket.AF_UNIX)
+    peer.connect(str(base / 'race.sock'))
+    rounds = []
+    real_select = op.select.select
+
+    def scripted(rlist, wlist, xlist, timeout):
+        rounds.append(len(rlist))
+        if len(rounds) == 1:
+            return [listener], [], []  # the observer attaches
+        if len(rounds) == 2:
+            require(len(rlist) == 3, 'the observer was not attached')
+            peer.close()
+            os.write(master_w, b'late output')
+            return [rlist[0], rlist[2]], [], []  # PTY first, then the observer
+        return real_select(rlist, wlist, xlist, 0)
+
+    child = SimpleNamespace(poll=lambda: None if len(rounds) < 2 else 0)
+    log_path = base / 'race.log'
+    try:
+        with open(log_path, 'wb') as log, patch.object(
+                op, 'select', SimpleNamespace(select=scripted)):
+            op.relay(child, master_r, listener, log, log_path)
+    except (ValueError, OSError) as error:
+        raise AssertionError(f'an observer hangup during output broke the relay: {error!r}') from error
+    finally:
+        listener.close()
+        os.close(master_r)
+        os.close(master_w)
+    require(log_path.read_bytes() == b'late output', 'output lost around an observer hangup')
+
+
 def main():
     spec = importlib.util.spec_from_file_location('operation', SOURCE)
     op = importlib.util.module_from_spec(spec)
@@ -366,6 +410,7 @@ def main():
                     'early launch failure not durable')
             op.call = fake_call
 
+            observer_race_contract(op, base)
             detach_contract(op, root, base)
             # No automatic backend lock cleanup is part of this helper.
             source = SOURCE.read_text()

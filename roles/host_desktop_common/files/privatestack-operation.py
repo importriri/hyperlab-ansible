@@ -406,6 +406,10 @@ def relay(child, master, listener, log, log_path):
                     except OSError:
                         conn.close()
                 else:
+                    if item not in clients:
+                        # Detached earlier in this round, when sending it
+                        # the PTY output failed; it is already closed.
+                        continue
                     try:
                         data = item.recv(4096)
                     except OSError:
