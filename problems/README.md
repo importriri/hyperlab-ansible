@@ -51,6 +51,9 @@ proof.
 - [`clipboard-receiver-counted-helper-socket.md`](clipboard-receiver-counted-helper-socket.md):
   the clipboard receiver took awww's socket for a second session; it now asks
   logind for the one local graphical session.
+- [`looking-glass-splash-after-guest-reload.md`](looking-glass-splash-after-guest-reload.md):
+  Looking Glass stayed on its splash screen after `hyprctl reload` in the
+  guest; diagnosis open, the sender now keeps its previous log.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

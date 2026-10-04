@@ -395,8 +395,16 @@ set -u
 
 log_path=$1
 
+# The previous run's log is kept as .1, so a sender that stopped sending
+# frames can still be diagnosed after it is restarted.
+if [[ -f "$log_path" ]]; then
+    mv -f -- "$log_path" "$log_path.1"
+fi
+printf 'HyperLab: sender started %s for Hyprland %s\n' \
+    "$(date --iso-8601=seconds)" "${HYPRLAND_INSTANCE_SIGNATURE:-unknown}" >"$log_path"
+
 /usr/local/bin/looking-glass-host \
-    >"$log_path" 2>&1 </dev/null &
+    >>"$log_path" 2>&1 </dev/null &
 sender_pid=$!
 
 cleanup() {
@@ -410,12 +418,16 @@ trap cleanup EXIT INT TERM HUP
 
 while kill -0 "$sender_pid" >/dev/null 2>&1; do
     if ! pgrep -u "$(id -u)" -x Hyprland >/dev/null 2>&1; then
+        printf 'HyperLab: Hyprland is gone; stopping the sender %s\n' \
+            "$(date --iso-8601=seconds)" >>"$log_path"
         exit 0
     fi
     sleep 0.5
 done
 
-wait "$sender_pid" >/dev/null 2>&1 || true
+wait "$sender_pid" >/dev/null 2>&1
+printf 'HyperLab: sender exited with status %s at %s\n' \
+    "$?" "$(date --iso-8601=seconds)" >>"$log_path"
 HYPERLAB_LG_SUPERVISOR
 
 for _ in 1 2 3 4 5; do
