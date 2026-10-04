@@ -59,8 +59,20 @@ instead of dispatching `exit`.
 - `tests/guest_workspace_shell_contract.py` refuses classic `hyprctl dispatch`
   syntax in the shell and requires the Lua dispatchers in the helper.
 
-## Still open
+## Display power
 
-`hypridle.conf` turns the display off and on with `hyprctl dispatch dpms`, the
-same classic syntax. On a headless guest it has no visible effect; it is
-listed in the roadmap until the Lua form of the DPMS dispatcher is reviewed.
+The guest's `hypridle.conf` once turned the display off and on with the same
+classic `hyprctl dispatch dpms` syntax. It no longer touches display power at
+all: a virtual display has no panel to save, and a guest behind Looking Glass
+does not run `hypridle`. `tests/guest_presentation_contract.py` refuses any
+`dpms` in the guest idle configuration.
+
+The host turns its panel off through `privatestack-compositor-adapter dpms`,
+which dispatches `hl.dsp.dpms({ action = "enable" | "disable" })`. That form
+was reviewed against the Hyprland 0.56.2 source
+(`src/config/lua/bindings/LuaBindingsDispatchers.cpp`, `hlDpms`, and
+`LuaBindingsInternal.cpp`, `parseToggleStr`): the `action` key accepts
+`enable`/`on` and `disable`/`off`, and **any other value, an empty one
+included, toggles** instead of failing. The adapter therefore passes only
+`enable` or `disable`, and `tests/host_hyprland_adapter_contract.py` checks
+that `toggle`, `off`, an empty word and `enable;` never reach `hyprctl`.

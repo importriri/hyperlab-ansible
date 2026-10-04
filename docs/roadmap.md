@@ -134,7 +134,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       Waybar fallback, one by one
 - [x] layer blur behind the islands and panels, through the reviewed Lua
       `hl.layer_rule` form (software-verified)
-- [ ] `hypridle` DPMS through the reviewed Lua dispatcher form
+- [x] `hypridle` DPMS through the reviewed Lua dispatcher form: the host
+      adapter only, checked against the Hyprland 0.56.2 source; guests never
+      touch display power (software-verified)
 - [ ] project restore: a project reopens the windows it had, not only its
       launch commands
 - [x] keybinding sheet in the guest (`ALT+H`), from one `keys.json` that the

@@ -130,6 +130,9 @@ def check_no_lock_behind_looking_glass() -> None:
     assert lua.count('hl.exec_cmd("hypridle")') == 1, "hypridle starts outside the guard"
     idle = (ROOT / "roles/guest_desktop_hyprland/files/hypridle.conf").read_text()
     assert "hyprctl dispatch" not in idle, "hyprctl dispatch takes Lua under the guest configuration"
+    # No guest turns its display off: a virtual display has no panel to
+    # save, and a guest behind Looking Glass must keep its output on.
+    assert "dpms" not in idle.lower(), "the guest idle configuration must not touch display power"
 
 
 def main() -> None:

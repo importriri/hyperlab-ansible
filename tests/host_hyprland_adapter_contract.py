@@ -467,6 +467,33 @@ fi
         )
 
         expect_call(
+            "hyprland",
+            ["dpms", "enable"],
+            (
+                "hyprctl|dispatch|"
+                "hl.dsp.dpms"
+                '({ action = "enable" })'
+            ),
+            bin_dir,
+            log,
+        )
+
+        # Hyprland 0.56 reads any action other than enable/on or
+        # disable/off as a toggle, so an unknown word must never reach it.
+        for action in ("toggle", "off", "", "enable;"):
+            result, recorded = run_adapter(
+                "hyprland",
+                ["dpms", action],
+                bin_dir,
+                log,
+            )
+
+            require(
+                result.returncode == 2 and recorded == "",
+                f"dpms {action!r} reached compositor IPC",
+            )
+
+        expect_call(
             "sway",
             ["native-bar", "hide"],
             (

@@ -197,6 +197,8 @@ Nothing depends on the shell being up:
   would show nothing. The host session lock protects that window. `ALT+L`
   still locks on request; Looking Glass then shows no picture until the
   password, typed into the window, unlocks it;
+- no guest turns its display off: a virtual display has no panel to save,
+  and a guest behind Looking Glass must keep its output on;
 - `guest_desktop_hyprland_shell: waybar` keeps the plain bar.
 
 The role installs the shell only for the reviewed Quickshell API series
