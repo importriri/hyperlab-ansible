@@ -23,6 +23,14 @@ another Desk comes to the front.
 The notification daemon does the hiding through its ``do-not-disturb``
 mode; this helper only sets the mode when the current Desk changes.
 
+Focus is a quiet Desk for a set time: ``focus 50`` quiets the Desk in front
+for fifty minutes and then puts back the quiet state it had.
+
+Time tracking is off until the user turns it on (``track on``). It counts,
+minute by minute, which Desk and slot are in front while the session is
+unlocked, keeps the totals in a local state file for five weeks, and sends
+them nowhere. It cannot tell an idle unlocked session from work.
+
 Configuration, first match wins:
 
     $XDG_CONFIG_HOME/hyperlab-workspace/desks.json   the user's own Desks
@@ -46,6 +54,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +70,13 @@ DESKTOP_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 FIELD_CODE = re.compile(r"^%[fFuUdDnNickvm]$")
 QUIET_MODE = "do-not-disturb"
 APP_NAME = "hyperlab-desk"
+SAMPLE_SECONDS = 60
+try:  # a shorter interval only for the contract's run of the sampler
+    SAMPLE_SECONDS = max(1, min(3600, int(os.environ.get("HYPERLAB_DESK_SAMPLE_SECONDS", "60"))))
+except ValueError:
+    pass
+KEEP_DAYS = 35
+MAX_FOCUS_MINUTES = 480
 
 HOME = Path.home()
 CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
@@ -71,6 +87,7 @@ SYSTEM_CONFIG = Path(
     or "/etc/hyperlab-workspace/desks.json"
 )
 STATE_FILE = STATE_HOME / "hyperlab-workspace/desks-state.json"
+TIME_FILE = STATE_HOME / "hyperlab-workspace/desks-time.json"
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
 DATA_DIRS = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
 
@@ -559,6 +576,105 @@ def notify(summary: str) -> None:
         pass
 
 
+class StateLock:
+    """Serialise the writers of one state file."""
+
+    def __init__(self, name: str, blocking: bool = True) -> None:
+        self.path = STATE_FILE.parent / f".{name}.lock"
+        self.blocking = blocking
+
+    def __enter__(self) -> StateLock:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = open(self.path, "w")
+        flags = fcntl.LOCK_EX if self.blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        try:
+            fcntl.flock(self.handle, flags)
+        except BlockingIOError:
+            self.handle.close()
+            raise DeskError("another tracker already runs in this session") from None
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        fcntl.flock(self.handle, fcntl.LOCK_UN)
+        self.handle.close()
+
+
+def load_time() -> dict[str, Any]:
+    try:
+        data = json.loads(TIME_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def session_locked() -> bool:
+    result = subprocess.run(
+        ["pgrep", "-x", "-u", str(os.getuid()), "hyprlock"],
+        capture_output=True, timeout=5, check=False,
+    )
+    return result.returncode == 0
+
+
+def track_sample(now: float) -> None:
+    """Credit the minute just past to the Desk and slot in front."""
+    with StateLock("time"):
+        data = load_time()
+        if data.get("enabled") is not True:
+            return
+        last = data.get("last")
+        data["last"] = now
+        days = data.get("days") if isinstance(data.get("days"), dict) else {}
+        elapsed = now - last if isinstance(last, (int, float)) else 0
+        # A longer gap is a suspend, a stopped tracker or a clock change;
+        # it is never credited to anything.
+        if 0 < elapsed <= 2 * SAMPLE_SECONDS and not session_locked():
+            position = split_workspace(active_workspace())
+            if position is not None:
+                day = time.strftime("%Y-%m-%d", time.localtime(now))
+                bucket = days.get(day) if isinstance(days.get(day), dict) else {}
+                for key in (str(position[0]), f"{position[0]}.{position[1]}"):
+                    previous = bucket.get(key)
+                    previous = previous if isinstance(previous, int) else 0
+                    bucket[key] = previous + int(round(elapsed))
+                days[day] = bucket
+        cutoff = time.strftime("%Y-%m-%d", time.localtime(now - KEEP_DAYS * 86400))
+        data["days"] = {day: value for day, value in days.items() if day > cutoff}
+        write_json(TIME_FILE, data)
+
+
+def focus_state() -> dict[str, Any] | None:
+    focus = load_state().get("focus")
+    valid = (
+        isinstance(focus, dict)
+        and isinstance(focus.get("desk"), int)
+        and isinstance(focus.get("until"), (int, float))
+        and isinstance(focus.get("was_quiet"), bool)
+    )
+    return focus if valid else None
+
+
+def end_focus(model: dict[str, Any], now: float, early: bool = False) -> bool:
+    """Put back the quiet state a focus found, once its time is up."""
+    focus = focus_state()
+    if focus is None or (focus["until"] > now and not early):
+        return False
+    state = load_state()
+    quiet = quiet_desks()
+    if not focus["was_quiet"]:
+        quiet.discard(focus["desk"])
+    state["quiet"] = sorted(quiet)
+    state.pop("focus", None)
+    write_json(STATE_FILE, state)
+    try:
+        apply_quiet(current_desk(active_workspace()))
+    except DeskError:
+        pass  # The next Desk change applies it.
+    desks = model["desks"]
+    name = desks[focus["desk"] - 1]["name"] if focus["desk"] <= len(desks) else str(focus["desk"])
+    notify(f"Desk {name}: focus ended")
+    return True
+
+
 def last_slot(desk: int) -> int:
     last = load_state().get("last_slot")
     slot = last.get(str(desk)) if isinstance(last, dict) else None
@@ -600,7 +716,13 @@ def describe(model: dict[str, Any], workspace: int | None) -> dict[str, Any]:
         "desk_name": desk["name"] if desk else "",
         "project_name": project["name"] if project else "",
         "quiet": bool(position) and position[0] in quiet_desks(),
+        "focus_until": focus_until(position[0]) if position else None,
     }
+
+
+def focus_until(desk: int) -> float | None:
+    focus = focus_state()
+    return focus["until"] if focus and focus["desk"] == desk else None
 
 
 def command_model(_: argparse.Namespace) -> dict[str, Any]:
@@ -814,6 +936,91 @@ def command_quiet(args: argparse.Namespace) -> dict[str, Any]:
     return {"desk": desk, "desk_name": name, "quiet": wanted}
 
 
+def command_focus(args: argparse.Namespace) -> dict[str, Any]:
+    model = load_model()
+    now = time.time()
+    end_focus(model, now)
+    if args.minutes == "stop":
+        return {"ended": end_focus(model, now, early=True)}
+    try:
+        minutes = int(args.minutes)
+    except ValueError:
+        raise DeskError("focus takes a number of minutes or stop") from None
+    if not 1 <= minutes <= MAX_FOCUS_MINUTES:
+        raise DeskError(f"focus lasts 1 to {MAX_FOCUS_MINUTES} minutes")
+    if focus_state() is not None:
+        raise DeskError("a focus is already running; focus stop ends it")
+    desk = current_desk(active_workspace())
+    name = require_desk(model, desk)["name"]
+    state = load_state()
+    quiet = quiet_desks()
+    state["focus"] = {"desk": desk, "until": now + minutes * 60, "was_quiet": desk in quiet}
+    quiet.add(desk)
+    state["quiet"] = sorted(quiet)
+    write_json(STATE_FILE, state)
+    apply_quiet(desk)
+    notify(f"Desk {name}: focus for {minutes} min")
+    return {"desk": desk, "desk_name": name, "until": state["focus"]["until"]}
+
+
+def track_report(model: dict[str, Any], days: int, now: float) -> dict[str, Any]:
+    first = time.strftime("%Y-%m-%d", time.localtime(now - (days - 1) * 86400))
+    totals: dict[str, int] = {}
+    stored = load_time().get("days")
+    for day, bucket in (stored.items() if isinstance(stored, dict) else []):
+        if day >= first and isinstance(bucket, dict):
+            for key, seconds in bucket.items():
+                if isinstance(seconds, int):
+                    totals[key] = totals.get(key, 0) + seconds
+    report = []
+    for index, desk in enumerate(model["desks"], start=1):
+        names = {item["slot"]: item["name"] for item in desk["projects"]}
+        slots = [
+            {"slot": slot, "project": names.get(slot, ""),
+             "minutes": totals[f"{index}.{slot}"] // 60}
+            for slot in SLOTS if totals.get(f"{index}.{slot}", 0) >= 60
+        ]
+        report.append({"desk": index, "name": desk["name"],
+                       "minutes": totals.get(str(index), 0) // 60, "slots": slots})
+    return {"days": days, "desks": report}
+
+
+def command_track(args: argparse.Namespace) -> dict[str, Any]:
+    now = time.time() if args.now is None else args.now
+    if args.action in ("on", "off", "clear"):
+        with StateLock("time"):
+            data = {} if args.action == "clear" else load_time()
+            if args.action != "clear":
+                data["enabled"] = args.action == "on"
+                data["last"] = now
+            write_json(TIME_FILE, data)
+        return {"tracking": data.get("enabled") is True}
+    if args.action == "sample":
+        end_focus(load_model(), now)
+        track_sample(now)
+        return {"tracking": load_time().get("enabled") is True}
+    if args.action == "report":
+        if not 1 <= args.days <= KEEP_DAYS:
+            raise DeskError(f"a report covers 1 to {KEEP_DAYS} days")
+        return track_report(load_model(), args.days, now)
+    # run: one sampler per session, started by Hyprland; it also ends a
+    # focus on time. It stops once Hyprland has been gone for three samples.
+    with StateLock("tracker", blocking=False):
+        failures = 0
+        while failures < 3:
+            try:
+                active_workspace()  # raises once Hyprland is gone, tracking or not
+                end_focus(load_model(), time.time())
+                track_sample(time.time())
+                failures = 0
+            except DeskError:
+                failures += 1
+            except (OSError, subprocess.TimeoutExpired):
+                pass  # A full disk or a slow pgrep skips one minute.
+            time.sleep(SAMPLE_SECONDS)
+    return {"stopped": "Hyprland is gone"}
+
+
 def command_check(args: argparse.Namespace) -> dict[str, Any]:
     model = validate(json.loads(Path(args.path).read_text()))
     return {"valid": True, "desks": len(model["desks"])}
@@ -875,6 +1082,14 @@ def parser() -> argparse.ArgumentParser:
                 "keep notifications out of sight while a Desk is in front")
     quiet.add_argument("action", choices=("on", "off", "toggle", "sync"))
     quiet.add_argument("--desk", type=int)
+
+    focus = add("focus", command_focus, "quiet the Desk in front for N minutes")
+    focus.add_argument("minutes", help="1 to 480, or stop")
+
+    track = add("track", command_track, "opt-in time per Desk and slot, kept locally")
+    track.add_argument("action", choices=("on", "off", "clear", "report", "sample", "run"))
+    track.add_argument("--days", type=int, default=7)
+    track.add_argument("--now", type=float, help=argparse.SUPPRESS)
 
     add("check", command_check, "validate a desks.json file").add_argument("path")
     return root

@@ -169,6 +169,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("mako")
     -- The Desk in front may be quiet; mako starts out of its quiet mode.
     hl.exec_cmd("hyperlab-desk quiet sync")
+    -- Ends a focus on time and, only if the user turned it on, counts time
+    -- per Desk; one per session, gone with Hyprland.
+    hl.exec_cmd("hyperlab-desk track run")
 {% if not guest_desktop_hyprland_headless_monitor %}
     hl.exec_cmd("hypridle")
 {% else %}

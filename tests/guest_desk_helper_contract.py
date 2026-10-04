@@ -23,7 +23,12 @@ What it proves:
      in its folder; nothing it cannot map, and no process argument, is kept;
   7. a quiet Desk puts the notification daemon in its do-not-disturb mode
      whenever that Desk comes to the front, and takes it out when another
-     Desk does.
+     Desk does; a focus quiets the Desk in front for a time and then puts
+     back the quiet state it found;
+  8. time tracking is off until turned on, credits only sampled minutes of
+     an unlocked session to the Desk and slot in front, never a gap, keeps
+     five weeks, and its sampler runs once per session and stops when
+     Hyprland is gone.
 """
 
 from __future__ import annotations
@@ -60,6 +65,10 @@ class Lab:
             )
             stand_in.chmod(0o755)
         self.notify_log = base / "notify.log"
+        pgrep = self.bin / "pgrep"
+        pgrep.write_text('#!/bin/sh\n[ -n "${FAKE_LOCKED:-}" ] && exit 0\nexit 1\n')
+        pgrep.chmod(0o755)
+        self.extra: dict[str, str] = {}
         self.state = base / "hypr.json"
         self.log = base / "hypr.log"
         self.set(active=1, windows={})
@@ -87,6 +96,7 @@ class Lab:
             "XDG_DATA_HOME": str(self.base / "data-home"),
             "XDG_DATA_DIRS": str(self.base / "data-dirs"),
             "FAKE_NOTIFY_LOG": str(self.notify_log),
+            **self.extra,
         }
         result = subprocess.run(
             [sys.executable, str(HELPER), *args],
@@ -341,6 +351,94 @@ def check_quiet(lab: Lab) -> None:
         lab.json("quiet", "off", "--desk", str(desk))
 
 
+def check_focus(lab: Lab) -> None:
+    def modes() -> list[str]:
+        lines = lab.notify_log.read_text().splitlines()
+        lab.notify_log.write_text("")
+        return [line for line in lines if line.startswith("makoctl")]
+
+    lab.set(active=11, windows={})
+    lab.notify_log.write_text("")
+    started = lab.json("focus", "25")
+    assert started["desk"] == 1 and modes() == ["makoctl mode -a do-not-disturb"]
+    status = lab.json("status")
+    assert status["quiet"] is True and status["focus_until"] == started["until"]
+    lab.run("focus", "10", ok=False)  # one focus at a time
+    # Before its time nothing changes; after it the Desk is loud again.
+    lab.json("track", "sample", "--now", str(started["until"] - 5))
+    assert lab.json("status")["quiet"] is True and modes() == []
+    lab.json("track", "sample", "--now", str(started["until"] + 1))
+    status = lab.json("status")
+    assert status["quiet"] is False and status["focus_until"] is None
+    assert modes() == ["makoctl mode -r do-not-disturb"]
+
+    # A Desk that was quiet before the focus stays quiet after it.
+    lab.json("quiet", "on")
+    lab.json("focus", "5")
+    assert lab.json("focus", "stop") == {"ended": True}
+    assert lab.json("status")["quiet"] is True
+    assert lab.json("focus", "stop") == {"ended": False}
+    lab.json("quiet", "off")
+    for bad in ("0", "481", "soon"):
+        lab.run("focus", bad, ok=False)
+
+
+def check_tracking(lab: Lab) -> None:
+    time_file = lab.home / ".local/state/hyperlab-workspace/desks-time.json"
+
+    def sample(now: int, active: int, locked: bool = False) -> None:
+        lab.set(active=active, windows={})
+        lab.extra = {"FAKE_LOCKED": "1"} if locked else {}
+        lab.json("track", "sample", "--now", str(now))
+        lab.extra = {}
+
+    def report(now: int) -> dict:
+        data = lab.json("track", "report", "--days", "1", "--now", str(now))
+        return {desk["desk"]: desk for desk in data["desks"]}
+
+    # Off until turned on: a sample writes nothing.
+    sample(1000, 12)
+    assert not time_file.exists()
+    assert all(desk["minutes"] == 0 for desk in report(1000).values())
+
+    lab.json("track", "on", "--now", "1000")
+    sample(1060, 12)                 # Desk 1, slot 2
+    sample(1120, 12, locked=True)    # locked: not credited
+    sample(1180, 23)                 # Desk 2, slot 3
+    sample(2000, 23)                 # a gap of 820 s: not credited
+    sample(2060, 23)
+    desks = report(2060)
+    assert desks[1]["minutes"] == 1 and desks[1]["slots"][0]["slot"] == 2
+    assert desks[2]["minutes"] == 2 and [s["slot"] for s in desks[2]["slots"]] == [3]
+    assert desks[3]["minutes"] == 0 and desks[3]["slots"] == []
+    assert "1.2" in time_file.read_text() and "pid" not in time_file.read_text()
+
+    # Five weeks are kept; older days go.
+    later = 2060 + 40 * 86400
+    sample(later, 11)
+    sample(later + 60, 11)
+    days = json.loads(time_file.read_text())["days"]
+    assert len(days) == 1 and report(later + 60)[1]["minutes"] == 1
+
+    lab.json("track", "off", "--now", str(later + 60))
+    sample(later + 120, 11)
+    assert report(later + 120)[1]["minutes"] == 1, "a sample after off was credited"
+    lab.run("track", "report", "--days", "36", ok=False)
+    assert lab.json("track", "clear") == {"tracking": False}
+    assert report(later + 120)[1]["minutes"] == 0
+
+    # One sampler per session, and it ends once Hyprland is gone.
+    lock = lab.home / ".local/state/hyperlab-workspace/.tracker.lock"
+    import fcntl
+    with open(lock, "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        lab.run("track", "run", ok=False)
+    lab.extra = {"HYPERLAB_DESK_SAMPLE_SECONDS": "1", "FAKE_HYPR_STATE": str(lab.base / "gone.json")}
+    stopped = lab.json("track", "run")
+    lab.extra = {}
+    assert stopped == {"stopped": "Hyprland is gone"}, stopped
+
+
 def check_refused_configuration(lab: Lab) -> None:
     good = lab.user_config.read_text()
     broken = json.loads(good)
@@ -387,6 +485,8 @@ def main() -> int:
         check_projects(lab)
         check_restore(lab)
         check_quiet(lab)
+        check_focus(lab)
+        check_tracking(lab)
         check_refused_configuration(lab)
     print("HyperLab guest Desk helper contract: OK")
     return 0

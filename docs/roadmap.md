@@ -149,6 +149,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       (software-verified)
 - [ ] shell-owned notifications: who owns them is
       [ADR 0027](adr/0027-guest-notification-owner.md), proposed
+- [x] per-Desk focus (a quiet Desk for a set time) and opt-in, local time
+      tracking per Desk and slot, in the Desk helper (software-verified)
+- [ ] the shell shows the quiet state, a running focus and the time report
 - [x] the same shell on every workstation Template, not only `arch-dev-vfio`:
       the role's default, applied by every workstation Template's profile
       playbook and overridden by none (software-verified)
@@ -419,7 +422,6 @@ Measured with the complete security plane active.
 
 - **M13 — seamless guest applications:** future work, and never described as
   providing Qubes OS security properties.
-- per-Desk focus modes and time tracking in the guest shell
 - Sway native parity acceptance (Sway remains the recovery session)
 
 ## C10 — Machine Factory

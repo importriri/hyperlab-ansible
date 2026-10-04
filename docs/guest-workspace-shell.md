@@ -139,6 +139,11 @@ hyperlab-desk project-save 1 1      # remember the applications open there now
 hyperlab-desk project-forget 1 1    # back to the launch commands
 hyperlab-desk quiet toggle          # quiet the Desk in front (ALT+SHIFT+N)
 hyperlab-desk quiet on --desk 2     # quiet Desk 2 whenever it is in front
+hyperlab-desk focus 50              # quiet the Desk in front for 50 minutes
+hyperlab-desk focus stop
+hyperlab-desk track on              # opt in to time per Desk (off by default)
+hyperlab-desk track report --days 7
+hyperlab-desk track clear           # erase every recorded minute
 hyperlab-desk model            # what the shell sees
 hyperlab-desk check FILE       # validate a desks.json before using it
 ```
@@ -172,6 +177,19 @@ another Desk comes to the front. The helper sets the mode whenever the Desk
 in front changes, and Hyprland runs `hyperlab-desk quiet sync` at session
 start. `hyperlab-desk status` reports `quiet`. Who draws notifications, mako
 or the shell, is [ADR 0027](adr/0027-guest-notification-owner.md), proposed.
+
+A focus is a quiet Desk for a set time: `focus 50` quiets the Desk in front
+and, fifty minutes later, puts back the quiet state it found, with a notice.
+`status` reports `focus_until`.
+
+Time tracking is off until you turn it on. Once on, a sampler that Hyprland
+starts with the session credits each minute to the Desk and slot in front,
+only while the session is unlocked; a longer gap (suspend, a stopped
+sampler) is credited to nothing. The totals stay in
+`~/.local/state/hyperlab-workspace/desks-time.json` for five weeks, are never
+sent anywhere, and `track clear` erases them. It cannot tell an idle
+unlocked session from work. The sampler also ends a focus on time; it runs
+once per session and stops when Hyprland is gone.
 
 ## Files
 
@@ -245,7 +263,7 @@ The role installs the shell only for the reviewed Quickshell API series
 
 | Contract | Proves |
 | --- | --- |
-| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, remembered applications, quiet Desks, refused configuration |
+| `tests/guest_desk_helper_contract.py` | Desk arithmetic, slot memory, project slots and launches, remembered applications, quiet Desks, focus, time tracking, refused configuration |
 | `tests/guest_workspace_shell_runtime_contract.py` | the real QML in an offscreen scene: readouts, Desks, overview, launcher, refusals |
 | `tests/guest_workspace_shell_contract.py` | no trust or host knowledge in the guest, lock in hyprlock, keys and fallbacks, role wiring |
 | `tests/guest_presentation_contract.py` | exactly one bar, fullscreen and tearing policy |
