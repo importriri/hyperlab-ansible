@@ -6,7 +6,7 @@
       - image_factory_manifest is string
       - image_factory_manifest | length > 0
     fail_msg: >-
-      image_factory_operation must be prepare or validate, and
+      image_factory_operation must be prepare, validate or rereceipt, and
       image_factory_manifest must name one checked-in file below images/.
 
 - name: Inspect the verified image-store identity manifest
@@ -70,7 +70,8 @@
       - --store
       - "{{ hyperlab_root }}"
       - --operation
-      - "{{ image_factory_operation }}"
+      # Re-receipt plans exactly what validation plans.
+      - "{{ 'validate' if image_factory_operation == 'rereceipt' else image_factory_operation }}"
       - --source-url
       - "{{ image_factory_source_url }}"
       - --source-sha256
@@ -191,6 +192,10 @@
 - name: Prepare the selected image transaction
   when: image_factory_operation == 'prepare'
   ansible.builtin.include_tasks: prepare.yml
+
+- name: Re-issue the receipt of the selected sealed official image
+  when: image_factory_operation == 'rereceipt'
+  ansible.builtin.include_tasks: rereceipt.yml
 
 - name: Record that the image_factory brick is available
   ansible.builtin.include_role:

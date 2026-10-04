@@ -2,11 +2,13 @@
 image_factory_supported_operations:
   - prepare
   - validate
+  - rereceipt
 
 image_factory_plan_tool: "{{ image_factory_repository_root }}/tools/image_plan.py"
 image_factory_inspect_tool: "{{ image_factory_repository_root }}/tools/image_inspect.py"
 image_factory_receipt_guard_tool: "{{ image_factory_repository_root }}/tools/image_receipt_guard.py"
 image_factory_guest_agent_tool: "{{ image_factory_repository_root }}/tools/image_guest_agent.py"
+image_factory_official_checksum_tool: "{{ image_factory_repository_root }}/tools/official_checksum.py"
 image_factory_schema_validator: "{{ image_factory_repository_root }}/tools/schema_select.py"
 image_factory_windows_workshop_guard_tool: >-
   {{ image_factory_repository_root }}/tools/windows_workshop_guard.py

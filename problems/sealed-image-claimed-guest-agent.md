@@ -48,6 +48,10 @@ cannot be reached safely.
   `images/debian-server.yml` (not built) is that base captured with the
   agent; `server-debian`, `debian-dev` and `svc-jellyfin` use it, and
   `server-debian` is a draft until it is sealed.
+- Correcting the claim changes the manifest policy that the Debian receipt
+  binds, so the sealed base fails validation until
+  `playbooks/image-rereceipt.yml` re-issues its receipt
+  ([ADR 0024](../docs/adr/0024-rereceipt-after-policy-change.md)).
 
 ## Regression proof
 

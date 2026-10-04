@@ -1,0 +1,16 @@
+---
+# Re-issue the provenance receipt of one sealed official cloud image after its
+# manifest policy changed (ADR 0024). The base is only read and checked again
+# against its pin and the vendor's checksum; only the receipt is rewritten.
+- name: Re-issue one sealed official image's provenance receipt
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    image_factory_operation: rereceipt
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: image_factory
+    - image_factory

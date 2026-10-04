@@ -1,0 +1,159 @@
+---
+# Re-issue the provenance receipt of a sealed official cloud image after its
+# manifest policy changed (ADR 0024). For an official cloud image the sealed
+# base is the verified download itself, byte for byte, so it is the source:
+# it is checked again against the pinned digest and against the vendor's own
+# checksum file, fetched again now. Only then is the receipt rewritten. The
+# base is read, never moved, replaced or deleted.
+
+- name: Read the vendor checksum location from the manifest
+  ansible.builtin.set_fact:
+    image_factory_source_checksum_url: >-
+      {{ (lookup('ansible.builtin.file', image_factory_plan.manifest_path)
+          | from_yaml).source_checksum_url | default('') }}
+
+- name: Require the exact image name, a sealed official image and its base
+  ansible.builtin.assert:
+    that:
+      - image_factory_confirm_rereceipt == image_factory_plan.id
+      - image_factory_transaction_complete
+      - image_factory_plan.manifest_status == 'sealed'
+      - image_factory_plan.source_type == 'official-cloud'
+      - image_factory_source_checksum_url is string
+      - image_factory_source_checksum_url is match('^https://')
+      - image_factory_plan.manifest_artifact_sha256 == image_factory_plan.source_sha256
+    fail_msg: >-
+      Re-receipt rewrites the provenance receipt of one sealed official cloud
+      image whose base is its verified download. Repeat with
+      -e image_factory_confirm_rereceipt={{ image_factory_plan.id }}. A
+      Workbench or workshop image is imported again instead.
+
+- name: Predict the re-receipt in check mode
+  when: ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would check {{ image_factory_plan.base_path }} against
+      {{ image_factory_plan.source_sha256 }} and the official checksum file,
+      then rewrite only {{ image_factory_plan.receipt_path }}.
+  changed_when: true
+
+- name: Acquire the per-image factory lock
+  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ image_factory_mkdir_bin }}"
+      - "{{ image_factory_plan.lock_path }}"
+  register: image_factory_lock_acquire
+  changed_when: image_factory_lock_acquire.rc == 0
+
+- name: Check the base and rewrite only the receipt while holding the lock
+  when: not ansible_check_mode
+  block:
+    - name: Inspect the committed base as the source it was downloaded as
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_python_bin }}"
+          - "{{ image_factory_inspect_tool }}"
+          - --path
+          - "{{ image_factory_plan.base_path }}"
+          - --qemu-img
+          - "{{ image_factory_qemu_img_bin }}"
+          - --expected-format
+          - "{{ image_factory_plan.format }}"
+          - --expected-size-gib
+          - "{{ image_factory_plan.virtual_size_gib | int }}"
+      register: image_factory_rereceipt_inspection
+      changed_when: false
+
+    - name: Publish the base inspection as receipt evidence
+      ansible.builtin.set_fact:
+        image_factory_candidate: "{{ image_factory_rereceipt_inspection.stdout | from_json }}"
+
+    - name: Refuse a base that is not the pinned download
+      ansible.builtin.assert:
+        that:
+          - image_factory_candidate.sha256 == image_factory_plan.source_sha256
+        fail_msg: >-
+          {{ image_factory_plan.base_path }} is not the pinned download
+          ({{ image_factory_plan.source_sha256 }}). Nothing was changed.
+
+    - name: Create a private workspace for the official checksum file
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ image_factory_tmp_root }}"
+        prefix: "hyperlab-rereceipt.{{ image_factory_plan.id }}."
+      register: image_factory_rereceipt_workspace
+
+    - name: Fetch the vendor's checksum file again
+      ansible.builtin.get_url:
+        url: "{{ image_factory_source_checksum_url }}"
+        dest: "{{ image_factory_rereceipt_workspace.path }}/checksums"
+        owner: root
+        group: root
+        mode: "0600"
+        force: true
+
+    - name: Check the base against the vendor's own checksum
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_python_bin }}"
+          - "{{ image_factory_official_checksum_tool }}"
+          - --checksums
+          - "{{ image_factory_rereceipt_workspace.path }}/checksums"
+          - --basename
+          - "{{ image_factory_plan.source_basename }}"
+          - --artifact
+          - "{{ image_factory_plan.base_path }}"
+      register: image_factory_official_checksum
+      changed_when: false
+
+    - name: Render the re-issued receipt beside the current one
+      ansible.builtin.template:
+        src: receipt.yml.j2
+        dest: "{{ image_factory_plan.receipt_new_path }}"
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Replace the receipt atomically
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_mv_bin }}"
+          - "{{ image_factory_plan.receipt_new_path }}"
+          - "{{ image_factory_plan.receipt_path }}"
+      changed_when: true
+
+    - name: Validate the image against its new receipt
+      ansible.builtin.include_tasks: validate.yml
+
+  rescue:
+    - name: Remove only a staged receipt that was never committed
+      ansible.builtin.file:
+        path: "{{ image_factory_plan.receipt_new_path }}"
+        state: absent
+
+    - name: Fail with the base untouched
+      ansible.builtin.fail:
+        msg: >-
+          Re-receipt of {{ image_factory_plan.id }} failed. The base was only
+          read; the previous receipt stays unless the new one was already
+          committed and failed validation.
+
+  always:
+    - name: Remove the checksum workspace
+      when: image_factory_rereceipt_workspace.path is defined
+      ansible.builtin.file:
+        path: "{{ image_factory_rereceipt_workspace.path }}"
+        state: absent
+
+    - name: Release the per-image factory lock
+      when:
+        - image_factory_lock_acquire is defined
+        - image_factory_lock_acquire.rc == 0
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_rmdir_bin }}"
+          - "{{ image_factory_plan.lock_path }}"
+      register: image_factory_lock_release
+      changed_when: image_factory_lock_release.rc == 0
+      failed_when: image_factory_lock_release.rc != 0

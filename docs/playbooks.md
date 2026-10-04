@@ -98,12 +98,31 @@ These playbooks are maintenance tools, not an alternative installation order.
 - `windows-workshop.yml` records privacy-safe evidence for one Windows master.
 - `image-prepare.yml` acquires or imports one image transaction.
 - `image-validate.yml` validates an already sealed image without replacing it.
+- `image-rereceipt.yml` re-issues the provenance receipt of one sealed
+  official cloud image after its manifest policy changed
+  ([ADR 0024](adr/0024-rereceipt-after-policy-change.md)).
 
 Every image starts in check mode. Public manifests stay `not-built` until the
 operator commits reviewed checksum and provenance evidence. Interactive source
 builds are documented in [`windows-image-workshop.md`](windows-image-workshop.md)
 and [`linux-iso-workshop.md`](linux-iso-workshop.md); virt-manager stops at the
 workshop boundary and never owns a managed domain.
+
+A receipt binds the manifest's policy: every field except `status`,
+`sha256` and the observed Looking Glass build. Correcting one of those
+fields, as when `supports.qemu_guest_agent` was found to be false for Debian,
+makes the sealed image fail validation until its receipt is re-issued:
+
+```bash
+ansible-playbook -K playbooks/image-rereceipt.yml \
+  -e image_factory_manifest=images/debian.yml \
+  -e image_factory_confirm_rereceipt=debian
+```
+
+It refuses without the exact image id, for an image that is not a sealed
+official cloud download, and when the base differs from its pinned digest
+or from the vendor's checksum file, which it fetches again. The base is only
+read; only the receipt is replaced, and the image is validated against it.
 
 ## VM lifecycle
 

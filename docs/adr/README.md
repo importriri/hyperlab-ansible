@@ -55,6 +55,9 @@ entered the pipeline.
     ladder, the ceiling rule, services and the per-run lease.
 23. [`0023-gaming-identities.md`](0023-gaming-identities.md) — gaming
     uses clean, dirty and lab, not a separate PLAY identity.
+24. [`0024-rereceipt-after-policy-change.md`](0024-rereceipt-after-policy-change.md)
+    — a sealed official image's receipt is re-issued after a policy change
+    only when its base still is the vendor's verified download.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
