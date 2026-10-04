@@ -1109,6 +1109,10 @@ Scope {
                 || typeof entry.display_name !== "string"
                 || typeof entry.creatable !== "boolean"
                 || typeof entry.blocked_reason !== "string"
+                || !Array.isArray(entry.lifecycles)
+                || entry.lifecycles.length === 0
+                || !entry.lifecycles.every(
+                    lifecycle => lifecycle === "permanent" || lifecycle === "disposable")
                 || !Array.isArray(entry.network_profiles)
                 || !entry.network_profiles.every(
                     network => state.provenanceOrder.indexOf(network) >= 0
@@ -1168,6 +1172,11 @@ Scope {
                 "displayName": entry.display_name,
                 "os": typeof entry.os === "string" ? entry.os : "",
                 "device": entry.device_capability === "vfio" ? "vfio" : "standard",
+                "lifecycles": entry.lifecycles.slice(),
+                "defaultLifecycle":
+                    entry.lifecycles.indexOf(entry.default_lifecycle) >= 0
+                    ? entry.default_lifecycle
+                    : entry.lifecycles[0],
                 "networks": entry.network_profiles.slice(),
                 "defaultNetwork":
                     entry.network_profiles.indexOf(entry.default_network) >= 0
@@ -1251,7 +1260,8 @@ Scope {
     }
 
     // The first reason this request would be refused, or "" when the plan
-    // allows it. form: { template, name, network, profile, memory, vcpus, disk }
+    // allows it. form: { template, name, lifecycle, network, profile,
+    // memory, vcpus, disk }
     function createProblem(form) {
         if (state.createPlan.state !== "ok")
             return "The creation plan has not been read";
@@ -1271,6 +1281,9 @@ Scope {
 
         if (state.machineById(name) !== null)
             return "A Machine named " + name + " already exists";
+
+        if (template.lifecycles.indexOf(String(form.lifecycle)) < 0)
+            return "Choose permanent or disposable";
 
         if (template.networks.indexOf(String(form.network)) < 0)
             return "Choose a network this Template allows";
@@ -1306,6 +1319,7 @@ Scope {
         const out = [
             String(form.template),
             String(form.name),
+            String(form.lifecycle),
             String(form.network),
             String(form.profile)
         ];

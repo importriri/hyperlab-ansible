@@ -27,8 +27,9 @@ Creation is split along the existing boundary.
   Template needs a password, and the guest key's fingerprint. Every value
   comes from the same factory code that creates the record; the shell only
   shows them.
-- **Intent.** `privatestack-machine-actions create TEMPLATE NAME NETWORK
-  PROFILE [MEMORY VCPUS DISK]` takes positional, validated values only. It
+- **Intent.** `privatestack-machine-actions create TEMPLATE NAME LIFECYCLE
+  NETWORK PROFILE [MEMORY VCPUS DISK]` takes positional, validated values
+  only. It
   runs `hyperlabctl machine create` and `project`, which refuse anything the
   Template forbids, and answers with structured JSON. A refusal leaves no
   record behind.

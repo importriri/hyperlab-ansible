@@ -25,6 +25,7 @@ Item {
     signal closed()
 
     property string templateId: ""
+    property string lifecycle: ""
     property string network: ""
     property string profile: ""
 
@@ -34,6 +35,7 @@ Item {
     readonly property var form: ({
         "template": view.templateId,
         "name": nameInput.text,
+        "lifecycle": view.lifecycle,
         "network": view.network,
         "profile": view.profile,
         "memory": memoryInput.text,
@@ -55,6 +57,7 @@ Item {
             return;
 
         view.templateId = entry.id;
+        view.lifecycle = entry.defaultLifecycle;
         view.network = entry.defaultNetwork;
         view.profile = entry.defaultProfile;
 
@@ -291,6 +294,65 @@ Item {
 
                         Accessible.role: Accessible.EditableText
                         Accessible.name: "Machine name"
+                    }
+                }
+
+                SectionHeader {
+                    width: parent.width
+                    tokens: view.tokens
+                    theme: view.theme
+                    label: "Lifecycle"
+                    description: "Permanent keeps its disk. Disposable throws away everything it wrote whenever it stops."
+                }
+
+                Flow {
+                    width: parent.width
+                    spacing: view.tokens.spaceSm
+
+                    Repeater {
+                        model: view.template !== null ? view.template.lifecycles : []
+
+                        delegate: ShellControl {
+                            required property var modelData
+
+                            objectName: "createLifecycle-" + modelData
+                            width: Math.min(300, frame.bodyWidth)
+                            height: lifecycleText.implicitHeight + view.tokens.spaceMd * 2
+                            tokens: view.tokens
+                            theme: view.theme
+                            selected: view.lifecycle === modelData
+                            accessibleName: modelData + " Machine"
+
+                            content: [
+                                Column {
+                                    id: lifecycleText
+                                    width: Math.min(300, frame.bodyWidth) - view.tokens.controlPadding * 2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: view.tokens.spaceXs
+
+                                    ShellLabel {
+                                        tokens: view.tokens
+                                        role: "label"
+                                        text: modelData === "disposable" ? "Disposable" : "Permanent"
+                                        color: view.theme.textPrimary
+                                    }
+
+                                    ShellLabel {
+                                        width: parent.width
+                                        tokens: view.tokens
+                                        role: "meta"
+                                        wrapMode: Text.Wrap
+                                        color: view.theme.textSecondary
+                                        text:
+                                            modelData === "disposable"
+                                            ? "Every start is a fresh first boot from the sealed image"
+                                            : "An independent copy; what it writes stays"
+                                    }
+                                }
+                            ]
+
+                            onActivated: view.lifecycle = modelData
+                        }
                     }
                 }
 

@@ -15,7 +15,7 @@ everything before it acts.
 Creation crosses it as two more questions (ADR 0017):
 
   create-plan                                   what may be created, within which limits
-  create TEMPLATE NAME NETWORK PROFILE [MEMORY VCPUS DISK]
+  create TEMPLATE NAME LIFECYCLE NETWORK PROFILE [MEMORY VCPUS DISK]
                                                 record, project, then provision
 
 Every response is one JSON object on stdout so the shell reads structure
@@ -389,10 +389,10 @@ def create_plan() -> dict[str, Any]:
 def create(args: list[str]) -> None:
     """Record, project and provision one Machine; every value re-checked here
     against the plan, then again by the factory."""
-    if len(args) not in (4, 7):
-        raise Refused("usage: create TEMPLATE NAME NETWORK PROFILE [MEMORY VCPUS DISK]")
-    template_id, name, network, profile = args[:4]
-    for value in (template_id, network, profile):
+    if len(args) not in (5, 8):
+        raise Refused("usage: create TEMPLATE NAME LIFECYCLE NETWORK PROFILE [MEMORY VCPUS DISK]")
+    template_id, name, lifecycle, network, profile = args[:5]
+    for value in (template_id, lifecycle, network, profile):
         if not TOKEN.fullmatch(value):
             raise Refused("invalid creation request")
     if not MACHINE_ID.fullmatch(name):
@@ -406,17 +406,19 @@ def create(args: list[str]) -> None:
     template = matches[0]
     if template.get("creatable") is not True:
         raise Refused(str(template.get("blocked_reason") or "the Template cannot be created"))
+    if lifecycle not in template.get("lifecycles", []):
+        raise Refused("the Template does not allow that lifecycle")
     if network not in template.get("network_profiles", []):
         raise Refused("the Template does not allow that network")
     if profile not in template.get("resource_profiles", []):
         raise Refused("the Template does not allow that resource profile")
 
-    command = ["machine", "create", template_id, name,
+    command = ["machine", "create", template_id, name, "--lifecycle", lifecycle,
                "--network-profile", network, "--resource-profile", profile]
     if profile == "custom":
-        if len(args) != 7 or not all(NUMBER.fullmatch(value) for value in args[4:]):
+        if len(args) != 8 or not all(NUMBER.fullmatch(value) for value in args[5:]):
             raise Refused("custom resources need memory, vCPUs and disk")
-        memory, vcpus, disk = (int(value) for value in args[4:])
+        memory, vcpus, disk = (int(value) for value in args[5:])
         limits = template.get("custom")
         keys = ("memory_mb_min", "vcpus_min", "vcpus_max", "disk_gib_min")
         if not isinstance(limits, dict) or not all(
@@ -429,7 +431,7 @@ def create(args: list[str]) -> None:
         if disk < limits["disk_gib_min"]:
             raise Refused(f"the disk must be at least {limits['disk_gib_min']} GiB")
         command += ["--memory-mb", str(memory), "--vcpus", str(vcpus), "--disk-gib", str(disk)]
-    elif len(args) != 4:
+    elif len(args) != 5:
         raise Refused("only custom resources take values")
     mode = template.get("looking_glass_mode")
     if mode not in (None, "disabled"):

@@ -71,7 +71,7 @@ SERVER = OPEN + """
             submit.activated();
             check(sharedMachineActions.created.length === 1
                   && JSON.stringify(sharedMachineActions.created[0])
-                     === JSON.stringify(["server-debian", "srv-deb-02", "services", "balanced"]),
+                     === JSON.stringify(["server-debian", "srv-deb-02", "permanent", "services", "balanced"]),
                   "the bridge got a different request: "
                   + JSON.stringify(sharedMachineActions.created));
             check(window.find(workspaceSurface, "createKey").text.indexOf("SHA256:") >= 0,
@@ -83,6 +83,9 @@ SERVER = OPEN + """
 CUSTOM = OPEN + """
             window.find(workspaceSurface, "createTemplate-server-fedora").activated();
             window.find(workspaceSurface, "createName").text = "srv-fed-02";
+            check(window.find(workspaceSurface, "createLifecycle-permanent").selected,
+                  "a server does not start as permanent, its Template default");
+            window.find(workspaceSurface, "createLifecycle-disposable").activated();
             window.find(workspaceSurface, "createProfile-custom").activated();
             const memory = window.find(workspaceSurface, "createMemory");
             const vcpus = window.find(workspaceSurface, "createVcpus");
@@ -104,7 +107,7 @@ CUSTOM = OPEN + """
             check(window.find(workspaceSurface, "createSubmit").enabled, "a valid custom request was refused");
             window.find(workspaceSurface, "createSubmit").activated();
             check(JSON.stringify(sharedMachineActions.created[0])
-                  === JSON.stringify(["server-fedora", "srv-fed-02", "dev", "custom", "4096", "2", "24"]),
+                  === JSON.stringify(["server-fedora", "srv-fed-02", "disposable", "dev", "custom", "4096", "2", "24"]),
                   "custom values reached the bridge differently: "
                   + JSON.stringify(sharedMachineActions.created));
             // A refusal from the bridge is shown as its own reason.
@@ -119,6 +122,8 @@ WORKSTATION = OPEN + """
             check(work !== null && work.enabled, "workstation-dev is not offered");
             work.activated();
             window.find(workspaceSurface, "createName").text = "dev-02";
+            check(window.find(workspaceSurface, "createLifecycle-disposable") === null,
+                  "a workstation offered a disposable Machine (ADR 0018)");
             check(window.find(workspaceSurface, "createProfile-performance") !== null
                   && window.find(workspaceSurface, "createProfile-minimum") === null,
                   "the resource profiles are not the Template's");

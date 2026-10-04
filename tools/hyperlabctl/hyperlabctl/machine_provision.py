@@ -124,6 +124,7 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
             # The same label the Machine cards show, from the manifest.
             "os": os_label(image),
             "lifecycles": entry["lifecycles"],
+            "default_lifecycle": entry["defaults"]["lifecycle"],
             "device_capability": entry["defaults"]["device_capability"],
             "network_profiles": entry["network_profiles"],
             "default_network": entry["defaults"]["network_profile"],

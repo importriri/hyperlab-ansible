@@ -155,8 +155,10 @@ reviewed backend remains the enforcement layer.
 **New Machine** in the Machines header replaces the inventory with the
 Create view ([ADR 0017](adr/0017-shell-machine-creation.md)). It reads
 `privatestack-machine-actions create-plan` each time it opens, and shows
-only what the Machine factory allows: the ready Templates, the networks of
-the chosen Template, its resource profiles with what each resolves to, and
+only what the Machine factory allows: the ready Templates, the lifecycles
+(permanent, or disposable where the Template allows it, see
+[ADR 0018](adr/0018-disposable-discards-on-stop.md)) and networks of the
+chosen Template, its resource profiles with what each resolves to, and
 for custom resources the limits they are checked against (memory floor of
 the image, vCPUs up to the host's, disk at least the sealed image). A
 Template that cannot be created stays visible, disabled, with the reason.

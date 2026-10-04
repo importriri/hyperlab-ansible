@@ -435,13 +435,14 @@ Scope {
         return true;
     }
 
-    // args: [TEMPLATE, NAME, NETWORK, PROFILE, (MEMORY, VCPUS, DISK)], built
-    // by ShellState.createArguments; the bridge validates them again.
+    // args: [TEMPLATE, NAME, LIFECYCLE, NETWORK, PROFILE, (MEMORY, VCPUS,
+    // DISK)], built by ShellState.createArguments; the bridge validates them
+    // again.
     function submitCreate(args) {
         if (
             machineActions.creating
             || !Array.isArray(args)
-            || (args.length !== 4 && args.length !== 7)
+            || (args.length !== 5 && args.length !== 8)
             || !args.every(value => typeof value === "string"
                 && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value))
         )

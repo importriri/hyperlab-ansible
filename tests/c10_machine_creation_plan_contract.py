@@ -86,6 +86,8 @@ def check_plan(repo: Path, home: Path) -> None:
     require(set(server["profiles"]) == {"balanced"} and server["profiles"]["balanced"]["vcpus"] == 4,
             f"profile resolution differs from the factory: {server['profiles']}")
     require(by_id["server-fedora"]["network_profiles"] == ["dev", "lab"], "Fedora allowlist lost")
+    require(server["lifecycles"] == ["permanent", "disposable"] and server["default_lifecycle"] == "permanent",
+            f"server lifecycles: {server['lifecycles']}")
     require(server["os"] == "Debian 13" and by_id["server-fedora"]["os"] == "Fedora 44",
             f"the plan does not use the Machine cards' OS label: {server['os']}")
 
