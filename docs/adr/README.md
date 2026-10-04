@@ -61,6 +61,9 @@ entered the pipeline.
 25. [`0025-host-key-without-agent-file-reads.md`](0025-host-key-without-agent-file-reads.md)
     — proposed: pin a Machine's SSH host key from the host-logged serial
     console instead of agent file reads.
+26. [`0026-offline-derived-images.md`](0026-offline-derived-images.md) — the
+    Workbench derives a Golden Image offline from a sealed base with a
+    reviewed package list, never booting it.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
