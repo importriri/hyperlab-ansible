@@ -150,6 +150,27 @@ Destructive operations stop at the shared confirmation and require the exact
 machine name. That is an interaction safeguard, not a privilege boundary: the
 reviewed backend remains the enforcement layer.
 
+### Creating a Machine
+
+**New Machine** in the Machines header replaces the inventory with the
+Create view ([ADR 0017](adr/0017-shell-machine-creation.md)). It reads
+`privatestack-machine-actions create-plan` each time it opens, and shows
+only what the Machine factory allows: the ready Templates, the networks of
+the chosen Template, its resource profiles with what each resolves to, and
+for custom resources the limits they are checked against (memory floor of
+the image, vCPUs up to the host's, disk at least the sealed image). A
+Template that cannot be created stays visible, disabled, with the reason.
+
+`ShellState` validates the plan and turns the form into positional values;
+the view submits nothing else. The bridge checks the request against the
+plan again, records and projects the Machine through `hyperlabctl`, and
+launches the durable operation `machine.provision`. Its window asks for the
+host's become password and, for a workstation, the Machine account's
+password; neither passes through the shell. The guest key is shown only by
+its fingerprint. Once the operation is dispatched the view closes on the new
+Machine, whose pane can reopen the operation window; success is verified
+like a start, by a fresh Running observation.
+
 ## Confirmation
 
 One reusable dialog, owned by `ShellSurfaces`, living inside the workspace.

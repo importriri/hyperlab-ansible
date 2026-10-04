@@ -1030,6 +1030,297 @@ Scope {
         return true;
     }
 
+    // ------------------------------------------------------------ creation
+    //
+    // What the reviewed bridge says may be created, as an observation (ADR
+    // 0017). The plan is computed by the Machine factory; presentation only
+    // shows it and builds a request from it. The bridge checks every request
+    // against the plan again and the factory checks it a third time, so a
+    // problem found here is advice that saves a round trip, never authority.
+    // No password and no key material ever cross this boundary.
+
+    readonly property var createResourceProfiles: [
+        "minimum",
+        "balanced",
+        "performance",
+        "custom"
+    ]
+
+    property var createPlan: ({
+        "state": "idle",
+        "templates": [],
+        "guestKey": null,
+        "pattern": "",
+        "hostVcpus": 0,
+        "detail": "",
+        "observedAt": 0
+    })
+
+    function beginCreatePlan() {
+        state.createPlan = Object.assign({}, state.createPlan, {
+            "state": "loading",
+            "detail": ""
+        });
+    }
+
+    function createInteger(value) {
+        return typeof value === "number" && Number.isInteger(value) && value > 0;
+    }
+
+    function createWord(value) {
+        return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
+    }
+
+    // Pure schema check. Returns the clean plan, or null.
+    function validCreatePlan(parsed) {
+        if (
+            parsed === null
+            || typeof parsed !== "object"
+            || parsed.phase !== "create-plan"
+            || parsed.plan === null
+            || typeof parsed.plan !== "object"
+        )
+            return null;
+
+        const plan = parsed.plan;
+        const key = plan.guest_key;
+
+        if (
+            plan.schema !== 1
+            || typeof plan.machine_id_pattern !== "string"
+            || plan.host === null
+            || typeof plan.host !== "object"
+            || !state.createInteger(plan.host.vcpus)
+            || key === null
+            || typeof key !== "object"
+            || typeof key.available !== "boolean"
+            || typeof key.reason !== "string"
+            || !Array.isArray(plan.templates)
+        )
+            return null;
+
+        const templates = [];
+
+        for (const entry of plan.templates) {
+            if (
+                entry === null
+                || typeof entry !== "object"
+                || !state.createWord(entry.id)
+                || typeof entry.display_name !== "string"
+                || typeof entry.creatable !== "boolean"
+                || typeof entry.blocked_reason !== "string"
+                || !Array.isArray(entry.network_profiles)
+                || !entry.network_profiles.every(
+                    network => state.provenanceOrder.indexOf(network) >= 0
+                        && network !== "unclassified")
+                || !Array.isArray(entry.resource_profiles)
+                || !entry.resource_profiles.every(
+                    profile => state.createResourceProfiles.indexOf(profile) >= 0)
+                || entry.profiles === null
+                || typeof entry.profiles !== "object"
+                || entry.provision === null
+                || typeof entry.provision !== "object"
+                || typeof entry.provision.password !== "boolean"
+            )
+                return null;
+
+            const custom = entry.custom;
+
+            if (entry.resource_profiles.indexOf("custom") >= 0) {
+                if (
+                    custom === null
+                    || typeof custom !== "object"
+                    || !state.createInteger(custom.memory_mb_min)
+                    || !state.createInteger(custom.vcpus_min)
+                    || !state.createInteger(custom.vcpus_max)
+                    || !state.createInteger(custom.disk_gib_min)
+                    || custom.vcpus_min > custom.vcpus_max
+                )
+                    return null;
+            }
+
+            const profiles = {};
+
+            for (const name of entry.resource_profiles) {
+                if (name === "custom")
+                    continue;
+
+                const values = entry.profiles[name];
+
+                if (
+                    values === null
+                    || typeof values !== "object"
+                    || !(values.memory_mb === "auto" || state.createInteger(values.memory_mb))
+                    || !state.createInteger(values.vcpus)
+                    || !state.createInteger(values.disk_gib)
+                )
+                    return null;
+
+                profiles[name] = {
+                    "memory_mb": values.memory_mb,
+                    "vcpus": values.vcpus,
+                    "disk_gib": values.disk_gib
+                };
+            }
+
+            templates.push({
+                "id": entry.id,
+                "displayName": entry.display_name,
+                "os": typeof entry.os === "string" ? entry.os : "",
+                "device": entry.device_capability === "vfio" ? "vfio" : "standard",
+                "networks": entry.network_profiles.slice(),
+                "defaultNetwork":
+                    entry.network_profiles.indexOf(entry.default_network) >= 0
+                    ? entry.default_network
+                    : entry.network_profiles[0] || "",
+                "resourceProfiles": entry.resource_profiles.slice(),
+                "defaultProfile":
+                    entry.resource_profiles.indexOf(entry.default_resource_profile) >= 0
+                    ? entry.default_resource_profile
+                    : entry.resource_profiles[0] || "",
+                "profiles": profiles,
+                "custom": entry.resource_profiles.indexOf("custom") >= 0
+                    ? {
+                        "memoryMin": custom.memory_mb_min,
+                        "vcpusMin": custom.vcpus_min,
+                        "vcpusMax": custom.vcpus_max,
+                        "diskMin": custom.disk_gib_min
+                    }
+                    : null,
+                "password": entry.provision.password,
+                "creatable": entry.creatable,
+                "blockedReason": entry.blocked_reason
+            });
+        }
+
+        return {
+            "templates": templates,
+            "guestKey": {
+                "available": key.available,
+                "fingerprint":
+                    key.available && typeof key.fingerprint === "string"
+                    ? key.fingerprint
+                    : "",
+                "reason": key.reason
+            },
+            "pattern": plan.machine_id_pattern,
+            "hostVcpus": plan.host.vcpus
+        };
+    }
+
+    function applyCreatePlan(raw, exitCode, detail) {
+        const plan =
+            exitCode === 0 ? state.validCreatePlan(state.parseJson(raw)) : null;
+
+        if (plan === null) {
+            state.createPlan = {
+                "state": "unavailable",
+                "templates": [],
+                "guestKey": null,
+                "pattern": "",
+                "hostVcpus": 0,
+                "detail":
+                    String(detail).length > 0
+                    ? String(detail)
+                    : "The machine bridge did not return a creation plan",
+                "observedAt": 0
+            };
+            return false;
+        }
+
+        state.createPlan = {
+            "state": "ok",
+            "templates": plan.templates,
+            "guestKey": plan.guestKey,
+            "pattern": plan.pattern,
+            "hostVcpus": plan.hostVcpus,
+            "detail": "",
+            "observedAt": Date.now()
+        };
+        return true;
+    }
+
+    function createTemplate(id) {
+        return state.createPlan.templates.find(entry => entry.id === String(id)) || null;
+    }
+
+    // A form value is a decimal integer typed by the operator, or nothing.
+    function createNumber(text) {
+        const value = String(text).trim();
+        return /^[1-9][0-9]{0,6}$/.test(value) ? Number(value) : -1;
+    }
+
+    // The first reason this request would be refused, or "" when the plan
+    // allows it. form: { template, name, network, profile, memory, vcpus, disk }
+    function createProblem(form) {
+        if (state.createPlan.state !== "ok")
+            return "The creation plan has not been read";
+
+        const template = state.createTemplate(form.template);
+
+        if (template === null)
+            return "Choose a Template";
+
+        if (!template.creatable)
+            return template.blockedReason || "This Template cannot be created";
+
+        const name = String(form.name);
+
+        if (!/^[a-z0-9][a-z0-9-]{1,30}$/.test(name))
+            return "The name needs 2 to 31 lowercase letters, digits or dashes";
+
+        if (state.machineById(name) !== null)
+            return "A Machine named " + name + " already exists";
+
+        if (template.networks.indexOf(String(form.network)) < 0)
+            return "Choose a network this Template allows";
+
+        if (template.resourceProfiles.indexOf(String(form.profile)) < 0)
+            return "Choose a resource profile this Template allows";
+
+        if (form.profile !== "custom")
+            return "";
+
+        const limits = template.custom;
+        const memory = state.createNumber(form.memory);
+        const vcpus = state.createNumber(form.vcpus);
+        const disk = state.createNumber(form.disk);
+
+        if (memory < limits.memoryMin)
+            return "Memory must be at least " + limits.memoryMin + " MB";
+
+        if (vcpus < limits.vcpusMin || vcpus > limits.vcpusMax)
+            return "vCPUs must be between " + limits.vcpusMin + " and " + limits.vcpusMax;
+
+        if (disk < limits.diskMin)
+            return "The disk must be at least " + limits.diskMin + " GiB";
+
+        return "";
+    }
+
+    // The bridge's positional arguments for an allowed request, or null.
+    function createArguments(form) {
+        if (state.createProblem(form) !== "")
+            return null;
+
+        const out = [
+            String(form.template),
+            String(form.name),
+            String(form.network),
+            String(form.profile)
+        ];
+
+        if (form.profile === "custom") {
+            out.push(
+                String(state.createNumber(form.memory)),
+                String(state.createNumber(form.vcpus)),
+                String(state.createNumber(form.disk))
+            );
+        }
+
+        return out;
+    }
+
     // The one availability decision presentation consumes. Every fact it
     // depends on must be current: the machine is in a current inventory, and
     // the bridge answered for this machine against this inventory

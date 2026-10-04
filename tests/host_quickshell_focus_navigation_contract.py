@@ -33,7 +33,8 @@ def check_routes() -> None:
         "openWorkspacePage": {"HyperLabBar.qml": 2, "LauncherSurface.qml": 1,
                               "SystemPanel.qml": 1, "ShellSurfaces.qml": 3},
         "switchWorkspace": {"WorkspaceSurface.qml": 1},
-        "selectMachine": {"MachineStage.qml": 2, "LauncherSurface.qml": 1},
+        "selectMachine": {"MachineStage.qml": 2, "LauncherSurface.qml": 1,
+                          "CreateMachineView.qml": 1},
         "workspaceRaiseRequested": {"ShellSurfaces.qml": 1},
         "openSubpage": {"ControlCenterView.qml": 1, "DiagnosticsView.qml": 1},
         "toggleWorkspace": {"HyperLabBar.qml": 1},
@@ -65,6 +66,11 @@ def check_routes() -> None:
         r'stage.shellState.machinesGeneration,\s*false\s*\)',
         sources["MachineStage.qml"])) == 2,
         "grid or dense selection lost internal no-raise semantics")
+    require(len(re.findall(
+        r'selectMachine\(\s*nameInput.text,\s*'
+        r'view.shellState.machinesGeneration,\s*false\s*\)',
+        sources["CreateMachineView.qml"])) == 1,
+        "opening a created Machine lost internal no-raise semantics")
 
 
 SCENARIO = r'''

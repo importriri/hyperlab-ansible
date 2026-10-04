@@ -425,6 +425,31 @@ Window {
             operations.push(String(verb) + ":" + String(machine));
             return true;
         }
+
+        // Creation transport (ADR 0017). The plan answer is bridge-shaped
+        // JSON handed to the real ShellState validation; null simulates a
+        // bridge that could not answer. Submissions are recorded only.
+        property var createPlanAnswer: null
+        property var created: []
+        property string createMachine: ""
+        property string createPhase: ""
+        property string createDetail: ""
+        property bool creating: false
+
+        function requestCreatePlan() {
+            sharedState.beginCreatePlan();
+            if (createPlanAnswer !== null)
+                sharedState.applyCreatePlan(JSON.stringify(createPlanAnswer), 0, "");
+            else
+                sharedState.applyCreatePlan("", 2, "fixture bridge unavailable");
+            return true;
+        }
+        function submitCreate(args) {
+            created = created.concat([args]);
+            createMachine = String(args[1]);
+            createPhase = "pending";
+            return true;
+        }
     }
 
     Rectangle { anchors.fill: parent; color: sharedTheme.base }

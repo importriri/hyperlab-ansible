@@ -23,6 +23,7 @@ from .machine_factory import (
     _image,
     _repo_root,
     _resource_values,
+    os_label,
     template_catalog,
 )
 from .machine_registry import read_machine
@@ -120,7 +121,8 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
             "display_name": entry["display_name"],
             "version": entry["version"],
             "image": entry["image"]["id"],
-            "os": image.get("os_variant"),
+            # The same label the Machine cards show, from the manifest.
+            "os": os_label(image),
             "lifecycles": entry["lifecycles"],
             "device_capability": entry["defaults"]["device_capability"],
             "network_profiles": entry["network_profiles"],

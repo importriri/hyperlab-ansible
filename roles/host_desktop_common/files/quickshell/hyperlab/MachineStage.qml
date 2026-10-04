@@ -29,6 +29,10 @@ Item {
     property string layoutMode: "auto"
     property string stateFilter: "all"
 
+    // The Create view replaces the inventory while it is open; it is built
+    // on demand, so every opening reads a fresh creation plan.
+    property bool creating: false
+
     readonly property int total: stage.shellState.machines.length
 
     // Past this a grid stops being an inventory and starts being wallpaper.
@@ -160,9 +164,27 @@ Item {
         }
     }
 
+    Loader {
+        anchors.fill: parent
+        active: stage.creating
+        visible: stage.creating
+
+        sourceComponent: CreateMachineView {
+            tokens: stage.tokens
+            theme: stage.theme
+            icons: stage.icons
+            shellState: stage.shellState
+            machineActions: stage.machineActions
+            shellSurfaces: stage.shellSurfaces
+
+            onClosed: stage.creating = false
+        }
+    }
+
     Row {
         anchors.fill: parent
         spacing: 0
+        visible: !stage.creating
 
         WorkspaceFrame {
             id: frame
@@ -200,6 +222,30 @@ Item {
                 : "warn"
 
             trailing: [
+                ShellControl {
+                    objectName: "newMachine"
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: stage.tokens.controlHeightLarge
+                    tokens: stage.tokens
+                    theme: stage.theme
+                    accessibleName: "New Machine"
+
+                    content: [
+                        ShellLabel {
+                            anchors.verticalCenter: parent.verticalCenter
+                            tokens: stage.tokens
+                            role: "label"
+                            text: "New Machine"
+                            color: stage.theme.textPrimary
+                        }
+                    ]
+
+                    onActivated: {
+                        stage.shellSurfaces.clearMachineSelection();
+                        stage.creating = true;
+                    }
+                },
+
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: frame.width > 640

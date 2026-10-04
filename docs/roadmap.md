@@ -231,7 +231,12 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [ ] permanent and disposable Machines created, projected, defined and
       started on Nitro from a Template
 - [ ] disposable Machines discard their writable layer on shutdown
-- [ ] Create view in the shell behind its feature gate
+- [x] Create view in the shell: Template, name, network and resources
+      within the Template's limits, provisioned as one durable operation;
+      password and become prompt only in the operation window
+      ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
+- [ ] Create view accepted on Nitro: a server and a workstation created
+      from the shell
 
 ### 5b. GPU as a capability and a boot-scoped lease
 

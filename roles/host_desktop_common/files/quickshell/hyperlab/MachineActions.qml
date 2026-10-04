@@ -408,6 +408,144 @@ Scope {
         }
     }
 
+    // ----------------------------------------------------------- creation
+    //
+    // Two short requests (ADR 0017). create-plan reports what the factory
+    // allows; ShellState validates it. create hands positional values to the
+    // bridge, which records and projects the Machine and launches its durable
+    // provisioning operation; the record that comes back is tracked like any
+    // other operation. No password crosses here: the provisioner asks for it
+    // in the operation window.
+
+    signal createPlanRequested()
+    signal createPlanAnswered(string raw, int exitCode, string detail)
+
+    property string createMachine: ""
+    property string createPhase: ""
+    property string createDetail: ""
+    property bool creating: false
+
+    function requestCreatePlan() {
+        if (createPlanRunner.running)
+            return false;
+        machineActions.createPlanRequested();
+        createPlanRunner.buffer = "";
+        createPlanRunner.detail = "";
+        createPlanRunner.running = true;
+        return true;
+    }
+
+    // args: [TEMPLATE, NAME, NETWORK, PROFILE, (MEMORY, VCPUS, DISK)], built
+    // by ShellState.createArguments; the bridge validates them again.
+    function submitCreate(args) {
+        if (
+            machineActions.creating
+            || !Array.isArray(args)
+            || (args.length !== 4 && args.length !== 7)
+            || !args.every(value => typeof value === "string"
+                && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value))
+        )
+            return false;
+
+        machineActions.createMachine = args[1];
+        machineActions.creating = true;
+        machineActions.createPhase = "pending";
+        machineActions.createDetail = "";
+        createRunner.command = [machineActions.bridge, "create"].concat(args);
+        createRunner.running = true;
+        return true;
+    }
+
+    function applyCreateLine(raw) {
+        const parsed = machineActions.parseLine(raw);
+
+        if (parsed === null)
+            return;
+
+        if (
+            operationState.valid(parsed)
+            && parsed.action_id === "machine.provision"
+            && parsed.machine === machineActions.createMachine
+        ) {
+            operationState.apply(parsed, parsed.operation_id);
+            machineActions.createPhase =
+                parsed.phase === "failed" ? "failed" : "dispatched";
+            machineActions.createDetail =
+                parsed.phase === "failed"
+                ? "The provisioning operation could not start"
+                : "";
+            return;
+        }
+
+        if (parsed.phase === "refused") {
+            machineActions.createPhase = "refused";
+            machineActions.createDetail =
+                parsed.reason === "operation-in-progress"
+                ? "An operation is already in progress for this Machine"
+                : String(parsed.reason || "The bridge refused the request").slice(0, 400);
+        }
+    }
+
+    Process {
+        id: createPlanRunner
+
+        property string buffer: ""
+        property string detail: ""
+
+        command: [machineActions.bridge, "create-plan"]
+
+        stdout: StdioCollector {
+            onStreamFinished: createPlanRunner.buffer = String(this.text)
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: createPlanRunner.detail = String(this.text).trim()
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.createPlanAnswered(
+                createPlanRunner.buffer,
+                exitCode,
+                createPlanRunner.detail
+            );
+        }
+    }
+
+    Process {
+        id: createRunner
+
+        stdout: SplitParser {
+            onRead: data => machineActions.applyCreateLine(data)
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.creating = false;
+            if (machineActions.createPhase === "pending") {
+                machineActions.createPhase = "failed";
+                machineActions.createDetail =
+                    "The machine bridge reported exit " + exitCode;
+            }
+        }
+    }
+
+    // Also covers failed-to-start, where QProcess may never emit exited.
+    Timer {
+        interval: 120000
+        running: machineActions.creating
+        repeat: false
+        onTriggered: {
+            if (createRunner.running) {
+                createRunner.signal(9);
+                return;
+            }
+            machineActions.creating = false;
+            if (machineActions.createPhase === "pending") {
+                machineActions.createPhase = "failed";
+                machineActions.createDetail = "Machine bridge unavailable";
+            }
+        }
+    }
+
     // -------------------------------------------------------- connections
 
     // One entry per open connection: "<verb>\n<machine>".

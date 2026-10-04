@@ -10,7 +10,11 @@ sealed Golden Image  arch-dev-20261003   images/arch-dev-20261003.yml
   -> domain          dev-01              libvirt, created by vm-create.yml
 ```
 
-The shell's Create view will run the same steps; until then they are
+The shell's Create view runs the same steps: **Machines → New Machine**
+records and projects the Machine, then one operation window runs steps 2
+and 3, asking for your password for each `-K` playbook and, for a
+workstation, for the Machine account's password
+([ADR 0017](adr/0017-shell-machine-creation.md)). By hand they are these
 commands.
 
 ## Before

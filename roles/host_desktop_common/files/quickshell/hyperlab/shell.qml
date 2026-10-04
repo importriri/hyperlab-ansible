@@ -129,6 +129,12 @@ ShellRoot {
 
         onCapabilitiesCleared: sharedState.clearCapabilities()
 
+        onCreatePlanRequested: sharedState.beginCreatePlan()
+
+        onCreatePlanAnswered: (raw, exitCode, detail) => {
+            sharedState.applyCreatePlan(raw, exitCode, detail);
+        }
+
         onAccepted: (verb, machine) => {
             sharedState.recordOperation({
                 "id": "machine:" + machine + ":" + verb,
