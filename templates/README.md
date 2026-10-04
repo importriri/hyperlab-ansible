@@ -14,6 +14,7 @@ carry runtime observations.
 | Template | Golden Image | Machines it offers |
 | --- | --- | --- |
 | [`workstation-dev`](workstation-dev.yml) | `arch-dev-20261003` | permanent, VFIO, dev network, GPU class `dev`, Linux Looking Glass |
+| [`workstation-dev-standard`](workstation-dev-standard.yml) | `arch-dev-standard` (placeholder; draft) | permanent, standard device, dev network, no GPU |
 | [`server-arch`](server-arch.yml) | `arch` | permanent or disposable, standard device, dev, services or lab network, SSH only |
 | [`server-debian`](server-debian.yml) | `debian-server` (not built; draft) | permanent or disposable, standard device, dev, services or lab network, SSH only |
 | [`server-fedora`](server-fedora.yml) | `fedora` | permanent or disposable, standard device, dev or lab network, SSH only |

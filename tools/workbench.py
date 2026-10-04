@@ -185,6 +185,24 @@ def now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
+def is_placeholder(path: Path, image_id: str) -> bool:
+    """A reviewed not-built manifest that only reserves an image id.
+
+    A Template can name an image before its capture exists; the seal then
+    replaces this placeholder. Anything with a digest, a recorded source or
+    another status is a real manifest and is never replaced.
+    """
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return False
+    return (isinstance(data, dict) and data.get("id") == image_id
+            and data.get("status") == "not-built" and data.get("sha256") is None
+            and data.get("source_sha256") is None and data.get("source_type") == "local")
+
+
 def cmd_adopt(args: argparse.Namespace) -> dict[str, Any]:
     root, repo = Path(args.root), Path(args.repo)
     require(NAME_RE.fullmatch(args.domain) is not None, "invalid domain name")
@@ -192,7 +210,8 @@ def cmd_adopt(args: argparse.Namespace) -> dict[str, Any]:
     require(args.profile in PROFILE_NETWORK, f"profile must be one of {', '.join(PROFILE_NETWORK)}")
     base = repo / "images" / f"{args.base_image}.yml"
     require(base.is_file(), f"base image manifest {base.name} does not exist")
-    require(not (repo / "images" / f"{args.image_id}.yml").exists(),
+    manifest = repo / "images" / f"{args.image_id}.yml"
+    require(not manifest.exists() or is_placeholder(manifest, args.image_id),
             f"images/{args.image_id}.yml already exists; a sealed image is never replaced, pick a new id")
     with Lock(root):
         path = record_path(root, args.domain)

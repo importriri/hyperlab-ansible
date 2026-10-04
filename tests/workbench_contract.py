@@ -144,6 +144,20 @@ def check_adoption(lab: Lab) -> None:
     assert "already taken" in lab.adopt(domain="arch-dev", ok=False)
     assert "never replaced" in lab.adopt(domain="arch-dev", image="arch", ok=False)
     assert "invalid domain" in lab.adopt(domain="Bad Name", image="x-1", ok=False)
+    # A reviewed not-built placeholder may reserve an id for a Template; it is
+    # the only manifest adoption accepts. A placeholder carrying a digest or a
+    # recorded source is a real manifest.
+    placeholder = yaml.safe_load((ROOT / "images/arch-dev-standard.yml").read_text())
+    (lab.repo / "images/arch-dev-standard.yml").write_text(yaml.safe_dump(placeholder))
+    adopted = lab.adopt(domain="arch-dev", image="arch-dev-standard")
+    assert adopted["image_id"] == "arch-dev-standard", adopted
+    lab.run("release", "--domain", "arch-dev")
+    for field, value in (("sha256", "a" * 64), ("source_sha256", "a" * 64), ("status", "sealed"),
+                         ("source_type", "official-cloud"), ("id", "another-id")):
+        forged = dict(placeholder, **{field: value})
+        (lab.repo / "images/arch-dev-standard.yml").write_text(yaml.safe_dump(forged))
+        assert "never replaced" in lab.adopt(domain="arch-dev", image="arch-dev-standard", ok=False), field
+    (lab.repo / "images/arch-dev-standard.yml").unlink()
     listing = lab.run("list")
     assert [item["domain"] for item in listing["candidates"]] == ["arch-dev-vfio"]
 
@@ -272,7 +286,15 @@ def check_wiring() -> None:
     assert "guestfs-tools" in defaults["workbench_packages"]
     assert 'path: "{{ workbench_root }}/staging", mode: "0700"' in tasks, "staging must be private"
     assert "LIBGUESTFS_BACKEND: direct" in tasks
-    assert "force: false" in tasks, "an existing image manifest must never be overwritten"
+    seal = yaml.safe_load((ROOT / "roles/workbench/tasks/main.yml").read_text())
+    copy_names = [task["name"] for block in seal for task in block.get("block", [])]
+    assert copy_names.index("Refuse to replace a real image manifest") < copy_names.index(
+        "Put the manifest in the checkout for review"), "the manifest can be copied before the placeholder check"
+    assert 'force: "{{ workbench_existing_manifest.stat.exists }}"' in tasks
+    for condition in ("status | default('') == 'not-built'", "sha256 | default('x') is none",
+                      "source_sha256 | default('x') is none", "source_type | default('') == 'local'",
+                      "id | default('') == workbench_capture.image_id"):
+        assert condition in tasks, f"the seal's placeholder rule lost: {condition}"
     assert "brick_guard_brick: workbench" in tasks
     bricks = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
     assert bricks["brick_requires"]["workbench"] == ["image_store"]

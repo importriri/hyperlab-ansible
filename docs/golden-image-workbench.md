@@ -73,6 +73,34 @@ Set `status: sealed` and the `sha256` that validation prints in
 ansible-playbook -K playbooks/workbench-release.yml -e workbench_domain=arch-dev-vfio
 ```
 
+## Reserving an id for a Template
+
+A Template can name an image before the image exists, as a draft. Its
+manifest is then a **placeholder**: `status: not-built`, `sha256: null`,
+`source_sha256: null`, `source_type: local`, and the reserved `id`. Adoption
+accepts that id, and the seal replaces the placeholder with the captured
+manifest. Any other manifest, sealed or not, is never replaced: adoption
+refuses the id and the seal stops before copying.
+
+## The second capture: `arch-dev-standard`
+
+`workstation-dev-standard` is the development workstation without the
+passed-through GPU. Its draft names `arch-dev-standard`, captured from
+`arch-dev` (standard device, the same Workspace Shell on the emulated
+display, `playbooks/guest-arch-dev.yml`):
+
+```bash
+ansible-playbook -K playbooks/vm-guest-inventory.yml -e guest_spec=vm-specs/arch-dev.yml
+ansible-playbook -i inventory.ini -i /run/user/$UID/arch-dev.ini playbooks/guest-arch-dev.yml
+ansible-playbook -K playbooks/vm-shutdown.yml -e guest_spec=vm-specs/arch-dev.yml
+ansible-playbook -K playbooks/workbench-adopt.yml -e workbench_domain=arch-dev -e workbench_profile=dev -e workbench_image_id=arch-dev-standard
+ansible-playbook -K playbooks/workbench-seal.yml -e workbench_domain=arch-dev
+```
+
+Then the import and validation commands the seal prints, `status: sealed`
+and the digest in `images/arch-dev-standard.yml`, `status: ready` in
+`templates/workstation-dev-standard.yml`, and the release.
+
 ## What a Machine from this image looks like
 
 No user, no home, no rice and no identity of the source: cloud-init creates

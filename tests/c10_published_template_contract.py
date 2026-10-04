@@ -163,11 +163,30 @@ def check_server_arch() -> None:
         assert plan["lifecycle"] == "disposable" and "/disposable/" in plan["disk_path"]
 
 
+def check_workstation_standard() -> None:
+    """The no-GPU workstation waits, as a draft, for its Workbench capture."""
+    template = yaml.safe_load((ROOT / "templates/workstation-dev-standard.yml").read_text())
+    image = yaml.safe_load((ROOT / "images/arch-dev-standard.yml").read_text())
+    assert template["status"] == "draft" and template["image"] == "arch-dev-standard"
+    assert template["device_capabilities"] == {"standard": True, "vfio": False}
+    assert not any(template["gpu_handoff_profiles"].values()), "a no-GPU Template offers the GPU"
+    assert template["presentation"]["looking_glass_mode"] == "disabled"
+    assert template["lifecycles"]["disposable"] is False, "the rice would be lost at every stop"
+    assert image["status"] == "not-built" and image["sha256"] is None and image["source_sha256"] is None
+    assert image["source_type"] == "local" and image["supports"]["vfio"] is False
+    entries = {entry["id"]: entry for entry in template_catalog(ROOT)}
+    assert entries["workstation-dev-standard"]["ready"] is False
+    from hyperlabctl.machine_provision import PROFILE_PLAYBOOKS
+    assert PROFILE_PLAYBOOKS["workstation-dev-standard"] == "playbooks/guest-arch-dev.yml"
+    assert (ROOT / PROFILE_PLAYBOOKS["workstation-dev-standard"]).is_file()
+
+
 def main() -> int:
     check_catalogue()
     check_refusals()
     check_machine_to_plan()
     check_server_arch()
+    check_workstation_standard()
     print("C10 published Template contract: OK")
     return 0
 

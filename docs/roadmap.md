@@ -224,6 +224,9 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       group (`wheel`, or `sudo` on Debian), so polkit never asks for root
       (software-verified)
 - [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
+- [x] its draft Template and the placeholder manifest that reserves
+      `arch-dev-standard`; the Workbench replaces only such a placeholder
+      (software-verified)
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles
 - [ ] `browser-disposable` with reset on shutdown

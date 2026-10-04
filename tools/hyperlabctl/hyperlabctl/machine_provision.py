@@ -38,6 +38,7 @@ KEY_RE = re.compile(r"^ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]+={0,2})(?:
 SERVER_WORKSPACE = "server"
 PROFILE_PLAYBOOKS = {
     "workstation-dev": "playbooks/guest-arch-dev-vfio.yml",
+    "workstation-dev-standard": "playbooks/guest-arch-dev.yml",
 }
 
 # Placeholder for the private hash file; the provisioner substitutes it.
