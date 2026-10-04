@@ -1,0 +1,13 @@
+---
+- name: Derive one Golden Image offline from a sealed base
+  hosts: hypervisor
+  become: true
+  environment:
+    LC_ALL: C
+  vars:
+    workbench_operation: derive
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: workbench
+    - workbench

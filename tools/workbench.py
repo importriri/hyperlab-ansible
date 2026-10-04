@@ -66,6 +66,18 @@ SYSPREP_ARGS = [
     "--truncate", "/etc/machine-id",
 ]
 
+# A derivation (ADR 0026) installs packages offline; apt and dpkg leave their
+# downloaded archives, package lists and logs behind. They go before the
+# machine-id is emptied, which stays the last step.
+APT_DELETES = [
+    "--delete", "/var/cache/apt/archives/*.deb",
+    "--delete", "/var/cache/apt/*.bin",
+    "--delete", "/var/lib/apt/lists/*",
+    "--delete", "/var/log/apt/*",
+    "--delete", "/var/log/dpkg.log",
+]
+DERIVE_SYSPREP_ARGS = SYSPREP_ARGS[:-2] + APT_DELETES + SYSPREP_ARGS[-2:]
+
 # Leftover scan: one guestfish script, one marker per probe. A leading `-`
 # lets guestfish continue when a path is absent, which is the good case.
 SCAN_PROBES = (
@@ -76,6 +88,18 @@ SCAN_PROBES = (
     ("cloud-instances", "-ls /var/lib/cloud/instances"),
     ("sudoers-cloud-init", "-is-file /etc/sudoers.d/90-cloud-init-users"),
     ("passwd", "-cat /etc/passwd"),
+    ("apt-archives", "glob-expand /var/cache/apt/archives/*.deb"),
+    ("apt-logs", "glob-expand /var/log/apt/*"),
+    ("dpkg-log", "-is-file /var/log/dpkg.log"),
+)
+
+# How the agent starts in a derived image: a systemd wants link created when
+# the package was installed, or a udev rule that pulls the unit in when the
+# agent's virtio port appears.
+AGENT_ACTIVATION_PROBES = (
+    "glob-expand /etc/systemd/system/*.wants/qemu-guest-agent.service",
+    "glob-expand /usr/lib/udev/rules.d/*qemu-guest-agent*",
+    "glob-expand /lib/udev/rules.d/*qemu-guest-agent*",
 )
 ROOT_FORBIDDEN = re.compile(r"^(\.ssh|\.gnupg|\.local|\.config|\.cache|\.npm|\..*_history|\.netrc|\.git-credentials|\.aws|\.kube|\.docker)$")
 
@@ -334,6 +358,12 @@ def evaluate_scan(output: str) -> list[str]:
             uid = int(fields[2])
             if 1000 <= uid < 60000:
                 problems.append(f"user account {fields[0]} (uid {uid}) remains")
+    if sections["apt-archives"]:
+        problems.append("downloaded packages remain: " + ", ".join(sections["apt-archives"]))
+    if sections["apt-logs"]:
+        problems.append("apt logs remain: " + ", ".join(sections["apt-logs"]))
+    if "true" in sections["dpkg-log"]:
+        problems.append("/var/log/dpkg.log remains")
     return problems
 
 
@@ -436,6 +466,108 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def agent_present(image: Path) -> list[str]:
+    """What keeps the QEMU Guest Agent from starting in the image; empty is good."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "image_guest_agent", Path(__file__).resolve().parent / "image_guest_agent.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    answer = module.evaluate(run(["guestfish", "--ro", "-a", str(image), "-i"], input=module.script()).stdout)
+    problems = []
+    if not answer["qemu_guest_agent"]:
+        problems.append("the QEMU Guest Agent binary or unit is missing")
+    activation = run(["guestfish", "--ro", "-a", str(image), "-i"],
+                     input="\n".join(AGENT_ACTIVATION_PROBES) + "\n").stdout
+    if not [line for line in activation.splitlines() if line.strip()]:
+        problems.append("nothing starts the QEMU Guest Agent (no wants link, no udev rule)")
+    return problems
+
+
+def render_derived_manifest(placeholder: dict[str, Any], sha256: str, virtual_size_bytes: int) -> str:
+    size_gib = max(1, math.ceil(virtual_size_bytes / (1024 ** 3)))
+    manifest = dict(placeholder)
+    manifest.update({
+        "version": now()[:10].replace("-", ""),
+        "status": "not-built",
+        "sha256": None,
+        "source_sha256": sha256,
+        "virtual_size_gib": size_gib,
+        "minimum_size_gib": size_gib,
+    })
+    return "---\n" + yaml.safe_dump(manifest, sort_keys=False, default_flow_style=None)
+
+
+def cmd_derive(args: argparse.Namespace) -> dict[str, Any]:
+    """Derive an image offline from a sealed base (ADR 0026); nothing boots."""
+    root, repo, store = Path(args.root), Path(args.repo), Path(args.store)
+    require(NAME_RE.fullmatch(args.image_id) is not None, "invalid image id")
+    target = repo / "images" / f"{args.image_id}.yml"
+    require(is_placeholder(target, args.image_id),
+            f"images/{args.image_id}.yml must be a not-built placeholder; a sealed image is never replaced")
+    placeholder = yaml.safe_load(target.read_text(encoding="utf-8"))
+    derive = placeholder.get("derive")
+    require(isinstance(derive, dict) and isinstance(derive.get("base"), str)
+            and isinstance(derive.get("install"), list) and derive["install"],
+            f"images/{args.image_id}.yml has no reviewed derive section")
+    packages = derive["install"]
+    require(all(isinstance(name, str) and re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", name) for name in packages),
+            "the package list holds an invalid name")
+    base_manifest = yaml.safe_load((repo / "images" / f"{derive['base']}.yml").read_text(encoding="utf-8"))
+    require(base_manifest.get("status") == "sealed" and SHA_RE.fullmatch(str(base_manifest.get("sha256"))),
+            f"base {derive['base']} is not sealed")
+    base = store / "bases" / "linux" / base_manifest["filename"]
+    require(base.is_file() and not base.is_symlink(), f"base image {base} is missing or redirected")
+    require(sha256_file(base) == base_manifest["sha256"],
+            f"base {derive['base']} no longer matches its sealed digest")
+    with Lock(root):
+        require(all(item["image_id"] != args.image_id for item in list_records(root)[0]),
+                f"image id {args.image_id} is taken by a Workbench candidate")
+        staging = root / "staging" / args.image_id
+        require(not staging.exists(), f"stale staging {staging} exists; discard it first")
+        staging.mkdir(parents=True, mode=0o700)
+        image = staging / f"{args.image_id}.qcow2"
+        try:
+            partial = staging / f"{args.image_id}.qcow2.new"
+            run(["qemu-img", "convert", "-O", "qcow2", str(base), str(partial)])
+            # apt in the appliance verifies every package against the archive
+            # keys already in the sealed base.
+            run(["virt-customize", "--format", "qcow2", "-a", str(partial), "--network",
+                 "--install", ",".join(packages)])
+            run(["virt-sysprep", "--format", "qcow2", "-a", str(partial), *DERIVE_SYSPREP_ARGS])
+            scan = run(["guestfish", "--ro", "-a", str(partial), "-i"], input=scan_script())
+            problems = evaluate_scan(scan.stdout) + agent_present(partial)
+            require(not problems, "the derived image is refused: " + "; ".join(problems))
+            run(["qemu-img", "check", str(partial)])
+            info = json.loads(run(["qemu-img", "info", "--output=json", str(partial)]).stdout)
+            require(info.get("format") == "qcow2" and "backing-filename" not in info,
+                    "the derived image must be one flat qcow2")
+            partial.rename(image)
+            os.chmod(image, 0o600)
+            digest = sha256_file(image)
+            manifest = render_derived_manifest(placeholder, digest, int(info["virtual-size"]))
+            (staging / "manifest.yml").write_text(manifest)
+        except BaseException:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+    return {"image_id": args.image_id, "base": derive["base"], "installed": packages,
+            "staged_image": str(image), "sha256": digest, "manifest": str(staging / "manifest.yml")}
+
+
+def cmd_discard(args: argparse.Namespace) -> dict[str, Any]:
+    """Remove a derived image's staging; a candidate's staging needs release."""
+    root = Path(args.root)
+    require(NAME_RE.fullmatch(args.image_id) is not None, "invalid image id")
+    with Lock(root):
+        require(all(item["image_id"] != args.image_id for item in list_records(root)[0]),
+                f"{args.image_id} belongs to a Workbench candidate; release the candidate instead")
+        staging = root / "staging" / args.image_id
+        existed = staging.exists()
+        if existed:
+            shutil.rmtree(staging)
+    return {"image_id": args.image_id, "discarded": existed}
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="workbench", description=__doc__.splitlines()[0])
     root.add_argument("--root", default="/var/lib/hyperlab-workbench")
@@ -454,6 +586,16 @@ def parser() -> argparse.ArgumentParser:
     seal.add_argument("--repo", required=True)
     seal.add_argument("--domain", required=True)
     seal.set_defaults(handler=cmd_seal)
+
+    derive = commands.add_parser("derive")
+    derive.add_argument("--repo", required=True)
+    derive.add_argument("--store", required=True)
+    derive.add_argument("--image-id", required=True)
+    derive.set_defaults(handler=cmd_derive)
+
+    discard = commands.add_parser("discard")
+    discard.add_argument("--image-id", required=True)
+    discard.set_defaults(handler=cmd_discard)
 
     for name, handler in (("release", cmd_release), ("show", cmd_show)):
         sub = commands.add_parser(name)

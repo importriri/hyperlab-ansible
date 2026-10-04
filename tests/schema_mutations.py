@@ -88,6 +88,27 @@ class SchemaMutationTests(unittest.TestCase):
             "QEMU Guest Agent requested but the image does not support it",
         )
 
+    def test_derived_package_names_are_validated(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "images/debian-server.yml",
+                                          lambda d: d["derive"].update(install=["qemu-guest-agent; rm -rf /"])),
+            "does not match",
+        )
+
+    def test_an_image_cannot_derive_from_itself(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "images/debian-server.yml",
+                                          lambda d: d["derive"].update(base="debian-server")),
+            "cannot be derived from itself",
+        )
+
+    def test_a_derived_image_is_local(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "images/debian-server.yml",
+                                          lambda d: d.update(source_type="official-cloud")),
+            "a derived image is a local artefact",
+        )
+
     def test_duplicate_tags_are_rejected(self) -> None:
         self.assert_mutation_fails(
             lambda root: self.mutate_yaml(root, "vm-specs/debian-dev.yml", lambda d: d.update(tags=["linux", "linux"])),

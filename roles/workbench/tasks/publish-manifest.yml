@@ -1,0 +1,64 @@
+---
+# Publish a staged manifest into the checkout (seal and derive). Expects
+# workbench_capture with image_id, manifest, staged_image and sha256.
+
+- name: Read the rendered image manifest
+  ansible.builtin.slurp:
+    path: "{{ workbench_capture.manifest }}"
+  register: workbench_manifest
+
+# Only a reviewed not-built placeholder that reserved this id may be
+# replaced; any other manifest already in the checkout stops the seal.
+- name: Read any manifest already reserving this image id
+  become: false
+  ansible.builtin.stat:
+    path: "{{ workbench_repository_root }}/images/{{ workbench_capture.image_id }}.yml"
+  register: workbench_existing_manifest
+
+- name: Read the existing manifest
+  become: false
+  when: workbench_existing_manifest.stat.exists and not workbench_existing_manifest.stat.islnk
+  ansible.builtin.set_fact:
+    workbench_existing_document: >-
+      {{ lookup('ansible.builtin.file', workbench_existing_manifest.stat.path) | from_yaml }}
+
+- name: Classify an existing manifest as a placeholder or a real image
+  when: workbench_existing_manifest.stat.exists
+  ansible.builtin.set_fact:
+    workbench_existing_placeholder: >-
+      {{ (not workbench_existing_manifest.stat.islnk)
+         and workbench_existing_document is mapping
+         and workbench_existing_document.id | default('') == workbench_capture.image_id
+         and workbench_existing_document.status | default('') == 'not-built'
+         and workbench_existing_document.sha256 | default('x') is none
+         and workbench_existing_document.source_sha256 | default('x') is none
+         and workbench_existing_document.source_type | default('') == 'local' }}
+
+- name: Refuse to replace a real image manifest
+  ansible.builtin.assert:
+    that:
+      - not workbench_existing_manifest.stat.exists or workbench_existing_placeholder | bool
+    fail_msg: >-
+      images/{{ workbench_capture.image_id }}.yml is a real manifest; a sealed
+      image is never replaced. The capture stays in staging.
+
+- name: Put the manifest in the checkout for review
+  become: false
+  ansible.builtin.copy:
+    content: "{{ workbench_manifest.content | b64decode }}"
+    dest: "{{ workbench_repository_root }}/images/{{ workbench_capture.image_id }}.yml"
+    mode: "0644"
+    # True only for a placeholder: the assert above refused anything else.
+    force: "{{ workbench_existing_manifest.stat.exists }}"
+
+- name: Show the import commands
+  ansible.builtin.debug:
+    msg:
+      - "Generalized, scanned and staged: {{ workbench_capture.staged_image }}"
+      - "sha256: {{ workbench_capture.sha256 }}"
+      - "Review images/{{ workbench_capture.image_id }}.yml, then import it:"
+      - >-
+        ansible-playbook -K playbooks/image-prepare.yml
+        -e image_factory_manifest=images/{{ workbench_capture.image_id }}.yml
+        -e image_factory_local_source={{ workbench_capture.staged_image }}
+        -e image_factory_source_sha256={{ workbench_capture.sha256 }}

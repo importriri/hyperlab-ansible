@@ -35,6 +35,12 @@ defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
 network_allowlist: [dev, lab, services]
 licensing: {redistributable: true}
 
+# The reviewed derivation: the sealed upstream base and the packages added to
+# a copy of it, offline (ADR 0026).
+derive:
+  base: debian
+  install: [qemu-guest-agent]
+
 looking_glass_host_build_required: null
 looking_glass_host_build_observed: null
 notes: >-

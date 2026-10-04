@@ -101,6 +101,45 @@ Then the import and validation commands the seal prints, `status: sealed`
 and the digest in `images/arch-dev-standard.yml`, `status: ready` in
 `templates/workstation-dev-standard.yml`, and the release.
 
+## Deriving offline: `debian-server`
+
+Some images only need packages added to a sealed upstream base, and the
+base cannot be reached safely to install them: the Debian genericcloud image
+has no QEMU Guest Agent, so its SSH host key cannot be pinned
+([ADR 0026](adr/0026-offline-derived-images.md)). `images/debian-server.yml`
+is a placeholder with a reviewed `derive` section (`base: debian`,
+`install: [qemu-guest-agent]`). Nothing boots and nothing connects:
+
+```bash
+ansible-playbook -K playbooks/workbench-derive.yml -e workbench_image_id=debian-server
+```
+
+1. The base is checked: sealed in its manifest, a regular file in the store,
+   and its SHA-256 equal to the sealed digest. It is copied to a flat qcow2
+   in the root-only staging and never written.
+2. `virt-customize --install qemu-guest-agent` runs apt inside the
+   libguestfs appliance, with the appliance's own network. apt refuses any
+   package whose signature does not verify against the Debian archive keys
+   already inside the sealed base; nothing is trusted from the host.
+3. `virt-sysprep` runs the default operations (logs, machine identity, SSH
+   host keys, package caches) plus the Workbench's deletes, and for apt and
+   dpkg removes `/var/cache/apt/archives/*.deb`, `/var/cache/apt/*.bin`,
+   `/var/lib/apt/lists/*`, `/var/log/apt/*` and `/var/log/dpkg.log`; the
+   machine-id is emptied last.
+4. The read-only scan refuses every leftover it already knew and, in
+   addition, any downloaded `.deb`, any apt log and `dpkg.log`.
+5. The agent must be there and must start by itself: `qemu-ga` and
+   `qemu-guest-agent.service` present, and either the systemd wants link the
+   package creates or a udev rule that starts the unit when the agent's
+   virtio port appears. Otherwise the derivation is refused and its staging
+   removed. `image-validate.yml` checks the binary and unit again before the
+   seal.
+6. The staged image and its manifest replace the placeholder in the
+   checkout; then the printed `image-prepare.yml` and `image-validate.yml`
+   commands, `status: sealed` with the digest, and `server-debian` back to
+   `ready`. `playbooks/workbench-discard.yml -e workbench_image_id=debian-server`
+   removes the staging afterwards.
+
 ## What a Machine from this image looks like
 
 No user, no home, no rice and no identity of the source: cloud-init creates

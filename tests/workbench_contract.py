@@ -65,9 +65,24 @@ elif name == "virt-sysprep":
     image = sys.argv[sys.argv.index("-a") + 1]
     with open(image, "ab") as handle:
         handle.write(b"generalized")
+elif name == "virt-customize":
+    if "--format" in sys.argv and sys.argv.index("--format") > sys.argv.index("-a"):
+        print("virt-customize: error: --format parameter must appear before -a parameter", file=sys.stderr)
+        sys.exit(1)
+    image = sys.argv[sys.argv.index("-a") + 1]
+    with open(image, "ab") as handle:
+        handle.write(b"customized")
 elif name == "guestfish":
-    sys.stdin.read()
-    print(open(os.environ["FAKE_SCAN"]).read(), end="")
+    script = sys.stdin.read()
+    if "is-file-opts" in script:
+        present = os.environ.get("FAKE_AGENT", "").split(",")
+        for line in script.splitlines():
+            if line.startswith("is-file-opts "):
+                print("true" if line.split()[1] in present else "false")
+    elif "qemu-guest-agent.service" in script and "glob-expand" in script:
+        print(os.environ.get("FAKE_ACTIVATION", ""))
+    else:
+        print(open(os.environ["FAKE_SCAN"]).read(), end="")
 '''
 
 CLEAN_SCAN = """@@home
@@ -78,6 +93,10 @@ CLEAN_SCAN = """@@home
 @@ssh-hostkeys
 @@cloud-instances
 @@sudoers-cloud-init
+false
+@@apt-archives
+@@apt-logs
+@@dpkg-log
 false
 @@passwd
 root:x:0:0::/root:/bin/bash
@@ -94,7 +113,7 @@ class Lab:
         (self.repo / "images/arch.yml").write_text((ROOT / "images/arch.yml").read_text())
         self.bin = base / "bin"
         self.bin.mkdir()
-        for name in ("virsh", "qemu-img", "virt-sysprep", "guestfish"):
+        for name in ("virsh", "qemu-img", "virt-sysprep", "virt-customize", "guestfish"):
             path = self.bin / name
             path.write_text(FAKE)
             path.chmod(0o755)
@@ -272,11 +291,85 @@ def check_scan_rules() -> None:
         "90-cloud-init-users remains": CLEAN_SCAN.replace("false", "true"),
         "user account sid (uid 1000) remains": CLEAN_SCAN + "sid:x:1000:1000::/home/sid:/bin/bash\n",
         "did not run completely": CLEAN_SCAN.replace("@@passwd", "@@other"),
+        "downloaded packages remain": CLEAN_SCAN.replace(
+            "@@apt-archives\n", "@@apt-archives\n/var/cache/apt/archives/qemu-guest-agent_10.0_amd64.deb\n"),
+        "apt logs remain": CLEAN_SCAN.replace("@@apt-logs\n", "@@apt-logs\n/var/log/apt/history.log\n"),
+        "/var/log/dpkg.log remains": CLEAN_SCAN.replace("@@dpkg-log\nfalse", "@@dpkg-log\ntrue"),
     }
     for expected, output in cases.items():
         problems = workbench.evaluate_scan(output)
         assert any(expected in problem for problem in problems), (expected, problems)
     assert workbench.evaluate_scan(CLEAN_SCAN.replace("@@machine-id\n", "@@machine-id\nuninitialized\n")) == []
+
+
+def check_derive(base_dir: Path) -> None:
+    """An offline derivation (ADR 0026): verified base, apt inside, scan, agent."""
+    lab = Lab(base_dir)
+    store = base_dir / "store"
+    (store / "bases/linux").mkdir(parents=True)
+    base_bytes = b"sealed debian genericcloud"
+    (store / "bases/linux/debian.qcow2").write_bytes(base_bytes)
+    debian = yaml.safe_load((ROOT / "images/debian.yml").read_text())
+    debian["sha256"] = hashlib.sha256(base_bytes).hexdigest()
+    (lab.repo / "images/debian.yml").write_text(yaml.safe_dump(debian))
+    placeholder = (ROOT / "images/debian-server.yml").read_text()
+    (lab.repo / "images/debian-server.yml").write_text(placeholder)
+    agent = "/usr/sbin/qemu-ga,/lib/systemd/system/qemu-guest-agent.service"
+    lab.env.update({"FAKE_AGENT": agent,
+                    "FAKE_ACTIVATION": "/etc/systemd/system/dev-virtio\\x2dports-org.qemu.guest_agent.0.device.wants/qemu-guest-agent.service"})
+
+    def derive(ok: bool = True):
+        return lab.run("derive", "--repo", str(lab.repo), "--store", str(store),
+                       "--image-id", "debian-server", ok=ok)
+
+    result = derive()
+    staged = Path(result["staged_image"])
+    assert result["base"] == "debian" and result["installed"] == ["qemu-guest-agent"]
+    assert result["sha256"] == hashlib.sha256(staged.read_bytes()).hexdigest()
+    assert (store / "bases/linux/debian.qcow2").read_bytes() == base_bytes, "the base was modified"
+    manifest = yaml.safe_load(Path(result["manifest"]).read_text())
+    assert manifest["status"] == "not-built" and manifest["sha256"] is None
+    assert manifest["source_sha256"] == result["sha256"] and manifest["derive"]["install"] == ["qemu-guest-agent"]
+    calls = lab.calls()
+    names = [call[0] for call in calls]
+    assert "virsh" not in names and "ssh" not in names, "a derivation booted or reached a guest"
+    customize = next(call for call in calls if call[0] == "virt-customize")
+    assert customize[customize.index("--install") + 1] == "qemu-guest-agent" and "--network" in customize
+    sysprep = next(call for call in calls if call[0] == "virt-sysprep")
+    for path in ("/var/cache/apt/archives/*.deb", "/var/lib/apt/lists/*", "/var/log/apt/*", "/var/log/dpkg.log"):
+        assert path in sysprep, f"apt residue {path} is not removed"
+    assert sysprep[-2:] == ["--truncate", "/etc/machine-id"], "the machine-id is not emptied last"
+    assert names.index("virt-customize") < names.index("virt-sysprep") < names.index("guestfish")
+    assert all("--ro" in call for call in calls if call[0] == "guestfish")
+    assert "stale staging" in derive(ok=False)
+    assert lab.run("discard", "--image-id", "debian-server")["discarded"] is True
+
+    for change, expected in (
+        ({"FAKE_AGENT": ""}, "binary or unit is missing"),
+        ({"FAKE_ACTIVATION": ""}, "nothing starts the QEMU Guest Agent"),
+    ):
+        saved = dict(lab.env)
+        lab.env.update(change)
+        assert expected in derive(ok=False), expected
+        assert not (lab.root / "staging/debian-server").exists(), "a refused derivation left staging"
+        lab.env = saved
+
+    lab.scan.write_text(CLEAN_SCAN.replace("@@apt-logs\n", "@@apt-logs\n/var/log/apt/term.log\n"))
+    assert "apt logs remain" in derive(ok=False)
+    lab.scan.write_text(CLEAN_SCAN)
+
+    (store / "bases/linux/debian.qcow2").write_bytes(b"changed base")
+    assert "no longer matches its sealed digest" in derive(ok=False)
+    (store / "bases/linux/debian.qcow2").write_bytes(base_bytes)
+
+    sealed = yaml.safe_load(placeholder)
+    sealed.update(status="sealed", sha256="a" * 64, source_sha256="a" * 64)
+    (lab.repo / "images/debian-server.yml").write_text(yaml.safe_dump(sealed))
+    assert "never replaced" in derive(ok=False)
+    (lab.repo / "images/debian-server.yml").write_text(placeholder)
+
+    lab.adopt(domain="arch-dev-vfio", image="contract-dev-20261003")
+    assert "release the candidate instead" in lab.run("discard", "--image-id", "contract-dev-20261003", ok=False)
 
 
 def check_wiring() -> None:
@@ -286,8 +379,9 @@ def check_wiring() -> None:
     assert "guestfs-tools" in defaults["workbench_packages"]
     assert 'path: "{{ workbench_root }}/staging", mode: "0700"' in tasks, "staging must be private"
     assert "LIBGUESTFS_BACKEND: direct" in tasks
-    seal = yaml.safe_load((ROOT / "roles/workbench/tasks/main.yml").read_text())
-    copy_names = [task["name"] for block in seal for task in block.get("block", [])]
+    publish_text = (ROOT / "roles/workbench/tasks/publish-manifest.yml").read_text()
+    tasks = tasks + publish_text
+    copy_names = [task["name"] for task in yaml.safe_load(publish_text)]
     assert copy_names.index("Refuse to replace a real image manifest") < copy_names.index(
         "Put the manifest in the checkout for review"), "the manifest can be copied before the placeholder check"
     assert 'force: "{{ workbench_existing_manifest.stat.exists }}"' in tasks
@@ -298,7 +392,14 @@ def check_wiring() -> None:
     assert "brick_guard_brick: workbench" in tasks
     bricks = yaml.safe_load((ROOT / "group_vars/all/bricks.yml").read_text())
     assert bricks["brick_requires"]["workbench"] == ["image_store"]
-    for operation in ("adopt", "seal", "release"):
+    main_tasks = yaml.safe_load((ROOT / "roles/workbench/tasks/main.yml").read_text())
+    for operation in ("seal", "derive"):
+        block = next(task for task in main_tasks if task.get("when") == f"workbench_operation == '{operation}'")
+        assert block["block"][-1].get("ansible.builtin.include_tasks") == "publish-manifest.yml", operation
+    derive_block = next(task for task in main_tasks if task.get("when") == "workbench_operation == 'derive'")
+    argv = derive_block["block"][0]["ansible.builtin.command"]["argv"]
+    assert "derive" in argv and derive_block["block"][0]["environment"]["LIBGUESTFS_BACKEND"] == "direct"
+    for operation in ("adopt", "seal", "release", "derive", "discard"):
         play = yaml.safe_load((ROOT / f"playbooks/workbench-{operation}.yml").read_text())[0]
         assert play["become"] is True and play["vars"]["workbench_operation"] == operation
         assert play["roles"][0]["vars"]["brick_guard_brick"] == "workbench"
@@ -318,6 +419,8 @@ def main() -> int:
         check_adoption(lab)
         check_refusals(lab)
         check_seal(lab)
+    with tempfile.TemporaryDirectory(prefix="hyperlab-workbench-derive-") as temporary:
+        check_derive(Path(temporary))
     print("HyperLab Workbench contract: OK")
     return 0
 

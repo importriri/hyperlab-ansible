@@ -216,6 +216,10 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [ ] `debian-server`: the Debian cloud image captured through the
       Workbench with QEMU Guest Agent, generalized, scanned and sealed;
       `server-debian` ready on it
+- [x] the Workbench derives an image offline from a sealed base with a
+      reviewed package list, scans apt and dpkg residues and requires the
+      agent to start by itself ([ADR 0026](adr/0026-offline-derived-images.md),
+      software-verified)
 - [ ] a Machine from `server-debian` and one from `server-fedora` reached
       over SSH on Nitro
 - [x] every new Linux Machine, server or workstation, starts in the host's

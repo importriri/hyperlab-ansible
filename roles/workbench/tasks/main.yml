@@ -2,18 +2,23 @@
 - name: Validate the Workbench request
   ansible.builtin.assert:
     that:
-      - workbench_operation in ['adopt', 'seal', 'release']
-      - workbench_domain is string
-      - workbench_domain is match('^[a-z0-9][a-z0-9-]{0,62}$')
+      - workbench_operation in ['adopt', 'seal', 'release', 'derive', 'discard']
+      - >-
+        workbench_operation in ['derive', 'discard']
+        or (workbench_domain is string and workbench_domain is match('^[a-z0-9][a-z0-9-]{0,62}$'))
+      - >-
+        workbench_operation not in ['derive', 'discard']
+        or (workbench_image_id is string and workbench_image_id is match('^[a-z0-9][a-z0-9-]{0,62}$'))
     fail_msg: >-
-      Name the domain with -e workbench_domain=<name> (lowercase letters,
+      Name the domain with -e workbench_domain=<name>, or for derive and
+      discard the image with -e workbench_image_id=<id> (lowercase letters,
       digits and dashes).
 
 - name: Install the offline generalization tools
   community.general.pacman:
     name: "{{ workbench_packages }}"
     state: present
-  when: workbench_operation == 'seal'
+  when: workbench_operation in ['seal', 'derive']
 
 - name: Create the root-owned Workbench directories
   ansible.builtin.file:
@@ -112,66 +117,50 @@
       ansible.builtin.set_fact:
         workbench_capture: "{{ workbench_sealed.stdout | from_json }}"
 
-    - name: Read the rendered image manifest
-      ansible.builtin.slurp:
-        path: "{{ workbench_capture.manifest }}"
-      register: workbench_manifest
+    - name: Put the rendered manifest in the checkout
+      ansible.builtin.include_tasks: publish-manifest.yml
 
-    # Only a reviewed not-built placeholder that reserved this id may be
-    # replaced; any other manifest already in the checkout stops the seal.
-    - name: Read any manifest already reserving this image id
-      become: false
-      ansible.builtin.stat:
-        path: "{{ workbench_repository_root }}/images/{{ workbench_capture.image_id }}.yml"
-      register: workbench_existing_manifest
+- name: Derive an image offline from a sealed base
+  when: workbench_operation == 'derive'
+  block:
+    - name: Copy the base, install the reviewed packages, generalize and scan
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ workbench_tool }}"
+          - --root
+          - "{{ workbench_root }}"
+          - derive
+          - --repo
+          - "{{ workbench_repository_root }}"
+          - --store
+          - "{{ hyperlab_root }}"
+          - --image-id
+          - "{{ workbench_image_id }}"
+      environment:
+        LIBGUESTFS_BACKEND: direct
+      register: workbench_derived
+      changed_when: true
 
-    - name: Read the existing manifest
-      become: false
-      when: workbench_existing_manifest.stat.exists and not workbench_existing_manifest.stat.islnk
+    - name: Read the derivation result
       ansible.builtin.set_fact:
-        workbench_existing_document: >-
-          {{ lookup('ansible.builtin.file', workbench_existing_manifest.stat.path) | from_yaml }}
+        workbench_capture: "{{ workbench_derived.stdout | from_json }}"
 
-    - name: Classify an existing manifest as a placeholder or a real image
-      when: workbench_existing_manifest.stat.exists
-      ansible.builtin.set_fact:
-        workbench_existing_placeholder: >-
-          {{ (not workbench_existing_manifest.stat.islnk)
-             and workbench_existing_document is mapping
-             and workbench_existing_document.id | default('') == workbench_capture.image_id
-             and workbench_existing_document.status | default('') == 'not-built'
-             and workbench_existing_document.sha256 | default('x') is none
-             and workbench_existing_document.source_sha256 | default('x') is none
-             and workbench_existing_document.source_type | default('') == 'local' }}
+    - name: Put the rendered manifest in the checkout
+      ansible.builtin.include_tasks: publish-manifest.yml
 
-    - name: Refuse to replace a real image manifest
-      ansible.builtin.assert:
-        that:
-          - not workbench_existing_manifest.stat.exists or workbench_existing_placeholder | bool
-        fail_msg: >-
-          images/{{ workbench_capture.image_id }}.yml is a real manifest; a sealed
-          image is never replaced. The capture stays in staging.
-
-    - name: Put the manifest in the checkout for review
-      become: false
-      ansible.builtin.copy:
-        content: "{{ workbench_manifest.content | b64decode }}"
-        dest: "{{ workbench_repository_root }}/images/{{ workbench_capture.image_id }}.yml"
-        mode: "0644"
-        # True only for a placeholder: the assert above refused anything else.
-        force: "{{ workbench_existing_manifest.stat.exists }}"
-
-    - name: Show the import commands
-      ansible.builtin.debug:
-        msg:
-          - "Generalized, scanned and staged: {{ workbench_capture.staged_image }}"
-          - "sha256: {{ workbench_capture.sha256 }}"
-          - "Review images/{{ workbench_capture.image_id }}.yml, then import it:"
-          - >-
-            ansible-playbook -K playbooks/image-prepare.yml
-            -e image_factory_manifest=images/{{ workbench_capture.image_id }}.yml
-            -e image_factory_local_source={{ workbench_capture.staged_image }}
-            -e image_factory_source_sha256={{ workbench_capture.sha256 }}
+- name: Discard a derived image's staging
+  when: workbench_operation == 'discard'
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ workbench_tool }}"
+      - --root
+      - "{{ workbench_root }}"
+      - discard
+      - --image-id
+      - "{{ workbench_image_id }}"
+  changed_when: true
 
 - name: Release the candidate and its staging
   when: workbench_operation == 'release'

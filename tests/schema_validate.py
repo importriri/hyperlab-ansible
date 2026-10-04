@@ -121,6 +121,8 @@ class RepositoryValidator:
                     continue
                 if rule.get("of") == "str" and not item:
                     self.fail(where, f"{key}[{index}] must not be empty")
+                if "item_pattern" in rule and re.fullmatch(rule["item_pattern"], item) is None:
+                    self.fail(where, f"{key}[{index}]={item!r} does not match {rule['item_pattern']}")
                 if rule.get("domain") and item not in self.valid_domains:
                     self.fail(where, f"{key}[{index}]={item!r} is not a declared network domain")
             return
@@ -235,6 +237,27 @@ class RepositoryValidator:
             self.fail(where, f"observed Looking Glass build {observed_build} != required {required_build}")
         if status == "sealed" and required_build and not observed_build:
             self.fail(where, "a sealed Looking Glass image must record the observed host build")
+        derive = image.get("derive")
+        if isinstance(derive, dict):
+            # An offline derivation (ADR 0026) is a local artefact built from
+            # one sealed-able Linux base of the same distribution.
+            if image.get("source_type") != "local":
+                self.fail(where, "a derived image is a local artefact")
+            base_id = derive.get("base")
+            base_path = self.root / "images" / f"{base_id}.yml"
+            if base_id == image_id:
+                self.fail(where, "an image cannot be derived from itself")
+            elif not base_path.is_file():
+                self.fail(where, f"derive.base {base_id!r} has no manifest")
+            else:
+                base = self.load_yaml(base_path)
+                if isinstance(base, dict):
+                    if base.get("os_family") != "linux" or image.get("os_family") != "linux":
+                        self.fail(where, "only a Linux image can be derived offline")
+                    if base.get("derive"):
+                        self.fail(where, "derive.base must not itself be derived")
+                    if str(base.get("os_variant")) != str(image.get("os_variant")):
+                        self.fail(where, "a derived image keeps its base's os_variant")
 
     def validate_template_policy(
         self,
