@@ -149,7 +149,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       (software-verified)
 - [ ] shell-owned notifications: who owns them is
       [ADR 0027](adr/0027-guest-notification-owner.md), proposed
-- [ ] the same shell on every workstation Template, not only `arch-dev-vfio`
+- [x] the same shell on every workstation Template, not only `arch-dev-vfio`:
+      the role's default, applied by every workstation Template's profile
+      playbook and overridden by none (software-verified)
 
 ### 3. Golden Image Workbench and capture (M12, first half)
 

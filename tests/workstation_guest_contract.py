@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
 
 
 def text(relative: str) -> str:
@@ -18,6 +20,41 @@ def mapping(relative: str) -> dict[str, object]:
     data = yaml.safe_load(text(relative))
     assert isinstance(data, dict), f"{relative} must contain a mapping"
     return data
+
+
+def check_same_shell() -> None:
+    """Every workstation Template gets the Workspace Shell, not only the VFIO one.
+
+    The shell is the role's default. A Template is a workstation when its id
+    says so; its reviewed profile playbook must apply the desktop role, and
+    no playbook or inventory variable may switch a workstation to Waybar.
+    """
+    from hyperlabctl.machine_provision import PROFILE_PLAYBOOKS
+
+    defaults = mapping("roles/guest_desktop_hyprland/defaults/main.yml")
+    assert defaults["guest_desktop_hyprland_shell"] == "quickshell"
+    workstations = sorted(
+        path.stem for path in (ROOT / "templates").glob("*.yml")
+        if mapping(f"templates/{path.name}")["id"].startswith("workstation-")
+    )
+    assert {"workstation-dev", "workstation-dev-standard"} <= set(workstations)
+    for template in workstations:
+        playbook = PROFILE_PLAYBOOKS.get(template)
+        assert playbook, f"{template} has no reviewed profile playbook"
+        plays = yaml.safe_load(text(playbook))
+        roles = [role for play in plays for role in play.get("roles", [])]
+        assert "guest_desktop_hyprland" in roles, f"{playbook} lacks the guest desktop"
+    for playbook in sorted((ROOT / "playbooks").glob("*.yml")):
+        source = playbook.read_text(encoding="utf-8")
+        if "guest_desktop_hyprland" in source:
+            assert "guest_desktop_hyprland_shell" not in source, (
+                f"{playbook.name} chooses a shell; workstations share one")
+    inventory = [ROOT / "inventory.ini"]
+    for directory in ("group_vars", "host_vars"):
+        inventory += sorted(path for path in (ROOT / directory).rglob("*") if path.is_file())
+    for path in inventory:
+        assert "guest_desktop_hyprland_shell" not in path.read_text(errors="replace"), (
+            f"{path.relative_to(ROOT)} chooses the guest shell")
 
 
 def main() -> int:
@@ -247,6 +284,7 @@ def main() -> int:
     )
     assert java_probe.get("check_mode") is False
 
+    check_same_shell()
     print("workstation guest contract: OK")
     return 0
 

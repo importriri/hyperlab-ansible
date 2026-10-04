@@ -233,7 +233,10 @@ Nothing depends on the shell being up:
   password, typed into the window, unlocks it;
 - no guest turns its display off: a virtual display has no panel to save,
   and a guest behind Looking Glass must keep its output on;
-- `guest_desktop_hyprland_shell: waybar` keeps the plain bar.
+- `guest_desktop_hyprland_shell: waybar` keeps the plain bar for a single
+  run; no playbook or inventory file sets it, so every workstation Template
+  (`workstation-dev`, `workstation-dev-standard`) gets the same shell
+  (`tests/workstation_guest_contract.py`).
 
 The role installs the shell only for the reviewed Quickshell API series
 (`guest_desktop_hyprland_quickshell_series`, currently 0.3).
