@@ -72,7 +72,7 @@ until then the VM specs below are the reviewed definitions.
 | VM spec | OS image (manifest) | Network | GPU class | Lifecycle | Today | Next |
 |---|---|---|---|---|---|---|
 | `arch-dev-vfio` | arch (sealed upstream base) | dev | dev | permanent | NVIDIA, kvmfr, Looking Glass, Workspace Shell accepted on Nitro | pre-login and input gate, audio proof, seal as `workstation-dev` |
-| `arch-dev` | arch | dev | none | permanent | Nitro lifecycle gate passed | move onto the shared workstation roles |
+| `arch-dev` | arch | dev | none | permanent | Nitro lifecycle gate passed; shared workstation roles | capture as `arch-dev-standard` for `workstation-dev-standard` |
 | `arch-gaming-clean` | arch | clean | clean | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
 | `arch-gaming-dirty` | arch | dirty | dirty | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
 | `debian-dev` | debian-server (not built) | dev | none | permanent | spec only | capture `debian-server`, first boot on the shared roles |
@@ -81,7 +81,7 @@ until then the VM specs below are the reviewed definitions.
 | `svc-jellyfin` | debian-server (not built) | services | optional | permanent | service contracts green | service and recovery hardware gates |
 | `win11clean-valley` | win11clean (not built) | clean | clean | permanent | Windows workshop flow exists | seal the master, VFIO benchmark |
 | `win11dirty-disposable` | win11dirty (not built) | dirty | dirty | disposable | Windows workshop flow exists | seal the master, prove reset |
-| `arch-minimal-ssh` | arch | dev | none | test fixture | used by inventory and SSH gates | move onto the shared roles |
+| `arch-minimal-ssh` | arch | dev | none | test fixture | superseded by the `server-arch` Template (`srv-01`) | retire the fixture domain when no gate uses it |
 | future `local-ai` | to decide | services | GPU-capable | permanent | requirement only | needs the GPU lease model below |
 | future `gaming-offline` | to decide | lab | lab | permanent | requirement only | Template after the gaming images |
 
@@ -118,8 +118,11 @@ then accepted on Nitro; Predator replays the frozen result.
       (software-verified)
 - [x] Guest Workspace Shell on the guest: Desks, tiling, theme, identity
       wallpaper and key sheet (Nitro, 2026-10-03)
-- [ ] extract reusable workstation behaviour from the VFIO-specific path;
-      finish `arch-dev` and `arch-minimal-ssh` on the same roles
+- [x] the workstation behaviour lives in the shared roles: `arch-dev` is
+      the shared roles plus `dev_ide`, and the accelerated playbooks add only
+      the GPU, its telemetry and Looking Glass through a closed set of
+      variables; `arch-minimal-ssh` is superseded by the `server-arch`
+      Template (software-verified)
 
 ### 2. Guest Workspace Shell
 

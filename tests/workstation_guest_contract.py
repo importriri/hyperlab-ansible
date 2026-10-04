@@ -49,6 +49,23 @@ def main() -> int:
     assert dev_roles == base_roles + ["dev_ide"]
     assert compat_roles == dev_roles
 
+    # The workstation behaviour lives in the shared roles. The accelerated
+    # path adds only the GPU, its telemetry and Looking Glass, and changes the
+    # shared roles only through a closed set of variables.
+    gpu_roles = ["guest_gpu_nvidia", "guest_gaming_telemetry", "guest_looking_glass_linux"]
+    gpu_vars = {
+        "workstation_kernel_profile", "workstation_kernel_remove_fallback",
+        "guest_desktop_hyprland_profile", "guest_desktop_hyprland_autologin",
+        "guest_desktop_hyprland_autologin_exec", "guest_desktop_hyprland_nvidia_only",
+        "guest_desktop_hyprland_headless_monitor",
+    }
+    for name, shared in (("guest-arch-dev-vfio", dev_roles), ("guest-arch-gaming-clean", base_roles),
+                         ("guest-arch-gaming-dirty", base_roles)):
+        play = yaml.safe_load(text(f"playbooks/{name}.yml"))[0]
+        roles = [role if isinstance(role, str) else role["role"] for role in play["roles"]]
+        assert roles == shared + gpu_roles, f"{name} carries workstation behaviour of its own: {roles}"
+        assert set(play.get("vars", {})) <= gpu_vars, f"{name} tunes the shared roles beyond the reviewed set"
+
     access = text("roles/workstation_access/tasks/main.yml")
     assert "passwd" in access
     assert "workstation_access_password_hash_pattern" in access
