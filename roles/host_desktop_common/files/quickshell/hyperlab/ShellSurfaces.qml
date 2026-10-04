@@ -41,7 +41,8 @@ QtObject {
 
     property bool launcherOpen: false
     // "" is the command palette; "clipboard" lists only the Machines the
-    // host clipboard may be sent to (ADR 0020). Every opening sets it.
+    // host clipboard may be sent to (ADR 0020); "keys" is the host key
+    // sheet. Every opening sets it.
     property string launcherMode: ""
     property bool systemPanelOpen: false
     property bool topRailVisible: true
@@ -250,7 +251,8 @@ QtObject {
     // and consequence are no longer what the operator is looking at.
     function openLauncher(origin, mode) {
         surfaces.cancelConfirmation();
-        surfaces.launcherMode = String(mode) === "clipboard" ? "clipboard" : "";
+        surfaces.launcherMode =
+            ["clipboard", "keys"].indexOf(String(mode)) >= 0 ? String(mode) : "";
         surfaces.launcherOrigin = surfaces.resolveOrigin(origin);
         surfaces.systemPanelOpen = false;
         surfaces.launcherOpen = surfaces.launcherOrigin.length > 0;

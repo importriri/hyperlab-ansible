@@ -428,6 +428,14 @@ hl.bind(
     )
 )
 
+-- The host key sheet, from HostKeys.qml.
+hl.bind(
+    main_mod .. " + F1",
+    hl.dsp.exec_cmd(
+        "/usr/bin/qs -c hyperlab ipc call launcher keys"
+    )
+)
+
 -- Host clipboard to one guest, chosen each time (ADR 0020).
 hl.bind(
     main_mod .. " + SHIFT + V",

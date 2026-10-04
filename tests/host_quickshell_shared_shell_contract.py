@@ -153,6 +153,7 @@ def main() -> int:
             "SystemPanel.qml",
             "OsdSurface.qml",
             "LauncherSurface.qml",
+            "HostKeys.qml",
         ],
         "bridge_owner_files": [
             "ShellState.qml",

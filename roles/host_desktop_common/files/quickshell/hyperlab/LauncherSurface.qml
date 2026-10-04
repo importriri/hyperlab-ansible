@@ -52,6 +52,12 @@ PanelWindow {
     readonly property bool clipboardMode:
         launcher.shellSurfaces.launcherMode === "clipboard"
 
+    // The host key sheet: read-only rows, searchable, nothing to run.
+    readonly property bool keysMode:
+        launcher.shellSurfaces.launcherMode === "keys"
+
+    readonly property HostKeys hostKeys: HostKeys {}
+
     // Native destinations. Aliases resolve to the destination they name, so
     // "workstation controls" and "power" reach the Control Center without
     // becoming rows of their own.
@@ -126,6 +132,28 @@ PanelWindow {
     readonly property var results: {
         const needle = launcher.query.trim().toLowerCase();
         const out = [];
+
+        if (launcher.keysMode) {
+            for (const group of launcher.hostKeys.groups) {
+                const keys = group.keys.filter(entry =>
+                    needle.length === 0
+                    || entry.keys.toLowerCase().indexOf(needle) >= 0
+                    || entry.does.toLowerCase().indexOf(needle) >= 0
+                );
+
+                if (keys.length === 0)
+                    continue;
+
+                out.push({ kind: "section", title: group.title });
+
+                for (const entry of keys)
+                    out.push({ kind: "key", entry: {
+                        title: entry.keys, hint: entry.does,
+                        glyph: launcher.icons.keyboard, context: "" } });
+            }
+
+            return out;
+        }
 
         // Send clipboard to: running Machines only, each with its
         // host-resolved provenance, and nothing else to choose.
@@ -266,6 +294,9 @@ PanelWindow {
         const result = launcher.results[launcher.selectable[position]];
 
         launcher.shellSurfaces.closeLauncher();
+
+        if (launcher.keysMode)
+            return;
 
         if (launcher.clipboardMode) {
             if (result.kind === "machine")
@@ -427,6 +458,8 @@ PanelWindow {
                         Accessible.name:
                             launcher.clipboardMode
                             ? "Send the host clipboard to a running Machine"
+                            : launcher.keysMode
+                            ? "Search the host keys"
                             : "Search machines and commands"
 
                         onTextChanged: launcher.query = text
@@ -448,6 +481,8 @@ PanelWindow {
                             text:
                                 launcher.clipboardMode
                                 ? "Send the host clipboard to…"
+                                : launcher.keysMode
+                                ? "Search the host keys"
                                 : "Search machines and commands"
                             color: launcher.theme.textQuiet
                         }
@@ -631,6 +666,7 @@ PanelWindow {
                             visible:
                                 resultRow.kind === "command"
                                 || resultRow.kind === "destination"
+                                || resultRow.kind === "key"
                             anchors.left: parent.left
                             anchors.leftMargin: launcher.tokens.spaceMd
                             anchors.verticalCenter: parent.verticalCenter
@@ -726,6 +762,8 @@ PanelWindow {
                 text:
                     launcher.clipboardMode
                     ? "↑↓ move · return send once · esc send nothing"
+                    : launcher.keysMode
+                    ? "type to find a key · esc close"
                     : "↑↓ move · return open · esc close"
                 color: launcher.theme.textQuiet
             }

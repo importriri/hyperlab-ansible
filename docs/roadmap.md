@@ -289,7 +289,8 @@ platform, recorded on the host:
       host-side device allowlist
 - [ ] microphone and camera off by default; on only per Machine and per
       session, with a host indicator while active
-- [ ] host keybinding cheatsheet that includes the crossing keys
+- [x] host keybinding cheatsheet that includes the crossing keys:
+      `SUPER + F1`, checked against the bindings (software-verified)
 
 ### 7. Snapshots, backups and recovery (M12, second half)
 

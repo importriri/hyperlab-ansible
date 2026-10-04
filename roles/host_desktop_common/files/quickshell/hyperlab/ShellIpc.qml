@@ -63,6 +63,12 @@ Scope {
             ipc.shellSurfaces.openLauncher("", "clipboard");
             return "open";
         }
+
+        // SUPER + F1: the host key sheet, read-only.
+        function keys(): string {
+            ipc.shellSurfaces.openLauncher("", "keys");
+            return "open";
+        }
     }
 
     IpcHandler {

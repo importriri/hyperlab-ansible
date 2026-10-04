@@ -46,3 +46,9 @@ trust metadata.
 
 A generated cheatsheet must therefore satisfy both correctness and
 information-boundary contracts before it can be installed.
+
+The host sheet exists: `SUPER + F1` opens it in the launcher, from
+`HostKeys.qml`. `tests/host_key_sheet_contract.py` compares it with the
+host Hyprland bindings in both directions, so a host key cannot exist off
+the sheet and the sheet cannot promise a key that is not bound. It lists
+host keys only; each guest keeps its own sheet on `ALT + H`.

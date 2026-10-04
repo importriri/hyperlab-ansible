@@ -215,6 +215,7 @@ host_desktop_common_shell_stage:
     - SystemPanel.qml
     - OsdSurface.qml
     - LauncherSurface.qml
+    - HostKeys.qml
   bridge_owner_files:
     - ShellState.qml
     - ShellActions.qml

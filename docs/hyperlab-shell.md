@@ -354,6 +354,9 @@ action bridge. Aliases such as "workstation controls" resolve to the
 destination they mean instead of producing duplicate rows. The query never
 becomes executable text.
 
+`SUPER + F1` opens the launcher as the **host key sheet**: every host
+binding from `HostKeys.qml`, searchable, read-only; a row runs nothing.
+
 `SUPER + SHIFT + V` opens the launcher in **Send the host clipboard to**
 mode ([ADR 0020](adr/0020-host-to-guest-clipboard.md)): only running
 Machines, each with its host-resolved provenance, no destinations and no
