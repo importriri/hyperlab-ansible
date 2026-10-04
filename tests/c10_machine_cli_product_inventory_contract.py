@@ -359,6 +359,27 @@ def verify_runtime_filtering(
         "matching managed runtime was not adopted",
     )
 
+    # Without a checkout the operating system is unknown, never guessed.
+    require(row["os"] is None, "an operating system was invented without a checkout")
+
+    class Config:
+        repo_root = ROOT
+
+    class Context:
+        config = Config()
+
+    machine_command.doc.build = lambda *_args, **_kwargs: {
+        "domains": [unrelated, matching],
+        "gpu": {"held_by": None, "bound": True},
+        "problems": [],
+    }
+    try:
+        named = machine_command.build_product_inventory(Context(), state_home=state)
+    finally:
+        machine_command.doc.build = original
+    require(named["machines"][0]["os"] == "Arch Linux",
+            f"the operating system was not read from the image: {named['machines'][0].get('os')}")
+
     missing_root_policy = dict(
         matching
     )

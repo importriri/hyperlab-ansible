@@ -12,6 +12,7 @@ from .. import document as doc
 from ..errors import Unavailable
 from ..machine_factory import (
     create_from_template,
+    image_os_label,
     template_catalog,
     write_projected_vm_spec,
 )
@@ -172,6 +173,12 @@ def build_product_inventory(
             for row in document["domains"]
         }
 
+    repo_root = getattr(
+        getattr(ctx, "config", None),
+        "repo_root",
+        None,
+    )
+
     rows = []
 
     for record in records:
@@ -249,6 +256,17 @@ def build_product_inventory(
                         "runtime_drift": False,
                     }
                 )
+
+        # The operating system comes from the Machine's checked-in image,
+        # not from anything the guest reports.
+        row["os"] = (
+            image_os_label(
+                repo_root,
+                record["image"]["id"],
+            )
+            if repo_root is not None
+            else None
+        )
 
         rows.append(
             row

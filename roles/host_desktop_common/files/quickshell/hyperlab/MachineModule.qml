@@ -84,20 +84,40 @@ ShellCard {
 
     accessibleName:
         String(module.machine.name)
+        + ", " + module.osText
         + ", " + module.theme.provenanceLabel(module.machine.provenance)
         + ", " + module.icons.machineStateWord(module.machine.state)
 
-    // 1. Name.
+    // The operating system, from the host's image manifest: a guest cannot
+    // rename itself here. An unknown system says so.
+    readonly property string osText:
+        typeof module.machine.os === "string" && module.machine.os.length > 0
+        ? module.machine.os
+        : "OS unknown"
+
+    // 1. Name, with the operating system on the same line.
     ShellLabel {
         id: nameLabel
 
         anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.right: osLabel.left
+        anchors.rightMargin: module.tokens.spaceSm
         anchors.top: parent.top
         tokens: module.tokens
         role: "title"
         text: String(module.machine.name)
         color: module.theme.textPrimary
+    }
+
+    ShellLabel {
+        id: osLabel
+
+        anchors.right: parent.right
+        anchors.baseline: nameLabel.baseline
+        tokens: module.tokens
+        role: "meta"
+        text: module.osText
+        color: module.theme.textQuiet
     }
 
     // 2. Provenance and 3. state on one line.

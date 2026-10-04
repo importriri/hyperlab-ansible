@@ -217,6 +217,7 @@ MACHINE_TEMPLATE = {
     "lifecycle": "permanent",
     "device_profile": "vfio",
     "blocked": None,
+    "os": "Arch Linux",
 }
 
 
@@ -232,6 +233,7 @@ def machines(count: int) -> list[dict]:
         row["state"] = states[index % len(states)]
         row["gpu_relation"] = "held" if index == 0 else "configured"
         if index % 5 == 0:
+            row["os"] = None
             row["networks"] = None
             row["network"] = None
             row["vcpus"] = None

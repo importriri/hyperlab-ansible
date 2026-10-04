@@ -459,6 +459,20 @@ Item {
                     color: pane.theme.textPrimary
                 }
 
+                ShellLabel { width: details.labelWidth; tokens: pane.tokens; role: "meta"; text: "OS"; color: pane.theme.textQuiet }
+                ShellLabel {
+                    width: details.valueWidth
+                    wrapMode: Text.WordWrap
+                    tokens: pane.tokens
+                    role: "body"
+                    text:
+                        pane.present && typeof pane.machine.os === "string"
+                        && pane.machine.os.length > 0
+                        ? String(pane.machine.os)
+                        : "Unknown"
+                    color: pane.theme.textPrimary
+                }
+
                 ShellLabel { width: details.labelWidth; tokens: pane.tokens; role: "meta"; text: "Lifecycle"; color: pane.theme.textQuiet }
                 ShellLabel {
                     width: details.valueWidth

@@ -173,6 +173,49 @@ def _image(
     return image
 
 
+OS_NAMES = {
+    "archlinux": "Arch Linux",
+    "debian": "Debian",
+    "fedora": "Fedora",
+    "parrot": "Parrot OS",
+    "ubuntu": "Ubuntu",
+    "win": "Windows",
+}
+
+OS_VARIANT_RE = re.compile(
+    r"^(archlinux|debian|fedora|parrot|ubuntu|win)([0-9]+(?:\.[0-9]+)?)?$"
+)
+
+
+def os_label(
+    image: dict[str, Any],
+) -> str | None:
+    """The operating system a Machine runs, from its checked-in image.
+
+    Read from the host's reviewed image manifest, never from the guest, so
+    a guest cannot rename itself. An unknown variant is reported as unknown
+    rather than guessed.
+    """
+    variant = image.get("os_variant")
+    if not isinstance(variant, str):
+        return None
+    match = OS_VARIANT_RE.fullmatch(variant)
+    if match is None:
+        return None
+    name = OS_NAMES[match.group(1)]
+    return f"{name} {match.group(2)}" if match.group(2) else name
+
+
+def image_os_label(
+    repo_root: Path | str,
+    image_id: str,
+) -> str | None:
+    try:
+        return os_label(_image(_repo_root(repo_root), image_id))
+    except (ContractError, Unavailable):
+        return None
+
+
 def _sealed_image(
     image: dict[str, Any],
 ) -> bool:

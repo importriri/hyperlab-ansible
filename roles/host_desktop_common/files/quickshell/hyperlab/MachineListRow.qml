@@ -87,6 +87,19 @@ Rectangle {
             color: row.theme.textPrimary
         }
 
+        // From the host's image manifest, never from the guest.
+        ShellLabel {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(90, row.width * 0.14)
+            tokens: row.tokens
+            role: "meta"
+            text:
+                typeof row.machine.os === "string" && row.machine.os.length > 0
+                ? row.machine.os
+                : "OS unknown"
+            color: row.theme.textQuiet
+        }
+
         StateChip {
             anchors.verticalCenter: parent.verticalCenter
             tokens: row.tokens

@@ -3,7 +3,7 @@ schema_version: 1
 id: parrot
 display_name: Parrot Security
 os_family: linux
-os_variant: debian12
+os_variant: parrot
 version: "pinned-at-build"
 format: qcow2
 

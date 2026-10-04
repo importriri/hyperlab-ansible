@@ -92,8 +92,14 @@ survive.
 
 Inventory grouped by host-resolved provenance, with a count per group and an
 explicit Unclassified group last. Cards are 300–420 units wide and carry, in
-order: name, provenance, state, the allocation the machine was given
-(memory, vCPU, network), and its relationship to the passthrough GPU.
+order: name and operating system, provenance, state, the allocation the
+machine was given (memory, vCPU, network), and its relationship to the
+passthrough GPU.
+
+The operating system comes from the Machine's checked-in image manifest
+(`os_variant`), read by the host: `Arch Linux`, `Debian 13`, `Fedora 44`,
+`Windows 11`. A guest cannot rename itself there, and a variant the host
+does not know reads **OS unknown** instead of a guess.
 
 Memory and vCPU are labelled **allocation**, never consumption. A value the
 host did not publish says Unknown; `networks: null` (the domain could not be
