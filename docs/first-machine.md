@@ -92,6 +92,27 @@ The dev profile playbook is the one that built `arch-dev-vfio`. Every
 package is already in the image, so the first pass mostly configures the new
 account; the second must report `changed=0`.
 
+## A server Machine
+
+`server-arch` gives a headless Arch Machine reached over SSH only, from the
+sealed upstream Arch image. There is no rice to apply:
+
+```bash
+hyperlabctl machine create server-arch srv-01 \
+  --resource-profile custom --memory-mb 2048 --vcpus 2 --disk-gib 16
+hyperlabctl machine project srv-01
+ansible-playbook -K playbooks/vm-create.yml \
+  -e guest_spec=vm-specs/.generated/srv-01.yml \
+  -e guest_start_after_create=true \
+  -e "{\"guest_cloud_init_ssh_public_keys\":[\"$(command cat ~/.ssh/hyperlab_ed25519.pub)\"]}"
+ansible-playbook -K playbooks/vm-guest-inventory.yml \
+  -e guest_spec=vm-specs/.generated/srv-01.yml
+ansible srv-01 -i inventory.ini -i /run/user/$UID/srv-01.ini -m ping
+```
+
+The inventory step pins the new host key, so plain `ssh` to the address it
+wrote works with strict checking too.
+
 ## 4. Looking at it
 
 ```bash

@@ -38,14 +38,14 @@ projection = load_tool("tests/c10_machine_vm_spec_projection_contract.py", "publ
 CREATED_AT = "2026-10-03T20:00:00Z"
 
 
-def refused(message: str, **kwargs) -> None:
+def refused(message: str, template: str = "workstation-dev", **kwargs) -> None:
     try:
-        materialize_machine(ROOT, template_id="workstation-dev", machine_id="dev-01",
+        materialize_machine(ROOT, template_id=template, machine_id="dev-01",
                             owner="sid", created_at=CREATED_AT, **kwargs)
     except ContractError as exc:
         assert message in str(exc), (message, str(exc))
         return
-    raise AssertionError(f"workstation-dev accepted {kwargs}")
+    raise AssertionError(f"{template} accepted {kwargs}")
 
 
 def check_catalogue() -> None:
@@ -108,10 +108,45 @@ def check_machine_to_plan() -> None:
         assert result["gpu_handoff_profile"] == "dev" and result["trust_level"] == 2
 
 
+def check_server_arch() -> None:
+    template = yaml.safe_load((ROOT / "templates/server-arch.yml").read_text())
+    image = yaml.safe_load((ROOT / "images/arch.yml").read_text())
+    assert template["status"] == "ready" and image["status"] == "sealed"
+    assert template["device_capabilities"] == {"standard": True, "vfio": False}
+    assert not any(template["gpu_handoff_profiles"].values()), "a server Template offers the GPU"
+    assert template["presentation"]["looking_glass_mode"] == "disabled"
+    assert set(template["network_allowlist"]) == {"dev", "services", "lab"}
+
+    refused("does not permit device capability vfio", template="server-arch",
+            device_capability="vfio", gpu_handoff_profile="dev")
+    refused("does not permit network clean", template="server-arch", network_profile="clean")
+    refused("does not permit network dirty", template="server-arch", network_profile="dirty")
+    refused("Looking Glass requires VFIO", template="server-arch", looking_glass_mode="linux-experimental")
+    refused("does not permit resource profile minimum", template="server-arch", resource_profile="minimum")
+
+    record = materialize_machine(ROOT, template_id="server-arch", machine_id="srv-01",
+                                 owner="sid", created_at=CREATED_AT, network_profile="services",
+                                 resource_profile="custom", memory_mb=2048, vcpus=2, disk_gib=16)
+    assert record["image"] == {"id": "arch", "sha256": image["sha256"]}
+    assert record["gpu_handoff_profile"] is None and record["device_capability"] == "standard"
+    assert record["resources"] == {"memory_mb": 2048, "vcpus": 2, "disk_gib": 16}
+
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        for name in ("images", "templates", "vm-specs", "group_vars", "schemas"):
+            shutil.copytree(ROOT / name, root / name, ignore=shutil.ignore_patterns(".generated"))
+        path = write_projected_vm_spec(root, record)
+        plan = guest_plan.build_plan(root, path, root / "store")
+        assert plan["device_profile"] == "standard" and plan["network_profile"] == "services"
+        assert plan["looking_glass"] is False and plan["cloud_init"] is True
+        assert plan["base_path"].endswith("/bases/linux/arch.qcow2")
+
+
 def main() -> int:
     check_catalogue()
     check_refusals()
     check_machine_to_plan()
+    check_server_arch()
     print("C10 published Template contract: OK")
     return 0
 
