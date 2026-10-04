@@ -180,8 +180,10 @@ lives in `desks.js`, `stats.js` and `launcher.js` and is tested directly.
 
 ## Look
 
-- the focused window wears a border in the theme's accent and a glow of the
-  same colour; inactive windows dim slightly;
+- the focused window wears a border running from the theme's accent to its
+  companion colour at 45 degrees, in the reviewed Lua gradient form
+  (`{ colors = { … }, angle = … }`), and a glow of the accent; inactive
+  windows dim slightly;
 - terminals are translucent over the blurred wallpaper;
 - the islands and panels blur what lies behind them, through a Hyprland
   layer rule in the reviewed Lua form (`hl.layer_rule`); only pixels above

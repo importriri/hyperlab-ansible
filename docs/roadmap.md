@@ -142,7 +142,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       never process arguments (software-verified)
 - [x] keybinding sheet in the guest (`ALT+H`), from one `keys.json` that the
       contract checks against the bound keys
-- [ ] a reviewed Lua form for a gradient active border
+- [x] a reviewed Lua form for a gradient active border: the `HL.Gradient`
+      table of Hyprland 0.56, executed per theme by the contract
+      (software-verified)
 - [ ] shell-owned notifications with a do-not-disturb mode per Desk
 - [ ] the same shell on every workstation Template, not only `arch-dev-vfio`
 

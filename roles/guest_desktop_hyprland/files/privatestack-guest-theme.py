@@ -210,14 +210,15 @@ def palette_files(
     )
 
     return {
-        # The active window wears the theme: an accent border and a glow of
-        # the same colour; inactive windows recede. Under the Lua
-        # configuration a colour is one rgba() value; the classic
-        # space-separated gradient string is refused.
+        # The active window wears the theme: a border running from the accent
+        # to its companion and a glow of the accent; inactive windows recede.
+        # Under the Lua configuration a gradient is a table of rgba() values
+        # and an angle (HL.Gradient); the classic space-separated gradient
+        # string is refused.
         CONFIG / "hypr/theme.lua": f"""hl.config({{
     general = {{
         col = {{
-            active_border = "rgba({accent}ff)",
+            active_border = {{ colors = {{ "rgba({accent}ff)", "rgba({accent_alt}ff)" }}, angle = 45 }},
             inactive_border = "rgba({surface}cc)",
         }},
     }},

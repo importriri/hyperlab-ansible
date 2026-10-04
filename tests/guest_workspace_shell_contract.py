@@ -282,6 +282,52 @@ def check_role() -> None:
     theme_lua = controller.split('CONFIG / "hypr/theme.lua"', 1)[1].split('""",', 1)[0]
     require("deg" not in theme_lua and not re.search(r"rgba\([^)]*\) rgba", theme_lua),
             "theme.lua colours must be single rgba() values under the Lua configuration")
+    check_theme_lua()
+
+
+THEME_LUA_CHECK = r"""
+local seen
+hl = { config = function(value) seen = value end }
+dofile(arg[1])
+local function colour(value)
+    return type(value) == "string" and value:match("^rgba%(%x%x%x%x%x%x%x%x%)$") ~= nil
+end
+local col = seen.general.col
+local active = col.active_border
+assert(type(active) == "table", "the active border must be an HL.Gradient table")
+for key in pairs(active) do
+    assert(key == "colors" or key == "angle", "unknown gradient field " .. tostring(key))
+end
+assert(#active.colors == 2 and colour(active.colors[1]) and colour(active.colors[2]),
+       "the gradient must be two rgba() colours")
+assert(active.colors[1] ~= active.colors[2], "a gradient of one colour is a plain border")
+assert(math.type(active.angle) == "integer" and active.angle >= 0 and active.angle < 360,
+       "the gradient angle must be whole degrees in [0, 360)")
+assert(colour(col.inactive_border), "the inactive border stays one rgba() colour")
+assert(colour(seen.decoration.shadow.color) and colour(seen.decoration.shadow.color_inactive))
+"""
+
+
+def check_theme_lua() -> None:
+    """Every theme renders a theme.lua that Hyprland's Lua form accepts."""
+    import importlib.util
+    import subprocess
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location("guest_theme_lua", ROLE / "files/privatestack-guest-theme.py")
+    theme = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(theme)
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        check = root / "check.lua"
+        check.write_text(THEME_LUA_CHECK)
+        for name in theme.THEMES:
+            files = theme.palette_files(name, root / "desktop.png", root / "lock.png")
+            rendered = root / f"{name}.lua"
+            rendered.write_text(files[theme.CONFIG / "hypr/theme.lua"])
+            result = subprocess.run(["lua", str(check), str(rendered)],
+                                    capture_output=True, text=True, check=False)
+            require(result.returncode == 0, f"theme {name}: {result.stderr.strip()}")
 
 
 def check_identity_themes() -> None:
