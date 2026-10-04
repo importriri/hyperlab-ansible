@@ -31,6 +31,11 @@ names it with `-e workbench_base_image=<image>`. The image id defaults to
 `-e workbench_image_id=...`. An id that already has a manifest is refused: a
 sealed image is never replaced.
 
+A product Machine is never a candidate: a domain with a Machine projection
+(`vm-specs/.generated/<domain>.yml`, as every Machine created from a Template
+has) is refused at adoption, and again at seal if it became one meanwhile. A
+Machine holds a person's work; a Golden Image is built for capture.
+
 ## 2. Seal
 
 Shut the domain down first, then:

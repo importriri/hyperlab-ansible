@@ -216,6 +216,23 @@ def check_adoption(lab: Lab) -> None:
     assert [item["domain"] for item in listing["candidates"]] == ["arch-dev-vfio"]
 
 
+def check_product_machine(lab: Lab) -> None:
+    """A product Machine is never adopted, nor sealed if it became one later."""
+    generated = lab.repo / "vm-specs/.generated"
+    generated.mkdir(parents=True)
+    (generated / "dev-01.yml").write_text("name: dev-01\n")
+    assert "is a product Machine" in lab.adopt(domain="dev-01", image="dev-01-capture", ok=False)
+    assert not (lab.root / "registry/dev-01.json").exists()
+    lab.adopt(domain="late-01", image="late-01-capture")
+    (generated / "late-01.yml").write_text("name: late-01\n")
+    assert "is a product Machine" in lab.run("seal", "--repo", str(lab.repo), "--domain", "late-01", ok=False)
+    assert not (lab.root / "staging/late-01-capture").exists()
+    assert lab.run("release", "--domain", "late-01")["released"] is True
+    for path in generated.iterdir():
+        path.unlink()
+    generated.rmdir()
+
+
 def check_refusals(lab: Lab) -> None:
     lab.env["FAKE_DOMSTATE"] = "running"
     assert "must be shut off" in lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio", ok=False)
@@ -509,6 +526,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hyperlab-workbench-") as temporary:
         lab = Lab(Path(temporary))
         check_adoption(lab)
+        check_product_machine(lab)
         check_refusals(lab)
         check_seal(lab)
     with tempfile.TemporaryDirectory(prefix="hyperlab-workbench-derive-") as temporary:

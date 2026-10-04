@@ -236,11 +236,19 @@ def is_placeholder(path: Path, image_id: str) -> bool:
             and data.get("source_sha256") is None and data.get("source_type") == "local")
 
 
+def require_not_a_machine(repo: Path, domain: str) -> None:
+    """A product Machine holds a person's work; it is never a candidate."""
+    projection = repo / "vm-specs" / ".generated" / f"{domain}.yml"
+    require(not projection.exists() and not projection.is_symlink(),
+            f"{domain} is a product Machine; only a domain built for capture can enter the Workbench")
+
+
 def cmd_adopt(args: argparse.Namespace) -> dict[str, Any]:
     root, repo = Path(args.root), Path(args.repo)
     require(NAME_RE.fullmatch(args.domain) is not None, "invalid domain name")
     require(NAME_RE.fullmatch(args.image_id) is not None, "invalid image id")
     require(args.profile in PROFILE_NETWORK, f"profile must be one of {', '.join(PROFILE_NETWORK)}")
+    require_not_a_machine(repo, args.domain)
     base = repo / "images" / f"{args.base_image}.yml"
     require(base.is_file(), f"base image manifest {base.name} does not exist")
     manifest = repo / "images" / f"{args.image_id}.yml"
@@ -492,6 +500,7 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
     with Lock(root):
         record = read_record(root, args.domain)
         require(record["state"] == "candidate", f"{args.domain} is already captured; release it first")
+        require_not_a_machine(repo, args.domain)
         checkout = checkout_provenance(repo)
         base = yaml.safe_load((repo / "images" / f"{record['base_image']}.yml").read_text())
         source = domain_disk(args.domain)
