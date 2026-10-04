@@ -51,8 +51,15 @@ The playbook installs `guestfs-tools` on the host, and:
    temporary files, the pacman cache, root's SSH, GnuPG, keyring,
    configuration, cache and npm directories, cloud-init instance state and the cloud-init sudoers file;
 4. scans the copy read-only and refuses on any leftover of those;
-5. checks and hashes it, writes `images/<id>.yml` into your checkout and
-   prints the import command.
+5. lists the copy's installed packages read-only with `virt-inspector`;
+6. checks and hashes it, writes `images/<id>.yml` and
+   `images/packages/<id>.txt` into your checkout and prints the import
+   command.
+
+The manifest's `build` section records where the image came from ([ADR
+0028](adr/0028-image-build-provenance.md)): the checkout commit the Workbench
+ran from and whether tracked files differed from it, the base image and its
+digest, and the package list's manager, count, file and sha256.
 
 A refused or failed seal removes its staging; nothing reaches the store.
 
@@ -65,7 +72,9 @@ ansible-playbook -K playbooks/image-validate.yml -e image_factory_manifest=image
 ```
 
 Set `status: sealed` and the `sha256` that validation prints in
-`images/<id>.yml`, review the whole manifest and commit it.
+`images/<id>.yml`, review the whole manifest and the package list, and commit
+both. `tests/schema_validate.py` refuses a package list that no longer
+matches the digest its manifest pins.
 
 ## 4. Release
 
@@ -134,7 +143,8 @@ ansible-playbook -K playbooks/workbench-derive.yml -e workbench_image_id=debian-
    virtio port appears. Otherwise the derivation is refused and its staging
    removed. `image-validate.yml` checks the binary and unit again before the
    seal.
-6. The staged image and its manifest replace the placeholder in the
+6. The staged image and its manifest, with its `build` section and
+   `images/packages/debian-server.txt`, replace the placeholder in the
    checkout; then the printed `image-prepare.yml` and `image-validate.yml`
    commands, `status: sealed` with the digest, and `server-debian` back to
    `ready`. `playbooks/workbench-discard.yml -e workbench_image_id=debian-server`

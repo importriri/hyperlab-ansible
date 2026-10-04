@@ -67,3 +67,20 @@ optional:
         min_items: 1
         unique_items: true
         item_pattern: "^[a-z0-9][a-z0-9+.-]*$"
+  # Build provenance written by the Workbench when it stages an image: the
+  # checkout it ran from, the base and its digest, and the package list read
+  # from the image offline, kept in images/<file> and pinned by digest.
+  build:
+    type: map
+    fields:
+      workbench_commit: {type: str, pattern: "^[a-f0-9]{40}$"}
+      workbench_tree_dirty: {type: bool}
+      base_image: {type: str, pattern: "^[a-z0-9][a-z0-9-]*$"}
+      base_sha256: {type: str, nullable: true, pattern: "^[a-f0-9]{64}$"}
+      packages:
+        type: map
+        fields:
+          manager: {type: str, enum: [pacman, dpkg, rpm]}
+          count: {type: int, min: 1, max: 100000}
+          file: {type: str, pattern: "^packages/[a-z0-9][a-z0-9-]*\\.txt$"}
+          sha256: {type: str, pattern: "^[a-f0-9]{64}$"}

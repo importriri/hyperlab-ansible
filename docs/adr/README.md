@@ -67,6 +67,9 @@ entered the pipeline.
 27. [`0027-guest-notification-owner.md`](0027-guest-notification-owner.md)
     — proposed: mako keeps owning guest notifications and the shell drives
     it; a quiet Desk is built on mako's do-not-disturb mode.
+28. [`0028-image-build-provenance.md`](0028-image-build-provenance.md) — a
+    Workbench image's manifest records the checkout commit, the base and its
+    digest, and a package list read offline and pinned by digest.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

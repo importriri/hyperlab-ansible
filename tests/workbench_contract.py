@@ -72,6 +72,11 @@ elif name == "virt-customize":
     image = sys.argv[sys.argv.index("-a") + 1]
     with open(image, "ab") as handle:
         handle.write(b"customized")
+elif name == "virt-inspector":
+    if "--format" in sys.argv and sys.argv.index("--format") > sys.argv.index("-a"):
+        print("virt-inspector: error: --format parameter must appear before -a parameter", file=sys.stderr)
+        sys.exit(1)
+    print(open(os.environ["FAKE_INSPECT"]).read(), end="")
 elif name == "guestfish":
     script = sys.stdin.read()
     if "is-file-opts" in script:
@@ -104,6 +109,30 @@ nobody:x:65534:65534:Kernel Overflow User:/:/usr/bin/nologin
 """
 
 
+INSPECTION = """<?xml version="1.0"?>
+<operatingsystems>
+  <operatingsystem>
+    <root>/dev/sda3</root>
+    <name>linux</name>
+    <package_format>pacman</package_format>
+    <applications>
+      <application><name>linux</name><version>6.17.1.arch1</version><release>1</release></application>
+      <application><name>qemu-guest-agent</name><epoch>1</epoch><version>10.1.0</version><release>2</release></application>
+      <application><name>bash</name><version>5.3.3</version><release>2</release></application>
+    </applications>
+  </operatingsystem>
+</operatingsystems>
+"""
+
+
+def git(repo: Path, *args: str) -> str:
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@t", "PATH": os.environ.get("PATH", "/usr/bin"),
+           "HOME": str(repo.parent)}
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                          check=True, env=env).stdout.strip()
+
+
 class Lab:
     def __init__(self, base: Path) -> None:
         self.base = base
@@ -111,9 +140,12 @@ class Lab:
         self.repo = base / "repo"
         (self.repo / "images").mkdir(parents=True)
         (self.repo / "images/arch.yml").write_text((ROOT / "images/arch.yml").read_text())
+        git(self.repo, "init", "-q")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "--no-gpg-sign", "-m", "fixture")
         self.bin = base / "bin"
         self.bin.mkdir()
-        for name in ("virsh", "qemu-img", "virt-sysprep", "virt-customize", "guestfish"):
+        for name in ("virsh", "qemu-img", "virt-sysprep", "virt-customize", "guestfish", "virt-inspector"):
             path = self.bin / name
             path.write_text(FAKE)
             path.chmod(0o755)
@@ -123,7 +155,10 @@ class Lab:
         self.log = base / "tools.log"
         self.scan = base / "scan.txt"
         self.scan.write_text(CLEAN_SCAN)
+        self.inspect = base / "inspect.xml"
+        self.inspect.write_text(INSPECTION)
         self.env = {
+            "FAKE_INSPECT": str(self.inspect),
             "PATH": f"{self.bin}:{os.environ.get('PATH', '/usr/bin')}",
             "FAKE_LOG": str(self.log),
             "FAKE_SCAN": str(self.scan),
@@ -233,11 +268,29 @@ def check_seal(lab: Lab) -> None:
     assert manifest["private"] is True and manifest["network_allowlist"] == ["dev"]
     assert manifest["virtual_size_gib"] == 100
 
+    # Build provenance: the checkout, the base and the packages, bound by digest.
+    build = manifest["build"]
+    assert build["workbench_commit"] == git(lab.repo, "rev-parse", "HEAD")
+    assert build["workbench_tree_dirty"] is False
+    assert build["base_image"] == "arch" and build["base_sha256"] == yaml.safe_load(
+        (lab.repo / "images/arch.yml").read_text()).get("sha256")
+    listing = Path(result["packages"])
+    assert listing.read_text() == (
+        "bash 5.3.3-2\nlinux 6.17.1.arch1-1\nqemu-guest-agent 1:10.1.0-2\n"), listing.read_text()
+    assert build["packages"] == {
+        "manager": "pacman", "count": 3, "file": "packages/contract-dev-20261003.txt",
+        "sha256": hashlib.sha256(listing.read_bytes()).hexdigest(),
+    }
+    inspector = next(call for call in lab.calls() if call[0] == "virt-inspector")
+    assert inspector[inspector.index("-a") + 1].endswith(".qcow2.new"), "inspection must read the copy"
+
     # The rendered manifest passes the repository's own schema validator.
     images = ROOT / "images" / "contract-dev-20261003.yml"
-    assert not images.exists()
+    packages = ROOT / "images" / "packages" / "contract-dev-20261003.txt"
+    assert not images.exists() and not packages.exists()
     try:
         images.write_text(Path(result["manifest"]).read_text())
+        packages.write_text(Path(result["packages"]).read_text())
         validation = subprocess.run([sys.executable, str(ROOT / "tests/schema_validate.py")],
                                     capture_output=True, text=True, check=False)
         assert validation.returncode == 0, validation.stdout + validation.stderr
@@ -251,11 +304,41 @@ def check_seal(lab: Lab) -> None:
         )
         assert plan.returncode == 0, plan.stderr
         assert json.loads(plan.stdout)["local_source"] == str(staged)
+        # The repository refuses a package list that no longer matches.
+        packages.write_text("bash 5.3.3-2\n")
+        validation = subprocess.run([sys.executable, str(ROOT / "tests/schema_validate.py")],
+                                    capture_output=True, text=True, check=False)
+        assert validation.returncode != 0 and "package list" in validation.stdout + validation.stderr
     finally:
         images.unlink()
+        packages.unlink(missing_ok=True)
 
     record = lab.run("show", "--domain", "arch-dev-vfio")
     assert record["state"] == "captured" and record["captured"]["sha256"] == result["sha256"]
+    assert lab.run("release", "--domain", "arch-dev-vfio")["released"] is True
+    lab.adopt()
+
+    # A tracked change is recorded; odd text from the image or no package
+    # format refuses the seal and leaves no staging.
+    (lab.repo / "images/arch.yml").write_text((lab.repo / "images/arch.yml").read_text() + "# local\n")
+    dirty = lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio")
+    assert yaml.safe_load(Path(dirty["manifest"]).read_text())["build"]["workbench_tree_dirty"] is True
+    git(lab.repo, "checkout", "--", "images/arch.yml")
+    assert lab.run("release", "--domain", "arch-dev-vfio")["released"] is True
+    for inspection, expected in (
+        (INSPECTION.replace("<name>bash</name>", "<name>bash;rm -rf /</name>"), "unreadable package entry"),
+        (INSPECTION.replace("<package_format>pacman</package_format>", ""), "unknown package format"),
+        ("not xml", "unreadable output"),
+    ):
+        lab.adopt()
+        lab.inspect.write_text(inspection)
+        assert expected in lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio", ok=False)
+        assert not (lab.root / "staging/contract-dev-20261003").exists(), "a refused seal left staging"
+        lab.inspect.write_text(INSPECTION)
+        assert lab.run("release", "--domain", "arch-dev-vfio")["released"] is True
+    lab.adopt()
+    result = lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio")
+    staged = Path(result["staged_image"])
     assert "already captured" in lab.run("seal", "--repo", str(lab.repo), "--domain", "arch-dev-vfio", ok=False)
 
     assert lab.run("release", "--domain", "arch-dev-vfio")["released"] is True
@@ -330,6 +413,10 @@ def check_derive(base_dir: Path) -> None:
     manifest = yaml.safe_load(Path(result["manifest"]).read_text())
     assert manifest["status"] == "not-built" and manifest["sha256"] is None
     assert manifest["source_sha256"] == result["sha256"] and manifest["derive"]["install"] == ["qemu-guest-agent"]
+    assert manifest["build"]["base_image"] == "debian"
+    assert manifest["build"]["base_sha256"] == debian["sha256"]
+    assert manifest["build"]["packages"]["file"] == "packages/debian-server.txt"
+    assert Path(result["packages"]).is_file()
     calls = lab.calls()
     names = [call[0] for call in calls]
     assert "virsh" not in names and "ssh" not in names, "a derivation booted or reached a guest"
@@ -408,6 +495,11 @@ def check_wiring() -> None:
     assert '"qemu-img", "convert"' in source
     assert 'run(["virt-sysprep", "--format", "qcow2", "-a", str(partial)' in source
     assert '"guestfish", "--ro"' in source
+    # Run as root over the operator's checkout, git must never rewrite the index.
+    assert '"git", "--no-optional-locks"' in source
+    publish = (ROOT / "roles/workbench/tasks/publish-manifest.yml").read_text()
+    assert 'path: "{{ workbench_capture.packages }}"' in publish
+    assert 'dest: "{{ workbench_repository_root }}/images/packages/{{ workbench_capture.image_id }}.txt"' in publish
 
 
 def main() -> int:

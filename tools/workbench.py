@@ -8,6 +8,11 @@ for the existing `image_factory` local import. The source disk is only read.
 
 Every write is atomic, every transaction holds one lock, and a failed seal
 removes its staging so nothing half-made survives.
+
+Every staged image carries its build provenance in the manifest: the
+checkout commit the Workbench ran from, the base image and its digest, and
+the package list read from the image without booting it, kept beside the
+manifest and bound to it by digest.
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from xml.etree import ElementTree
 from typing import Any
 
 import yaml
@@ -32,6 +38,9 @@ import yaml
 SCHEMA_VERSION = 1
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 SHA_RE = re.compile(r"^[a-f0-9]{64}$")
+COMMIT_RE = re.compile(r"^[a-f0-9]{40}$")
+PACKAGE_LINE = re.compile(r"^[A-Za-z0-9@._+-]+ [A-Za-z0-9:._+~^-]+$")
+PACKAGE_MANAGERS = ("pacman", "dpkg", "rpm")
 STATES = ("candidate", "captured")
 PROFILE_NETWORK = {"dev": "dev", "gaming-clean": "clean", "gaming-dirty": "dirty"}
 
@@ -314,6 +323,64 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def checkout_provenance(repo: Path) -> dict[str, Any]:
+    """The commit the Workbench runs from, and whether tracked files differ.
+
+    The Workbench runs as root over the operator's checkout: no optional
+    locks, so `git status` never rewrites the index as root.
+    """
+    git = ["git", "--no-optional-locks", "-c", f"safe.directory={repo}", "-C", str(repo)]
+    commit = run([*git, "rev-parse", "--verify", "HEAD"]).stdout.strip()
+    require(COMMIT_RE.fullmatch(commit) is not None, "the Workbench must run from a git checkout")
+    changed = run([*git, "status", "--porcelain", "--untracked-files=no"]).stdout.strip()
+    return {"workbench_commit": commit, "workbench_tree_dirty": bool(changed)}
+
+
+def package_list(image: Path) -> tuple[str, list[str]]:
+    """The image's installed packages, read by libguestfs inspection only."""
+    report = run(["virt-inspector", "--no-icons", "--format", "qcow2", "-a", str(image)]).stdout
+    try:
+        systems = ElementTree.fromstring(report).findall("operatingsystem")
+    except ElementTree.ParseError as error:
+        raise WorkbenchError(f"virt-inspector returned unreadable output: {error}") from None
+    require(len(systems) == 1, "the image must hold exactly one operating system")
+    manager = (systems[0].findtext("package_format") or "").strip()
+    require(manager in PACKAGE_MANAGERS, f"unknown package format {manager!r}")
+    lines = set()
+    for application in systems[0].iterfind("applications/application"):
+        name, epoch, version, release = (
+            (application.findtext(tag) or "").strip() for tag in ("name", "epoch", "version", "release")
+        )
+        version += f"-{release}" if release else ""
+        if epoch not in ("", "0"):
+            version = f"{epoch}:{version}"
+        line = f"{name} {version}"
+        # Text that came out of the image is kept only in this narrow form.
+        require(PACKAGE_LINE.fullmatch(line) is not None, f"unreadable package entry {line[:80]!r}")
+        lines.add(line)
+    require(bool(lines), "the image's package list is empty")
+    return manager, sorted(lines)
+
+
+def stage_build(staging: Path, image_id: str, image: Path, checkout: dict[str, Any],
+                base_id: str, base_sha256: str | None) -> dict[str, Any]:
+    manager, lines = package_list(image)
+    listing = staging / "packages.txt"
+    listing.write_text("\n".join(lines) + "\n")
+    os.chmod(listing, 0o644)
+    return {
+        **checkout,
+        "base_image": base_id,
+        "base_sha256": base_sha256,
+        "packages": {
+            "manager": manager,
+            "count": len(lines),
+            "file": f"packages/{image_id}.txt",
+            "sha256": sha256_file(listing),
+        },
+    }
+
+
 def scan_script() -> str:
     lines = []
     for marker, command in SCAN_PROBES:
@@ -367,7 +434,8 @@ def evaluate_scan(output: str) -> list[str]:
     return problems
 
 
-def render_manifest(repo: Path, record: dict[str, Any], sha256: str, virtual_size_bytes: int) -> str:
+def render_manifest(repo: Path, record: dict[str, Any], sha256: str, virtual_size_bytes: int,
+                    build: dict[str, Any]) -> str:
     base = yaml.safe_load((repo / "images" / f"{record['base_image']}.yml").read_text())
     network = PROFILE_NETWORK[record["profile"]]
     size_gib = max(1, math.ceil(virtual_size_bytes / (1024 ** 3)))
@@ -414,6 +482,7 @@ def render_manifest(repo: Path, record: dict[str, Any], sha256: str, virtual_siz
             "their account from cloud-init and their rice from the profile "
             "playbook."
         ),
+        "build": build,
     }
     return "---\n" + yaml.safe_dump(manifest, sort_keys=False, default_flow_style=None)
 
@@ -423,6 +492,8 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
     with Lock(root):
         record = read_record(root, args.domain)
         require(record["state"] == "candidate", f"{args.domain} is already captured; release it first")
+        checkout = checkout_provenance(repo)
+        base = yaml.safe_load((repo / "images" / f"{record['base_image']}.yml").read_text())
         source = domain_disk(args.domain)
         staging = root / "staging" / record["image_id"]
         require(not staging.exists(), f"stale staging {staging} exists; release and adopt again")
@@ -436,6 +507,8 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
             scan = run(["guestfish", "--ro", "-a", str(partial), "-i"], input=scan_script())
             problems = evaluate_scan(scan.stdout)
             require(not problems, "the generalized image still holds: " + "; ".join(problems))
+            build = stage_build(staging, record["image_id"], partial, checkout,
+                                record["base_image"], base.get("sha256"))
             run(["qemu-img", "check", str(partial)])
             info = json.loads(run(["qemu-img", "info", "--output=json", str(partial)]).stdout)
             require(info.get("format") == "qcow2" and not info.get("backing-filename"),
@@ -444,7 +517,7 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
             os.chmod(image, 0o600)
             digest = sha256_file(image)
             size = int(info["virtual-size"])
-            manifest = render_manifest(repo, record, digest, size)
+            manifest = render_manifest(repo, record, digest, size, build)
             (staging / "manifest.yml").write_text(manifest)
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
@@ -463,6 +536,7 @@ def cmd_seal(args: argparse.Namespace) -> dict[str, Any]:
         "staged_image": str(image),
         "sha256": digest,
         "manifest": str(staging / "manifest.yml"),
+        "packages": str(staging / "packages.txt"),
     }
 
 
@@ -484,7 +558,8 @@ def agent_present(image: Path) -> list[str]:
     return problems
 
 
-def render_derived_manifest(placeholder: dict[str, Any], sha256: str, virtual_size_bytes: int) -> str:
+def render_derived_manifest(placeholder: dict[str, Any], sha256: str, virtual_size_bytes: int,
+                            build: dict[str, Any]) -> str:
     size_gib = max(1, math.ceil(virtual_size_bytes / (1024 ** 3)))
     manifest = dict(placeholder)
     manifest.update({
@@ -494,6 +569,7 @@ def render_derived_manifest(placeholder: dict[str, Any], sha256: str, virtual_si
         "source_sha256": sha256,
         "virtual_size_gib": size_gib,
         "minimum_size_gib": size_gib,
+        "build": build,
     })
     return "---\n" + yaml.safe_dump(manifest, sort_keys=False, default_flow_style=None)
 
@@ -520,6 +596,7 @@ def cmd_derive(args: argparse.Namespace) -> dict[str, Any]:
     require(base.is_file() and not base.is_symlink(), f"base image {base} is missing or redirected")
     require(sha256_file(base) == base_manifest["sha256"],
             f"base {derive['base']} no longer matches its sealed digest")
+    checkout = checkout_provenance(repo)
     with Lock(root):
         require(all(item["image_id"] != args.image_id for item in list_records(root)[0]),
                 f"image id {args.image_id} is taken by a Workbench candidate")
@@ -538,6 +615,8 @@ def cmd_derive(args: argparse.Namespace) -> dict[str, Any]:
             scan = run(["guestfish", "--ro", "-a", str(partial), "-i"], input=scan_script())
             problems = evaluate_scan(scan.stdout) + agent_present(partial)
             require(not problems, "the derived image is refused: " + "; ".join(problems))
+            build = stage_build(staging, args.image_id, partial, checkout,
+                                derive["base"], base_manifest["sha256"])
             run(["qemu-img", "check", str(partial)])
             info = json.loads(run(["qemu-img", "info", "--output=json", str(partial)]).stdout)
             require(info.get("format") == "qcow2" and "backing-filename" not in info,
@@ -545,13 +624,14 @@ def cmd_derive(args: argparse.Namespace) -> dict[str, Any]:
             partial.rename(image)
             os.chmod(image, 0o600)
             digest = sha256_file(image)
-            manifest = render_derived_manifest(placeholder, digest, int(info["virtual-size"]))
+            manifest = render_derived_manifest(placeholder, digest, int(info["virtual-size"]), build)
             (staging / "manifest.yml").write_text(manifest)
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
             raise
     return {"image_id": args.image_id, "base": derive["base"], "installed": packages,
-            "staged_image": str(image), "sha256": digest, "manifest": str(staging / "manifest.yml")}
+            "staged_image": str(image), "sha256": digest, "manifest": str(staging / "manifest.yml"),
+            "packages": str(staging / "packages.txt")}
 
 
 def cmd_discard(args: argparse.Namespace) -> dict[str, Any]:

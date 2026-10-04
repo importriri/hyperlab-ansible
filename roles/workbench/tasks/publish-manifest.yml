@@ -1,6 +1,7 @@
 ---
-# Publish a staged manifest into the checkout (seal and derive). Expects
-# workbench_capture with image_id, manifest, staged_image and sha256.
+# Publish a staged manifest and its package list into the checkout (seal and
+# derive). Expects workbench_capture with image_id, manifest, packages,
+# staged_image and sha256.
 
 - name: Read the rendered image manifest
   ansible.builtin.slurp:
@@ -51,12 +52,27 @@
     # True only for a placeholder: the assert above refused anything else.
     force: "{{ workbench_existing_manifest.stat.exists }}"
 
+# The package list read from the image, pinned by digest in the manifest.
+- name: Read the image's package list
+  ansible.builtin.slurp:
+    path: "{{ workbench_capture.packages }}"
+  register: workbench_packages
+
+- name: Put the package list beside the manifest
+  become: false
+  ansible.builtin.copy:
+    content: "{{ workbench_packages.content | b64decode }}"
+    dest: "{{ workbench_repository_root }}/images/packages/{{ workbench_capture.image_id }}.txt"
+    mode: "0644"
+
 - name: Show the import commands
   ansible.builtin.debug:
     msg:
       - "Generalized, scanned and staged: {{ workbench_capture.staged_image }}"
       - "sha256: {{ workbench_capture.sha256 }}"
-      - "Review images/{{ workbench_capture.image_id }}.yml, then import it:"
+      - >-
+        Review images/{{ workbench_capture.image_id }}.yml and
+        images/packages/{{ workbench_capture.image_id }}.txt, then import it:
       - >-
         ansible-playbook -K playbooks/image-prepare.yml
         -e image_factory_manifest=images/{{ workbench_capture.image_id }}.yml

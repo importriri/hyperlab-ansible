@@ -18,6 +18,8 @@ workbench_profile: dev
 workbench_base_image: ""
 workbench_image_id: ""
 
-# Offline generalization and inspection of the copied disk.
+# Offline generalization and inspection of the copied disk, and the
+# checkout commit recorded as build provenance.
 workbench_packages:
   - guestfs-tools
+  - git

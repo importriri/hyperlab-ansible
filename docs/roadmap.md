@@ -176,7 +176,8 @@ Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
       as `arch-dev-20261003` (Nitro-verified)
 - [ ] **Workbench** section in the shell: start, stop, open and seal a
       candidate, never shown as a product Machine
-- [ ] build commits and the package list in the image manifest
+- [x] build commits and the package list in the image manifest
+      ([ADR 0028](adr/0028-image-build-provenance.md), software-verified)
 - [ ] a sealed image is read-only and verified by digest at every use
 
 ### 4. Templates

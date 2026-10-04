@@ -7,6 +7,7 @@ transaction roles, not to checked-in schema validation.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -237,6 +238,9 @@ class RepositoryValidator:
             self.fail(where, f"observed Looking Glass build {observed_build} != required {required_build}")
         if status == "sealed" and required_build and not observed_build:
             self.fail(where, "a sealed Looking Glass image must record the observed host build")
+        build = image.get("build")
+        if isinstance(build, dict):
+            self.validate_build(where, image_id, build)
         derive = image.get("derive")
         if isinstance(derive, dict):
             # An offline derivation (ADR 0026) is a local artefact built from
@@ -258,6 +262,34 @@ class RepositoryValidator:
                         self.fail(where, "derive.base must not itself be derived")
                     if str(base.get("os_variant")) != str(image.get("os_variant")):
                         self.fail(where, "a derived image keeps its base's os_variant")
+
+    def validate_build(self, where: str, image_id: Any, build: dict[str, Any]) -> None:
+        """A Workbench image's package list exists and still matches its pin."""
+        packages = build.get("packages")
+        if not isinstance(packages, dict):
+            return
+        if packages.get("file") != f"packages/{image_id}.txt":
+            self.fail(where, "build.packages.file must be packages/<image id>.txt")
+            return
+        listing = self.root / "images" / str(packages["file"])
+        if not listing.is_file() or listing.is_symlink():
+            self.fail(where, f"the package list images/{packages['file']} is missing")
+            return
+        data = listing.read_bytes()
+        if hashlib.sha256(data).hexdigest() != packages.get("sha256"):
+            self.fail(where, "the package list no longer matches build.packages.sha256")
+        lines = data.decode("utf-8", errors="replace").splitlines()
+        if len(lines) != packages.get("count") or lines != sorted(set(lines)):
+            self.fail(where, "the package list is not the sorted, counted list the manifest pins")
+        base_id = build.get("base_image")
+        base_path = self.root / "images" / f"{base_id}.yml"
+        if not base_path.is_file():
+            self.fail(where, f"build.base_image {base_id!r} has no manifest")
+        else:
+            base = self.load_yaml(base_path)
+            base_sha = base.get("sha256") if isinstance(base, dict) else None
+            if build.get("base_sha256") is not None and build.get("base_sha256") != base_sha:
+                self.fail(where, "build.base_sha256 is not the base image's digest")
 
     def validate_template_policy(
         self,
