@@ -109,6 +109,17 @@ def rejected(source: str, bar: dict, label: str, shell: str = 'quickshell') -> N
     raise AssertionError('regression not detected: ' + label)
 
 
+def check_no_lock_behind_looking_glass() -> None:
+    """A guest reached through Looking Glass never locks itself idle."""
+    lua = (ROOT / "roles/guest_desktop_hyprland/templates/hyprland.lua.j2").read_text()
+    guarded = lua.split("{% if not guest_desktop_hyprland_headless_monitor %}", 1)
+    assert len(guarded) == 2, "hypridle is not guarded by the headless monitor policy"
+    assert 'hl.exec_cmd("hypridle")' in guarded[1].split("{% endif %}", 1)[0]
+    assert lua.count('hl.exec_cmd("hypridle")') == 1, "hypridle starts outside the guard"
+    idle = (ROOT / "roles/guest_desktop_hyprland/files/hypridle.conf").read_text()
+    assert "hyprctl dispatch" not in idle, "hyprctl dispatch takes Lua under the guest configuration"
+
+
 def main() -> None:
     source = (GUEST / 'templates/hyprland.lua.j2').read_text()
     bar = json.loads((GUEST / 'files/waybar.jsonc').read_text())
@@ -131,6 +142,7 @@ def main() -> None:
     rejected(source.replace('hl.exec_cmd("hyperlab-workspace session")', ''), bar, 'disabled shell')
     rejected(source.replace('{% else %}\n    hl.exec_cmd("waybar")', '\n    hl.exec_cmd("waybar")'),
              bar, 'two bars')
+    check_no_lock_behind_looking_glass()
 
     host = (ROOT / 'roles/host_desktop_hyprland/templates/hyprland.lua.j2').read_text()
     host = re.sub(r'--[^\n]*', '', host)

@@ -19,6 +19,8 @@ proof.
 - [`looking-glass-linux-sdr-flagged-hdr.md`](looking-glass-linux-sdr-flagged-hdr.md):
   the pinned PipeWire sender marked every SDR frame HDR PQ, so colour-managed
   clients tagged sRGB surfaces as ST2084.
+- [`guest-idle-lock-blanked-looking-glass.md`](guest-idle-lock-blanked-looking-glass.md):
+  a guest reached through Looking Glass no longer locks itself when idle.
 - [`focus-accent-kept-old-resolver.md`](focus-accent-kept-old-resolver.md):
   the border and keyboard service now follows a resolver pulled into the
   checkout.

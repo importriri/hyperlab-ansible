@@ -167,7 +167,13 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("waybar")
 {% endif %}
     hl.exec_cmd("mako")
+{% if not guest_desktop_hyprland_headless_monitor %}
     hl.exec_cmd("hypridle")
+{% else %}
+    -- No idle lock in a guest reached through Looking Glass: Hyprland stops
+    -- screen capture while the session is locked, so a guest that locked
+    -- itself would show nothing. The host session lock protects the window.
+{% endif %}
 
     hl.exec_cmd(
         "sleep 1 && "

@@ -189,6 +189,11 @@ Nothing depends on the shell being up:
   run, and starts Waybar if the shell fails three times in a row;
 - the lock is hyprlock, a separate program, so a shell crash can never leave
   the session unlocked or unlockable;
+- a guest reached through Looking Glass never locks itself when idle:
+  Hyprland stops screen capture while a session is locked, so Looking Glass
+  would show nothing. The host session lock protects that window. `ALT+L`
+  still locks on request; Looking Glass then shows no picture until the
+  password, typed into the window, unlocks it;
 - `guest_desktop_hyprland_shell: waybar` keeps the plain bar.
 
 The role installs the shell only for the reviewed Quickshell API series
