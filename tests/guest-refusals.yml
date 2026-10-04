@@ -3,7 +3,7 @@
   hosts: hypervisor
   gather_facts: false
   tasks:
-    - name: Ask the side-effect-free planner for the current Debian guest
+    - name: Ask the side-effect-free planner for a guest whose image is not built
       ansible.builtin.command:
         argv:
           - "{{ ansible_playbook_python }}"
@@ -11,7 +11,7 @@
           - --root
           - "{{ playbook_dir | dirname }}"
           - --spec
-          - vm-specs/debian-dev.yml
+          - vm-specs/parrot-disposable.yml
           - --store
           - /var/lib/libvirt/images/hyperlab
       register: guest_refusal_unsealed
@@ -22,7 +22,7 @@
       ansible.builtin.assert:
         that:
           - guest_refusal_unsealed.rc == 2
-          - "'image debian is not sealed' in guest_refusal_unsealed.stderr"
+          - "'image parrot is not sealed' in guest_refusal_unsealed.stderr"
         fail_msg: >-
           M3 must remain unusable with a production manifest whose base has not
           been imported, checksummed and marked sealed.

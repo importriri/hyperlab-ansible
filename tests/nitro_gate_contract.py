@@ -1,9 +1,40 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = (ROOT / "run-nitro-m9-cockpit-gate.sh").read_text()
 VERIFY = (ROOT / "verify.sh").read_text()
+
+
+def unsealed_example(spec_path: str, pattern: str) -> None:
+    """An expected unsealed-image refusal must name an image that is really unsealed."""
+    spec = yaml.safe_load((ROOT / spec_path).read_text())
+    image = spec["image"]
+    manifest = yaml.safe_load((ROOT / "images" / f"{image}.yml").read_text())
+    assert manifest["status"] != "sealed", (
+        f"{spec_path} uses image {image}, which is sealed now; pick an image that is not built")
+    assert pattern == f"image {image} is not sealed", (spec_path, pattern)
+
+
+def check_unsealed_examples() -> None:
+    gate_spec = re.search(r"^SPEC=(\S+)$", GATE, re.MULTILINE).group(1)
+    gate_pattern = re.search(r"refusal_pattern='(image \S+ is not sealed)'", GATE).group(1)
+    unsealed_example(gate_spec, gate_pattern)
+
+    suite = yaml.safe_load((ROOT / "tests/guest-refusals.yml").read_text())
+    for task in suite[0]["tasks"]:
+        argv = task.get("ansible.builtin.command", {}).get("argv", [])
+        if "--spec" in argv:
+            spec_path = argv[argv.index("--spec") + 1]
+    checks = [task for task in suite[0]["tasks"] if "ansible.builtin.assert" in task]
+    patterns = [re.search(r"'(image \S+ is not sealed)'", line).group(1)
+                for task in checks for line in task["ansible.builtin.assert"]["that"]
+                if "is not sealed" in line]
+    assert len(patterns) == 1, patterns
+    unsealed_example(spec_path, patterns[0])
 
 
 def main() -> int:
@@ -38,7 +69,7 @@ def main() -> int:
     assert 'run_sudo test -f /etc/privatestack/bricks/image_factory' in GATE
     assert "refusal_reason=unsealed-image" in GATE
     assert "refusal_reason=missing-image-factory-prerequisite" in GATE
-    assert "refusal_pattern='image debian is not sealed'" in GATE
+    assert "refusal_pattern='image parrot is not sealed'" in GATE
     assert "refusal_pattern='guest needs image_factory on this host first'" in GATE
     assert 'vm-create-expected-refusal.txt' in GATE
     assert 'grep -Fq "${refusal_pattern}"' in GATE
@@ -64,6 +95,8 @@ def main() -> int:
     assert "if sudo -v; then" not in VERIFY
     assert "become_args=(-K)" not in VERIFY
     assert 'ansible-playbook "${become_args[@]}"' in VERIFY
+
+    check_unsealed_examples()
 
     print("Nitro gate contract: OK")
     return 0

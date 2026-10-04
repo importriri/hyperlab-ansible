@@ -75,10 +75,10 @@ until then the VM specs below are the reviewed definitions.
 | `arch-dev` | arch | dev | none | permanent | Nitro lifecycle gate passed | move onto the shared workstation roles |
 | `arch-gaming-clean` | arch | clean | clean | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
 | `arch-gaming-dirty` | arch | dirty | dirty | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
-| `debian-dev` | debian (not built) | dev | none | permanent | spec only | prepare and seal the Debian image, first boot |
-| `fedora-dev` | fedora (not built) | dev | none | permanent | spec only | prepare and seal the Fedora image, first boot |
+| `debian-dev` | debian (sealed upstream base) | dev | none | permanent | spec only | first boot on the shared roles |
+| `fedora-dev` | fedora (sealed upstream base) | dev | none | permanent | spec only | first boot on the shared roles |
 | `parrot-disposable` | parrot (not built) | lab | none | disposable | spec only | prepare and seal the Parrot image, prove reset |
-| `svc-jellyfin` | debian (not built) | services | optional | permanent | service contracts green | service and recovery hardware gates |
+| `svc-jellyfin` | debian (sealed upstream base) | services | optional | permanent | service contracts green | service and recovery hardware gates |
 | `win11clean-valley` | win11clean (not built) | clean | clean | permanent | Windows workshop flow exists | seal the master, VFIO benchmark |
 | `win11dirty-disposable` | win11dirty (not built) | dirty | dirty | disposable | Windows workshop flow exists | seal the master, prove reset |
 | `arch-minimal-ssh` | arch | dev | none | test fixture | used by inventory and SSH gates | move onto the shared roles |

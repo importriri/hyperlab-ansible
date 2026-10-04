@@ -38,6 +38,9 @@ proof.
 - [`guest-wallpaper-key-redrew-session.md`](guest-wallpaper-key-redrew-session.md):
   `ALT+SHIFT+W` reloaded the whole session and ran a 1.1 s transition; it
   now changes only the wallpaper with a short fade.
+- [`refusal-example-image-got-sealed.md`](refusal-example-image-got-sealed.md):
+  sealing Debian broke the unsealed-image refusal suite; the example now uses
+  an unbuilt image and a contract checks that it stays unsealed.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 STORE=/var/lib/libvirt/images/hyperlab
-SPEC=vm-specs/debian-dev.yml
+SPEC=vm-specs/parrot-disposable.yml
 NETWORKS=(clean dirty dev lab services)
 STAMP="$(date +%Y%m%d-%H%M%S)"
 EVIDENCE_ROOT="${XDG_STATE_HOME:-${HOME}/.local/state}/hyperlab-gates"
@@ -220,7 +220,7 @@ printf '%s\n' "${domains_before}" >"${LOG_DIR}/domains-before.sha256"
 step "Resolve the expected managed-create refusal"
 if run_sudo test -f /etc/privatestack/bricks/image_factory; then
   refusal_reason=unsealed-image
-  refusal_pattern='image debian is not sealed'
+  refusal_pattern='image parrot is not sealed'
 else
   refusal_reason=missing-image-factory-prerequisite
   refusal_pattern='guest needs image_factory on this host first'
