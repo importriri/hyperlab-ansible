@@ -178,7 +178,11 @@ Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
       candidate, never shown as a product Machine
 - [x] build commits and the package list in the image manifest
       ([ADR 0028](adr/0028-image-build-provenance.md), software-verified)
-- [ ] a sealed image is read-only and verified by digest at every use
+- [x] a sealed image is read-only and verified by digest at every use:
+      root:qemu 0440 in the store; a disposable Machine verifies it on every
+      operation that opens its overlay, a permanent one is an independent
+      clone of a verified base, a derivation checks it first
+      (`tests/sealed_base_use_contract.py`, software-verified)
 
 ### 4. Templates
 
