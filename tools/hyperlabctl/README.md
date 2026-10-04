@@ -24,6 +24,7 @@ registry does not expose.
 | `hyperlabctl machine project <id>` | write the derived VM-spec adapter for one Machine |
 | `hyperlabctl machine create-plan` | JSON: what the shell's Create view may offer, with the factory's limits |
 | `hyperlabctl machine provision-steps <id>` | JSON: the reviewed provisioning commands for one projected Machine |
+| `hyperlabctl clipboard send <id>` | send the host clipboard text to one running Machine, once |
 | `hyperlabctl trust` | current GPU trust owner and allowed transitions |
 | `hyperlabctl logs --level warn` | warning-or-higher HyperLab events |
 | `hyperlabctl schema` | discovered status providers and fields |

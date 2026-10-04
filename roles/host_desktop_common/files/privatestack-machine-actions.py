@@ -12,6 +12,10 @@ reviewed action registry. The shell never reconstructs these rules, and a
 capability answer is advice for presentation only -- this bridge re-derives
 everything before it acts.
 
+The host clipboard crosses it as one more operation (ADR 0020):
+
+  clipboard NAME     send the host clipboard text to this machine, once
+
 Creation crosses it as two more questions (ADR 0017):
 
   create-plan                                   what may be created, within which limits
@@ -137,6 +141,7 @@ def resolve(
     if action_id in {
         "vm.console",
         "vm.ssh",
+        "vm.clipboard-send",
         "vm.looking-glass",
         "vm.start",
         "vm.stop",
@@ -492,6 +497,16 @@ def main() -> int:
     if verb == "capabilities":
         emit(capabilities(name))
         return 0
+
+    if verb == "clipboard":
+        # The same checks as SSH: the text travels over that channel.
+        machine = live_machine(name)
+        choose_action("ssh", name, machine, managed_spec(name))
+        argv = resolve("vm.clipboard-send", name, None)
+        emit({"phase": "accepted", "mode": "foreground", "verb": "clipboard",
+              "machine": name, "action_id": "vm.clipboard-send"})
+        os.execvp(argv[0], argv)
+        return 127
 
     if verb not in VERBS:
         raise Refused("unsupported machine operation")

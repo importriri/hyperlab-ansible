@@ -563,6 +563,16 @@
     group: root
     mode: "0755"
 
+# The host sends a clipboard text only to this program, over its pinned SSH
+# channel (ADR 0020); it never executes what it receives.
+- name: Install the host clipboard receiver
+  ansible.builtin.copy:
+    src: hyperlab-clipboard-receive.py
+    dest: /usr/local/bin/hyperlab-clipboard-receive
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the Desk helper and the Workspace Shell entry point
   ansible.builtin.copy:
     src: "{{ item.src }}"

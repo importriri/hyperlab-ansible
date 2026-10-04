@@ -89,6 +89,15 @@ ACTIONS = [
         "requires": None,
     },
     {
+        "id": "vm.clipboard-send",
+        "label": "Send the host clipboard text to a running managed guest",
+        "command": ["hyperlabctl", "clipboard", "send", "{domain}"],
+        "privileged": False,
+        "destructive": False,
+        "target": "domain",
+        "requires": None,
+    },
+    {
         "id": "vm.looking-glass",
         "label": "Open Looking Glass for one running VFIO guest",
         "command": ["hyperlabctl", "open", "looking-glass", "{domain}"],
