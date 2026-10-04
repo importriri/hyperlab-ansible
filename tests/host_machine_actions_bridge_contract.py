@@ -245,12 +245,102 @@ def static_cases(bridge) -> None:
           "connections no longer report their own mode")
 
 
+CREATE_PLAN = {
+    "schema": 1,
+    "templates": [
+        {"id": "server-debian", "creatable": True, "blocked_reason": "",
+         "network_profiles": ["dev", "services", "lab"], "resource_profiles": ["balanced", "custom"],
+         "custom": {"memory_mb_min": 2048, "vcpus_min": 1, "vcpus_max": 8, "disk_gib_min": 3},
+         "looking_glass_mode": "disabled"},
+        {"id": "workstation-dev", "creatable": True, "blocked_reason": "",
+         "network_profiles": ["dev"], "resource_profiles": ["balanced", "performance", "custom"],
+         "custom": {"memory_mb_min": 4096, "vcpus_min": 1, "vcpus_max": 8, "disk_gib_min": 100},
+         "looking_glass_mode": "linux-experimental"},
+        {"id": "workstation-unreviewed", "creatable": False,
+         "blocked_reason": "no reviewed profile playbook for this Template",
+         "network_profiles": ["dev"], "resource_profiles": ["balanced"], "custom": None,
+         "looking_glass_mode": "linux-experimental"},
+    ],
+}
+
+
+def creation_cases(bridge) -> None:
+    calls: list[tuple[str, ...]] = []
+    launched: list[tuple[str, str]] = []
+
+    def fake_cli(*args):
+        calls.append(args)
+        if args == ("machine", "create-plan"):
+            return CREATE_PLAN
+        if args[:2] == ("machine", "create"):
+            return {"record_path": "/state/x.yml", "machine": {"id": args[3]}}
+        if args[:2] == ("machine", "project"):
+            return {"machine": args[2], "spec": f"vm-specs/.generated/{args[2]}.yml"}
+        raise AssertionError("unexpected hyperlabctl call %r" % (args,))
+
+    bridge.cli_json = fake_cli
+    bridge.privileged = lambda action, name: launched.append((action, name))
+
+    def attempt(*args):
+        calls.clear()
+        launched.clear()
+        try:
+            bridge.create(list(args))
+        except bridge.Refused as exc:
+            return "refused: " + str(exc)
+        return "launched"
+
+    check(attempt("server-debian", "srv-deb-02", "services", "balanced") == "launched",
+          "a valid server request was not launched")
+    check(calls[1] == ("machine", "create", "server-debian", "srv-deb-02",
+                       "--network-profile", "services", "--resource-profile", "balanced"),
+          "the factory got a different request: %r" % (calls[1:2],))
+    check(calls[2] == ("machine", "project", "srv-deb-02"), "the Machine was not projected")
+    check(launched == [("machine.provision", "srv-deb-02")],
+          "provisioning not handed to the reviewed runner: %r" % launched)
+
+    check(attempt("workstation-dev", "dev-02", "dev", "custom", "8192", "4", "120") == "launched",
+          "a valid custom workstation request was refused")
+    check(calls[1][8:14] == ("--memory-mb", "8192", "--vcpus", "4", "--disk-gib", "120"),
+          "custom values lost: %r" % (calls[1],))
+    check(calls[1][-2:] == ("--looking-glass-mode", "linux-experimental"),
+          "the Template's Looking Glass mode was not applied")
+
+    refusals = {
+        ("server-debian", "Srv", "dev", "balanced"): "the name",
+        ("server-debian", "x", "dev", "balanced"): "the name",
+        ("server-debian", "srv-a", "clean", "balanced"): "network",
+        ("server-debian", "srv-a", "dev", "performance"): "resource profile",
+        ("server-debian", "srv-a", "dev", "balanced", "1", "1", "1"): "only custom",
+        ("server-debian", "srv-a", "dev", "custom"): "custom resources",
+        ("server-debian", "srv-a", "dev", "custom", "1024", "2", "16"): "memory must be",
+        ("server-debian", "srv-a", "dev", "custom", "2048", "9", "16"): "vCPUs must be",
+        ("server-debian", "srv-a", "dev", "custom", "2048", "2", "2"): "disk must be",
+        ("server-debian", "srv-a", "dev", "custom", "2048", "0", "16"): "custom resources",
+        ("server-debian", "srv-a", "dev", "custom", "2048", "-2", "16"): "custom resources",
+        ("workstation-unreviewed", "dev-03", "dev", "balanced"): "no reviewed profile playbook",
+        ("missing", "srv-a", "dev", "balanced"): "unknown",
+        ("--repo=/tmp", "srv-a", "dev", "balanced"): "invalid creation request",
+        ("server-debian", "srv-a", "dev"): "usage",
+    }
+    for args, reason in refusals.items():
+        result = attempt(*args)
+        check(result.startswith("refused") and reason in result,
+              "creation %r: expected refusal mentioning %r, got %r" % (args, reason, result))
+        check(not any(call[:2] in (("machine", "create"), ("machine", "project")) for call in calls)
+              and not launched, "a refused request reached the factory or the runner: %r" % (args,))
+
+    source = BRIDGE.read_text(encoding="utf-8")
+    check("password" not in source.lower(), "the bridge handles a password")
+
+
 def main() -> int:
     bridge = load_bridge()
     choose_action_cases(bridge)
     ssh_parity_cases(bridge)
     capability_cases(bridge)
     static_cases(bridge)
+    creation_cases(bridge)
 
     if FAILURES:
         for failure in FAILURES:

@@ -151,10 +151,14 @@ def main():
         repo = base / 'repo'
         (repo / 'vm-specs').mkdir(parents=True)
         (repo / 'playbooks').mkdir()
-        for name in ('start', 'shutdown', 'reboot', 'stop', 'power-cycle', 'reset'):
+        for name in ('start', 'shutdown', 'reboot', 'stop', 'power-cycle', 'reset', 'create'):
             (repo / f'playbooks/vm-{name}.yml').write_text('---\n')
         for machine in ('one', 'two'):
             (repo / f'vm-specs/{machine}.yml').write_text(f'name: {machine}\n')
+        (repo / 'vm-specs/.generated').mkdir()
+        (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\n')
+        specs = {'one': 'vm-specs/one.yml', 'two': 'vm-specs/two.yml',
+                 'made-01': 'vm-specs/.generated/made-01.yml'}
         pointer = base / 'pointer'
         pointer.write_text(str(repo))
         op.POINTER = pointer
@@ -163,8 +167,7 @@ def main():
         def fake_cli(root, *args):
             require(root == repo, 'checkout escaped')
             if args == ('compose', 'list'):
-                return [{'path': f'vm-specs/{name}.yml', 'spec': {'name': name}}
-                        for name in ('one', 'two')]
+                return [{'path': path, 'spec': {'name': name}} for name, path in specs.items()]
             require(args[:2] == ('actions', '--resolve'), 'unreviewed lookup')
             return registry_resolve(args[2], repo_root=repo, spec=args[4], domain=args[6])
 
@@ -319,9 +322,27 @@ def main():
             require(op.read(root, tampered['operation_id'])['phase'] == 'failed',
                     'context drift did not leave a durable failure')
             for action in op.ACTIONS:
+                if action == 'machine.provision':
+                    continue
                 argv, _, _ = op.resolve(action, 'two', repo)
                 require(argv[0] == '/usr/bin/ansible-playbook' and '-K' in argv,
                         'lifecycle action lost reviewed binary/authentication')
+            # Provisioning runs the reviewed provisioner on a Machine's own
+            # projection only; a checked-in fixture spec is never provisioned.
+            argv, _, spec_hash = op.resolve('machine.provision', 'made-01', repo)
+            require(argv == [op.PROVISION, '--spec', 'vm-specs/.generated/made-01.yml', 'made-01'],
+                    'provisioning command is not the reviewed provisioner: %r' % argv)
+            require(spec_hash == op.digest((repo / 'vm-specs/.generated/made-01.yml').read_bytes()),
+                    'provisioning does not pin the projected spec')
+            refused(lambda: op.resolve('machine.provision', 'two', repo))
+            provision = op.launch('machine.provision', 'made-01')
+            require(provision['phase'] == 'dispatched' and provision['action_id'] == 'machine.provision',
+                    'provisioning not launched as a durable operation')
+            (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\nchanged: true\n')
+            with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('drifted spec ran')):
+                op.run(provision['operation_id'])
+            require(op.read(root, provision['operation_id'])['phase'] == 'failed',
+                    'a spec changed after launch was provisioned')
 
             # A view that cannot open never fails or cancels the operation.
             viewless = op.launch('vm.managed-start', 'two')

@@ -12,6 +12,12 @@ reviewed action registry. The shell never reconstructs these rules, and a
 capability answer is advice for presentation only -- this bridge re-derives
 everything before it acts.
 
+Creation crosses it as two more questions (ADR 0017):
+
+  create-plan                                   what may be created, within which limits
+  create TEMPLATE NAME NETWORK PROFILE [MEMORY VCPUS DISK]
+                                                record, project, then provision
+
 Every response is one JSON object on stdout so the shell reads structure
 instead of prose. Managed lifecycle reports correlated durable operation records, never spawn success.
 """
@@ -20,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -363,6 +370,81 @@ def capabilities(name: str) -> dict[str, Any]:
     }
 
 
+MACHINE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
+TOKEN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+NUMBER = re.compile(r"^[1-9][0-9]{0,6}$")
+
+
+def create_plan() -> dict[str, Any]:
+    plan = cli_json("machine", "create-plan")
+    if (
+        not isinstance(plan, dict)
+        or plan.get("schema") != 1
+        or not isinstance(plan.get("templates"), list)
+    ):
+        raise Refused("invalid creation plan")
+    return plan
+
+
+def create(args: list[str]) -> None:
+    """Record, project and provision one Machine; every value re-checked here
+    against the plan, then again by the factory."""
+    if len(args) not in (4, 7):
+        raise Refused("usage: create TEMPLATE NAME NETWORK PROFILE [MEMORY VCPUS DISK]")
+    template_id, name, network, profile = args[:4]
+    for value in (template_id, network, profile):
+        if not TOKEN.fullmatch(value):
+            raise Refused("invalid creation request")
+    if not MACHINE_ID.fullmatch(name):
+        raise Refused("the name must be 2-31 lowercase letters, digits or dashes")
+
+    plan = create_plan()
+    matches = [entry for entry in plan["templates"]
+               if isinstance(entry, dict) and entry.get("id") == template_id]
+    if len(matches) != 1:
+        raise Refused("unknown or unready Template")
+    template = matches[0]
+    if template.get("creatable") is not True:
+        raise Refused(str(template.get("blocked_reason") or "the Template cannot be created"))
+    if network not in template.get("network_profiles", []):
+        raise Refused("the Template does not allow that network")
+    if profile not in template.get("resource_profiles", []):
+        raise Refused("the Template does not allow that resource profile")
+
+    command = ["machine", "create", template_id, name,
+               "--network-profile", network, "--resource-profile", profile]
+    if profile == "custom":
+        if len(args) != 7 or not all(NUMBER.fullmatch(value) for value in args[4:]):
+            raise Refused("custom resources need memory, vCPUs and disk")
+        memory, vcpus, disk = (int(value) for value in args[4:])
+        limits = template.get("custom")
+        keys = ("memory_mb_min", "vcpus_min", "vcpus_max", "disk_gib_min")
+        if not isinstance(limits, dict) or not all(
+                type(limits.get(key)) is int for key in keys):
+            raise Refused("the Template has no custom limits")
+        if memory < limits["memory_mb_min"]:
+            raise Refused(f"memory must be at least {limits['memory_mb_min']} MB")
+        if not limits["vcpus_min"] <= vcpus <= limits["vcpus_max"]:
+            raise Refused(f"vCPUs must be between {limits['vcpus_min']} and {limits['vcpus_max']}")
+        if disk < limits["disk_gib_min"]:
+            raise Refused(f"the disk must be at least {limits['disk_gib_min']} GiB")
+        command += ["--memory-mb", str(memory), "--vcpus", str(vcpus), "--disk-gib", str(disk)]
+    elif len(args) != 4:
+        raise Refused("only custom resources take values")
+    mode = template.get("looking_glass_mode")
+    if mode not in (None, "disabled"):
+        command += ["--looking-glass-mode", str(mode)]
+
+    created = cli_json(*command)
+    if not isinstance(created, dict) or created.get("machine", {}).get("id") != name:
+        raise Refused("the factory did not confirm the Machine")
+    projected = cli_json("machine", "project", name)
+    if not isinstance(projected, dict) or projected.get("spec") != f"vm-specs/.generated/{name}.yml":
+        raise Refused("the Machine was recorded but not projected")
+    # The runner resolves the provisioning command itself; nothing else crosses.
+    privileged("machine.provision", name)
+
+
 def checkout() -> str:
     value = CHECKOUT_POINTER.read_text(encoding="utf-8").strip()
     candidate = Path(value)
@@ -391,6 +473,12 @@ def main() -> int:
     if len(sys.argv) == 3 and sys.argv[1] == "operation-view":
         # Reattach an observer; the runner validates the id and owns nothing new.
         os.execv(OPERATION, [OPERATION, "view", sys.argv[2]])
+    if sys.argv[1:] == ["create-plan"]:
+        emit({"phase": "create-plan", "plan": create_plan()})
+        return 0
+    if len(sys.argv) >= 2 and sys.argv[1] == "create":
+        create(sys.argv[2:])
+        return 127
     if len(sys.argv) != 3:
         raise Refused("usage: machine-action {capabilities|VERB} MACHINE")
 

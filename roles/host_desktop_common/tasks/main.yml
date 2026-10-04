@@ -400,6 +400,14 @@
     group: root
     mode: "0755"
 
+- name: Install the reviewed Machine provisioner
+  ansible.builtin.copy:
+    src: privatestack-machine-provision.py
+    dest: /usr/local/bin/privatestack-machine-provision
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install the shared host session lifecycle controller
   ansible.builtin.copy:
     src: privatestack-session-lifecycle.sh

@@ -118,6 +118,8 @@ Scope {
             return "Power cycle";
         case "reset":
             return "Reset";
+        case "provision":
+            return "Provision";
         default:
             return "Operation";
         }

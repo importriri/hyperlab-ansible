@@ -135,6 +135,28 @@ BODY = r'''
             check(!recovery.busyFor("one"),
                   "unverified Power cycle remained busy");
 
+            // A Machine created from the shell is provisioned by one durable
+            // operation; it is known, busy while it runs, and verified only
+            // by a fresh Running observation of the new domain.
+            recovery.records = [];
+            recovery.inventory = [];
+            recovery.inventoryObservedAt = (epoch + 1) * 1000;
+            recovery.now = (epoch + 1) * 1000;
+            const six = "f".repeat(32);
+            check(recovery.snapshot({schema: 1, operations: [
+                payload(six, "made-01", "running", 1, null, "machine.provision")]}),
+                  "a provisioning record made the operation snapshot unknown");
+            check(recovery.known && recovery.busyFor("made-01")
+                  && recovery.records[0].verb === "provision",
+                  "provisioning was not tracked as its own operation");
+            recovery.apply(payload(six, "made-01", "succeeded", 2, 0, "machine.provision"), six);
+            check(recovery.records[0].phase === "verifying",
+                  "provisioning success claimed a Machine before inventory saw it");
+            recovery.inventory = [{name: "made-01", state: "running"}];
+            recovery.inventoryObservedAt = (epoch + 3) * 1000;
+            check(recovery.records[0].phase === "completed",
+                  "fresh Running did not verify the provisioned Machine");
+
 
 '''
 

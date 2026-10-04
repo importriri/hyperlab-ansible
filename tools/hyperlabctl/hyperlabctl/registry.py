@@ -171,6 +171,15 @@ ACTIONS = [
         "requires": "playbooks/vm-create.yml",
     },
     {
+        "id": "machine.provision",
+        "label": "Provision a created and projected Machine",
+        "command": ["privatestack-machine-provision", "--spec", "{spec}", "{domain}"],
+        "privileged": True,
+        "destructive": False,
+        "target": "spec",
+        "requires": "playbooks/vm-create.yml",
+    },
+    {
         "id": "vm.destroy",
         "label": "Destroy a domain",
         "command": ["ansible-playbook", "playbooks/vm-destroy.yml", "-K",

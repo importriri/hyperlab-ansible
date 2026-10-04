@@ -12,7 +12,8 @@ QtObject {
     readonly property var actionVerbs: ({
         "vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
         "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
-        "vm.power-cycle": "power-cycle", "vm.reset": "reset"
+        "vm.power-cycle": "power-cycle", "vm.reset": "reset",
+        "machine.provision": "provision"
     })
     signal changed(var record)
     signal refreshRequested()
@@ -114,7 +115,9 @@ QtObject {
             const machine = tracker.inventory.find(m => m.name === record.machine);
             const needsTransitionProof =
                 ["reboot", "power-cycle"].indexOf(record.verb) >= 0;
-            const wanted = record.verb === "start" ? "running" : "shut off";
+            // Provisioning creates and starts the domain, so it ends Running.
+            const wanted = record.verb === "start" || record.verb === "provision"
+                ? "running" : "shut off";
 
             // Reboot and power-cycle begin and end in Running. A fresh
             // Running inventory observation therefore cannot prove that the

@@ -32,7 +32,11 @@ CLI = "/usr/local/bin/hyperlabctl"
 POINTER = Path("/etc/hyperlabctl/checkout")
 ACTIONS = {"vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
            "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
-           "vm.power-cycle": "power-cycle", "vm.reset": "reset"}
+           "vm.power-cycle": "power-cycle", "vm.reset": "reset",
+           "machine.provision": "provision"}
+# Provisioning is the one action that is not a single playbook: the reviewed
+# provisioner runs the documented steps, each -K playbook asking in the PTY.
+PROVISION = "/usr/local/bin/privatestack-machine-provision"
 FINAL = {"succeeded", "failed", "interrupted"}
 PHASES = FINAL | {"requested", "dispatched", "running"}
 # terminal-opened and terminal-launch-failed are kept so earlier records stay
@@ -210,10 +214,17 @@ def resolve(action, machine, repo):
                "--domain", machine)
     # The entire command is supplied by the existing resolver, never by the
     # caller or record. Normalize only its reviewed executable token.
-    require(isinstance(argv, list) and argv and all(isinstance(x, str) and x for x in argv)
-            and argv[0] == "ansible-playbook" and "-K" in argv,
+    require(isinstance(argv, list) and argv and all(isinstance(x, str) and x for x in argv),
             "invalid-reviewed-command")
-    argv[0] = "/usr/bin/ansible-playbook"
+    if action == "machine.provision":
+        # Only a Machine's own projection is provisioned, never a fixture spec.
+        require(row["path"] == f"vm-specs/.generated/{machine}.yml"
+                and argv == ["privatestack-machine-provision", "--spec", row["path"], machine],
+                "invalid-reviewed-command")
+        argv[0] = PROVISION
+    else:
+        require(argv[0] == "ansible-playbook" and "-K" in argv, "invalid-reviewed-command")
+        argv[0] = "/usr/bin/ansible-playbook"
     info = repo.stat()
     return argv, f"{info.st_dev}:{info.st_ino}", digest((repo / row["path"]).read_bytes())
 
