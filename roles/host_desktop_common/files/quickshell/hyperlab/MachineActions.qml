@@ -120,6 +120,8 @@ Scope {
             return "Reset";
         case "provision":
             return "Provision";
+        case "clipboard":
+            return "Send clipboard";
         default:
             return "Operation";
         }
@@ -405,6 +407,78 @@ Scope {
             }
             if (operationState.records.some(r => r.phase === "verifying"))
                 machineActions.inventoryRefreshRequested();
+        }
+    }
+
+    // ---------------------------------------------------------- clipboard
+    //
+    // One host-to-guest send to one named Machine (ADR 0020). The bridge
+    // reads the host clipboard itself and pipes it over the pinned SSH
+    // channel; the text never passes through the shell. The outcome is
+    // reported through settled() like a lifecycle verb.
+
+    property string clipboardMachine: ""
+    property string clipboardPhase: ""
+    property string clipboardDetail: ""
+
+    function sendClipboard(machine) {
+        const name = String(machine);
+
+        if (
+            clipboardRunner.running
+            || machineActions.clipboardMachine.length > 0
+            || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/.test(name)
+        )
+            return false;
+
+        machineActions.clipboardMachine = name;
+        machineActions.clipboardPhase = "";
+        machineActions.clipboardDetail = "";
+        clipboardRunner.command = [machineActions.bridge, "clipboard", name];
+        clipboardRunner.running = true;
+        return true;
+    }
+
+    Process {
+        id: clipboardRunner
+
+        stdout: SplitParser {
+            onRead: data => {
+                const parsed = machineActions.parseLine(data);
+
+                if (parsed === null)
+                    return;
+                if (parsed.phase === "accepted")
+                    machineActions.clipboardPhase = "accepted";
+                else if (parsed.phase === "refused") {
+                    machineActions.clipboardPhase = "refused";
+                    machineActions.clipboardDetail = String(parsed.reason || "").slice(0, 300);
+                }
+            }
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: {
+                const text = String(this.text).trim();
+
+                if (text.length > 0 && machineActions.clipboardDetail.length === 0)
+                    machineActions.clipboardDetail = text.split("\n").pop().slice(0, 300);
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            const machine = machineActions.clipboardMachine;
+            const phase =
+                machineActions.clipboardPhase === "refused" ? "refused"
+                : machineActions.clipboardPhase === "accepted" && exitCode === 0 ? "completed"
+                : "failed";
+            const detail =
+                phase === "completed" ? ""
+                : machineActions.clipboardDetail.length > 0 ? machineActions.clipboardDetail
+                : "The clipboard send reported exit " + exitCode;
+
+            machineActions.clipboardMachine = "";
+            machineActions.settled("clipboard", machine, phase, detail);
         }
     }
 

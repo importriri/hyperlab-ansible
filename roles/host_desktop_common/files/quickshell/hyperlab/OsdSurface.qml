@@ -62,6 +62,8 @@ PanelWindow {
             return osd.icons.wallpaper;
         case "lighting":
             return osd.icons.keyboard;
+        case "clipboard":
+            return osd.icons.connect;
         default:
             return osd.icons.theme;
         }
@@ -77,6 +79,8 @@ PanelWindow {
             return "Wallpaper";
         case "lighting":
             return "Keyboard lighting";
+        case "clipboard":
+            return osd.pending || osd.failure.length > 0 ? "Clipboard" : "Sent to";
         default:
             return "Theme";
         }
@@ -87,7 +91,7 @@ PanelWindow {
             return "Failed";
 
         if (osd.pending)
-            return "Applying…";
+            return osd.kind === "clipboard" ? "Sending…" : "Applying…";
 
         switch (osd.kind) {
         case "audio":
@@ -103,6 +107,9 @@ PanelWindow {
             return osd.shellState.wallpaperLabel();
         case "lighting":
             return osd.shellState.rgbModeLabel();
+        case "clipboard":
+            // The target the card was opened for; never the text.
+            return String(osd.shellSurfaces.osdAction).replace(/^clipboard:/, "");
         default:
             return osd.shellState.themeLabel();
         }
@@ -256,6 +263,7 @@ PanelWindow {
                     spacing: osd.tokens.spaceSm
 
                     ShellLabel {
+                        id: osdLabel
                         anchors.verticalCenter: parent.verticalCenter
                         tokens: osd.tokens
                         role: "label"
@@ -263,8 +271,11 @@ PanelWindow {
                         color: osd.theme.textSecondary
                     }
 
+                    // A long Machine name elides instead of leaving the card.
                     ShellLabel {
                         anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - osdLabel.width - parent.spacing
+                        elide: Text.ElideRight
                         tokens: osd.tokens
                         role: "value"
                         text: osd.value

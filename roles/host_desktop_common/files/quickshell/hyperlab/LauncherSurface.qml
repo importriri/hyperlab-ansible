@@ -49,6 +49,9 @@ PanelWindow {
     property string query: ""
     property int cursor: 0
 
+    readonly property bool clipboardMode:
+        launcher.shellSurfaces.launcherMode === "clipboard"
+
     // Native destinations. Aliases resolve to the destination they name, so
     // "workstation controls" and "power" reach the Control Center without
     // becoming rows of their own.
@@ -123,6 +126,28 @@ PanelWindow {
     readonly property var results: {
         const needle = launcher.query.trim().toLowerCase();
         const out = [];
+
+        // Send clipboard to: running Machines only, each with its
+        // host-resolved provenance, and nothing else to choose.
+        if (launcher.clipboardMode) {
+            const targets = launcher.shellState.machines.filter(machine =>
+                String(machine.state) === "running"
+                && (
+                    needle.length === 0
+                    || launcher.matchesQuery(machine.name, needle)
+                    || String(machine.provenance).indexOf(needle) >= 0
+                )
+            );
+
+            if (targets.length > 0) {
+                out.push({ kind: "section", title: "Send the host clipboard to" });
+
+                for (const machine of targets)
+                    out.push({ kind: "machine", machine: machine });
+            }
+
+            return out;
+        }
 
         const destinations = launcher.destinations.filter(entry =>
             needle.length === 0
@@ -241,6 +266,15 @@ PanelWindow {
         const result = launcher.results[launcher.selectable[position]];
 
         launcher.shellSurfaces.closeLauncher();
+
+        if (launcher.clipboardMode) {
+            if (result.kind === "machine")
+                launcher.shellSurfaces.requestClipboardSend(
+                    String(result.machine.name),
+                    launcher.outputName
+                );
+            return;
+        }
 
         if (result.kind === "destination") {
             launcher.shellSurfaces.openWorkspacePage(
@@ -390,7 +424,10 @@ PanelWindow {
                         clip: true
 
                         Accessible.role: Accessible.EditableText
-                        Accessible.name: "Search machines and commands"
+                        Accessible.name:
+                            launcher.clipboardMode
+                            ? "Send the host clipboard to a running Machine"
+                            : "Search machines and commands"
 
                         onTextChanged: launcher.query = text
 
@@ -408,7 +445,10 @@ PanelWindow {
                             tokens: launcher.tokens
                             role: "heading"
                             font.weight: Font.Normal
-                            text: "Search machines and commands"
+                            text:
+                                launcher.clipboardMode
+                                ? "Send the host clipboard to…"
+                                : "Search machines and commands"
                             color: launcher.theme.textQuiet
                         }
                     }
@@ -641,7 +681,7 @@ PanelWindow {
                             text: {
                                 switch (resultRow.kind) {
                                 case "machine":
-                                    return "open";
+                                    return launcher.clipboardMode ? "send" : "open";
                                 case "destination":
                                     return "workspace";
                                 case "command":
@@ -683,7 +723,10 @@ PanelWindow {
             ShellLabel {
                 tokens: launcher.tokens
                 role: "meta"
-                text: "↑↓ move · return open · esc close"
+                text:
+                    launcher.clipboardMode
+                    ? "↑↓ move · return send once · esc send nothing"
+                    : "↑↓ move · return open · esc close"
                 color: launcher.theme.textQuiet
             }
         }

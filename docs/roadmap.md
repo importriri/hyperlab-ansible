@@ -276,8 +276,10 @@ platform, recorded on the host:
 
 ### 6. Controlled data crossing
 
-- [ ] host → guest clipboard: copy on the host, a dedicated host key, pick
+- [x] host → guest clipboard: copy on the host, `SUPER + SHIFT + V`, pick
       the target Machine, the text is delivered once and nowhere else
+      ([ADR 0020](adr/0020-host-to-guest-clipboard.md), software-verified)
+- [ ] host → guest clipboard accepted on Nitro into a workstation Machine
 - [ ] guest → host and guest → guest clipboard through the same host action;
       moving data from a lower trust class to a higher one asks for
       confirmation and is logged

@@ -56,6 +56,13 @@ Scope {
             ipc.shellSurfaces.closeLauncher();
             return "closed";
         }
+
+        // SUPER + SHIFT + V: choose the one Machine that receives the host
+        // clipboard (ADR 0020). Choosing is the only way to send.
+        function clipboard(): string {
+            ipc.shellSurfaces.openLauncher("", "clipboard");
+            return "open";
+        }
     }
 
     IpcHandler {

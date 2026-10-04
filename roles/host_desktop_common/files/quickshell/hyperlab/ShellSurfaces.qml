@@ -40,6 +40,9 @@ QtObject {
     property string subpage: "inventory"
 
     property bool launcherOpen: false
+    // "" is the command palette; "clipboard" lists only the Machines the
+    // host clipboard may be sent to (ADR 0020). Every opening sets it.
+    property string launcherMode: ""
     property bool systemPanelOpen: false
     property bool topRailVisible: true
 
@@ -92,6 +95,10 @@ QtObject {
     signal workspaceRaiseRequested()
     signal workspaceClosed()
     signal confirmationCancelled()
+
+    // One host-to-guest clipboard send, aimed at one named Machine. The
+    // window host forwards it to the machine bridge; nothing is sent here.
+    signal clipboardSendRequested(string machine)
 
     function validWorkspace(candidate) {
         return surfaces.destinations.indexOf(String(candidate)) >= 0;
@@ -241,8 +248,9 @@ QtObject {
 
     // A transient that summons over a dialog abandons the dialog: its target
     // and consequence are no longer what the operator is looking at.
-    function openLauncher(origin) {
+    function openLauncher(origin, mode) {
         surfaces.cancelConfirmation();
+        surfaces.launcherMode = String(mode) === "clipboard" ? "clipboard" : "";
         surfaces.launcherOrigin = surfaces.resolveOrigin(origin);
         surfaces.systemPanelOpen = false;
         surfaces.launcherOpen = surfaces.launcherOrigin.length > 0;
@@ -333,7 +341,20 @@ QtObject {
             || candidate === "keyboard"
             || candidate === "theme"
             || candidate === "wallpaper"
-            || candidate === "lighting";
+            || candidate === "lighting"
+            || candidate === "clipboard";
+    }
+
+    // Report the send on the OSD as pending, and ask for it once.
+    function requestClipboardSend(machine, origin) {
+        const name = String(machine);
+
+        if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/.test(name))
+            return false;
+
+        surfaces.showActionOsd("clipboard", "clipboard:" + name, true, origin);
+        surfaces.clipboardSendRequested(name);
+        return true;
     }
 
     // Show the host's current state for a kind, with no action attached:

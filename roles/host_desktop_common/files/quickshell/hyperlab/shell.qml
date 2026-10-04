@@ -64,6 +64,14 @@ ShellRoot {
         }
 
         liveOutputs: Quickshell.screens.map(screen => String(screen.name))
+
+        // The launcher named one Machine; only the machine bridge sends.
+        onClipboardSendRequested: machine => {
+            if (!sharedMachineActions.sendClipboard(machine))
+                sharedSurfaces.settleActionOsd(
+                    "clipboard:" + machine, false,
+                    "Another clipboard send is still running");
+        }
     }
 
     ShellActions {
@@ -147,6 +155,10 @@ ShellRoot {
         }
 
         onSettled: (verb, machine, phase, detail) => {
+            if (verb === "clipboard")
+                sharedSurfaces.settleActionOsd(
+                    "clipboard:" + machine, phase === "completed", detail);
+
             sharedState.recordOperation({
                 "id": "machine:" + machine + ":" + verb,
                 "kind": "machine",

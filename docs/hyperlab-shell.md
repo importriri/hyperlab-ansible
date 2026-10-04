@@ -354,6 +354,15 @@ action bridge. Aliases such as "workstation controls" resolve to the
 destination they mean instead of producing duplicate rows. The query never
 becomes executable text.
 
+`SUPER + SHIFT + V` opens the launcher in **Send the host clipboard to**
+mode ([ADR 0020](adr/0020-host-to-guest-clipboard.md)): only running
+Machines, each with its host-resolved provenance, no destinations and no
+commands, and no default target. Return sends once to the highlighted
+Machine; Escape sends nothing. The shell only names the Machine:
+`MachineActions` asks the bridge's `clipboard` verb, which reads the host
+clipboard and pipes it over the pinned SSH channel. The OSD shows *Sending…*
+and then *Sent to* the Machine, or the reason it failed, never the text.
+
 Launching arbitrary desktop entries stays outside the typed bridge. Rofi
 keeps that one job on `SUPER + D` as a transitional application launcher with
 no HyperLab route; finishing it needs a reviewed desktop-entry catalogue that
