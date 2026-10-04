@@ -162,6 +162,9 @@ lives in `desks.js`, `stats.js` and `launcher.js` and is tested directly.
 - the focused window wears a border in the theme's accent and a glow of the
   same colour; inactive windows dim slightly;
 - terminals are translucent over the blurred wallpaper;
+- the islands and panels blur what lies behind them, through a Hyprland
+  layer rule in the reviewed Lua form (`hl.layer_rule`); only pixels above
+  the alpha floor are blurred, and the wallpaper layer is not;
 - an empty workspace shows the desktop clock and greeting;
 - a Desk change is announced by name, and the context island catches a
   highlight;
@@ -219,6 +222,4 @@ PipeWire, and the look with IBM Plex installed.
 
 Known gaps:
 
-- the islands are translucent but not blurred; Hyprland layer blur needs a
-  layer rule in the Lua configuration once its form is reviewed;
 - notifications are still mako, styled by the theme rather than the shell.

@@ -132,7 +132,8 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       (Nitro, 2026-10-03)
 - [ ] physical acceptance of the launcher, Desks overview, lock and the
       Waybar fallback, one by one
-- [ ] layer blur behind the islands
+- [x] layer blur behind the islands and panels, through the reviewed Lua
+      `hl.layer_rule` form (software-verified)
 - [ ] `hypridle` DPMS through the reviewed Lua dispatcher form
 - [ ] project restore: a project reopens the windows it had, not only its
       launch commands
@@ -465,7 +466,7 @@ Open:
 
 - [ ] physical acceptance on `arch-dev-vfio`: shell start, keys, overview,
       launcher, lock, theme change, Waybar fallback
-- [ ] Hyprland layer blur behind the islands
+- [x] Hyprland layer blur behind the islands (software-verified)
 
 ## Decisions and closed milestones
 

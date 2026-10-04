@@ -444,6 +444,28 @@ hl.bind(
     }
 )
 
+-- LAYER-BLUR-BEGIN
+-- The Workspace Shell's islands and panels are translucent; the compositor
+-- blurs what lies behind them. Only pixels above the alpha floor count, so
+-- the transparent rest of each layer surface stays clear. The desktop layer
+-- is the wallpaper itself and is not blurred.
+for _, namespace in ipairs({
+    "hyperlab-workspace-top",
+    "hyperlab-workspace-dock",
+    "hyperlab-workspace-launcher",
+    "hyperlab-workspace-overview",
+    "hyperlab-workspace-cheatsheet",
+    "hyperlab-workspace-osd",
+}) do
+    hl.layer_rule({
+        name = "blur-" .. namespace,
+        match = { namespace = "^" .. namespace .. "$" },
+        blur = true,
+        ignore_alpha = 0.2,
+    })
+end
+-- LAYER-BLUR-END
+
 -- Applications may ask to open maximized; kitty does on this guest. A
 -- maximized window covers the tiled ones, so a second terminal looked like
 -- it replaced the first. Tiling decides window sizes, as in Hyprland's own

@@ -148,6 +148,29 @@ def check_hyprland_wiring() -> None:
     require('"pidof hyprlock || hyprlock"' in lua, "ALT+L no longer locks with hyprlock")
 
 
+def check_layer_blur() -> None:
+    """The islands are blurred through the reviewed Lua layer rule form."""
+    import shutil
+    import subprocess
+
+    lua = (ROLE / "templates/hyprland.lua.j2").read_text()
+    require("-- LAYER-BLUR-BEGIN" in lua and "-- LAYER-BLUR-END" in lua, "the layer blur block is gone")
+    block = lua.split("-- LAYER-BLUR-BEGIN", 1)[1].split("-- LAYER-BLUR-END", 1)[0]
+    require("{%" not in block and "{{" not in block, "the layer blur block depends on the template")
+    require("hl.layer_rule(" in block and "blur = true" in block and "ignore_alpha" in block,
+            "the layer rule does not blur behind translucent pixels only")
+    namespaces = set(re.findall(r'"(hyperlab-workspace-[a-z]+)"', block))
+    declared = {match for path in SHELL.glob("*.qml")
+                for match in re.findall(r'WlrLayershell\.namespace: "([^"]+)"', path.read_text())}
+    require(namespaces and namespaces <= declared, f"blurred namespaces the shell does not declare: {namespaces - declared}")
+    require({"hyperlab-workspace-top", "hyperlab-workspace-dock"} <= namespaces, "the islands are not blurred")
+    require("hyperlab-workspace-desktop" not in namespaces, "the wallpaper layer would be blurred")
+    luac = shutil.which("luac5.4") or shutil.which("luac")
+    if luac:
+        result = subprocess.run([luac, "-p", "-"], input=block, text=True, capture_output=True, check=False)
+        require(result.returncode == 0, f"the layer blur block is not valid Lua: {result.stderr}")
+
+
 def check_keys_sheet() -> None:
     """Every ALT binding the guest configures is on the sheet, and back."""
     sheet = json.loads((SHELL / "keys.json").read_text())
@@ -449,6 +472,7 @@ def main() -> int:
     check_shell_sources()
     check_hyprland_wiring()
     check_keys_sheet()
+    check_layer_blur()
     check_role()
     check_identity_themes()
     check_launcher_fallback()
