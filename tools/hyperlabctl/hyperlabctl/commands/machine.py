@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import getpass
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,10 @@ from ..machine_factory import (
     image_os_label,
     template_catalog,
     write_projected_vm_spec,
+)
+from ..machine_provision import (
+    creation_plan,
+    provision_steps,
 )
 from ..machine_registry import (
     list_machines,
@@ -436,6 +441,19 @@ class MachineCommand(Command):
             "machine_id",
         )
 
+        sub.add_parser(
+            "create-plan",
+            help="what the shell may offer when it creates a Machine (JSON)",
+        )
+
+        steps = sub.add_parser(
+            "provision-steps",
+            help="the reviewed provisioning commands for one projected Machine (JSON)",
+        )
+        steps.add_argument(
+            "machine_id",
+        )
+
     def run(self, args, ctx):
         action = args.machine_action
 
@@ -469,6 +487,17 @@ class MachineCommand(Command):
 
         if action == "project":
             return self._project(
+                args,
+                ctx,
+            )
+
+        if action == "create-plan":
+            return self._create_plan(
+                ctx,
+            )
+
+        if action == "provision-steps":
+            return self._provision_steps(
                 args,
                 ctx,
             )
@@ -673,4 +702,36 @@ class MachineCommand(Command):
                 spec
             )
 
+        return 0
+
+    def _create_plan(self, ctx):
+        # Always JSON: the only consumer is the reviewed shell bridge.
+        print(
+            json.dumps(
+                creation_plan(
+                    _repo_root(ctx),
+                    home=Path.home(),
+                    cpu_count=os.cpu_count() or 0,
+                ),
+                indent=2,
+            )
+        )
+        return 0
+
+    def _provision_steps(self, args, ctx):
+        runtime = os.environ.get(
+            "XDG_RUNTIME_DIR",
+            f"/run/user/{os.getuid()}",
+        )
+        print(
+            json.dumps(
+                provision_steps(
+                    _repo_root(ctx),
+                    args.machine_id,
+                    home=Path.home(),
+                    runtime_dir=Path(runtime),
+                ),
+                indent=2,
+            )
+        )
         return 0
