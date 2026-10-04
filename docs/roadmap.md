@@ -192,7 +192,8 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [x] first Machine, `dev-01`, created from `workstation-dev` on Nitro, the
       rice applied by the dev profile playbook, second pass `changed=0`,
       Looking Glass, Desks, host provenance and trust colours (Nitro-verified)
-- [ ] `ALT+SHIFT+W` in the guest takes seconds to change the wallpaper
+- [x] `ALT+SHIFT+W` in the guest changes only the wallpaper, with a short
+      fade, instead of reloading the session (software-verified)
 - [x] Arch rice profiles `dev`, `gaming-clean` and `gaming-dirty` on one set
       of roles, with their playbooks and VM specs (software-verified)
 - [x] `server-arch`: SSH-only Machines from the sealed upstream Arch image,

@@ -420,6 +420,18 @@ def ensure_awww() -> None:
     time.sleep(0.5)
 
 
+# A theme change redraws the whole session, so its wallpaper transition can
+# take its time. Moving to the next wallpaper changes nothing else: it is a
+# short fade, and the compositor, bar, notifications and terminals are left
+# alone, so the key answers at once.
+THEME_TRANSITION = ["--transition-type", "grow", "--transition-duration", "1.1"]
+WALLPAPER_TRANSITION = [
+    "--transition-type", "fade",
+    "--transition-duration", "0.4",
+    "--transition-fps", "60",
+]
+
+
 def runtime_refresh(desktop_wallpaper: Path) -> None:
     wayland_active = bool(os.environ.get("WAYLAND_DISPLAY"))
 
@@ -472,20 +484,16 @@ def runtime_refresh(desktop_wallpaper: Path) -> None:
         )
 
     if wayland_active:
-        ensure_awww()
+        show_wallpaper(desktop_wallpaper, THEME_TRANSITION)
 
-        subprocess.run(
-            [
-                "awww",
-                "img",
-                str(desktop_wallpaper),
-                "--transition-type",
-                "grow",
-                "--transition-duration",
-                "1.1",
-            ],
-            check=False,
-        )
+
+def show_wallpaper(desktop_wallpaper: Path, transition: list[str]) -> None:
+    ensure_awww()
+
+    subprocess.run(
+        ["awww", "img", str(desktop_wallpaper), *transition],
+        check=False,
+    )
 
 
 def apply_theme(
@@ -529,13 +537,25 @@ def apply_theme(
     )
 
     changed = False
-
-    for path, content in palette_files(
+    styling_changed = False
+    files = palette_files(
         theme,
         desktop_wallpaper,
         lock_wallpaper,
-    ).items():
-        changed = write_if_changed(path, content) or changed
+    )
+    # Files whose text names the wallpaper are not styling: rendering them
+    # with the previous images tells them apart from colours and style.
+    unrotated = palette_files(
+        theme,
+        Path(previous_desktop) if previous_desktop else desktop_wallpaper,
+        Path(previous_lock) if previous_lock else lock_wallpaper,
+    )
+
+    for path, content in files.items():
+        written = write_if_changed(path, content)
+        changed = written or changed
+        if written and content == unrotated[path]:
+            styling_changed = True
 
     history_desktop = (
         previous_desktop
@@ -569,7 +589,10 @@ def apply_theme(
 
     changed = save_state(state) or changed
 
-    if runtime:
+    if runtime and rotate and not styling_changed:
+        if os.environ.get("WAYLAND_DISPLAY"):
+            show_wallpaper(desktop_wallpaper, WALLPAPER_TRANSITION)
+    elif runtime:
         runtime_refresh(desktop_wallpaper)
 
     return changed

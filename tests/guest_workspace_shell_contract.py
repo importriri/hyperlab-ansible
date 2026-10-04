@@ -379,6 +379,72 @@ def check_launcher_fallback() -> None:
     require("rofi -show drun" in calls, f"a session without its shell got no launcher: {calls}")
 
 
+def check_wallpaper_rotation() -> None:
+    """ALT+SHIFT+W changes only the wallpaper; a theme change still redraws everything."""
+    import importlib.util
+    import json
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location("guest_theme_rotation", ROLE / "files/privatestack-guest-theme.py")
+    theme = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(theme)
+    calls: list[list[str]] = []
+
+    class Done:
+        returncode = 0
+
+    def fake_run(argv, *args, **kwargs):
+        calls.append([str(part) for part in argv])
+        return Done()
+
+    theme.subprocess.run = fake_run
+    theme.subprocess.Popen = fake_run
+    theme.shutil.which = lambda name: f"/usr/bin/{name}"
+    theme.os.environ["WAYLAND_DISPLAY"] = "wayland-1"
+    theme.os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "fixture"
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        theme.IDENTITY_FILE = root / "guest-identity-theme"
+        theme.IDENTITY_FILE.write_text("hyperlab-workstation\n")
+        theme.HOME = root / "home"
+        theme.CONFIG = theme.HOME / ".config"
+        theme.STATE_DIR = root / "state-dir"
+        theme.STATE_FILE = theme.STATE_DIR / "state.json"
+        theme.WALL_ROOT = root / "walls"
+        for surface in ("desktop", "lockscreen"):
+            pool = theme.WALL_ROOT / "hyperlab-workstation" / surface
+            pool.mkdir(parents=True)
+            for name in ("01.png", "bootstrap.png"):
+                (pool / name).write_bytes(b"png")
+
+        theme.apply_theme("hyperlab-workstation", runtime=True, rotate=False)
+        require(["hyprctl", "reload"] in calls, f"the first theme apply did not reload: {calls}")
+
+        calls.clear()
+        theme.apply_theme("hyperlab-workstation", runtime=True, rotate=True)
+        state = json.loads(theme.STATE_FILE.read_text())
+        require(state["desktop_wallpaper"].endswith("/desktop/bootstrap.png"),
+                f"ALT+SHIFT+W did not move to the next wallpaper: {state}")
+        require("bootstrap.png" in (theme.CONFIG / "hypr/hyprlock-theme.conf").read_text(),
+                "the lock screen did not follow the new wallpaper")
+        programs = [call[0] for call in calls]
+        require(set(programs) <= {"awww"}, f"ALT+SHIFT+W redrew more than the wallpaper: {calls}")
+        shown = [call for call in calls if call[:2] == ["awww", "img"]]
+        require(len(shown) == 1 and shown[0][2].endswith("/desktop/bootstrap.png")
+                and shown[0][3:] == theme.WALLPAPER_TRANSITION,
+                f"ALT+SHIFT+W did not show the next wallpaper with the short fade: {calls}")
+        duration = float(theme.WALLPAPER_TRANSITION[theme.WALLPAPER_TRANSITION.index("--transition-duration") + 1])
+        require(duration <= 0.5, f"the wallpaper fade is slow again: {duration}s")
+
+        calls.clear()
+        theme.apply_theme("sakura-circuit", runtime=True, rotate=False)
+        require(["hyprctl", "reload"] in calls and any(call[0] == "makoctl" for call in calls),
+                f"a theme change no longer refreshes the session: {calls}")
+        shown = [call for call in calls if call[:2] == ["awww", "img"]]
+        require(len(shown) == 1 and shown[0][3:] == theme.THEME_TRANSITION,
+                f"a theme change lost its transition: {calls}")
+
+
 def main() -> int:
     check_shell_sources()
     check_hyprland_wiring()
@@ -386,6 +452,7 @@ def main() -> int:
     check_role()
     check_identity_themes()
     check_launcher_fallback()
+    check_wallpaper_rotation()
     print("HyperLab guest workspace shell contract: OK")
     return 0
 
