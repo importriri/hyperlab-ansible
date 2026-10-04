@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 name: svc-jellyfin
-image: debian
+image: debian-server
 lifecycle: permanent
 device_profile: standard
 network_profile: services

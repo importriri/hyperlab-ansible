@@ -15,7 +15,7 @@ carry runtime observations.
 | --- | --- | --- |
 | [`workstation-dev`](workstation-dev.yml) | `arch-dev-20261003` | permanent, VFIO, dev network, GPU class `dev`, Linux Looking Glass |
 | [`server-arch`](server-arch.yml) | `arch` | permanent or disposable, standard device, dev, services or lab network, SSH only |
-| [`server-debian`](server-debian.yml) | `debian` | permanent or disposable, standard device, dev, services or lab network, SSH only |
+| [`server-debian`](server-debian.yml) | `debian-server` (not built; draft) | permanent or disposable, standard device, dev, services or lab network, SSH only |
 | [`server-fedora`](server-fedora.yml) | `fedora` | permanent or disposable, standard device, dev or lab network, SSH only |
 
 `workstation-dev` offers only VFIO Machines: its image carries the

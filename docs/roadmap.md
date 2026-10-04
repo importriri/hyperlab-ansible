@@ -75,10 +75,10 @@ until then the VM specs below are the reviewed definitions.
 | `arch-dev` | arch | dev | none | permanent | Nitro lifecycle gate passed | move onto the shared workstation roles |
 | `arch-gaming-clean` | arch | clean | clean | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
 | `arch-gaming-dirty` | arch | dirty | dirty | permanent | profile, playbook, spec (software) | build from the sealed workstation image |
-| `debian-dev` | debian (sealed upstream base) | dev | none | permanent | spec only | first boot on the shared roles |
+| `debian-dev` | debian-server (not built) | dev | none | permanent | spec only | capture `debian-server`, first boot on the shared roles |
 | `fedora-dev` | fedora (sealed upstream base) | dev | none | permanent | spec only | first boot on the shared roles |
 | `parrot-disposable` | parrot (not built) | lab | none | disposable | spec only | prepare and seal the Parrot image, prove reset |
-| `svc-jellyfin` | debian (sealed upstream base) | services | optional | permanent | service contracts green | service and recovery hardware gates |
+| `svc-jellyfin` | debian-server (not built) | services | optional | permanent | service contracts green | service and recovery hardware gates |
 | `win11clean-valley` | win11clean (not built) | clean | clean | permanent | Windows workshop flow exists | seal the master, VFIO benchmark |
 | `win11dirty-disposable` | win11dirty (not built) | dirty | dirty | disposable | Windows workshop flow exists | seal the master, prove reset |
 | `arch-minimal-ssh` | arch | dev | none | test fixture | used by inventory and SSH gates | move onto the shared roles |
@@ -209,6 +209,13 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       `server-fedora` published as drafts
 - [x] Debian 13 and Fedora 44 images prepared, validated and sealed on
       Nitro; `server-debian` and `server-fedora` ready
+- [x] a manifest's QEMU Guest Agent claim is checked inside the image,
+      read-only, before it is sealed or validated; the upstream Debian
+      genericcloud has no agent, so `server-debian` is a draft again
+      (software-verified)
+- [ ] `debian-server`: the Debian cloud image captured through the
+      Workbench with QEMU Guest Agent, generalized, scanned and sealed;
+      `server-debian` ready on it
 - [ ] a Machine from `server-debian` and one from `server-fedora` reached
       over SSH on Nitro
 - [x] every new Linux Machine, server or workstation, starts in the host's

@@ -147,7 +147,7 @@ def check_server_arch() -> None:
     for template_id in ("server-arch", "server-debian", "server-fedora"):
         lifecycles = yaml.safe_load((ROOT / f"templates/{template_id}.yml").read_text())["lifecycles"]
         assert lifecycles == {"permanent": True, "disposable": True}, template_id
-    throwaway = materialize_machine(ROOT, template_id="server-debian", machine_id="lab-tmp-01",
+    throwaway = materialize_machine(ROOT, template_id="server-fedora", machine_id="lab-tmp-01",
                                     owner="sid", created_at=CREATED_AT, lifecycle="disposable",
                                     network_profile="lab", resource_profile="balanced")
     assert throwaway["lifecycle"] == "disposable"

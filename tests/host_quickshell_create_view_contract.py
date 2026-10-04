@@ -51,9 +51,11 @@ SERVER = OPEN + """
                   "the form showed before a Template was chosen");
             check(sharedState.createProblem({template: ""}) === "Choose a Template",
                   "a request without a Template was not explained");
-            const debian = window.find(workspaceSurface, "createTemplate-server-debian");
-            check(debian !== null && debian.enabled, "server-debian is not offered");
-            debian.activated();
+            check(window.find(workspaceSurface, "createTemplate-server-debian") === null,
+                  "a draft Template was offered");
+            const arch = window.find(workspaceSurface, "createTemplate-server-arch");
+            check(arch !== null && arch.enabled, "server-arch is not offered");
+            arch.activated();
             const name = window.find(workspaceSurface, "createName");
             check(name !== null && name.visible, "choosing a Template did not show the form");
             check(window.find(workspaceSurface, "createNetwork-services") !== null
@@ -64,19 +66,19 @@ SERVER = OPEN + """
             name.text = "fixture-000";
             check(!submit.enabled && window.find(workspaceSurface, "createProblem").text.indexOf("already exists") >= 0,
                   "an existing Machine name was accepted");
-            name.text = "srv-deb-02";
+            name.text = "srv-arch-02";
             check(submit.enabled, "a valid server request was not allowed: "
                   + window.find(workspaceSurface, "createProblem").text);
             window.find(workspaceSurface, "createNetwork-services").activated();
             submit.activated();
             check(sharedMachineActions.created.length === 1
                   && JSON.stringify(sharedMachineActions.created[0])
-                     === JSON.stringify(["server-debian", "srv-deb-02", "permanent", "services", "balanced"]),
+                     === JSON.stringify(["server-arch", "srv-arch-02", "permanent", "services", "balanced"]),
                   "the bridge got a different request: "
                   + JSON.stringify(sharedMachineActions.created));
             check(window.find(workspaceSurface, "createKey").text.indexOf("SHA256:") >= 0,
                   "the guest key fingerprint is not shown");
-            check(window.find(workspaceSurface, "createProblem").text.indexOf("Recording srv-deb-02") >= 0,
+            check(window.find(workspaceSurface, "createProblem").text.indexOf("Recording srv-arch-02") >= 0,
                   "a pending request is not shown as pending");
 """
 
@@ -132,7 +134,7 @@ WORKSTATION = OPEN + """
 
 DISPATCH = SERVER + """
             sharedMachineActions.createPhase = "dispatched";
-            check(sharedSurfaces.selectedMachineId === "srv-deb-02",
+            check(sharedSurfaces.selectedMachineId === "srv-arch-02",
                   "a dispatched creation did not open the new Machine");
             check(window.find(workspaceSurface, "createName") === null,
                   "the Create view stayed open after provisioning started");

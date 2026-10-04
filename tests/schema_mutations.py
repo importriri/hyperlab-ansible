@@ -84,7 +84,7 @@ class SchemaMutationTests(unittest.TestCase):
 
     def test_guest_agent_request_without_image_support_is_rejected(self) -> None:
         self.assert_mutation_fails(
-            lambda root: self.mutate_yaml(root, "images/debian.yml", lambda d: d["supports"].update(qemu_guest_agent=False)),
+            lambda root: self.mutate_yaml(root, "images/debian-server.yml", lambda d: d["supports"].update(qemu_guest_agent=False)),
             "QEMU Guest Agent requested but the image does not support it",
         )
 

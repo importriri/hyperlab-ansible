@@ -76,10 +76,13 @@ def check_plan(repo: Path, home: Path) -> None:
             "the plan carries key material; the shell needs only the fingerprint")
     by_id = {entry["id"]: entry for entry in plan["templates"]}
 
-    server = by_id["server-debian"]
+    # server-debian is a draft until debian-server carries the agent: a
+    # Template that is not ready is never offered for creation.
+    require("server-debian" not in by_id, "a draft Template was offered for creation")
+    server = by_id["server-arch"]
     require(server["creatable"] and server["provision"] == {"profile_playbook": None, "password": False},
             f"server Template not offered as SSH-only: {server}")
-    require(server["custom"] == {"memory_mb_min": 2048, "vcpus_min": 1, "vcpus_max": 8, "disk_gib_min": 3},
+    require(server["custom"] == {"memory_mb_min": 2048, "vcpus_min": 1, "vcpus_max": 8, "disk_gib_min": 2},
             f"custom limits do not come from the image: {server['custom']}")
     require(server["network_profiles"] == ["dev", "services", "lab"] and server["default_network"] == "dev",
             f"networks not from the Template: {server}")
@@ -88,7 +91,7 @@ def check_plan(repo: Path, home: Path) -> None:
     require(by_id["server-fedora"]["network_profiles"] == ["dev", "lab"], "Fedora allowlist lost")
     require(server["lifecycles"] == ["permanent", "disposable"] and server["default_lifecycle"] == "permanent",
             f"server lifecycles: {server['lifecycles']}")
-    require(server["os"] == "Debian 13" and by_id["server-fedora"]["os"] == "Fedora 44",
+    require(server["os"] == "Arch Linux" and by_id["server-fedora"]["os"] == "Fedora 44",
             f"the plan does not use the Machine cards' OS label: {server['os']}")
 
     work = by_id["workstation-dev"]
@@ -134,7 +137,7 @@ def check_key_refusals(root: Path, repo: Path) -> None:
 
 def check_steps(repo: Path, home: Path, state: Path) -> None:
     runtime = Path("/run/user/1000")
-    create_from_template(repo, state_home=state, template_id="server-debian", machine_id="srv-test",
+    create_from_template(repo, state_home=state, template_id="server-arch", machine_id="srv-test",
                          owner="sid", created_at="2026-10-04T00:00:00Z",
                          resource_profile="custom", memory_mb=2048, vcpus=2, disk_gib=16)
     refuses(lambda: provision_steps(repo, "srv-test", home=home, runtime_dir=runtime, state_home=state),

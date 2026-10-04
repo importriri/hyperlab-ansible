@@ -14,6 +14,8 @@ image_factory_looking_glass_observed_build: ""
 
 image_factory_python_bin: /usr/bin/python
 image_factory_qemu_img_bin: /usr/bin/qemu-img
+# Read-only libguestfs inspection of a Linux image's guest agent claim.
+image_factory_guestfish_bin: /usr/bin/guestfish
 image_factory_mv_bin: /usr/bin/mv
 image_factory_mkdir_bin: /usr/bin/mkdir
 image_factory_rmdir_bin: /usr/bin/rmdir

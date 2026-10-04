@@ -51,6 +51,59 @@
   changed_when: false
   check_mode: false
 
+# A manifest that claims QEMU Guest Agent is a promise every Machine relies
+# on: its SSH host key is read through the agent. The promise is checked in
+# the image itself, read-only, before the image is sealed or used again.
+- name: Read the guest agent claim of a Linux image manifest
+  when: image_factory_plan.os_family == 'linux'
+  ansible.builtin.set_fact:
+    image_factory_claims_guest_agent: >-
+      {{ (lookup('ansible.builtin.file', image_factory_plan.manifest_path)
+          | from_yaml).supports.qemu_guest_agent | default(false) | bool }}
+
+- name: Look inside the image for the QEMU Guest Agent it claims
+  when:
+    - image_factory_plan.os_family == 'linux'
+    - image_factory_claims_guest_agent | bool
+  block:
+    - name: Require libguestfs for the read-only inspection
+      ansible.builtin.stat:
+        path: "{{ image_factory_guestfish_bin }}"
+      register: image_factory_guestfish_stat
+
+    - name: Refuse to trust a guest agent claim that cannot be checked
+      ansible.builtin.assert:
+        that:
+          - image_factory_guestfish_stat.stat.exists
+          - image_factory_guestfish_stat.stat.executable
+        fail_msg: >-
+          {{ image_factory_guestfish_bin }} is missing; install libguestfs.
+          A guest agent claim is never accepted unchecked.
+
+    - name: Inspect the image read-only for the guest agent
+      ansible.builtin.command:
+        argv:
+          - "{{ image_factory_python_bin }}"
+          - "{{ image_factory_guest_agent_tool }}"
+          - --image
+          - "{{ image_factory_plan.base_path }}"
+          - --guestfish
+          - "{{ image_factory_guestfish_bin }}"
+      register: image_factory_guest_agent
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse an image whose manifest claims an agent it does not carry
+      ansible.builtin.assert:
+        that:
+          - (image_factory_guest_agent.stdout | from_json).qemu_guest_agent
+        fail_msg: >-
+          {{ image_factory_plan.id }} claims supports.qemu_guest_agent, but the
+          image has no QEMU Guest Agent binary and unit
+          ({{ image_factory_guest_agent.stdout }}). Capture an image that carries
+          it, or correct the manifest; Machines cannot pin their SSH host key
+          without it.
+
 - name: Publish validated image evidence
   ansible.builtin.set_fact:
     image_factory_validation_evidence: "{{ image_factory_validation.stdout | from_json }}"

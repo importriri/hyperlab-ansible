@@ -1,0 +1,44 @@
+---
+schema_version: 1
+id: debian-server
+display_name: Debian Server
+os_family: linux
+os_variant: debian13
+version: "pinned-at-build"
+format: qcow2
+
+status: not-built
+sha256: null
+
+private: false
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+# The upstream Debian 13 genericcloud image (images/debian.yml) carries no
+# QEMU Guest Agent, and HyperLab reads a new Machine's SSH host key through
+# the agent. This image is that upstream base captured through the Workbench
+# (ADR 0015) with qemu-guest-agent installed, then generalized, scanned and
+# sealed. Nothing is installed at first boot, so it works offline on lab.
+source_type: local
+source_url: null
+source_checksum_url: null
+filename: debian-server.qcow2
+
+virtual_size_gib: 3
+minimum_size_gib: 3
+min_memory_mb: 2048
+
+supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: permanent, device_profile: standard, network_profile: dev}
+network_allowlist: [dev, lab, services]
+licensing: {redistributable: true}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  Workbench capture of the sealed upstream debian image with qemu-guest-agent
+  installed. The image factory refuses to seal it unless the agent is found
+  inside the image. Cloud image plus NoCloud seed: hostname and user are
+  created at first boot.

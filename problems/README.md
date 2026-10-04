@@ -45,6 +45,9 @@ proof.
   the Machine account was outside the polkit administrator group, so polkit
   asked for root's password; cloud-init now adds it to its distribution's
   group.
+- [`sealed-image-claimed-guest-agent.md`](sealed-image-claimed-guest-agent.md):
+  the Debian image was sealed claiming a QEMU Guest Agent it does not carry;
+  the claim is now checked inside the image before sealing.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

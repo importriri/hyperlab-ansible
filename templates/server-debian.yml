@@ -3,11 +3,15 @@ schema_version: 1
 id: server-debian
 display_name: Debian Server
 version: "1.0"
-status: ready
-image: debian
+# Draft: the sealed upstream debian image has no QEMU Guest Agent, so a
+# new Machine's SSH host key could not be read and pinned. It returns to
+# ready on debian-server, the Workbench capture that carries the agent.
+status: draft
+image: debian-server
 description: >-
-  A headless Debian Machine reached over SSH only: the sealed upstream Debian
-  cloud image, the account and key from cloud-init, no desktop and no GPU.
+  A headless Debian Machine reached over SSH only: the Debian cloud image with
+  QEMU Guest Agent, sealed through the Workbench, the account and key from
+  cloud-init, no desktop and no GPU.
 
 lifecycles:
   permanent: true
