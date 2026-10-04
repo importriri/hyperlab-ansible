@@ -42,6 +42,8 @@ entered the pipeline.
 18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
     — a disposable Machine's disk is a libvirt transient disk, so every stop
     discards its writes.
+19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — proposed: a GPU-capable
+    Machine chooses at each start whether this run owns the GPU.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

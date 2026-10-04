@@ -107,4 +107,5 @@ would break the existing guest lifecycle without changing what it means.
   contract coverage only. No real `domains.d` entry has been written on Nitro
   yet, and no unmapped passthrough domain has been refused on hardware.
 - A boot-scoped GPU lease (a GPU-capable Machine that may also start without
-  the GPU) is a product direction, not an implemented feature.
+  the GPU) is decided in [ADR 0019](adr/0019-gpu-lease.md) and not yet
+  implemented.

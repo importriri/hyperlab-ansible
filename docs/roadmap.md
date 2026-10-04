@@ -252,6 +252,9 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [ ] a Machine declares `gpu_capable`; owning the GPU is a host-owned lease
       for one run, so a dev Machine can start without the GPU and restart
       with it for Blender or CUDA
+- [x] the lease decided in [ADR 0019](adr/0019-gpu-lease.md) (proposed:
+      it waits for an image with a session on both shapes, a Nitro test of
+      define-then-start and the choice of Templates)
 - [ ] SERVICES Machines may be GPU-capable through a reviewed handoff
       profile; the static rule that excludes them is replaced
 - [ ] `local-ai` service Machine (local inference) on that model
