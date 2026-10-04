@@ -36,6 +36,9 @@ entered the pipeline.
     Workbench and the capture, generalization and seal of a Golden Image.
 16. [`0016-gpu-shared-definition-running-lease.md`](0016-gpu-shared-definition-running-lease.md) — several
     managed VFIO domains may name the GPU; only the running one owns it.
+17. [`0017-shell-machine-creation.md`](0017-shell-machine-creation.md) — the
+    shell creates a Machine through the reviewed bridge and one durable
+    operation; the password and the become prompt stay in its terminal.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
