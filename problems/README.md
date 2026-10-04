@@ -54,6 +54,9 @@ proof.
 - [`looking-glass-splash-after-guest-reload.md`](looking-glass-splash-after-guest-reload.md):
   Looking Glass stayed on its splash screen after `hyprctl reload` in the
   guest; diagnosis open, the sender now keeps its previous log.
+- [`fedora-host-key-through-agent.md`](fedora-host-key-through-agent.md):
+  whether the host can read a Fedora Machine's SSH host key through the
+  agent; diagnosis waiting for Nitro.
 - [`guest-kvmfr-owner-before-account.md`](guest-kvmfr-owner-before-account.md):
   on a new Machine udev resolved the kvmfr owner before cloud-init created
   the account; the role re-reads the rules when that happened.

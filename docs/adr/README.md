@@ -58,6 +58,9 @@ entered the pipeline.
 24. [`0024-rereceipt-after-policy-change.md`](0024-rereceipt-after-policy-change.md)
     — a sealed official image's receipt is re-issued after a policy change
     only when its base still is the vendor's verified download.
+25. [`0025-host-key-without-agent-file-reads.md`](0025-host-key-without-agent-file-reads.md)
+    — proposed: pin a Machine's SSH host key from the host-logged serial
+    console instead of agent file reads.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
