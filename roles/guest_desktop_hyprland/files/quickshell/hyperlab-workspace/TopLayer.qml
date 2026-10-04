@@ -54,5 +54,6 @@ PanelWindow {
         y: top.theme.gap
         theme: top.theme
         stats: top.stats
+        deskState: top.deskState
     }
 }

@@ -3,6 +3,7 @@
 // Two sources, each with one job:
 //
 //   hyperlab-desk model   the validated Desks and projects (configuration)
+//   hyperlab-desk status  whether the Desk in front is quiet or in a focus
 //   Quickshell.Hyprland   the active workspace and window counts (live)
 //
 // Every change goes back through hyperlab-desk, the same helper the ALT key
@@ -40,6 +41,13 @@ Item {
     readonly property var place: Desks.place(state.model, state.activeWorkspace)
     readonly property int currentDesk: place.desk
     readonly property int deskCount: state.model.desks.length
+
+    // The Desk in front: quiet, and when its focus ends (epoch seconds, 0
+    // for none). Unknown until the helper answers, and then never guessed.
+    property bool calmKnown: false
+    property bool quiet: false
+    property real focusUntil: 0
+    property bool calmPending: false
 
     // Last notice for the OSD: {text, detail, kind, serial}.
     property var notice: ({ "text": "", "detail": "", "kind": "", "serial": 0 })
@@ -107,16 +115,51 @@ Item {
 
     property bool modelPending: false
 
+    function refreshCalm() {
+        if (calmProcess.running)
+            calmPending = true;
+        else
+            calmProcess.running = true;
+    }
+
     onActiveWorkspaceChanged: {
         const position = Desks.split(state.activeWorkspace);
         if (position && position.desk !== previousDesk) {
             previousDesk = position.desk;
             state.deskEntered(position.desk);
+            state.refreshCalm();
         }
     }
     property int previousDesk: 0
 
-    Component.onCompleted: refreshModel()
+    Component.onCompleted: {
+        refreshModel();
+        refreshCalm();
+    }
+
+    Process {
+        id: calmProcess
+
+        command: [state.helper, "status"]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const calm = Desks.parseCalm(this.text);
+                state.calmKnown = calm.ok;
+                state.quiet = calm.quiet;
+                state.focusUntil = calm.focusUntil;
+            }
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                state.calmKnown = false;
+            if (state.calmPending) {
+                state.calmPending = false;
+                calmProcess.running = true;
+            }
+        }
+    }
 
     Process {
         id: modelProcess
@@ -194,6 +237,17 @@ Item {
         printErrors: false
 
         onFileChanged: state.refreshModel()
+    }
+
+    // The helper's state: quiet Desks and a running focus change here, from
+    // a key, the sampler or a terminal.
+    FileView {
+        path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state")
+            + "/hyperlab-workspace/desks-state.json"
+        watchChanges: true
+        printErrors: false
+
+        onFileChanged: state.refreshCalm()
     }
 
     // The binding on `counts` reads each workspace's IPC object, so it

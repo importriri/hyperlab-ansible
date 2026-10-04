@@ -265,6 +265,7 @@ Item {
     function baseFixtures() {
         QsHarness.processes = {
             "hyperlab-desk model": { "stdout": @@MODEL@@, "code": 0 },
+            "hyperlab-desk status": { "stdout": "{\"quiet\": false, \"focus_until\": null}", "code": 0 },
             "sh -c*": { "stdout": "8, 47\n", "code": 0 },
             "hyperlab-desk project-open*": { "stdout": "{}", "code": 0 },
             "hyperlab-desk project-new*": { "stdout": "{}", "code": 0 }
@@ -532,6 +533,54 @@ SCENARIOS = {
                 check(index >= 0, "the launcher does not offer the key sheet");
                 launcher.activate(index);
                 check(findWith("groups").open, "the launcher did not open the key sheet");
+                done();
+            } }
+        ];
+    }
+""",
+    "calm": r"""
+    function status(reply) {
+        QsHarness.processes = Object.assign({}, QsHarness.processes,
+            { "hyperlab-desk status": reply });
+    }
+
+    function scenario() {
+        // 22.5 minutes left: shown rounded up.
+        status({ "stdout": JSON.stringify({ "quiet": true,
+                 "focus_until": QsHarness.now.getTime() / 1000 + 22.5 * 60 }), "code": 0 });
+        steps = [
+            { "wait": 4600, "run": done => {
+                check(ran("hyperlab-desk status"), "the Desk state was not read from the helper");
+                check(visibleText("DESK") && visibleText("focus 23 min"), "a running focus is not shown");
+                capture("calm", () => {
+                    status({ "stdout": JSON.stringify({ "quiet": true, "focus_until": null }), "code": 0 });
+                    Hyprland.focusedWorkspace = { "id": 21 };
+                    done();
+                });
+            } },
+            { "wait": 400, "run": done => {
+                check(visibleText("quiet") && !visibleText("focus 23 min"),
+                      "entering a quiet Desk did not show it");
+                status({ "stdout": "", "stderr": "hyprctl is not reachable", "code": 2 });
+                Hyprland.focusedWorkspace = { "id": 31 };
+                done();
+            } },
+            { "wait": 400, "run": done => {
+                check(!visibleText("DESK"), "an unknown Desk state was shown");
+                status({ "stdout": JSON.stringify({ "quiet": true,
+                         "focus_until": QsHarness.now.getTime() / 1000 - 60 }), "code": 0 });
+                Hyprland.focusedWorkspace = { "id": 11 };
+                done();
+            } },
+            { "wait": 400, "run": done => {
+                check(visibleText("quiet") && !texts().some(t => t.indexOf("focus ") === 0),
+                      "a focus past its end is still counted down");
+                status({ "stdout": JSON.stringify({ "quiet": false, "focus_until": null }), "code": 0 });
+                Hyprland.focusedWorkspace = { "id": 21 };
+                done();
+            } },
+            { "wait": 400, "run": done => {
+                check(!visibleText("DESK"), "a loud Desk shows the Desk readout");
                 done();
             } }
         ];

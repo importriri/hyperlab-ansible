@@ -1,13 +1,18 @@
-// What is this machine doing: GPU, CPU, memory, volume, network and the
-// time. Readouts whose source cannot be read are hidden, not faked.
+// What is this machine doing: whether the Desk in front is quiet or in a
+// focus, GPU, CPU, memory, volume, network and the time. Readouts whose
+// source cannot be read are hidden, not faked.
 
 import Quickshell
 import QtQuick
+import "desks.js" as Desks
 
 Island {
     id: status
 
     required property var stats
+    required property var deskState
+
+    readonly property int focusLeft: Desks.focusMinutes(status.deskState.focusUntil, clock.date)
 
     padding: 16
     enterDelay: 90
@@ -25,6 +30,15 @@ Island {
 
     Row {
         spacing: 18
+
+        Readout {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: status.deskState.calmKnown && (status.focusLeft > 0 || status.deskState.quiet)
+            theme: status.theme
+            label: "DESK"
+            value: status.focusLeft > 0 ? "focus " + status.focusLeft + " min" : "quiet"
+            valueColor: status.theme.accent
+        }
 
         Readout {
             anchors.verticalCenter: parent.verticalCenter

@@ -145,3 +145,29 @@ function parseModel(text) {
         "errors": Array.isArray(data.errors) ? data.errors.map(String) : []
     };
 }
+
+// `hyperlab-desk status` for the Desk in front: quiet, and the epoch second
+// its focus ends (0 for none). Anything unreadable is not known.
+function parseCalm(text) {
+    let data;
+    try {
+        data = JSON.parse(String(text));
+    } catch (error) {
+        return { "ok": false, "quiet": false, "focusUntil": 0 };
+    }
+    if (!data || typeof data.quiet !== "boolean")
+        return { "ok": false, "quiet": false, "focusUntil": 0 };
+    const until = data.focus_until;
+    return {
+        "ok": true,
+        "quiet": data.quiet,
+        "focusUntil": typeof until === "number" && isFinite(until) && until > 0 ? until : 0
+    };
+}
+
+// Whole minutes left in a focus at `now` (a Date), rounded up; 0 once over.
+function focusMinutes(focusUntil, now) {
+    if (!(focusUntil > 0))
+        return 0;
+    return Math.max(0, Math.ceil((focusUntil * 1000 - now.getTime()) / 60000));
+}

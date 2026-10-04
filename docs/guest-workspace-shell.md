@@ -98,7 +98,7 @@ Log out, restart and power off ask for a second `Enter`.
 | Surface | What it shows | Source |
 | --- | --- | --- |
 | Context island (top left) | the mark, `WORKSTATION`, Desk / Project | `hyperlab-desk model` + active workspace |
-| Status island (top right) | GPU, CPU with a short trace, RAM, volume, network, date and time | see below |
+| Status island (top right) | `DESK quiet` or `DESK focus N min` for the Desk in front, GPU, CPU with a short trace, RAM, volume, network, date and time | `hyperlab-desk status`, re-read when the Desk or the helper's state file changes; see below |
 | Dock (bottom) | the Desks, the slots of the current Desk, the launcher | `hyperlab-desk model` + Hyprland |
 | Desks overview | every Desk with its projects and live window counts | same |
 | Launcher | applications, projects of every Desk, actions | desktop entries, the model |
@@ -280,5 +280,5 @@ PipeWire, and the look with IBM Plex installed.
 Known gaps:
 
 - notifications are still drawn by mako, styled by the theme rather than the
-  shell, and the shell does not show the quiet state yet
+  shell; the shell shows the quiet state and a focus, not the time report yet
   ([ADR 0027](adr/0027-guest-notification-owner.md), proposed).

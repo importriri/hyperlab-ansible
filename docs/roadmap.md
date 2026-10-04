@@ -151,7 +151,9 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       [ADR 0027](adr/0027-guest-notification-owner.md), proposed
 - [x] per-Desk focus (a quiet Desk for a set time) and opt-in, local time
       tracking per Desk and slot, in the Desk helper (software-verified)
-- [ ] the shell shows the quiet state, a running focus and the time report
+- [x] the status island shows a quiet Desk and a running focus, from the
+      helper (software-verified, offscreen runtime contract)
+- [ ] the time report in the shell
 - [x] the same shell on every workstation Template, not only `arch-dev-vfio`:
       the role's default, applied by every workstation Template's profile
       playbook and overridden by none (software-verified)
