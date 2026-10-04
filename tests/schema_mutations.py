@@ -57,7 +57,7 @@ class SchemaMutationTests(unittest.TestCase):
     def test_disk_smaller_than_base_is_rejected(self) -> None:
         self.assert_mutation_fails(
             lambda root: self.mutate_yaml(root, "vm-specs/debian-dev.yml", lambda d: d["resources"].update(disk_gib=1)),
-            "disk_gib=1 is smaller than image virtual_size_gib=20",
+            "disk_gib=1 is smaller than image virtual_size_gib=3",
         )
 
     def test_looking_glass_without_host_pin_is_rejected(self) -> None:

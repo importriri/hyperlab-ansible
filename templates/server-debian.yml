@@ -1,0 +1,44 @@
+---
+schema_version: 1
+id: server-debian
+display_name: Debian Server
+version: "1.0"
+status: draft
+image: debian
+description: >-
+  A headless Debian Machine reached over SSH only: the sealed upstream Debian
+  cloud image, the account and key from cloud-init, no desktop and no GPU.
+
+lifecycles:
+  permanent: true
+  disposable: false
+
+device_capabilities:
+  standard: true
+  vfio: false
+
+gpu_handoff_profiles:
+  clean: false
+  dev: false
+  dirty: false
+  lab: false
+
+network_allowlist: [dev, services, lab]
+
+resource_profiles:
+  minimum: false
+  balanced: true
+  performance: false
+  custom: true
+
+presentation:
+  looking_glass_mode: disabled
+  recovery_console: true
+  workspace_profile: server
+
+defaults:
+  lifecycle: permanent
+  device_capability: standard
+  gpu_handoff_profile: null
+  network_profile: dev
+  resource_profile: balanced

@@ -3,8 +3,8 @@ schema_version: 1
 id: debian
 display_name: Debian
 os_family: linux
-os_variant: debian12
-version: "pinned-at-build"
+os_variant: debian13
+version: "20261001-2618"
 format: qcow2
 
 status: not-built
@@ -15,16 +15,17 @@ contains_personal_data: false
 generalized: true
 instance_policy: multiple
 
-# The exact release and its official checksum URL are filled in when the image
-# is actually pulled from the distribution's own download page. They are null
-# here because an invented URL is worse than a blank: a blank fails closed.
+# Debian 13 "trixie" genericcloud, dated build 20261001-2618. Pinned from a
+# download on Nitro verified against the official SHA512SUMS; Debian publishes
+# no SHA256, so source_sha256 is the digest of that verified artefact.
 source_type: official-cloud
-source_url: null
-source_checksum_url: null
+source_url: https://cloud.debian.org/images/cloud/trixie/20261001-2618/debian-13-genericcloud-amd64-20261001-2618.qcow2
+source_checksum_url: https://cloud.debian.org/images/cloud/trixie/20261001-2618/SHA512SUMS
+source_sha256: b2aca2bee42c7082fd6aba4a5bb1a89612087a405e99896920f3346f7b23b9d1
 filename: debian.qcow2
 
-virtual_size_gib: 20
-minimum_size_gib: 8
+virtual_size_gib: 3
+minimum_size_gib: 3
 min_memory_mb: 2048
 
 supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}

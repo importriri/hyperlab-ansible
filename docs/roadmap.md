@@ -197,9 +197,13 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       of roles, with their playbooks and VM specs (software-verified)
 - [x] `server-arch`: SSH-only Machines from the sealed upstream Arch image,
       standard device, dev, services or lab network (software-verified)
-- [ ] `srv-01` from `server-arch` created and reached over SSH on Nitro
-- [ ] `server-debian` and `server-fedora`, after their upstream images are
-      pinned and sealed
+- [x] `srv-01` from `server-arch` created and reached over SSH on Nitro
+      (Nitro-verified)
+- [x] Debian 13 and Fedora 44 cloud images pinned from downloads verified on
+      Nitro against the official checksums; `server-debian` and
+      `server-fedora` published as drafts
+- [ ] Debian and Fedora images prepared and sealed; `server-debian` and
+      `server-fedora` ready and proven with a Machine each
 - [ ] `workstation-dev-standard` from a Workbench capture of `arch-dev`
 - [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
       and Windows, pinned to sealed images of those profiles

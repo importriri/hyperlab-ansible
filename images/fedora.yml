@@ -3,8 +3,8 @@ schema_version: 1
 id: fedora
 display_name: Fedora
 os_family: linux
-os_variant: fedora42
-version: "pinned-at-build"
+os_variant: fedora44
+version: "44-1.7"
 format: qcow2
 
 status: not-built
@@ -15,17 +15,16 @@ contains_personal_data: false
 generalized: true
 instance_policy: multiple
 
-# The exact release and its official checksum URL are filled in when the
-# image is actually pulled, at M7, from the distribution's own download
-# page. They are null here because an invented URL is worse than a blank:
-# a blank fails the sealing check, a wrong one downloads something.
+# Fedora 44 Cloud Base Generic 1.7. Pinned from a download on Nitro that
+# matched the SHA256 in the official CHECKSUM file.
 source_type: official-cloud
-source_url: null
-source_checksum_url: null
+source_url: https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2
+source_checksum_url: https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-44-1.7-x86_64-CHECKSUM
+source_sha256: 28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f
 filename: fedora.qcow2
 
-virtual_size_gib: 24
-minimum_size_gib: 10
+virtual_size_gib: 5
+minimum_size_gib: 5
 min_memory_mb: 2048
 
 supports: {standard: true, vfio: true, cloud_init: true, qemu_guest_agent: true}
