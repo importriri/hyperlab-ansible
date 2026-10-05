@@ -212,6 +212,30 @@ state() {
     [ "$(state)" = "2" ]
 }
 
+@test "a SERVICES Machine's GPU use is a rung: a cleaner domain after it is refused" {
+    printf 'services-workload-01 dev\n' \
+        > "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+    chmod 0644 "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+
+    "${HOOK}" services-workload-01 prepare
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *REFUSING* ]]
+    [ "$(state)" = "2" ]
+}
+
+@test "a SERVICES Machine cannot raise the ladder after a dirtier use" {
+    printf 'services-workload-01 dev\n' \
+        > "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+    chmod 0644 "${GPU_HANDOFF_MANAGED_DIR}/services-workload-01.conf"
+
+    "${HOOK}" win11dirty-disposable prepare
+    run "${HOOK}" services-workload-01 prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *REFUSING* ]]
+    [ "$(state)" = "1" ]
+}
+
 @test "duplicate static and managed domain policy fails closed" {
     printf 'arch-dev-vfio dev\n' \
         > "${GPU_HANDOFF_MANAGED_DIR}/arch-dev-vfio.conf"

@@ -320,8 +320,10 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       names `gpu_handoff_profile` (null by default) and its VM spec must match
       it; the services Template class allows VFIO (software-verified)
 - [ ] `local-ai` service Machine (local inference) on that model
-- [ ] the ladder still guarantees that a lower-trust GPU use never precedes a
-      higher-trust use in the same host boot
+- [x] the ladder still guarantees that a lower-trust GPU use never precedes a
+      higher-trust use in the same host boot: a services Machine's GPU use is
+      a rung like any other, so a cleaner domain after it is refused and it
+      is refused after a dirtier use (`tests/hook.bats`, software-verified)
 
 ### Showcase: from Golden Image to running Machine
 
