@@ -467,11 +467,12 @@ Software-verified:
 
 Open before C10 can be used as a product path:
 
-- [ ] a captured, generalized and sealed workstation Golden Image; the
-      upstream `arch` cloud image is a base, not the workstation
-- [ ] the first published Template pinned to that Golden Image
-- [ ] a Machine created, projected, defined and started on Nitro, with its
-      managed `domains.d` policy written and verified by the hook
+- [x] a captured, generalized and sealed workstation Golden Image, the first
+      published Template pinned to it, and a Machine created, projected,
+      defined and started from it on Nitro: `arch-dev-20261003`,
+      `workstation-dev` and `dev-01` (milestones 3 and 4, Nitro-verified)
+- [ ] the managed `domains.d` policy of a Machine created from a Template
+      read back on Nitro and matched by the hook at its start
 - [ ] physical proof that the hook refuses an unmapped domain with PCI
       passthrough (software-verified in `tests/hook.bats`)
 - [ ] physical acceptance of the product-only Machines workspace and the

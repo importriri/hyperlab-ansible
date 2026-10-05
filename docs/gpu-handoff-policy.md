@@ -104,8 +104,10 @@ would break the existing guest lifecycle without changing what it means.
 ## Known open work
 
 - The managed policy surface and the unmapped-passthrough refusal have
-  contract coverage only. No real `domains.d` entry has been written on Nitro
-  yet, and no unmapped passthrough domain has been refused on hardware.
+  contract coverage. On Nitro, `dev-01`, created from `workstation-dev`, has
+  its `domains.d` entry and runs with the GPU; the physical acceptance of
+  that entry being matched at start, and of an unmapped passthrough domain
+  being refused, is still open.
 - A boot-scoped GPU lease (a GPU-capable Machine that may also start without
   the GPU) is decided in [ADR 0019](adr/0019-gpu-lease.md) and not yet
   implemented.
