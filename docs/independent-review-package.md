@@ -90,6 +90,7 @@ there.
 | [0036](adr/0036-machine-snapshots-and-backups.md) | snapshots and encrypted backups of Machines |
 | [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
 | [0038](adr/0038-host-usb-device-policy.md) | the host's policy for new USB devices |
+| [0039](adr/0039-host-frame-around-fullscreen-guests.md) | the host frame around a fullscreen guest window |
 
 ## 5. Questions the maintainer wants answered
 

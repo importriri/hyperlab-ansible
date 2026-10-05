@@ -98,6 +98,9 @@ entered the pipeline.
     per-Machine DAC identities.
 38. [`0038-host-usb-device-policy.md`](0038-host-usb-device-policy.md) —
     proposed: USBGuard blocks a new USB device until the operator allows it.
+39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)
+    — proposed: a host-drawn provenance ring on the overlay layer around a
+    fullscreen guest window.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
