@@ -438,6 +438,15 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `tests/host_usbguard_contract.py`, software-verified)
 - [ ] that policy applied on Nitro, with the internal keyboard and touchpad
       proved unaffected, and a device allowed from the host shell
+- [ ] Wi-Fi card in a sys-net Machine through VFIO, the host routing the five
+      networks through it and keeping their isolation, with a tested way to
+      give the card back to the host
+      ([ADR 0042](adr/0042-network-device-machine.md), proposed; IOMMU group
+      checked: the card is alone in its group)
+- [ ] USB controller in a sys-usb Machine, devices handed to Machines through
+      an explicit host action
+      ([ADR 0043](adr/0043-usb-controller-machine.md), proposed; one
+      controller for every USB device, camera and Bluetooth included)
 - [ ] measured boot: the boot profiles as one signed multi-profile unified
       kernel image measured into PCR 11, TPM2 with a PIN for the root volume,
       a recovery key kept off the host, the type 1 entries removed last

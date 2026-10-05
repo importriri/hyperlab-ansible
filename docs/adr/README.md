@@ -108,6 +108,12 @@ entered the pipeline.
 41. [`0041-seamless-guest-applications.md`](0041-seamless-guest-applications.md)
     — proposed: whole desktops for now; later waypipe per application,
     confined and without clipboard forwarding.
+42. [`0042-network-device-machine.md`](0042-network-device-machine.md) —
+    proposed: a sys-net Machine owns the Wi-Fi card; the host routes the five
+    networks through it and keeps their isolation.
+43. [`0043-usb-controller-machine.md`](0043-usb-controller-machine.md) —
+    proposed: a sys-usb Machine owns the only USB controller; a device goes to
+    a Machine through a host-relayed vsock port.
 44. [`0044-measured-boot.md`](0044-measured-boot.md) — proposed: a signed
     multi-profile unified kernel image measured into PCR 11, TPM2 with a PIN
     for the root volume, and a recovery key kept off the host.

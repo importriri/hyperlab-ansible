@@ -90,6 +90,8 @@ there.
 | [0036](adr/0036-machine-snapshots-and-backups.md) | snapshots and encrypted backups of Machines |
 | [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
 | [0041](adr/0041-seamless-guest-applications.md) | seamless guest applications |
+| [0042](adr/0042-network-device-machine.md) | the Wi-Fi card in a network Machine |
+| [0043](adr/0043-usb-controller-machine.md) | the USB controller in a USB Machine |
 | [0044](adr/0044-measured-boot.md) | a signed and measured boot with TPM2 unlock |
 
 ## 5. Questions the maintainer wants answered
