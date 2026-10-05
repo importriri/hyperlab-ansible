@@ -93,6 +93,7 @@ there.
 | [0042](adr/0042-network-device-machine.md) | the Wi-Fi card in a network Machine |
 | [0043](adr/0043-usb-controller-machine.md) | the USB controller in a USB Machine |
 | [0044](adr/0044-measured-boot.md) | a signed and measured boot with TPM2 unlock |
+| [0045](adr/0045-looking-glass-stream-health.md) | Looking Glass stream health and a capture restart |
 
 ## 5. Questions the maintainer wants answered
 

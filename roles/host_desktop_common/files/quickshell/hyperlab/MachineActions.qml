@@ -39,12 +39,15 @@ Scope {
         "console",
         "ssh",
         "looking-glass",
+        "restart-capture",
         "force-stop"
     ]
 
     // Presentation order inside the selected machine, grouped by the decision
     // an operator is actually making.
     readonly property var connectVerbs: ["console", "ssh", "looking-glass"]
+    // A Linux guest's Looking Glass capture, restarted without the guest.
+    readonly property var streamVerbs: ["restart-capture"]
     readonly property var powerVerbs: ["start", "shutdown", "reboot"]
     readonly property var advancedVerbs: ["force-stop"]
 
@@ -112,6 +115,8 @@ Scope {
             return "SSH";
         case "looking-glass":
             return "Looking Glass";
+        case "restart-capture":
+            return "Restart capture";
         case "force-stop":
             return "Force stop";
         case "power-cycle":
@@ -218,6 +223,91 @@ Scope {
                     probeRunner.detail
                 );
                 probeRunner.destroy();
+            }
+        }
+    }
+
+    // ------------------------------------------------------- stream health
+
+    // Read only, one runner per request, each with its own serial: ShellState
+    // adopts only the answer to the question it last asked (ADR 0045).
+    property int streamHealthSerial: 0
+
+    signal streamHealthRequested(int serial, string machine)
+    signal streamHealthAnswered(
+        int serial,
+        string machine,
+        string raw,
+        int exitCode,
+        string detail
+    )
+
+    function checkStream(machine) {
+        const name = String(machine);
+
+        if (name.length === 0)
+            return false;
+
+        machineActions.streamHealthSerial += 1;
+
+        const serial = machineActions.streamHealthSerial;
+
+        machineActions.streamHealthRequested(serial, name);
+
+        const runner = streamHealthComponent.createObject(machineActions, {
+            "serial": serial,
+            "machine": name,
+            "command": [machineActions.bridge, "stream-health", name]
+        });
+
+        if (runner === null) {
+            machineActions.streamHealthAnswered(
+                serial,
+                name,
+                "",
+                -1,
+                "The machine bridge could not be started"
+            );
+            return false;
+        }
+
+        runner.running = true;
+        return true;
+    }
+
+    Component {
+        id: streamHealthComponent
+
+        Process {
+            id: healthRunner
+
+            property int serial: -1
+            property string machine: ""
+
+            property string buffer: ""
+            property string detail: ""
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    healthRunner.buffer = String(this.text);
+                }
+            }
+
+            stderr: StdioCollector {
+                onStreamFinished: {
+                    healthRunner.detail = String(this.text).trim();
+                }
+            }
+
+            onExited: (exitCode, exitStatus) => {
+                machineActions.streamHealthAnswered(
+                    healthRunner.serial,
+                    healthRunner.machine,
+                    healthRunner.buffer,
+                    exitCode,
+                    healthRunner.detail
+                );
+                healthRunner.destroy();
             }
         }
     }

@@ -385,6 +385,19 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       shell action bridge resolves to root-owned desktop files
       (software-verified; also the shell checklist item below)
 
+### 8b. Reliability
+
+- [x] Looking Glass stream health in the host shell: the guest agent's
+      answer, the sender and the stream state on the selected Machine's pane,
+      and a capture restart (sender and portals, the guest keeps running)
+      ([ADR 0045](adr/0045-looking-glass-stream-health.md), proposed;
+      `hyperlabctl looking-glass`, `tools/hyperlabctl/tests/test_looking_glass.py`,
+      the runtime contract's stream-health scenario; software-verified)
+- [ ] the same accepted on Nitro with the rebuilt sender
+- [ ] no host suspend while a VFIO Machine holds the GPU
+- [ ] "collect diagnostics": one archive of a Machine's host and guest logs,
+      with sensitive data removed
+
 ### 9. Network security topology
 
 - [x] frozen allowed-flow matrix between clean, dev, dirty, lab and services

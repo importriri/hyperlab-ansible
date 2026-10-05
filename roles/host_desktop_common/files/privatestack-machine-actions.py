@@ -54,6 +54,7 @@ VERBS = (
     "console",
     "ssh",
     "looking-glass",
+    "restart-capture",
     "force-stop",
 )
 
@@ -83,14 +84,14 @@ def emit(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, separators=(",", ":")), flush=True)
 
 
-def cli_json(*args: str) -> Any:
+def cli_json(*args: str, timeout: int = 15) -> Any:
     result = subprocess.run(
         [HYPERLABCTL, "--json", *args],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
-        timeout=15,
+        timeout=timeout,
     )
     if result.returncode:
         raise Refused(
@@ -149,6 +150,8 @@ def resolve(
         "vm.ssh",
         "vm.clipboard-send",
         "vm.looking-glass",
+        "vm.looking-glass-health",
+        "vm.looking-glass-restart",
         "vm.start",
         "vm.stop",
     }:
@@ -297,6 +300,26 @@ def choose_action(
             raise Refused("Looking Glass transport is not approved")
 
         return "vm.looking-glass"
+
+    if verb == "restart-capture":
+        # The stream of a Linux sender only (ADR 0045): the Windows sender is
+        # not restarted from here.
+        if not running:
+            raise Refused("restarting the capture requires a running managed machine")
+        if not managed_identity(machine, spec_row):
+            raise Refused("restarting the capture requires a running managed machine")
+        if machine.get("vfio") is not True:
+            raise Refused("restarting the capture requires VFIO")
+        spec = spec_row.get("spec")
+        image = spec_row.get("image")
+        if not isinstance(spec, dict) or not isinstance(image, dict):
+            raise Refused("Looking Glass metadata is unavailable")
+        if spec.get("looking_glass") is not True:
+            raise Refused("Looking Glass is disabled by the machine spec")
+        if (str(image.get("os_family") or "") != "linux"
+                or str(spec.get("looking_glass_mode") or "") != "linux-experimental"):
+            raise Refused("only a Linux Looking Glass capture can be restarted")
+        return "vm.looking-glass-restart"
 
     if verb == "force-stop":
         if not running:
@@ -548,6 +571,17 @@ def main() -> int:
 
     if verb == "capabilities":
         emit(capabilities(name))
+        return 0
+
+    if verb == "stream-health":
+        # Read only: the same checks as restarting the capture, then the
+        # reviewed health command. The shell shows the answer as it came.
+        machine = live_machine(name)
+        choose_action("restart-capture", name, machine, managed_spec(name))
+        report = cli_json("looking-glass", "health", name, timeout=45)
+        if not isinstance(report, dict):
+            raise Refused("invalid stream health report")
+        emit({"phase": "stream-health", "machine": name, "health": report})
         return 0
 
     if verb == "clipboard":

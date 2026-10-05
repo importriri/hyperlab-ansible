@@ -137,6 +137,14 @@ ShellRoot {
 
         onCapabilitiesCleared: sharedState.clearCapabilities()
 
+        onStreamHealthRequested: (serial, machine) => {
+            sharedState.beginStreamHealth(serial, machine);
+        }
+
+        onStreamHealthAnswered: (serial, machine, raw, exitCode, detail) => {
+            sharedState.applyStreamHealth(serial, machine, raw, exitCode, detail);
+        }
+
         onCreatePlanRequested: sharedState.beginCreatePlan()
 
         onCreatePlanAnswered: (raw, exitCode, detail) => {

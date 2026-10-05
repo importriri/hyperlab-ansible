@@ -1,8 +1,8 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
-index de0211de..d738ca45 100644
+index de0211de..1e67bb96 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -1,281 +1,335 @@
+@@ -1,281 +1,340 @@
  /**
   * Looking Glass
   * Copyright © 2017-2026 The Looking Glass Authors
@@ -187,10 +187,15 @@ index de0211de..d738ca45 100644
 +    pw_stream_queue_buffer(stream, pwBuffer);
      return;
 +  }
++
++  const uint64_t nowUs = microtime();
++  if (this->stallWarned)
++    DEBUG_INFO("Frames resumed after %llu s without a usable frame",
++        (unsigned long long)((nowUs - this->lastFrameUs) / 1000000ULL));
  
 -  this->frameData = buffer->datas[0].data;
 +  this->frameData    = buffer->datas[0].data;
-+  this->lastFrameUs  = microtime();
++  this->lastFrameUs  = nowUs;
 +  this->callbacks    = 0;
 +  this->emptyBuffers = 0;
 +  this->stallWarned  = false;
@@ -347,7 +352,7 @@ index de0211de..d738ca45 100644
    if (!this->threadLoop)
    {
      DEBUG_ERROR("Failed to create pipewire thread loop");
-@@ -297,197 +351,259 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
+@@ -297,197 +356,259 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
      close(pipewireFd);
      goto fail;
    }

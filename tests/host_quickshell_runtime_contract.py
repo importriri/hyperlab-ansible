@@ -369,8 +369,29 @@ Window {
         property bool busy: false
 
         readonly property var verbs: ["start", "shutdown", "reboot",
-            "console", "ssh", "looking-glass", "force-stop"]
+            "console", "ssh", "looking-glass", "restart-capture", "force-stop"]
         readonly property var connectVerbs: ["console", "ssh", "looking-glass"]
+        readonly property var streamVerbs: ["restart-capture"]
+
+        // Stream health transport (ADR 0045): the answer is bridge-shaped
+        // JSON handed to the real ShellState validation; null is a bridge
+        // that could not answer.
+        signal settled(string verb, string machine, string phase, string detail)
+        property var streamAnswer: null
+        property var streamChecks: []
+        property int streamSerial: 0
+        function checkStream(machine) {
+            streamSerial += 1;
+            streamChecks = streamChecks.concat([String(machine)]);
+            sharedState.beginStreamHealth(streamSerial, String(machine));
+            if (streamAnswer !== null)
+                sharedState.applyStreamHealth(streamSerial, String(machine),
+                                              JSON.stringify(streamAnswer), 0, "");
+            else
+                sharedState.applyStreamHealth(streamSerial, String(machine), "", 2,
+                                              "fixture bridge unavailable");
+            return true;
+        }
         readonly property var powerVerbs: ["start", "shutdown", "reboot"]
         readonly property var advancedVerbs: ["force-stop"]
 
@@ -402,6 +423,7 @@ Window {
             case "console": return "Console";
             case "ssh": return "SSH";
             case "looking-glass": return "Looking Glass";
+            case "restart-capture": return "Restart capture";
             case "force-stop": return "Force stop";
             case "seal": return "Seal";
             default: return "Operation";
@@ -682,6 +704,10 @@ def scenario_source(
             "reason": "strict runtime SSH inventory is unavailable",
         },
         "looking-glass": {"available": True, "reason": ""},
+        "restart-capture": {
+            "available": False,
+            "reason": "only a Linux Looking Glass capture can be restarted",
+        },
         "force-stop": {"available": True, "reason": ""},
     })
 
@@ -2213,6 +2239,112 @@ APPLICATIONS = """
                   "an application outside the catalogue was listed");
 """
 
+STREAM_HEALTH = """
+            sharedSurfaces.openWorkspace("machines");
+            sharedSurfaces.selectMachine("fixture-001", 1);
+
+            // The bridge does not offer a capture restart (a Windows or
+            // non-Looking Glass guest): no stream section and no check.
+            const healthRow = find(workspaceSurface, "machine-stream-health");
+            check(healthRow !== null, "the stream health row is missing");
+            check(healthRow === null || !healthRow.visible,
+                  "the stream section showed for a machine that cannot restart its capture");
+            check(sharedMachineActions.streamChecks.length === 0,
+                  "stream health was asked for a machine that cannot restart its capture");
+
+            function report(machine, health, agent, sender, stream) {
+                return { phase: "stream-health", machine: machine,
+                         health: { machine: machine, health: health, agent: agent,
+                                   sender: sender, stream: stream,
+                                   log_age_seconds: 4,
+                                   observed_at: "2026-10-05T19:00:00+00:00" } };
+            }
+
+            // Offered, and the guest reports a stalled stream.
+            sharedMachineActions.streamAnswer =
+                report("fixture-001", "stalled", "yes", "running", "stalled");
+            const offered = JSON.parse(JSON.stringify(sharedMachineActions.capabilityVerbs));
+            offered["restart-capture"] = { available: true, reason: "" };
+            sharedState.beginCapabilityRequest(50, "fixture-001", sharedState.machinesGeneration);
+            check(sharedState.applyCapabilityAnswer(50, "fixture-001", JSON.stringify({
+                    phase: "capabilities",
+                    machine: { name: "fixture-001", state: "running", managed: true, vfio: true },
+                    verbs: offered }), 0, ""),
+                  "a capability answer offering restart-capture was refused");
+            // The pane's timer asks as soon as the restart is offered.
+            check(sharedMachineActions.streamChecks.indexOf("fixture-001") >= 0,
+                  "stream health was not asked when the restart became available");
+            check(healthRow !== null && healthRow.visible,
+                  "the stream section is hidden while a restart is offered");
+            check(healthRow !== null && healthRow.title === "Stalled"
+                  && healthRow.tone === "danger",
+                  "a stalled stream is not shown as an alarm: "
+                  + (healthRow ? healthRow.title + "/" + healthRow.tone : "none"));
+            check(healthRow !== null && healthRow.hint.indexOf("guest agent answers") >= 0,
+                  "the agent's yes is not shown");
+
+            // The action runs through the typed bridge, once, on this machine.
+            const restartRow = find(workspaceSurface, "machine-stream-restart-capture");
+            check(restartRow !== null && restartRow.enabled,
+                  "the restart action is not offered");
+            if (restartRow !== null)
+                restartRow.activated();
+            check(sharedMachineActions.operations.indexOf("restart-capture:fixture-001") >= 0,
+                  "Restart capture did not run on the selected machine: "
+                  + sharedMachineActions.operations.join(","));
+            check(sharedSurfaces.confirmation === null,
+                  "restarting the capture asked for a destructive confirmation");
+
+            // A settled restart is followed by a fresh check.
+            const before = sharedMachineActions.streamChecks.length;
+            sharedMachineActions.streamAnswer =
+                report("fixture-001", "ok", "yes", "running", "streaming");
+            sharedMachineActions.settled("restart-capture", "fixture-001", "succeeded", "");
+            check(sharedMachineActions.streamChecks.length === before + 1,
+                  "the stream was not checked again after the restart settled");
+            check(healthRow !== null && healthRow.title === "Frames arriving"
+                  && healthRow.tone === "neutral",
+                  "a healthy stream is not shown as healthy");
+
+            // An unresponsive guest is named, not called a stream problem.
+            sharedMachineActions.streamAnswer =
+                report("fixture-001", "guest-unresponsive", "no", "running", "streaming");
+            sharedMachineActions.checkStream("fixture-001");
+            check(healthRow !== null && healthRow.title === "Guest not answering",
+                  "an unresponsive guest agent was not shown");
+
+            // Late, foreign and malformed answers are never adopted.
+            sharedState.beginStreamHealth(90, "fixture-001");
+            sharedState.beginStreamHealth(91, "fixture-001");
+            check(!sharedState.applyStreamHealth(90, "fixture-001",
+                    JSON.stringify(report("fixture-001", "ok", "yes", "running", "streaming")), 0, ""),
+                  "a superseded stream answer was adopted");
+            const malformed = [
+                report("fixture-002", "ok", "yes", "running", "streaming"),
+                report("fixture-001", "fine", "yes", "running", "streaming"),
+                report("fixture-001", "ok", "maybe", "running", "streaming"),
+                report("fixture-001", "ok", "yes", "zombie", "streaming"),
+                report("fixture-001", "ok", "yes", "running", "flowing"),
+                { phase: "capabilities", machine: "fixture-001", health: {} }
+            ];
+            let serial = 100;
+            for (const answer of malformed) {
+                serial += 1;
+                sharedState.beginStreamHealth(serial, "fixture-001");
+                sharedState.applyStreamHealth(serial, "fixture-001", JSON.stringify(answer), 0, "");
+                check(sharedState.streamHealth.state === "unavailable",
+                      "a malformed stream answer was adopted: " + JSON.stringify(answer));
+            }
+            check(healthRow !== null && healthRow.title === "Unknown" && healthRow.tone === "danger",
+                  "an unreadable stream answer was not shown as unknown");
+
+            // Another machine never inherits this one's answer.
+            sharedState.beginStreamHealth(200, "fixture-002");
+            check(sharedState.streamHealth.machine === "fixture-002"
+                  && sharedState.streamHealth.state === "loading",
+                  "another machine inherited the stream answer");
+"""
+
 FULLSCREEN = """
             const real = @@PROVENANCE@@;
             function answer(provenance) {
@@ -2405,6 +2537,7 @@ def main() -> int:
              WORKBENCH.replace("@@WORKBENCH@@", json.dumps(WORKBENCH_ANSWER))),
             ("workbench-empty", 1920, 1080, populated, WORKBENCH_EMPTY),
             ("workbench-unavailable", 1920, 1080, populated, WORKBENCH_UNAVAILABLE),
+            ("stream-health", 1920, 1080, populated, STREAM_HEALTH),
             ("fullscreen-frame", 1920, 1080, populated,
              FULLSCREEN.replace("@@PROVENANCE@@", json.dumps(resolver_answers()))),
         ]

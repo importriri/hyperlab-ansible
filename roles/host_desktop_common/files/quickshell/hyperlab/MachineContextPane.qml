@@ -63,6 +63,72 @@ Item {
         return pane.shellState.capabilityFor(pane.identifier, verb);
     }
 
+    // Stream health (ADR 0045): shown only while the bridge offers to
+    // restart this machine's capture, which it does only for a running Linux
+    // Looking Glass guest. Checked on a timer while shown, and again after a
+    // restart settles.
+    readonly property bool streamOffered:
+        pane.present && pane.capability("restart-capture").available
+
+    readonly property var streamHealth: pane.shellState.streamHealth
+
+    readonly property var streamSummary: {
+        const health = pane.streamHealth;
+
+        if (health.machine !== pane.identifier
+            || health.state === "loading"
+            || health.state === "idle")
+            return { "word": "Checking", "detail": "Asking the guest", "alarm": false };
+
+        if (health.state === "unavailable")
+            return { "word": "Unknown", "detail": health.detail, "alarm": true };
+
+        const agent =
+            health.agent === "yes"
+            ? "guest agent answers"
+            : "guest agent does not answer";
+
+        switch (health.health) {
+        case "ok":
+            return { "word": "Frames arriving", "detail": agent, "alarm": false };
+        case "stalled":
+            return { "word": "Stalled", "detail": "no frames while the guest is alive · " + agent, "alarm": true };
+        case "sender-down":
+            return { "word": "Sender stopped", "detail": agent, "alarm": true };
+        case "idle":
+            return { "word": "No client", "detail": "no Looking Glass window is connected · " + agent, "alarm": false };
+        case "starting":
+            return { "word": "Starting", "detail": agent, "alarm": false };
+        case "guest-unresponsive":
+            return { "word": "Guest not answering", "detail": "a capture restart would not help", "alarm": true };
+        default:
+            return { "word": "Unknown", "detail": agent, "alarm": false };
+        }
+    }
+
+    // The first check as soon as a restart is offered (a new selection, or a
+    // fresh capability answer); then every 15 s while the pane is shown.
+    onStreamOfferedChanged: {
+        if (pane.streamOffered)
+            pane.machineActions.checkStream(pane.identifier);
+    }
+
+    Timer {
+        interval: 15000
+        repeat: true
+        running: pane.visible && pane.streamOffered
+        onTriggered: pane.machineActions.checkStream(pane.identifier)
+    }
+
+    Connections {
+        target: pane.machineActions
+
+        function onSettled(verb, machine, phase, detail) {
+            if (verb === "restart-capture" && machine === pane.identifier)
+                pane.machineActions.checkStream(pane.identifier);
+        }
+    }
+
     // Every operation goes through the same request. Destructive ones stop
     // at the shared confirmation, which captures this exact target.
     function request(verb) {
@@ -323,6 +389,65 @@ Item {
             ShellDivider {
                 width: parent.width
                 visible: pane.present
+                vertical: false
+                tokens: pane.tokens
+                theme: pane.theme
+            }
+
+            // Stream.
+            SectionHeader {
+                width: parent.width
+                visible: pane.streamOffered
+                tokens: pane.tokens
+                theme: pane.theme
+                label: "Stream"
+                description: "Looking Glass frames, read from the guest's sender"
+            }
+
+            Column {
+                width: parent.width
+                visible: pane.streamOffered
+                spacing: 2
+
+                PanelRow {
+                    objectName: "machine-stream-health"
+                    width: parent.width
+                    tokens: pane.tokens
+                    theme: pane.theme
+                    glyph: pane.streamSummary.alarm ? pane.icons.warning : pane.icons.connect
+                    tone: pane.streamSummary.alarm ? "danger" : "neutral"
+                    title: pane.streamSummary.word
+                    hint: pane.streamSummary.detail
+                }
+
+                Repeater {
+                    model: pane.machineActions.streamVerbs
+
+                    delegate: PanelRow {
+                        required property var modelData
+
+                        readonly property var entry: pane.capability(modelData)
+
+                        objectName: "machine-stream-" + modelData
+                        width: parent.width
+                        tokens: pane.tokens
+                        theme: pane.theme
+                        glyph: pane.icons.power
+                        title: pane.machineActions.labelFor(modelData)
+                        interactive: true
+                        enabled: entry.available
+                        busy: pane.machineActions.busyFor(pane.identifier)
+                        disabledReason: entry.reason
+                        hint: "sender and portals · the guest keeps running"
+
+                        onActivated: pane.request(modelData)
+                    }
+                }
+            }
+
+            ShellDivider {
+                width: parent.width
+                visible: pane.streamOffered
                 vertical: false
                 tokens: pane.tokens
                 theme: pane.theme

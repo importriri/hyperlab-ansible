@@ -147,6 +147,18 @@ the life of the connection, so an open guest display never blocks power
 operations or a connection to another machine; a connection that ends is
 recorded as *closed*, not *completed*.
 
+For a running Linux Looking Glass guest the bridge also offers **Restart
+capture**, and the pane adds a **Stream** section
+([ADR 0045](adr/0045-looking-glass-stream-health.md)). It shows what
+`privatestack-machine-actions stream-health NAME` answered: whether the guest
+agent answers `guest-ping`, whether the sender runs, and the stream state the
+sender last logged, as one word (*Frames arriving*, *Stalled*, *Sender
+stopped*, *No client*, *Guest not answering*). It is asked when the restart
+becomes available and every 15 s while the pane is shown, and accepted only
+for the outstanding request. Restart capture stops the sender, restarts the
+guest's screen-cast portals and starts the sender again; the guest keeps
+running and the Looking Glass window reconnects by itself.
+
 Destructive operations stop at the shared confirmation and require the exact
 machine name. That is an interaction safeguard, not a privilege boundary: the
 reviewed backend remains the enforcement layer.

@@ -117,6 +117,9 @@ entered the pipeline.
 44. [`0044-measured-boot.md`](0044-measured-boot.md) — proposed: a signed
     multi-profile unified kernel image measured into PCR 11, TPM2 with a PIN
     for the root volume, and a recovery key kept off the host.
+45. [`0045-looking-glass-stream-health.md`](0045-looking-glass-stream-health.md)
+    — proposed: the shell asks the guest's sender whether its stream is
+    alive and restarts the capture without restarting the Machine.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

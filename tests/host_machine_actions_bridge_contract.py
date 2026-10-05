@@ -118,6 +118,29 @@ def choose_action_cases(bridge) -> None:
           "an unapproved Linux Looking Glass transport was offered")
     check(outcome(bridge, "console", running_external, None) == "vm.console",
           "console lost for a running domain")
+
+    # Restarting the capture (ADR 0045): a running managed Linux Looking Glass
+    # guest only; never Windows, never without VFIO, never a stopped guest.
+    linux_lg = dict(SPEC_WINDOWS, image={"os_family": "linux"},
+                    spec={"name": "win", "looking_glass": True,
+                          "looking_glass_mode": "linux-experimental"})
+    check(outcome(bridge, "restart-capture", running_managed, linux_lg) == "vm.looking-glass-restart",
+          "a Linux Looking Glass guest cannot restart its capture")
+    for label, machine, spec_row in (
+        ("Windows", running_managed, SPEC_WINDOWS),
+        ("no VFIO", dict(running_managed, vfio=False), linux_lg),
+        ("stopped", dict(running_managed, state="shut off"), linux_lg),
+        ("external", running_external, None),
+        ("no spec", running_managed, None),
+        ("Looking Glass off", running_managed,
+         dict(linux_lg, spec={"name": "win", "looking_glass": False,
+                              "looking_glass_mode": "linux-experimental"})),
+    ):
+        check(outcome(bridge, "restart-capture", machine, spec_row).startswith("refused"),
+              "a capture restart was offered to a %s guest" % label)
+    check("restart-capture" not in bridge.DESTRUCTIVE_VERBS
+          and "restart-capture" not in bridge.CONNECTION_VERBS,
+          "restarting the capture is not a plain foreground operation")
     check(outcome(bridge, "reboot", running_external, None).startswith("refused"),
           "guest reboot was offered to an external domain")
 

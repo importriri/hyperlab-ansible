@@ -43,6 +43,7 @@ struct pw_buffer { struct spa_buffer *buffer; };
 struct pw_stream { int unused; };
 struct pw_thread_loop { int unused; };
 #define DEBUG_WARN(...) (fprintf(stderr, __VA_ARGS__), fputc('\n', stderr))
+#define DEBUG_INFO(...) (fprintf(stderr, __VA_ARGS__), fputc('\n', stderr))
 static uint64_t clock_us;
 static uint64_t microtime(void) { return ++clock_us; }
 
@@ -205,6 +206,8 @@ def main() -> int:
     require("hlStallAction(" in timeout and "return CAPTURE_RESULT_REINIT;" in timeout,
             "a capture timeout does not consult the watchdog or restart the capture")
     require("No usable frame for" in timeout, "a stall is not logged")
+    require("Frames resumed after" in function(after, CALLBACK),
+            "frames that come back after a stall warning are not logged")
     print("Looking Glass sender frame stall contract: OK")
     return 0
 

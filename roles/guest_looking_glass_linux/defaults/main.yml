@@ -12,7 +12,7 @@ guest_looking_glass_linux_compat_patch_sha256: "868d7e1dc49ae9c583bed300f2a7f732
 guest_looking_glass_linux_compat_patch_remote: /run/privatestack-looking-glass-portal-gcc16.patch
 guest_looking_glass_linux_compat_patch_target: host/platform/Linux/capture/pipewire/src/portal.c
 guest_looking_glass_linux_runtime_patch: pipewire-thread-loop-runtime.patch
-guest_looking_glass_linux_runtime_patch_sha256: "62f0e4c3622e7aded89e7a3a293eecf145fa05775d2efbd7f1c63d4db5a1fd78"
+guest_looking_glass_linux_runtime_patch_sha256: "002d083206b402e11b21b0e06feebc70f53e3b64a15ed569cf8c97b89b4d97a0"
 guest_looking_glass_linux_runtime_patch_remote: /run/privatestack-looking-glass-pipewire-runtime.patch
 guest_looking_glass_linux_runtime_patch_target: host/platform/Linux/capture/pipewire/src/pipewire.c
 guest_looking_glass_linux_kvmfr_version: "0.0.12"

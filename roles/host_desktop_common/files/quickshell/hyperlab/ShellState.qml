@@ -896,6 +896,7 @@ Scope {
         "console",
         "ssh",
         "looking-glass",
+        "restart-capture",
         "force-stop"
     ]
 
@@ -1042,6 +1043,129 @@ Scope {
             "state": "ok",
             "verbs": answer.verbs,
             "facts": answer.facts,
+            "detail": "",
+            "observedAt": Date.now()
+        };
+        return true;
+    }
+
+    // ------------------------------------------------------- stream health
+    //
+    // What `hyperlabctl looking-glass health` last said about one Linux
+    // Machine's Looking Glass stream (ADR 0045), bound to the request that
+    // asked for it. A late, foreign or malformed answer is never adopted; a
+    // broken answer to the current request is "unavailable", never a guessed
+    // health.
+
+    readonly property var streamHealthWords: [
+        "ok", "stalled", "sender-down", "idle", "starting",
+        "guest-unresponsive", "unknown"
+    ]
+    readonly property var streamStateWords: [
+        "streaming", "stalled", "restarting", "idle", "starting", "stopped",
+        "unknown"
+    ]
+
+    property var streamHealthRequest: ({ "serial": 0, "machine": "" })
+
+    property var streamHealth: ({
+        "machine": "",
+        "state": "idle",
+        "health": "",
+        "agent": "",
+        "sender": "",
+        "stream": "",
+        "detail": "",
+        "observedAt": 0
+    })
+
+    function beginStreamHealth(serial, machine) {
+        const name = String(machine);
+
+        state.streamHealthRequest = { "serial": serial, "machine": name };
+
+        // Another machine never inherits this one's answer.
+        if (state.streamHealth.machine !== name) {
+            state.streamHealth = {
+                "machine": name,
+                "state": "loading",
+                "health": "",
+                "agent": "",
+                "sender": "",
+                "stream": "",
+                "detail": "",
+                "observedAt": 0
+            };
+        }
+    }
+
+    function validStreamHealth(parsed, machine) {
+        if (
+            parsed === null
+            || typeof parsed !== "object"
+            || Array.isArray(parsed)
+            || parsed.phase !== "stream-health"
+            || parsed.machine !== machine
+        )
+            return null;
+
+        const report = parsed.health;
+
+        if (
+            report === null
+            || typeof report !== "object"
+            || Array.isArray(report)
+            || report.machine !== machine
+            || state.streamHealthWords.indexOf(report.health) < 0
+            || ["yes", "no"].indexOf(report.agent) < 0
+            || ["running", "absent"].indexOf(report.sender) < 0
+            || state.streamStateWords.indexOf(report.stream) < 0
+        )
+            return null;
+
+        return {
+            "health": report.health,
+            "agent": report.agent,
+            "sender": report.sender,
+            "stream": report.stream
+        };
+    }
+
+    function applyStreamHealth(serial, machine, raw, exitCode, detail) {
+        const request = state.streamHealthRequest;
+
+        if (serial !== request.serial || String(machine) !== request.machine)
+            return false;
+
+        const answer =
+            exitCode === 0
+            ? state.validStreamHealth(state.parseJson(raw), request.machine)
+            : null;
+
+        if (answer === null) {
+            state.streamHealth = {
+                "machine": request.machine,
+                "state": "unavailable",
+                "health": "",
+                "agent": "",
+                "sender": "",
+                "stream": "",
+                "detail":
+                    String(detail).length > 0
+                    ? String(detail)
+                    : "The stream health check did not answer",
+                "observedAt": 0
+            };
+            return false;
+        }
+
+        state.streamHealth = {
+            "machine": request.machine,
+            "state": "ok",
+            "health": answer.health,
+            "agent": answer.agent,
+            "sender": answer.sender,
+            "stream": answer.stream,
             "detail": "",
             "observedAt": Date.now()
         };
