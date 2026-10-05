@@ -39,8 +39,11 @@ was written as a check of something assumed present.
 
 ## Fix
 
-Pending ADR 0037: AppArmor with libvirt's per-domain profiles, per-Machine
-DAC identities, or both.
+Pending ADR 0037. The chosen route, AppArmor with libvirt's per-domain
+profiles, is not available with Arch's libvirt, which is built without its
+AppArmor and SELinux drivers; the ADR now weighs a local libvirt build
+against per-Machine DAC identities with one AppArmor profile for QEMU. The
+kernel side is prepared: an AppArmor boot entry that is not the default.
 
 ## Regression proof
 

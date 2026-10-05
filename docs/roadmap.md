@@ -408,7 +408,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 - [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed:
       verified absent on Nitro (DAC only, one QEMU user for every Machine;
       [`problems/qemu-processes-share-one-identity.md`](../problems/qemu-processes-share-one-identity.md)),
-      decision in [ADR 0037](adr/0037-qemu-process-confinement.md), proposed
+      decision in [ADR 0037](adr/0037-qemu-process-confinement.md), proposed;
+      Arch's libvirt has no AppArmor driver, so the route is open again
+- [x] the kernel side of AppArmor prepared: a VFIO boot entry with AppArmor in
+      `lsm=`, not the default (`tests/apparmor_boot_contract.py`,
+      software-verified)
+- [ ] that entry booted and proved on Nitro, then made the default
 - [x] QEMU guest agent restricted to the commands HyperLab uses; no guest
       command execution: the last provisioning step writes the allowlist and
       proves `guest-exec` refused from the host (software-verified)

@@ -203,7 +203,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     vfio_defaults = (ROOT / "roles/vfio_boot/defaults/main.yml").read_text()
     vfio_tasks = (ROOT / "roles/vfio_boot/tasks/main.yml").read_text()
     check("hardware_probe_vfio_ids_csv" not in vfio_defaults, "vfio defaults must not embed cross-role facts")
-    check(vfio_defaults.count("bind_vfio_devices: true") == 1, "exactly one boot profile must request VFIO binding")
+    # One VFIO entry and its AppArmor twin; tests/apparmor_boot_contract.py
+    # holds the twin identical to it but for the lsm= group (ADR 0037).
+    check(vfio_defaults.count("bind_vfio_devices: true") == 2
+          and "file: Arch-Linux-Hardened-Vfio-AppArmor.conf" in vfio_defaults,
+          "only the VFIO boot profile and its AppArmor twin may request VFIO binding")
     check("default Arch-Linux-Hardened-Vfio.conf" in vfio_tasks, "the managed loader default must be VFIO")
 
     hardware_tasks = (ROOT / "roles/hardware_probe/tasks/main.yml").read_text()

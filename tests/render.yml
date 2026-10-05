@@ -101,12 +101,15 @@
           - >-
             'hardware_probe_vfio_ids_csv'
             not in (vfio_boot_profiles | to_json)
+          # The VFIO entry and its AppArmor twin (ADR 0037), which
+          # tests/apparmor_boot_contract.py holds identical but for lsm=.
           - >-
             vfio_boot_profiles
             | selectattr('bind_vfio_devices', 'defined')
             | selectattr('bind_vfio_devices', 'equalto', true)
+            | map(attribute='file')
             | list
-            | length == 1
+            == ['Arch-Linux-Hardened-Vfio.conf', 'Arch-Linux-Hardened-Vfio-AppArmor.conf']
         fail_msg: >-
           vfio_boot profile defaults must remain static data. The validated
           hardware fact is injected only while rendering the VFIO entry.

@@ -42,7 +42,7 @@
   ansible.builtin.set_fact:
     vfio_boot_luks_uuid: "{{ vfio_boot_luks_raw.stdout }}"
 
-- name: Install the four boot profiles
+- name: Install the boot profiles
   ansible.builtin.template:
     src: entry.conf.j2
     dest: /boot/loader/entries/{{ item.file }}

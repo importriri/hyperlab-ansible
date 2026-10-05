@@ -18,6 +18,19 @@ vfio_boot_profiles:
       - "modprobe.blacklist=nouveau module_blacklist=nouveau nvidia-drm.modeset=0"
       - "video=efifb:off pcie_port_pm=off pcie_aspm=off kvm.ignore_msrs=1"
 
+  # The VFIO boot with AppArmor active in the kernel (ADR 0037). Not the
+  # default: it is tried with a one-time boot first, and the Vfio entry above
+  # stays the fallback until Nitro proves every Machine, Looking Glass, the
+  # GPU and the network under it.
+  - file: Arch-Linux-Hardened-Vfio-AppArmor.conf
+    title: Arch Linux (Vfio, AppArmor)
+    bind_vfio_devices: true
+    option_groups:
+      - "intel_iommu=on iommu=pt"
+      - "modprobe.blacklist=nouveau module_blacklist=nouveau nvidia-drm.modeset=0"
+      - "video=efifb:off pcie_port_pm=off pcie_aspm=off kvm.ignore_msrs=1"
+      - "lsm=landlock,lockdown,yama,integrity,apparmor,bpf"
+
   - file: Arch-Linux-Hardened.conf
     title: Arch Linux (Hardened)
     option_groups:
