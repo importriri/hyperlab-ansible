@@ -539,7 +539,7 @@ def domain_xml(name: str, bdfs: list[str], port: str = "5900") -> str:
             "<hostdev type='pci'><source><address "
             f"domain='0x{domain}' bus='0x{bus}' slot='0x{slot}' function='0x{function}'/>")
         hostdevs[-1] += "</source></hostdev>"
-    return f"<domain><name>{name}</name><devices>{''.join(hostdevs)}<graphics type='spice' port='{port}'/></devices></domain>"
+    return f"<domain><name>{name}</name><devices>{''.join(hostdevs)}<graphics type='spice' port='{port}' listen='127.0.0.1'/></devices></domain>"
 
 
 def managed_vfio_xml(name: str, bdfs: list[str], *, profile: str = "vfio", kvmfr: bool = False,

@@ -36,6 +36,7 @@ not provide.
 | Trusting an SSH host key shown on the network | the first key is read through the QEMU Guest Agent and pinned | `tools/guest_host_key.py` |
 | A guest running commands through the guest agent | after provisioning the agent answers only the calls HyperLab uses; `guest-exec` is refused and proven refused | `tests/guest_access_close_contract.py` |
 | Data leaving or entering a guest silently | no SPICE agent channel, no shared folders, no USB devices or redirection, no SPICE file transfer; host-to-guest clipboard is one explicit action to one Machine | `tests/media_input_contract.py`, [ADR 0020](adr/0020-host-to-guest-clipboard.md) |
+| A guest's display and input reachable from the network | SPICE listens only on a UNIX socket or loopback; the domain XML guard refuses any display server elsewhere, and any second one | `tests/graphics_exposure_contract.py` |
 | A guest listening to the room | guests have a playback-only sound card and the Looking Glass client denies the microphone | `tests/media_input_contract.py` |
 | A product Machine captured into a Golden Image | the Workbench refuses a domain with a Machine projection | `tests/workbench_contract.py` |
 | A Template offering what its class forbids | the review gate at catalogue load and in CI | [ADR 0029](adr/0029-template-review-gate.md) |

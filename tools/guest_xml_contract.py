@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Compare the managed contract fields of two libvirt domain XML files."""
+"""Compare the managed contract fields of two libvirt domain XML files.
+
+Whatever the comparison says, a domain whose display server listens anywhere
+but a UNIX socket or loopback is refused (graphics_exposure).
+"""
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -46,6 +51,42 @@ def graphics_listen(root: ET.Element) -> str | None:
         return graphics.get("listen")
     child = graphics.find("./listen[@type='address']")
     return None if child is None else child.get("address")
+
+
+def loopback(address: str | None) -> bool:
+    try:
+        return address is not None and ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
+
+
+def graphics_exposure(root: ET.Element) -> list[str]:
+    """Every display server must listen on a UNIX socket or loopback only.
+
+    Checked on every graphics device, not only the managed one, and on the
+    listen attribute as well as each listen element: a VNC device added next
+    to SPICE, or SPICE on a libvirt network's address, is refused.
+    """
+    problems = []
+    for graphics in root.findall("./devices/graphics"):
+        kind = graphics.get("type")
+        if kind not in {"spice", "vnc"}:
+            problems.append(f"graphics type {kind!r} is not allowed")
+            continue
+        addresses = [graphics.get("listen")] if graphics.get("listen") is not None else []
+        listens = graphics.findall("./listen")
+        if not listens and not addresses:
+            problems.append(f"{kind} graphics names no listen address")
+        for listen in listens:
+            mode = listen.get("type")
+            if mode == "address":
+                addresses.append(listen.get("address"))
+            elif mode not in {"socket", "none"}:
+                problems.append(f"{kind} graphics listens through a {mode!r} listen")
+        for address in addresses:
+            if not loopback(address):
+                problems.append(f"{kind} graphics listens on {address!r}, not loopback")
+    return problems
 
 
 def hostdev_bdfs(root: ET.Element) -> list[str]:
@@ -230,6 +271,7 @@ def signature(path: Path) -> dict[str, Any]:
         "tpm_persistent": None if tpm_backend is None else tpm_backend.get("persistent_state"),
         "tpm_path": None if tpm_source is None else tpm_source.get("path"),
         "graphics": None if graphics is None else graphics.get("type"),
+        "graphics_count": len(root.findall("./devices/graphics")),
         "graphics_listen": graphics_listen(root),
         "graphics_port": None if graphics is None or not is_vfio else graphics.get("port"),
         "graphics_autoport": None if graphics is None else graphics.get("autoport"),
@@ -265,9 +307,19 @@ def main() -> int:
     try:
         expected = signature(Path(args.expected))
         actual = signature(Path(args.actual))
+        exposed = [
+            f"{label}: {problem}"
+            for label, path in (("expected", args.expected), ("actual", args.actual))
+            for problem in graphics_exposure(ET.parse(path).getroot())
+        ]
     except (OSError, ET.ParseError, ValueError) as exc:
         print(f"domain XML contract cannot be read: {exc}", file=sys.stderr)
         return 2
+    if exposed:
+        print("domain XML exposes a display server beyond loopback:", file=sys.stderr)
+        for problem in exposed:
+            print(f"- {problem}", file=sys.stderr)
+        return 1
     errors = [
         f"{key}: expected {expected[key]!r}, got {actual[key]!r}"
         for key in expected

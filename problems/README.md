@@ -242,5 +242,8 @@ proof.
 - [`session-test-pid-file-race.md`](session-test-pid-file-race.md): the
   session reload tests read a pid file the old manager had just removed as a
   new manager's pid, and failed under load.
+- [`domain-xml-guard-missed-exposed-graphics.md`](domain-xml-guard-missed-exposed-graphics.md):
+  the domain XML guard accepted a VNC device on every address next to the
+  managed SPICE one.
 
 Author: [importriri](https://github.com/importriri).

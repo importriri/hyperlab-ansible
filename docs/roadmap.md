@@ -426,6 +426,11 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       transfer, USB redirection): no Machine gets the SPICE agent channel or
       USB redirection, and file transfer is off (`tests/media_input_contract.py`,
       software-verified)
+- [x] no display server beyond loopback: SPICE only on a UNIX socket or
+      loopback, the domain XML guard refusing any SPICE or VNC elsewhere and
+      any second display device, and no ready Template projecting the SPICE
+      clipboard on (decided 2026-10-05; `tests/graphics_exposure_contract.py`,
+      software-verified)
 - [x] VM disks at rest on the encrypted host volume only, with swap and
       temporary files of guests never on unencrypted storage: the store
       guard accepts only a dm-crypt source, guest disks, transient overlays
