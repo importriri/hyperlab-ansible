@@ -245,5 +245,8 @@ proof.
 - [`domain-xml-guard-missed-exposed-graphics.md`](domain-xml-guard-missed-exposed-graphics.md):
   the domain XML guard accepted a VNC device on every address next to the
   managed SPICE one.
+- [`looking-glass-sender-streaming-without-frames.md`](looking-glass-sender-streaming-without-frames.md):
+  the Linux sender lost a PipeWire buffer on every empty frame and froze
+  silently; it now queues them back and restarts a capture without frames.
 
 Author: [importriri](https://github.com/importriri).

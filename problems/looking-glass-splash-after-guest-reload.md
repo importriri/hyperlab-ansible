@@ -53,3 +53,7 @@ follows the evidence.
 fake sender and a fake `pgrep`: the previous log must survive as `.1`, and
 the new log must name the start time and Hyprland instance and record the
 sender's exit status or the loss of Hyprland.
+
+Related: [`looking-glass-sender-streaming-without-frames.md`](looking-glass-sender-streaming-without-frames.md),
+a sender that froze without a reload; its watchdog now logs a capture that
+stops receiving frames, which also bears on this one.
