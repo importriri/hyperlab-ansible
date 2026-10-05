@@ -82,6 +82,7 @@ there.
 | [0025](adr/0025-host-key-without-agent-file-reads.md) | pinning host keys without agent file reads |
 | [0027](adr/0027-guest-notification-owner.md) | whether mako or the guest shell owns notifications |
 | [0030](adr/0030-disposable-browser-image.md) | how the disposable browser image gets its session |
+| [0031](adr/0031-service-appliance-templates.md) | how a service appliance is created from a Template |
 
 ## 5. Questions the maintainer wants answered
 

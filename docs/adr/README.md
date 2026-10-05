@@ -76,6 +76,9 @@ entered the pipeline.
 30. [`0030-disposable-browser-image.md`](0030-disposable-browser-image.md)
     — proposed: the disposable browser image gets its session through a
     Workbench capture of a reviewed kiosk profile.
+31. [`0031-service-appliance-templates.md`](0031-service-appliance-templates.md)
+    — proposed: a services Template names its reviewed service spec, which
+    owns the appliance's address, exposure and backups.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

@@ -214,6 +214,18 @@ def check_browser_draft() -> None:
     assert entries["browser-disposable"]["ready"] is False
 
 
+def check_services_draft() -> None:
+    """svc-jellyfin waits for ADR 0031 and a sealed debian-server."""
+    template = yaml.safe_load((ROOT / "templates/svc-jellyfin.yml").read_text())
+    assert template["status"] == "draft" and template["class"] == "services"
+    assert template["network_allowlist"] == ["services"] and template["image"] == "debian-server"
+    assert template["presentation"]["looking_glass_mode"] == "disabled"
+    service = yaml.safe_load((ROOT / "service-specs/svc-jellyfin.yml").read_text())
+    assert service["network_profile"] == "services"
+    entries = {entry["id"]: entry for entry in template_catalog(ROOT)}
+    assert entries["svc-jellyfin"]["ready"] is False
+
+
 def main() -> int:
     check_catalogue()
     check_refusals()
@@ -222,6 +234,7 @@ def main() -> int:
     check_workstation_standard()
     check_gaming_drafts()
     check_browser_draft()
+    check_services_draft()
     print("C10 published Template contract: OK")
     return 0
 

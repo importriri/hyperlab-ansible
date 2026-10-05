@@ -275,7 +275,10 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       `fedora-dev` and `parrot-disposable` proven from them
 - [ ] Windows masters sealed through the workshop; `win11clean` and
       `win11dirty` Templates
-- [ ] `svc-jellyfin` as a services Template
+- [x] `svc-jellyfin` draft Template of the services class (software-verified)
+- [ ] `svc-jellyfin` ready: created from the shell as
+      [ADR 0031](adr/0031-service-appliance-templates.md) decides, on a sealed
+      `debian-server`
 - [x] Template review gate: a Template cannot request a network, GPU profile
       or device its class forbids ([ADR 0029](adr/0029-template-review-gate.md),
       software-verified)
