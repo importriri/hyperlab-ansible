@@ -8,7 +8,9 @@ Machine (ADR 0034, ADR 0035, both proposed). This contract holds the default:
      guest gets a capture device: the sound card is playback only, and a
      domain defined before that is recognised as legacy and reconciled;
   2. the domain template passes no USB device, redirects no USB over SPICE,
-     shares no folder and allows no SPICE file transfer;
+     shares no folder, allows no SPICE file transfer and has no SPICE agent
+     channel, so no SPICE clipboard can flow whatever a spec's clipboard
+     flag says;
   3. every checked-in VM spec keeps its USB allowlist empty and shares no
      folder.
 """
@@ -46,6 +48,8 @@ def main() -> int:
         ('type="usb"', "a USB device is passed to every guest"),
         ("<redirdev", "USB is redirected over SPICE"),
         ("<filesystem", "a host folder is shared with every guest"),
+        ("spicevmc", "a SPICE agent channel carries clipboard and file transfer"),
+        ("com.redhat.spice.0", "a SPICE agent channel carries clipboard and file transfer"),
     ):
         require(needle not in template.replace('<input type="tablet" bus="usb"/>', ""), why)
     require('<filetransfer enable="no"/>' in template, "SPICE file transfer is not off")

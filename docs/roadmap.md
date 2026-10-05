@@ -413,8 +413,10 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       account's password (decided 2026-10-04): done for every Machine whose
       account has a password (software-verified)
 - [ ] the same for server Machines, whose account has no password today
-- [ ] SPICE channels a Template does not need disabled (clipboard, file
-      transfer, USB redirection)
+- [x] SPICE channels a Template does not need disabled (clipboard, file
+      transfer, USB redirection): no Machine gets the SPICE agent channel or
+      USB redirection, and file transfer is off (`tests/media_input_contract.py`,
+      software-verified)
 - [ ] VM disks at rest on the encrypted host volume only, with swap and
       temporary files of guests never on unencrypted storage
 - [ ] firmware updates through `fwupd`, with a recorded result on Nitro
