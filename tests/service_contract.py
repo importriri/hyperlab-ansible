@@ -114,6 +114,36 @@ def test_service_plan_and_refusals() -> None:
         refused = plan(exposure_root, store)
         assert refused.returncode == 2 and "not reviewed" in refused.stderr
 
+        # A service brings the GPU only the class its reviewed spec names.
+        gpu_root = Path(td) / "gpu"
+        fixture(gpu_root)
+        spec_path = gpu_root / "service-specs/svc-jellyfin.yml"
+        vm_path = gpu_root / "vm-specs/svc-jellyfin.yml"
+        spec = yaml.safe_load(spec_path.read_text())
+        vm = yaml.safe_load(vm_path.read_text())
+        assert data["gpu_handoff_profile"] is None
+        vm.update(device_profile="vfio", gpu_handoff_profile="dev")
+        write_yaml(vm_path, vm)
+        refused = plan(gpu_root, store)
+        assert refused.returncode == 2 and "uses the standard device" in refused.stderr
+        spec["gpu_handoff_profile"] = "dev"
+        write_yaml(spec_path, spec)
+        accepted = plan(gpu_root, store)
+        assert accepted.returncode == 0, accepted.stderr
+        assert json.loads(accepted.stdout)["gpu_handoff_profile"] == "dev"
+        vm["gpu_handoff_profile"] = "dirty"
+        write_yaml(vm_path, vm)
+        refused = plan(gpu_root, store)
+        assert refused.returncode == 2 and "differs from its reviewed service spec" in refused.stderr
+        vm.update(device_profile="standard", gpu_handoff_profile=None)
+        write_yaml(vm_path, vm)
+        refused = plan(gpu_root, store)
+        assert refused.returncode == 2 and "is a VFIO guest" in refused.stderr
+        spec["gpu_handoff_profile"] = "services"
+        write_yaml(spec_path, spec)
+        refused = plan(gpu_root, store)
+        assert refused.returncode == 2 and "must be null or one of" in refused.stderr
+
 
 def test_receipt_and_network_guards() -> None:
     with tempfile.TemporaryDirectory() as td:

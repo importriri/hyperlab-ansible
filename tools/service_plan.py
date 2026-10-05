@@ -16,8 +16,10 @@ import yaml
 SERVICE_RE = re.compile(r"^svc-[a-z0-9][a-z0-9-]*$")
 MAC_RE = re.compile(r"^52:54:00(?::[0-9a-f]{2}){3}$")
 EXPOSURE_RE = re.compile(r"^(tcp|udp)/([1-9][0-9]{0,4})$")
+GPU_HANDOFF_PROFILES = ("clean", "dev", "dirty", "lab")
 SERVICE_KEYS = {
     "schema_version",
+    "gpu_handoff_profile",
     "id",
     "vm",
     "network_profile",
@@ -118,7 +120,20 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
     require(vm.get("name") == vm_name, "linked VM spec name differs from service VM")
     require(vm.get("network_profile") == "services", "linked service VM must use the services network")
     require(vm.get("lifecycle") == "permanent", "service VM lifecycle must be permanent")
-    require(vm.get("device_profile") == "standard", "service VM must use the standard device profile")
+    # Services are not a rung (ADR 0022): a service VM may use the GPU only
+    # with the handoff profile its reviewed service spec names, and the VM
+    # spec must carry exactly that profile.
+    gpu = spec.get("gpu_handoff_profile")
+    require(gpu is None or gpu in GPU_HANDOFF_PROFILES,
+            "service gpu_handoff_profile must be null or one of " + ", ".join(GPU_HANDOFF_PROFILES))
+    if gpu is None:
+        require(vm.get("device_profile") == "standard" and vm.get("gpu_handoff_profile") is None,
+                "a service without a reviewed GPU handoff profile uses the standard device")
+    else:
+        require(vm.get("device_profile") == "vfio",
+                "a service with a GPU handoff profile is a VFIO guest")
+        require(vm.get("gpu_handoff_profile") == gpu,
+                "the service VM's GPU handoff profile differs from its reviewed service spec")
     require(vm.get("memory_overcommit") is False, "service VM memory overcommit is forbidden")
     require(vm.get("autostart") is False, "M7 service VMs require operator-controlled start")
     require(vm.get("qemu_guest_agent") is True, "service VM requires QEMU Guest Agent")
@@ -193,6 +208,7 @@ def build_plan(root: Path, spec_arg: str, store: Path) -> dict[str, Any]:
         "owner": spec["owner"],
         "purpose": spec["purpose"],
         "network_profile": "services",
+        "gpu_handoff_profile": gpu,
         "memory_reservation_mb": memory_mb,
         "backup_policy": spec["backup_policy"],
         "restore_policy": spec["restore_policy"],

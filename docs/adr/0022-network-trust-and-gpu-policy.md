@@ -29,8 +29,9 @@ and [`0019`](0019-gpu-lease.md).
   tool each enforce it.
 - **Services are not a rung.** A services Machine has no implied class. It
   may use the GPU only with a handoff profile its reviewed Template allows.
-  That review replaces the static rule that excluded services from VFIO;
-  the replacement itself is still open in roadmap milestone 5b.
+  That review replaces the static rule that excluded services from VFIO: a
+  registered service names the profile in its service spec, and its VM spec
+  must carry exactly that profile.
 - **Owning the GPU is per run.** Several managed domains may name the GPU;
   only the running one owns it (ADR 0016). A GPU-capable Machine chooses at
   each start whether this run has it (ADR 0019, proposed), and only a run

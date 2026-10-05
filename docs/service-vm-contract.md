@@ -1,6 +1,7 @@
 # Service VM contract and recovery
 
-Service applications run inside standard VMs. The hypervisor owns registration,
+Service applications run inside their own VMs, standard unless their reviewed
+service spec names a GPU handoff profile. The hypervisor owns registration,
 network identity, capacity, exposure and recovery policy; it does not install the
 application itself.
 
@@ -16,6 +17,14 @@ A registered service is valid only when these files agree:
 `tools/service_plan.py` rejects disagreement between service and VM identity,
 memory, backup policy, network, MAC or IP. The service MAC must also match the
 deterministic address derived from the VM name.
+
+A service brings the GPU nothing unless its service spec says so. The
+services network is not a rung of the GPU ladder
+([ADR 0022](adr/0022-network-trust-and-gpu-policy.md)), so the class a
+service may bring is a reviewed choice: `gpu_handoff_profile` in the service
+spec is `null` (a standard VM) or one of `clean`, `dev`, `dirty`, `lab`, and
+then the VM spec must be a VFIO guest with exactly that profile. The root
+qemu hook still enforces the ladder at every start.
 
 ## Required order
 

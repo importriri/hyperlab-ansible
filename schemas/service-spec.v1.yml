@@ -1,5 +1,5 @@
 ---
-# Service spec schema v1. A service spec binds one long-lived standard VM to a
+# Service spec schema v1. A service spec binds one long-lived VM to a
 # reviewed services-network lease and recovery policy. M7 declares exposure
 # intent but does not open ports.
 schema_version: 1
@@ -9,6 +9,9 @@ fields:
   id: {type: str, pattern: "^svc-[a-z0-9][a-z0-9-]*$"}
   vm: {type: str, pattern: "^svc-[a-z0-9][a-z0-9-]*$"}
   network_profile: {type: str, enum: [services]}
+  # ADR 0022: null for a standard service VM; otherwise the one GPU handoff
+  # class this reviewed service may bring to the GPU, as a VFIO guest.
+  gpu_handoff_profile: {type: str, nullable: true, enum: [clean, dev, dirty, lab]}
   memory_reservation_mb: {type: int, min: 512, max: 1048576}
   backup_policy: {type: str, enum: [manual, weekly]}
   restore_policy: {type: str, enum: [offline-only]}

@@ -3,6 +3,8 @@ schema_version: 1
 id: svc-jellyfin
 vm: svc-jellyfin
 network_profile: services
+# Jellyfin transcodes on the CPU; it brings nothing to the GPU.
+gpu_handoff_profile: null
 memory_reservation_mb: 4096
 backup_policy: weekly
 restore_policy: offline-only

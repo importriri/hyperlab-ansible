@@ -315,8 +315,10 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       it waits for an image with a session on both shapes, a Nitro test of
       define-then-start and the choice of Templates; it comes after
       `workstation-dev-standard` and the Create view proven on Nitro)
-- [ ] SERVICES Machines may be GPU-capable through a reviewed handoff
-      profile; the static rule that excludes them is replaced
+- [x] SERVICES Machines may be GPU-capable through a reviewed handoff
+      profile; the static rule that excludes them is replaced: a service spec
+      names `gpu_handoff_profile` (null by default) and its VM spec must match
+      it; the services Template class allows VFIO (software-verified)
 - [ ] `local-ai` service Machine (local inference) on that model
 - [ ] the ladder still guarantees that a lower-trust GPU use never precedes a
       higher-trust use in the same host boot
