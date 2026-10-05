@@ -524,6 +524,7 @@ exit 0
                 "pid": 48123,
                 "title": "guest controlled title",
                 "window_id": "42",
+                "fullscreen": False,
             },
             "Sway PID-bearing snapshot changed",
         )
@@ -552,6 +553,7 @@ exit 0
                 "pid": 48123,
                 "title": "guest controlled title",
                 "window_id": "0xabc",
+                "fullscreen": False,
             },
             "Hyprland PID-bearing snapshot changed",
         )

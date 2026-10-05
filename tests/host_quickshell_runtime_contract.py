@@ -49,6 +49,7 @@ OUT = os.environ.get("HYPERLAB_RENDER_OUT")
 
 # Surfaces whose host is a compositor window in production.
 WINDOW_FILES = (
+    "FullscreenFrame.qml",
     "HyperLabDesktop.qml",
     "HyperLabBar.qml",
     "OsdSurface.qml",
@@ -127,7 +128,7 @@ def adapt_window(source: str) -> str:
         r"(?m)^\s*WlrLayershell\.keyboardFocus:\n\s+.*\n", "", source
     )
     source = re.sub(
-        r"(?m)^\s*(exclusiveZone: .*|WlrLayershell\..*)\n",
+        r"(?m)^\s*(exclusiveZone: .*|exclusionMode: .*|WlrLayershell\..*)\n",
         "",
         source,
     )
@@ -494,6 +495,12 @@ Window {
     }
 
     Rectangle { anchors.fill: parent; color: sharedTheme.base }
+
+    FullscreenFrame {
+        id: fullscreenFrame
+        screen: ({ "name": "eDP-1" })
+        tokens: sharedTokens; theme: sharedTheme; shellState: sharedState
+    }
 
     HyperLabDesktop {
         id: desktop
@@ -2206,6 +2213,61 @@ APPLICATIONS = """
                   "an application outside the catalogue was listed");
 """
 
+FULLSCREEN = """
+            const real = @@PROVENANCE@@;
+            function answer(provenance) {
+                sharedState.applyProvenancePayload(JSON.stringify({
+                    "schema": 1, "status": "ok",
+                    "request": sharedState.provenanceRequest, "provenance": provenance }));
+            }
+            function focus(pid, app, windowId, fullscreen) {
+                sharedState.applyFocusPayload(JSON.stringify({
+                    "pid": pid, "app_id": app, "window_id": windowId, "title": "x",
+                    "fullscreen": fullscreen }));
+            }
+            const ring = window.find(fullscreenFrame, "fullscreen-frame-ring")
+                || fullscreenFrame.children[0];
+
+            // A guest window, not fullscreen: its border carries the colour.
+            focus(901, "looking-glass-client", "0x21", false);
+            answer(real.dev);
+            check(sharedState.focusedProvenance.identity === "dev", "the fixture guest did not resolve");
+            check(!fullscreenFrame.visible, "the ring showed around a window that is not fullscreen");
+
+            // The same guest fullscreen: the host ring in the dev colour.
+            focus(901, "looking-glass-client", "0x21", true);
+            answer(real.dev);
+            check(fullscreenFrame.visible, "no host ring around a fullscreen guest");
+            check(Qt.colorEqual(ring.border.color, sharedTheme.provenanceColor("dev")),
+                  "the ring is not the guest's provenance colour");
+            check(ring.border.width === sharedTokens.fullscreenRing, "the ring width is not the token");
+
+            // A host window fullscreen: no ring.
+            focus(900, "foot", "0x10", true);
+            answer(real.host);
+            check(!fullscreenFrame.visible, "the ring showed around a fullscreen host window");
+
+            // Fail closed: fullscreen and not resolved, or resolving.
+            focus(902, "looking-glass-client", "0x22", true);
+            check(fullscreenFrame.visible, "a fullscreen surface still resolving got no ring");
+            answer(real.unresolved);
+            check(fullscreenFrame.visible
+                  && Qt.colorEqual(ring.border.color, sharedTheme.semanticStatusColor("warn")),
+                  "an unresolved fullscreen surface did not get the warning ring");
+
+            // Another output: the ring stays on the focused window's output.
+            fullscreenFrame.screen = { "name": "HDMI-A-1" };
+            check(sharedState.focusedOutput === "eDP-1", "the fixture does not name the focused output");
+            check(!fullscreenFrame.visible,
+                  "the ring showed on an output that does not hold the focused window");
+            fullscreenFrame.screen = { "name": "eDP-1" };
+
+            // A non-boolean fullscreen field makes the focus source unavailable.
+            sharedState.applyFocusPayload(JSON.stringify({
+                "pid": 901, "app_id": "x", "window_id": "0x21", "fullscreen": "yes" }));
+            check(sharedState.focusSourceState === "unavailable", "a malformed fullscreen field was accepted");
+"""
+
 LAUNCHER_OPEN = """
             sharedSurfaces.openLauncher("");
             launcher.query = "f";
@@ -2343,6 +2405,8 @@ def main() -> int:
              WORKBENCH.replace("@@WORKBENCH@@", json.dumps(WORKBENCH_ANSWER))),
             ("workbench-empty", 1920, 1080, populated, WORKBENCH_EMPTY),
             ("workbench-unavailable", 1920, 1080, populated, WORKBENCH_UNAVAILABLE),
+            ("fullscreen-frame", 1920, 1080, populated,
+             FULLSCREEN.replace("@@PROVENANCE@@", json.dumps(resolver_answers()))),
         ]
 
         for name, width, height, inventory, body in cases:

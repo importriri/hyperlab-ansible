@@ -89,7 +89,6 @@ there.
 | [0035](adr/0035-microphone-and-camera.md) | microphone and camera per Machine and session |
 | [0036](adr/0036-machine-snapshots-and-backups.md) | snapshots and encrypted backups of Machines |
 | [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
-| [0039](adr/0039-host-frame-around-fullscreen-guests.md) | the host frame around a fullscreen guest window |
 | [0040](adr/0040-security-plane.md) | the security plane's tools and boundaries |
 | [0041](adr/0041-seamless-guest-applications.md) | seamless guest applications |
 

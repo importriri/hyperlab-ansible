@@ -147,6 +147,7 @@ def main() -> int:
             "MachineContextPane.qml",
             "CreateMachineView.qml",
             "WorkbenchView.qml",
+            "FullscreenFrame.qml",
             "ControlCenterView.qml",
             "DiagnosticsView.qml",
             "OwnershipInstrument.qml",

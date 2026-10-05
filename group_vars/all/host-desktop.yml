@@ -209,6 +209,7 @@ host_desktop_common_shell_stage:
     - MachineContextPane.qml
     - CreateMachineView.qml
     - WorkbenchView.qml
+    - FullscreenFrame.qml
     - ControlCenterView.qml
     - DiagnosticsView.qml
     - OwnershipInstrument.qml

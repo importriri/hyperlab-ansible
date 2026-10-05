@@ -1,7 +1,7 @@
 # ADR 0039 - The host frame around a fullscreen guest window
 
-Status: proposed. The operator chooses; today the provenance colour is the
-focused window's border, which fullscreen hides.
+Status: accepted (2026-10-05, option A) and built in the host shell
+(`FullscreenFrame.qml`); its acceptance on Nitro is open.
 
 ## Context
 
@@ -37,3 +37,18 @@ and the rail's height.
 A, with the ring's width a design token, so the frame holds in fullscreen
 without changing how fullscreen behaves. The ring must be checked on Nitro
 over a fullscreen Looking Glass window and over a fullscreen SPICE console.
+
+## Implementation
+
+The compositor adapter adds `fullscreen` to its focus snapshot: Hyprland's
+`activewindow` mode 2 (`FSMODE_FULLSCREEN`; 1 is maximized, which keeps the
+border and the rail) or a Sway `fullscreen_mode` of 1 or 2, and a
+`fullscreen>>` event refreshes it. `ShellState.fullscreenFrame` makes the
+ring visible whenever the focused window is fullscreen and the host has not
+resolved it as its own: in the resolved guest's provenance colour, and in
+the warning colour while it is resolving, unresolved or unavailable (fail
+closed). `FullscreenFrame.qml` draws it on the overlay layer of the focused
+window's output, ignoring other surfaces' exclusive zones, with no input
+region; its width is the design token `fullscreenRing` (4 px).
+`tests/host_quickshell_runtime_contract.py` (scenario `fullscreen-frame`)
+and `tests/host_hyprland_adapter_contract.py` cover it.

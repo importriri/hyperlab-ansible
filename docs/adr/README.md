@@ -99,7 +99,7 @@ entered the pipeline.
 38. [`0038-host-usb-device-policy.md`](0038-host-usb-device-policy.md) —
     accepted: USBGuard blocks a new USB device until the operator allows it.
 39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)
-    — proposed: a host-drawn provenance ring on the overlay layer around a
+    — accepted: a host-drawn provenance ring on the overlay layer around a
     fullscreen guest window.
 40. [`0040-security-plane.md`](0040-security-plane.md) — proposed: auditd
     and AIDE on the host, Suricata on bridge mirrors, a read-only

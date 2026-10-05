@@ -212,7 +212,8 @@ Scope {
     property var focusPayload: ({
         "pid": null,
         "app_id": "",
-        "window_id": ""
+        "window_id": "",
+        "fullscreen": false
     })
 
     readonly property string focusedSurface:
@@ -306,6 +307,23 @@ Scope {
             );
 
         return state.provenanceObservation;
+    }
+
+    // ADR 0039: while the focused window is fullscreen it covers the rail and
+    // has no border, so the host draws a ring on the overlay layer instead.
+    // Fail closed: every fullscreen window gets the ring unless the host
+    // resolved it as its own; an unresolved one gets the warning colour.
+    readonly property var fullscreenFrame: {
+        const provenance = state.focusedProvenance;
+        const fullscreen = state.focusSourceState === "ok"
+            && state.focusPayload.fullscreen === true;
+        const host = provenance.state === "resolved" && provenance.identity === "host";
+
+        return {
+            "visible": fullscreen && !host,
+            "identity": provenance.state === "resolved" ? provenance.identity : "",
+            "resolved": provenance.state === "resolved"
+        };
     }
 
     function provenanceResult(status, identity, source, domain, code, reason) {
@@ -1705,7 +1723,8 @@ Scope {
         if (parsed === null
             || (parsed.pid !== null && (!Number.isInteger(parsed.pid) || parsed.pid <= 0))
             || typeof parsed.app_id !== "string"
-            || typeof parsed.window_id !== "string") {
+            || typeof parsed.window_id !== "string"
+            || (parsed.fullscreen !== undefined && typeof parsed.fullscreen !== "boolean")) {
             state.focusSourceState = "unavailable";
             state.provenanceStopped();
             return;
@@ -1719,7 +1738,8 @@ Scope {
             "app_id":
                 typeof parsed.app_id === "string" ? parsed.app_id : "",
             "window_id":
-                typeof parsed.window_id === "string" ? parsed.window_id : ""
+                typeof parsed.window_id === "string" ? parsed.window_id : "",
+            "fullscreen": parsed.fullscreen === true
         };
 
         state.focusSourceState = "ok";

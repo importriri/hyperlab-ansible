@@ -262,6 +262,18 @@ Workbench reading shows the candidate captured; a shut-off domain is never
 taken as proof. Import, validation and release stay in the terminal, with the
 commands the seal prints.
 
+## Fullscreen frame
+
+A fullscreen window covers the rail and has no border, so the usual frame
+disappears exactly when a guest could imitate the host. While the focused
+window is fullscreen and the host has not resolved it as its own, the shell
+draws a ring around that window's output on the overlay layer, above every
+window ([ADR 0039](adr/0039-host-frame-around-fullscreen-guests.md)): in the
+resolved guest's provenance colour, or in the warning colour while the
+surface is resolving, unresolved or unavailable. A fullscreen host window
+gets no ring. The ring takes no input and reserves no space; a guest cannot
+draw over it or turn it off.
+
 ## Durable machine operations
 
 Managed start, shutdown, reboot, force stop, power cycle and reset run through

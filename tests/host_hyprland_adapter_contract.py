@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -168,8 +169,9 @@ def verify_fake_backends() -> None:
             bin_dir / "swaymsg",
             """
 if [[ "$*" == "-r -t get_tree" ]]; then
+    default_tree='{"focused":false,"nodes":[{"focused":true,"id":42,"app_id":"foot"}]}'
     printf '%s\\n' \
-      '{"focused":false,"nodes":[{"focused":true,"id":42,"app_id":"foot"}]}'
+      "${HYPERLAB_FAKE_TREE:-$default_tree}"
 fi
 
 if [[ "$*" == "-r -t get_bar_config bar-0" ]]; then
@@ -185,8 +187,9 @@ fi
 if [[ "${1:-}" == "activewindow" &&
       "${2:-}" == "-j" ]]
 then
+    default_window='{"address":"0xabc","class":"foot"}'
     printf '%s\\n' \
-      '{"address":"0xabc","class":"foot"}'
+      "${HYPERLAB_FAKE_ACTIVEWINDOW:-$default_window}"
 fi
 """,
         )
@@ -404,6 +407,37 @@ fi
             == "hyprctl|activewindow|-j\n",
             "bad Hyprland focused-window IPC",
         )
+
+        # ADR 0039: only Hyprland's FSMODE_FULLSCREEN (2) is fullscreen;
+        # maximized (1) keeps the border and the rail.
+        for mode, expected in ((2, True), (1, False), (0, False), (None, False)):
+            node = {"address": "0xabc", "class": "looking-glass-client", "pid": 901}
+            if mode is not None:
+                node["fullscreen"] = mode
+            result, _ = run_adapter(
+                "hyprland",
+                ["focused-window-json"],
+                bin_dir,
+                log,
+                {"HYPERLAB_FAKE_ACTIVEWINDOW": json.dumps(node)},
+            )
+            require(result.returncode == 0, result.stderr)
+            payload = json.loads(result.stdout)
+            require(payload["fullscreen"] is expected,
+                    f"fullscreen={mode} reported as {payload['fullscreen']}")
+
+        for mode, expected in ((1, True), (2, True), (0, False)):
+            tree = {"focused": False, "nodes": [
+                {"focused": True, "id": 42, "app_id": "foot", "fullscreen_mode": mode}]}
+            result, _ = run_adapter("sway", ["focused-window-json"], bin_dir, log,
+                                    {"HYPERLAB_FAKE_TREE": json.dumps(tree)})
+            require(result.returncode == 0, result.stderr)
+            require(json.loads(result.stdout)["fullscreen"] is expected,
+                    f"Sway fullscreen_mode={mode} misreported")
+
+        adapter_source = ADAPTER.read_text(encoding="utf-8")
+        require("fullscreen\\>\\>*" in adapter_source,
+                "a fullscreen change does not refresh the focused surface")
 
         expect_call(
             "sway",

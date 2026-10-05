@@ -195,6 +195,16 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
 
+        FullscreenFrame {
+            tokens: sharedTokens
+            theme: sharedTheme
+            shellState: sharedState
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
         HyperLabDesktop {
             tokens: sharedTokens
             theme: sharedTheme

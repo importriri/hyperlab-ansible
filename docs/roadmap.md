@@ -441,12 +441,14 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 11. Visual provenance and trust model
 
-- [ ] finish the host-owned visual provenance and trust model: every focused
+- [x] finish the host-owned visual provenance and trust model: every focused
       surface named by the host, including fullscreen guests
-      ([ADR 0039](adr/0039-host-frame-around-fullscreen-guests.md), proposed:
-      the resolver already names them; fullscreen hides the frame)
-- [ ] the host frame visible around a Looking Glass window at all times
-      (same ADR)
+      ([ADR 0039](adr/0039-host-frame-around-fullscreen-guests.md): a host
+      ring on the overlay layer while a guest is fullscreen, software-verified)
+- [x] the host frame visible around a Looking Glass window at all times
+      (same ADR, software-verified)
+- [ ] the fullscreen ring accepted on Nitro over Looking Glass and the SPICE
+      console
 - [ ] study: Looking Glass as the everyday window for Linux Machines without
       a GPU too (the PipeWire sender captures any guest desktop), one kvmfr
       device per running Machine, SPICE kept as recovery only; Windows needs

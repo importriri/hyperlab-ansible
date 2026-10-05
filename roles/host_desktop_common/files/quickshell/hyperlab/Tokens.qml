@@ -43,6 +43,8 @@ QtObject {
     readonly property int gapInner: 8
     readonly property int gapOuter: 16
     readonly property int borderSize: 1
+    // ADR 0039: the host ring around a fullscreen guest window.
+    readonly property int fullscreenRing: 4
 
     // Control geometry.
     readonly property int controlHeight: 28

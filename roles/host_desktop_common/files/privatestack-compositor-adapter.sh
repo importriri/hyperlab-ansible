@@ -210,6 +210,7 @@ if node is None:
         "app_id": "",
         "window_id": "",
         "title": "",
+        "fullscreen": False,
     }
 else:
     raw_pid = node.get("pid")
@@ -230,6 +231,8 @@ else:
         ),
         "window_id": str(node.get("id") or ""),
         "title": node.get("name") or "",
+        # 1 is workspace fullscreen, 2 global fullscreen.
+        "fullscreen": node.get("fullscreen_mode") in (1, 2),
     }
 
 print(
@@ -272,6 +275,9 @@ payload = {
         or ""
     ),
     "title": node.get("title") or "",
+    # Hyprland 0.56 FSMODE_FULLSCREEN; 1 is maximized, which keeps the
+    # border and the bar.
+    "fullscreen": node.get("fullscreen") == 2,
 }
 
 print(
@@ -342,6 +348,7 @@ focused_watch_hyprland() {
         case ${event_line} in
             activewindow\>\>*|\
             activewindowv2\>\>*|\
+            fullscreen\>\>*|\
             closewindow\>\>*|\
             openwindow\>\>*|\
             workspace\>\>*|\
