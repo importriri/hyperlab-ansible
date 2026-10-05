@@ -330,10 +330,12 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 Once 5 and 5b are done on Nitro, a short public demonstration of the
 platform, recorded on the host:
 
-- [ ] storyboard of 60 to 90 seconds: create a Machine from
+- [x] storyboard of 60 to 90 seconds: create a Machine from
       `workstation-dev` in the shell, first boot with the rice, the GPU lease,
       Looking Glass, the Desks, the host frame showing trust and network
-- [ ] a demo script that runs the steps in order, so the take is clean
+      ([`showcase.md`](showcase.md); the lease shot waits for ADR 0019)
+- [x] a demo script that runs the steps in order, so the take is clean
+      (`tools/showcase/demo.sh`, read-only, software-verified)
 - [ ] recording on the host, editing, captions
 - [ ] review before publishing: no host name, user name, address or private
       path on screen
