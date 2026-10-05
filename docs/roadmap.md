@@ -608,5 +608,7 @@ work explicitly requires it.
       (the Create view needs none: it runs the same steps as the CLI)
 - [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
 - [ ] shell-owned notifications (mako remains the reviewed daemon)
-- [ ] complete keybinding cheatsheet surface
+- [x] complete keybinding cheatsheet surface: `SUPER + F1`, every host binding
+      on the sheet and nothing else (`tests/host_key_sheet_contract.py`;
+      the same item as in milestone 6, software-verified)
 - [ ] Sway native parity acceptance (Sway remains the recovery session)
