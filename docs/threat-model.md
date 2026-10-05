@@ -1,11 +1,14 @@
 # HyperLab threat model
 
 What HyperLab protects against, what it does not, and where each claim is
-checked. It describes one workstation, the operator's laptop, running
-Machines under KVM with libvirt and QEMU on Arch Linux. It is not Qubes OS
-and does not provide Qubes OS security properties: there is no Xen, no
-separate driver or GUI domains, no qrexec policy, and the host's Linux
-kernel, KVM, QEMU and the host session are all in the trusted base.
+checked. HyperLab is a Qubes-inspired compartmentalization on KVM: one
+workstation, the operator's laptop, running Machines under KVM with libvirt
+and QEMU on Arch Linux. It is not Qubes OS and
+does not provide Qubes OS security properties: there is no Xen, no separate
+GUI domain, no separate driver domains yet (ADRs 0042 and 0043 propose them
+for the network card and the USB controller), no qrexec policy, and the
+host's Linux kernel, KVM, QEMU and the host session are all in the trusted
+base.
 
 `tests/threat_model_contract.py` keeps this page honest: every open problem
 in `problems/` must appear in it, and it may not claim what it says it does
@@ -62,10 +65,25 @@ not provide.
   not protect a Machine from its own software.
 - **Upstream supply chain** beyond the pinned checksums of base images and
   the archive keys inside them.
-- **Physical access, firmware and new USB devices on the host**
-  ([ADR 0038](adr/0038-host-usb-device-policy.md), proposed).
+- **A tampered boot before the disk opens.** Secure Boot verifies the boot
+  loader and the kernel with HyperLab's own keys, but not the initramfs or
+  the kernel command line, and nothing is measured: whoever can write the
+  EFI system partition can capture the disk passphrase
+  ([ADR 0044](adr/0044-measured-boot.md), proposed).
+- **Host drivers parsing outside input.** The host drives the Wi-Fi card
+  and the only USB controller itself, outside IOMMU translation
+  (`iommu=pt`): a flaw in their drivers or firmware is a flaw in the host
+  ([ADR 0042](adr/0042-network-device-machine.md),
+  [ADR 0043](adr/0043-usb-controller-machine.md), proposed). USBGuard
+  ([ADR 0038](adr/0038-host-usb-device-policy.md), built, not yet applied
+  on Nitro) keeps a new USB device's drivers away, but the host kernel
+  still enumerates it.
+- **Other physical access and firmware attacks.**
 - **Host-side intrusion detection.** There is no HIDS or NIDS yet
-  ([ADR 0040](adr/0040-security-plane.md), accepted, not built).
+  ([ADR 0040](adr/0040-security-plane.md), accepted, not built). Once built,
+  auditd, AIDE and Suricata detect; they do not prevent. A root compromise
+  of the host can stop them and erase what they wrote, so their evidence
+  counts only once it has reached the append-only receiver off the host.
 
 ## Open problems
 
