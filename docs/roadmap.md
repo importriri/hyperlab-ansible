@@ -472,10 +472,13 @@ Measured with the complete security plane active.
       sanitized-publication
 - [ ] `arch-bootstrap` frozen at the same campaign; `arch-hypervisor-lab`
       receives only the sanitized evidence
-- [ ] threat model document: what HyperLab protects against and what it does
+- [x] threat model document: what HyperLab protects against and what it does
       not; no claim of Qubes OS security properties
-- [ ] `SECURITY.md` and private vulnerability reporting enabled before the
-      release
+      ([`threat-model.md`](threat-model.md), `tests/threat_model_contract.py`,
+      software-verified)
+- [x] `SECURITY.md` (private reporting through GitHub)
+- [ ] private vulnerability reporting enabled in the repository settings
+      before the release
 - [ ] licence and authorship reviewed for publication under Doppiari
 - [ ] wallpaper and polish, screenshots, video and release documentation
 - [ ] sanitized Nitro evidence sealed with the exact public `main` commits
