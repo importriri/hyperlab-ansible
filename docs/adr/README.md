@@ -101,6 +101,9 @@ entered the pipeline.
 39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)
     — proposed: a host-drawn provenance ring on the overlay layer around a
     fullscreen guest window.
+40. [`0040-security-plane.md`](0040-security-plane.md) — proposed: auditd
+    and AIDE on the host, Suricata on bridge mirrors, a read-only
+    correlation shown in Diagnostics.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

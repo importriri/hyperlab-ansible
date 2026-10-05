@@ -446,6 +446,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 12. Security plane
 
+Decision pending: [ADR 0040](adr/0040-security-plane.md) (proposed).
+
 - [ ] endpoint HIDS with measured overhead and no hypervisor remote-command
       plane
 - [ ] passive NIDS that is never an inline routing dependency

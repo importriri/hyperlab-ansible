@@ -91,6 +91,7 @@ there.
 | [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
 | [0038](adr/0038-host-usb-device-policy.md) | the host's policy for new USB devices |
 | [0039](adr/0039-host-frame-around-fullscreen-guests.md) | the host frame around a fullscreen guest window |
+| [0040](adr/0040-security-plane.md) | the security plane's tools and boundaries |
 
 ## 5. Questions the maintainer wants answered
 
