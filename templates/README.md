@@ -18,6 +18,8 @@ carry runtime observations.
 | [`server-arch`](server-arch.yml) | `arch` | permanent or disposable, standard device, dev, services or lab network, SSH only |
 | [`server-debian`](server-debian.yml) | `debian-server` (not built; draft) | permanent or disposable, standard device, dev, services or lab network, SSH only |
 | [`server-fedora`](server-fedora.yml) | `fedora` | permanent or disposable, standard device, dev or lab network, SSH only |
+| [`gaming-clean`](gaming-clean.yml) | `arch-gaming-clean` (placeholder; draft) | permanent, VFIO, clean network, GPU class `clean`, Linux Looking Glass |
+| [`gaming-dirty`](gaming-dirty.yml) | `arch-gaming-dirty` (placeholder; draft) | permanent, VFIO, dirty network, GPU class `dirty`, Linux Looking Glass |
 
 `workstation-dev` offers only VFIO Machines: its image carries the
 NVIDIA-only session of the workstation it was captured from. It offers no

@@ -39,6 +39,8 @@ SERVER_WORKSPACE = "server"
 PROFILE_PLAYBOOKS = {
     "workstation-dev": "playbooks/guest-arch-dev-vfio.yml",
     "workstation-dev-standard": "playbooks/guest-arch-dev.yml",
+    "gaming-clean": "playbooks/guest-arch-gaming-clean.yml",
+    "gaming-dirty": "playbooks/guest-arch-gaming-dirty.yml",
 }
 
 # Placeholder for the private hash file; the provisioner substitutes it.

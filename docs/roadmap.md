@@ -259,8 +259,13 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [x] its draft Template and the placeholder manifest that reserves
       `arch-dev-standard`; the Workbench replaces only such a placeholder
       (software-verified)
-- [ ] `gaming-clean`, `gaming-dirty` and `gaming-offline` Templates for Linux
-      and Windows, pinned to sealed images of those profiles
+- [x] Linux `gaming-clean` and `gaming-dirty` draft Templates, with the
+      placeholder manifests that reserve their Workbench captures and their
+      reviewed profile playbooks (software-verified)
+- [ ] `gaming-clean` and `gaming-dirty` ready on sealed captures of
+      `arch-gaming-clean` and `arch-gaming-dirty`
+- [ ] `gaming-offline` (needs its own rice profile) and the Windows gaming
+      Templates, pinned to sealed images of those profiles
 - [ ] `browser-disposable` with reset on shutdown
 - [ ] Debian, Fedora and Parrot images prepared and sealed; `debian-dev`,
       `fedora-dev` and `parrot-disposable` proven from them

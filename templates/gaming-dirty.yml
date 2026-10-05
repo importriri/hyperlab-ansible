@@ -1,0 +1,47 @@
+---
+schema_version: 1
+id: gaming-dirty
+display_name: Gaming (dirty)
+version: "1.0"
+# Draft until arch-gaming-dirty is captured and sealed through the Workbench.
+status: draft
+class: gaming
+image: arch-gaming-dirty
+description: >-
+  Arch gaming on the dirty network with the dedicated GPU: modded games and third-party launchers, never the store accounts.
+  The account comes from cloud-init and the rice from the gaming-dirty profile
+  playbook.
+
+lifecycles:
+  permanent: true
+  disposable: false
+
+device_capabilities:
+  standard: false
+  vfio: true
+
+gpu_handoff_profiles:
+  clean: false
+  dev: false
+  dirty: true
+  lab: false
+
+network_allowlist: [dirty]
+
+resource_profiles:
+  minimum: false
+  balanced: true
+  performance: true
+  custom: true
+
+presentation:
+  looking_glass_mode: linux-experimental
+  recovery_console: true
+  workspace_profile: gaming-dirty
+
+defaults:
+  lifecycle: permanent
+  device_capability: vfio
+  gpu_handoff_profile: dirty
+  network_profile: dirty
+  resource_profile: balanced

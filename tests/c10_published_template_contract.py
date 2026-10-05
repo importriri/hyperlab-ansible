@@ -181,12 +181,33 @@ def check_workstation_standard() -> None:
     assert (ROOT / PROFILE_PLAYBOOKS["workstation-dev-standard"]).is_file()
 
 
+def check_gaming_drafts() -> None:
+    """gaming-clean and gaming-dirty wait for their Workbench captures."""
+    from hyperlabctl.machine_provision import PROFILE_PLAYBOOKS
+    entries = {entry["id"]: entry for entry in template_catalog(ROOT)}
+    for profile, network in (("gaming-clean", "clean"), ("gaming-dirty", "dirty")):
+        template = yaml.safe_load((ROOT / f"templates/{profile}.yml").read_text())
+        image = yaml.safe_load((ROOT / f"images/arch-{profile}.yml").read_text())
+        assert template["status"] == "draft" and template["class"] == "gaming"
+        assert template["image"] == f"arch-{profile}" and template["network_allowlist"] == [network]
+        assert template["device_capabilities"] == {"standard": False, "vfio": True}
+        assert [name for name, on in template["gpu_handoff_profiles"].items() if on] == [network], \
+            "a gaming Template brings the GPU exactly its own network's class"
+        assert template["lifecycles"]["disposable"] is False, "the rice would be lost at every stop"
+        assert image["status"] == "not-built" and image["sha256"] is None and image["source_sha256"] is None
+        assert image["network_allowlist"] == [network] and image["supports"]["vfio"] is True
+        assert entries[profile]["ready"] is False
+        assert PROFILE_PLAYBOOKS[profile] == f"playbooks/guest-arch-{profile}.yml"
+        assert (ROOT / PROFILE_PLAYBOOKS[profile]).is_file()
+
+
 def main() -> int:
     check_catalogue()
     check_refusals()
     check_machine_to_plan()
     check_server_arch()
     check_workstation_standard()
+    check_gaming_drafts()
     print("C10 published Template contract: OK")
     return 0
 

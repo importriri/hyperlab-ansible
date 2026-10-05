@@ -1,0 +1,44 @@
+---
+schema_version: 1
+id: arch-gaming-clean
+display_name: HyperLab gaming-clean workstation
+os_family: linux
+os_variant: archlinux
+version: "pinned-at-build"
+format: qcow2
+
+# Placeholder: it reserves the id for the Workbench capture of
+# arch-gaming-clean, the gaming-clean workstation with the passed-through GPU. The
+# seal replaces this file with the captured manifest; a placeholder is the
+# only manifest the Workbench may replace.
+status: not-built
+sha256: null
+
+private: true
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+source_type: local
+source_url: null
+source_checksum_url: null
+source_sha256: null
+filename: arch-gaming-clean.qcow2
+
+virtual_size_gib: 100
+minimum_size_gib: 100
+min_memory_mb: 8192
+
+supports: {standard: false, vfio: true, cloud_init: true, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: permanent, device_profile: vfio, network_profile: clean}
+network_allowlist: [clean]
+licensing: {redistributable: false}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  Captured through the Workbench from arch-gaming-clean (gaming-clean profile, VFIO)
+  over the arch base, then generalized, scanned and sealed. Machines get
+  their account from cloud-init and their rice from
+  playbooks/guest-arch-gaming-clean.yml.
