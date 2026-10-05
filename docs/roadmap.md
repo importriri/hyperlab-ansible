@@ -438,6 +438,11 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `tests/host_usbguard_contract.py`, software-verified)
 - [ ] that policy applied on Nitro, with the internal keyboard and touchpad
       proved unaffected, and a device allowed from the host shell
+- [ ] measured boot: the boot profiles as one signed multi-profile unified
+      kernel image measured into PCR 11, TPM2 with a PIN for the root volume,
+      a recovery key kept off the host, the type 1 entries removed last
+      ([ADR 0044](adr/0044-measured-boot.md), proposed; Secure Boot with
+      HyperLab's own keys is already enabled)
 
 ### 11. Visual provenance and trust model
 
@@ -457,13 +462,18 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 12. Security plane
 
-Decision pending: [ADR 0040](adr/0040-security-plane.md) (proposed).
+Decided: [ADR 0040](adr/0040-security-plane.md) (accepted: auditd and AIDE,
+Suricata on bridge mirrors, logs shipped off the host).
 
 - [ ] endpoint HIDS with measured overhead and no hypervisor remote-command
       plane
 - [ ] passive NIDS that is never an inline routing dependency
 - [ ] HyperLab Security Plane correlating endpoint and network evidence, shown
       in Diagnostics
+- [ ] host logs shipped as they are written to an append-only receiver off
+      the host, with the host journal sealed (forward-secure) and a stale
+      shipping state shown in Diagnostics; auditd and AIDE are detection, not
+      prevention, and their evidence counts only once it has left the host
 
 ### 13. Performance and gaming tuning
 

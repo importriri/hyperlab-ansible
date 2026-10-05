@@ -1,6 +1,7 @@
 # ADR 0040 - The security plane: host and network evidence, no command plane
 
-Status: proposed. The operator chooses the tools; nothing is built.
+Status: accepted (2026-10-05, host A and network A), extended with
+off-host, append-only log shipping below. Nothing is built.
 
 ## Context
 
@@ -43,8 +44,59 @@ says), and publishes a summary that Diagnostics shows: what fired, where,
 when, and how fresh the evidence is. It has no write path into a guest or
 the host configuration.
 
-## Recommendation
+## What this detects, and what it does not
 
-Host A and network A, with the Security Plane as above. Before either is
-enabled, its overhead is measured on Nitro with `dev-01` under load, and a
-crafted event per rule proves the evidence reaches Diagnostics.
+auditd, AIDE and Suricata are detection, not prevention. They record that
+something happened; none of them stops it. Code that becomes root on the
+host can stop auditd, rewrite AIDE's database and delete the logs, so
+evidence kept only on the host proves nothing about a host compromise: it
+shows what happened up to the moment the attacker cared to hide it, and
+only if it left the host before then.
+
+## Off-host, append-only logs
+
+The evidence is copied off the host as it is written, to a store the host
+can add to but not change or delete.
+
+**A. `systemd-journal-upload` to `systemd-journal-remote` on another device
+(recommended).** The host's journal, which receives auditd's records through
+the `audisp-syslog` plugin, AIDE's timer output and Suricata's alerts, is
+streamed over HTTPS with a client certificate to a small receiver that is
+not a HyperLab Machine. The receiver's store is append-only for the host's
+identity: the host has no shell or file access there, and the receiver
+rotates and keeps logs by its own policy. A Machine on Nitro is not off the
+host: whoever controls the host controls it.
+**B. Remote syslog (rsyslog with TLS)** to the same kind of receiver. Same
+property, a second log format to keep.
+**C. Periodic export to the backup disk** of
+[ADR 0036](0036-machine-snapshots-and-backups.md). Not append-only in time:
+an attacker edits the logs before the next export. Kept only as a copy.
+
+In addition, and whatever the destination, the host journal is sealed with
+forward-secure sealing (`journalctl --setup-keys`). The verification key is
+written down off the host; `journalctl --verify` with it then shows whether
+the local journal was altered after the fact. Sealing detects tampering, it
+does not prevent it, and a root attacker can still delete the journal.
+
+The Security Plane reports the age of the last record the receiver
+acknowledged; Diagnostics shows log shipping as stale, not as healthy, when
+that age passes a threshold.
+
+The receiving device is the operator's to choose (`<LOG-SINK>` in the test
+plan) and is a prerequisite for calling any host evidence trustworthy.
+
+## Decision
+
+Host A, network A and off-host logs A with forward-secure sealing, with the
+Security Plane as above. Before any of them is enabled, its overhead is
+measured on Nitro with `dev-01` under load, and a crafted event per rule
+proves the evidence reaches Diagnostics and the receiver.
+
+## Hardware test
+
+On Nitro, once the receiver exists: a crafted audit event (a write under a
+watched path) reaches the receiver within the threshold; stopping
+`systemd-journal-upload` turns Diagnostics' log shipping state to stale;
+the host cannot delete or rewrite a record already on the receiver with its
+own credentials; `journalctl --verify` with the off-host key passes on an
+untouched journal and fails on a copy altered on purpose.

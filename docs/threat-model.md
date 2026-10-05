@@ -65,7 +65,7 @@ not provide.
 - **Physical access, firmware and new USB devices on the host**
   ([ADR 0038](adr/0038-host-usb-device-policy.md), proposed).
 - **Host-side intrusion detection.** There is no HIDS or NIDS yet
-  ([ADR 0040](adr/0040-security-plane.md), proposed).
+  ([ADR 0040](adr/0040-security-plane.md), accepted, not built).
 
 ## Open problems
 

@@ -101,12 +101,16 @@ entered the pipeline.
 39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)
     — accepted: a host-drawn provenance ring on the overlay layer around a
     fullscreen guest window.
-40. [`0040-security-plane.md`](0040-security-plane.md) — proposed: auditd
+40. [`0040-security-plane.md`](0040-security-plane.md) — accepted: auditd
     and AIDE on the host, Suricata on bridge mirrors, a read-only
-    correlation shown in Diagnostics.
+    correlation shown in Diagnostics, and logs shipped off the host to an
+    append-only receiver.
 41. [`0041-seamless-guest-applications.md`](0041-seamless-guest-applications.md)
     — proposed: whole desktops for now; later waypipe per application,
     confined and without clipboard forwarding.
+44. [`0044-measured-boot.md`](0044-measured-boot.md) — proposed: a signed
+    multi-profile unified kernel image measured into PCR 11, TPM2 with a PIN
+    for the root volume, and a recovery key kept off the host.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
