@@ -93,6 +93,9 @@ entered the pipeline.
 36. [`0036-machine-snapshots-and-backups.md`](0036-machine-snapshots-and-backups.md)
     — proposed: offline independent snapshots with retention, and restic
     backups to a host-only target.
+37. [`0037-qemu-process-confinement.md`](0037-qemu-process-confinement.md)
+    — proposed: AppArmor with libvirt's per-domain profiles first, then
+    per-Machine DAC identities.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

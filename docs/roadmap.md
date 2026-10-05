@@ -404,7 +404,10 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 10. Hypervisor hardening
 
-- [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed
+- [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed:
+      verified absent on Nitro (DAC only, one QEMU user for every Machine;
+      [`problems/qemu-processes-share-one-identity.md`](../problems/qemu-processes-share-one-identity.md)),
+      decision in [ADR 0037](adr/0037-qemu-process-confinement.md), proposed
 - [x] QEMU guest agent restricted to the commands HyperLab uses; no guest
       command execution: the last provisioning step writes the allowlist and
       proves `guest-exec` refused from the host (software-verified)

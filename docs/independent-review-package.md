@@ -88,6 +88,7 @@ there.
 | [0034](adr/0034-usb-passthrough.md) | USB passthrough per Machine |
 | [0035](adr/0035-microphone-and-camera.md) | microphone and camera per Machine and session |
 | [0036](adr/0036-machine-snapshots-and-backups.md) | snapshots and encrypted backups of Machines |
+| [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
 
 ## 5. Questions the maintainer wants answered
 
