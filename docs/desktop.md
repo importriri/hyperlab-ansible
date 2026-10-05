@@ -331,9 +331,9 @@ pointer reaches, on Hyprland and Sway alike:
 No detached HyperLab drawer, overlay or control-center process is bound in
 the preferred session. The GTK surfaces remain deployed as Sway recovery
 tools and are documented as migration routes, not as product navigation.
-`SUPER + D` keeps Rofi as a transitional **application** launcher only:
-launching arbitrary desktop entries stays outside the typed bridge until a
-reviewed desktop-entry catalogue exists.
+`SUPER + D` keeps Rofi as a transitional **application** launcher for
+applications outside the reviewed catalogue; the HyperLab launcher starts the
+catalogue's applications through the typed bridge.
 
 See `docs/hyperlab-shell.md` for the visual and behavioural system and
 `docs/wallpaper-art-direction.md` for the identity assets.

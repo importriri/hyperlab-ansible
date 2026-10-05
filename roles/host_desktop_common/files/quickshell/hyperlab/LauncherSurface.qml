@@ -209,6 +209,23 @@ PanelWindow {
             }
         }
 
+        // Host applications from the reviewed catalogue, once asked for.
+        if (needle.length > 0) {
+            const applications = launcher.shellActions.applications.filter(application =>
+                launcher.matchesQuery(application.name, needle)
+                || application.id.indexOf(needle) >= 0
+            );
+
+            if (applications.length > 0) {
+                out.push({ kind: "section", title: "Applications" });
+
+                for (const application of applications)
+                    out.push({ kind: "application", entry: {
+                        id: application.id, title: application.name,
+                        hint: "host application", glyph: launcher.icons.grid } });
+            }
+        }
+
         const commands = launcher.commands.filter(entry =>
             needle.length === 0
             || launcher.matchesQuery(entry.title, needle)
@@ -324,6 +341,11 @@ PanelWindow {
                 String(result.machine.name),
                 launcher.shellState.machinesGeneration
             );
+            return;
+        }
+
+        if (result.kind === "application") {
+            launcher.shellActions.launchApplication(result.entry.id);
             return;
         }
 
@@ -671,6 +693,7 @@ PanelWindow {
                                 resultRow.kind === "command"
                                 || resultRow.kind === "destination"
                                 || resultRow.kind === "key"
+                                || resultRow.kind === "application"
                             anchors.left: parent.left
                             anchors.leftMargin: launcher.tokens.spaceMd
                             anchors.verticalCenter: parent.verticalCenter
@@ -726,6 +749,8 @@ PanelWindow {
                                     return "workspace";
                                 case "command":
                                     return String(resultRow.entry.context);
+                                case "application":
+                                    return "host";
                                 default:
                                     return "";
                                 }
@@ -756,7 +781,7 @@ PanelWindow {
                 kind: "filtered"
                 title: "Nothing matches"
                 description:
-                    "No destination, machine or reviewed command matches "
+                    "No destination, machine, application or reviewed command matches "
                     + "this search."
             }
 

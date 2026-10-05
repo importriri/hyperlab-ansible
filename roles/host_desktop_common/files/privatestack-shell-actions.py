@@ -5,9 +5,16 @@ Two shapes cross this boundary and no third one exists:
 
   ACTIONS          a fixed identifier resolved to an immutable argument
                    vector this file owns; the caller supplies no value at all
-  PARAMETERIZED    one reviewed operation that carries a single argument,
+  PARAMETERIZED    a reviewed operation that carries a single argument,
                    validated here against an explicit pattern before it is
                    ever placed in the vector
+
+`app-launch` is the parameterized operation for host applications: its
+argument is an id from APPLICATIONS, the reviewed catalogue in this file,
+and it is resolved here to a root-owned desktop entry the package manager
+installed; the argument vector carries that path, never the id or anything
+else the caller sent. `applications` lists the catalogue entries present on
+this host.
 
 Nothing the shell collects from a user -- a query, a name, a path -- can reach
 either shape, and every target is re-checked for root ownership before exec.
@@ -94,8 +101,20 @@ ACTIONS: dict[str, tuple[str, ...]] = {
 }
 
 
-# The one reviewed operation that accepts a value. The pattern is the whole
-# contract: the compositor adapter validates the same slot again.
+# The reviewed host applications the shell may start (roadmap milestone 8).
+# Each id names a desktop entry under APPLICATIONS_DIR; the list is the
+# review. Every entry here is also started by a reviewed host key today.
+APPLICATIONS: tuple[str, ...] = (
+    "foot",
+    "nemo",
+)
+APPLICATIONS_DIR = Path("/usr/share/applications")
+TRUSTED_UID = 0
+
+
+# The reviewed operations that accept a value. The pattern is the whole
+# contract for workspace-select, which the compositor adapter validates
+# again; app-launch is resolved further by application_entry.
 PARAMETERIZED: dict[str, tuple[tuple[str, ...], str]] = {
     "workspace-select": (
         (
@@ -104,7 +123,62 @@ PARAMETERIZED: dict[str, tuple[tuple[str, ...], str]] = {
         ),
         r"^[1-9]$",
     ),
+    "app-launch": (
+        (
+            "/usr/bin/gio",
+            "launch",
+        ),
+        r"^[a-z0-9][a-z0-9._-]{0,95}$",
+    ),
 }
+
+
+def application_entry(identifier: str) -> Path | None:
+    """A catalogue id's desktop entry, only if the session cannot change it."""
+    if identifier not in APPLICATIONS:
+        return None
+    path = APPLICATIONS_DIR / f"{identifier}.desktop"
+    try:
+        if path.is_symlink():
+            return None
+        metadata = path.stat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != TRUSTED_UID or metadata.st_mode & 0o022:
+        return None
+    return path
+
+
+def entry_fields(path: Path) -> dict[str, str]:
+    """The unlocalised Name and Icon of a desktop entry's main group."""
+    fields: dict[str, str] = {}
+    group = None
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            group = line[1:-1]
+        elif group == "Desktop Entry" and "=" in line:
+            key, value = line.split("=", 1)
+            if key in ("Name", "Icon") and key not in fields:
+                fields[key] = value.strip()[:80]
+    return fields
+
+
+def applications() -> int:
+    """List the catalogue entries present and trusted on this host."""
+    listed = []
+    for identifier in APPLICATIONS:
+        path = application_entry(identifier)
+        if path is None:
+            continue
+        fields = entry_fields(path)
+        listed.append({
+            "id": identifier,
+            "name": fields.get("Name") or identifier,
+            "icon": fields.get("Icon", ""),
+        })
+    print(json.dumps({"applications": listed}, separators=(",", ":")))
+    return 0
 
 
 def trusted_target(path: Path) -> bool:
@@ -181,12 +255,23 @@ def resolve(argument: list[str]) -> tuple[str, ...] | None:
         )
         return None
 
+    if action == "app-launch":
+        path = application_entry(argument[1])
+        if path is None:
+            print(
+                "HyperLab: rejected an application outside the reviewed "
+                f"catalogue or not installed: {argument[1]}",
+                file=sys.stderr,
+            )
+            return None
+        return (*argv, str(path))
+
     return (*argv, argument[1])
 
 
 def main() -> int:
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        allowed = "|".join((*ACTIONS, *PARAMETERIZED, "probe"))
+        allowed = "|".join((*ACTIONS, *PARAMETERIZED, "probe", "applications"))
         print(
             f"usage: privatestack-shell-actions {{{allowed}}}",
             file=sys.stderr,
@@ -202,6 +287,16 @@ def main() -> int:
             return 2
 
         return probe()
+
+    if sys.argv[1] == "applications":
+        if len(sys.argv) != 2:
+            print(
+                "usage: privatestack-shell-actions applications",
+                file=sys.stderr,
+            )
+            return 2
+
+        return applications()
 
     argv = resolve(sys.argv[1:])
 

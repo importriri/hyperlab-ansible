@@ -364,7 +364,7 @@ boundary for this behavior.
 
 ## Launcher
 
-Results are grouped **Destinations**, **Machines**, **Commands**. An empty
+Results are grouped **Destinations**, **Machines**, **Applications**, **Commands**. An empty
 query favours navigation and reviewed commands; machines appear once an
 operator asks for them, so opening the palette never lists two hundred rows
 before the three destinations.
@@ -387,10 +387,16 @@ Machine; Escape sends nothing. The shell only names the Machine:
 clipboard and pipes it over the pinned SSH channel. The OSD shows *Sending…*
 and then *Sent to* the Machine, or the reason it failed, never the text.
 
-Launching arbitrary desktop entries stays outside the typed bridge. Rofi
-keeps that one job on `SUPER + D` as a transitional application launcher with
-no HyperLab route; finishing it needs a reviewed desktop-entry catalogue that
-returns stable application IDs.
+Host applications come from a **reviewed catalogue**: `APPLICATIONS` in
+`privatestack-shell-actions` lists desktop entry ids (today `foot` and
+`nemo`, both already bound to host keys). The bridge's `applications`
+answer lists the ones installed by a package, as regular root-owned files
+the session cannot change, with their name and icon; once a query is typed
+the launcher shows them under **Applications**. Choosing one sends only its
+id; the bridge checks it against the catalogue again and runs `gio launch`
+on the desktop entry's path. Adding an application is a reviewed edit of
+that list. Rofi stays on `SUPER + D` as a transitional launcher for
+anything outside the catalogue, with no HyperLab route.
 
 ## Design system
 

@@ -338,6 +338,20 @@ Window {
             workspaces.push(Number(slot));
             return true;
         }
+
+        // The bridge's reviewed host application catalogue, as listed.
+        property var applications: [
+            { "id": "foot", "name": "Foot", "icon": "foot" },
+            { "id": "nemo", "name": "Files", "icon": "system-file-manager" }
+        ]
+        property var launched: []
+
+        function launchApplication(identifier) {
+            if (!applications.some(entry => entry.id === String(identifier)))
+                return false;
+            launched.push(String(identifier));
+            return true;
+        }
     }
 
     // Transport fixture. The capability reply is bridge-shaped JSON handed to
@@ -2170,6 +2184,28 @@ WORKBENCH_UNAVAILABLE = """
                   "an unreadable Workbench was not reported");
 """
 
+APPLICATIONS = """
+            sharedSurfaces.openLauncher("");
+            check(!launcher.results.some(result => result.kind === "application"),
+                  "an empty query listed host applications");
+            launcher.query = "files";
+            const row = launcher.results.findIndex(result => result.kind === "application");
+            check(row >= 0 && launcher.results[row].entry.id === "nemo",
+                  "a catalogue application did not match its name");
+            check(launcher.results[row - 1].kind === "section"
+                  && launcher.results[row - 1].title === "Applications",
+                  "host applications are not grouped");
+            launcher.activate(launcher.selectable.indexOf(row));
+            check(sharedActions.launched.length === 1 && sharedActions.launched[0] === "nemo",
+                  "choosing an application did not ask the bridge to start it");
+            check(sharedActions.invoked.length === 0,
+                  "an application reached the fixed command path");
+            sharedSurfaces.openLauncher("");
+            launcher.query = "firefox";
+            check(!launcher.results.some(result => result.kind === "application"),
+                  "an application outside the catalogue was listed");
+"""
+
 LAUNCHER_OPEN = """
             sharedSurfaces.openLauncher("");
             launcher.query = "f";
@@ -2297,6 +2333,7 @@ def main() -> int:
             ("diagnostics-isolation", 1920, 1080, populated,
              DIAGNOSTICS_ISOLATION),
             ("launcher-open", 1920, 1080, populated, LAUNCHER_OPEN),
+            ("applications", 1920, 1080, populated, APPLICATIONS),
             ("system-panel", 1920, 1080, populated, PANEL_OPEN),
             ("confirmation-open", 1920, 1080, populated, CONFIRM_OPEN),
             ("machines-dense", 1920, 1080, machines(24), SELECTION),

@@ -264,10 +264,12 @@ host_desktop_common_shell_stage:
     - force-stop
   machine_destructive_verbs:
     - force-stop
-  # One reviewed parameterised host operation. Its only argument is a
-  # compositor slot, validated in the shell and again by the bridge.
+  # Reviewed parameterised host operations: a compositor slot, validated in
+  # the shell and again by the bridge, and a host application id that the
+  # bridge resolves against its own reviewed catalogue.
   parameterized_actions:
     - workspace-select
+    - app-launch
   # Who owns product navigation in each session. The shared role stages the
   # shell and never starts it; the Hyprland session routes every HyperLab
   # surface through the shell's reviewed IPC receivers, while Sway keeps the

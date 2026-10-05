@@ -379,7 +379,10 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       complete (M10 domain manager and M11 shell are implemented; their live
       gates remain)
 - [ ] the drawer placement visual recheck on Nitro
-- [ ] reviewed desktop-entry catalogue and app-launch bridge on the host
+- [x] reviewed desktop-entry catalogue and app-launch bridge on the host:
+      the launcher's Applications group starts only catalogue entries the
+      shell action bridge resolves to root-owned desktop files
+      (software-verified; also the shell checklist item below)
 
 ### 9. Network security topology
 
@@ -566,8 +569,8 @@ work explicitly requires it.
 - [x] reviewed focused-surface provenance resolver wired live into the shell
       (software-verified)
 - [x] physical Nitro acceptance of live focused-surface provenance
-- [ ] reviewed desktop-entry catalogue and app-launch bridge (Rofi remains a
-      transitional application launcher)
+- [x] reviewed desktop-entry catalogue and app-launch bridge (milestone 8;
+      Rofi stays on `SUPER + D` for applications outside the catalogue)
 - [ ] reviewed focused-window targeting (fullscreen/opacity stay compositor
       shortcuts; the shell cannot request them)
 - [ ] native Networks and Nitro hardware views behind their feature gates

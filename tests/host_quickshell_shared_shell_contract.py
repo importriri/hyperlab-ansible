@@ -199,7 +199,7 @@ def main() -> int:
             "force-stop",
         ],
         "machine_destructive_verbs": ["force-stop"],
-        "parameterized_actions": ["workspace-select"],
+        "parameterized_actions": ["workspace-select", "app-launch"],
         "product_navigation": {
             "hyprland": "quickshell",
             "sway": "recovery",

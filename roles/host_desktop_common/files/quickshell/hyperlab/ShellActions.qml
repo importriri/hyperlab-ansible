@@ -8,9 +8,11 @@
 //
 //   * a fixed action identifier from `allowedActions`, which the bridge
 //     resolves to an immutable argument vector it owns;
-//   * one reviewed parameterised operation, workspace-select, whose only
+//   * a reviewed parameterised operation: workspace-select, whose only
 //     argument is an integer validated here against the compositor's nine
-//     slots and validated again by the bridge.
+//     slots and validated again by the bridge; or app-launch, whose only
+//     argument is an application id the bridge itself listed, resolved by
+//     the bridge to a root-owned desktop entry of its reviewed catalogue.
 //
 // Host actions are serialized through one runner, so two conflicting session
 // operations cannot be in flight at once, and every operation reports its
@@ -42,11 +44,16 @@ Scope {
         "audio-volume-down"
     ]
 
-    // The one reviewed operation that carries a value. The value is an
-    // integer slot, never text a user typed.
+    // The reviewed operations that carry a value: an integer slot, or an
+    // application id the bridge listed. Never text a user typed.
     readonly property var parameterizedActions: [
-        "workspace-select"
+        "workspace-select",
+        "app-launch"
     ]
+
+    // Host applications from the bridge's reviewed catalogue, as it listed
+    // them: [{id, name, icon}]. Empty until it answers.
+    property var applications: []
 
     readonly property int workspaceSlots: 9
     readonly property int queueLimit: 4
@@ -125,6 +132,48 @@ Scope {
         }
 
         return actions.enqueue("workspace-select", [String(value)]);
+    }
+
+    // Only an id the bridge listed may be sent back; the bridge resolves it
+    // again against its catalogue before anything runs.
+    function launchApplication(identifier) {
+        const id = String(identifier);
+
+        if (!actions.applications.some(entry => entry.id === id))
+            return false;
+
+        return actions.enqueue("app-launch", [id]);
+    }
+
+    function applyApplications(text) {
+        let parsed = null;
+
+        try {
+            parsed = JSON.parse(String(text));
+        } catch (error) {
+            parsed = null;
+        }
+
+        const listed = parsed && Array.isArray(parsed.applications) ? parsed.applications : [];
+        actions.applications = listed.filter(entry =>
+            entry && typeof entry.id === "string" && /^[a-z0-9][a-z0-9._-]{0,95}$/.test(entry.id)
+            && typeof entry.name === "string" && entry.name.length > 0
+        ).map(entry => ({
+            "id": entry.id,
+            "name": entry.name.slice(0, 80),
+            "icon": typeof entry.icon === "string" ? entry.icon.slice(0, 80) : ""
+        }));
+    }
+
+    Process {
+        id: applicationsReader
+
+        running: true
+        command: [actions.actionBridge, "applications"]
+
+        stdout: StdioCollector {
+            onStreamFinished: actions.applyApplications(this.text)
+        }
     }
 
     function enqueue(identifier, argv) {
