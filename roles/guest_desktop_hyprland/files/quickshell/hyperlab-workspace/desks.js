@@ -165,6 +165,35 @@ function parseCalm(text) {
     };
 }
 
+// `hyperlab-desk track report` as {desk: minutes}, empty unless tracking is
+// on and the answer is readable.
+function parseTime(text) {
+    let data;
+    try {
+        data = JSON.parse(String(text));
+    } catch (error) {
+        return {};
+    }
+    if (!data || data.tracking !== true || !Array.isArray(data.desks))
+        return {};
+    const minutes = {};
+    for (const desk of data.desks) {
+        if (desk && Number.isInteger(desk.desk) && Number.isInteger(desk.minutes) && desk.minutes >= 0)
+            minutes[String(desk.desk)] = desk.minutes;
+    }
+    return minutes;
+}
+
+// "1 h 05 min", "12 min" or "under a minute".
+function durationText(minutes) {
+    if (minutes < 1)
+        return "under a minute";
+    if (minutes < 60)
+        return minutes + " min";
+    const rest = minutes % 60;
+    return Math.floor(minutes / 60) + " h " + (rest < 10 ? "0" : "") + rest + " min";
+}
+
 // Whole minutes left in a focus at `now` (a Date), rounded up; 0 once over.
 function focusMinutes(focusUntil, now) {
     if (!(focusUntil > 0))

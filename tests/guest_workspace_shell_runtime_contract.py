@@ -266,6 +266,7 @@ Item {
         QsHarness.processes = {
             "hyperlab-desk model": { "stdout": @@MODEL@@, "code": 0 },
             "hyperlab-desk status": { "stdout": "{\"quiet\": false, \"focus_until\": null}", "code": 0 },
+            "hyperlab-desk track report*": { "stdout": "{\"days\": 1, \"tracking\": false, \"desks\": []}", "code": 0 },
             "sh -c*": { "stdout": "8, 47\n", "code": 0 },
             "hyperlab-desk project-open*": { "stdout": "{}", "code": 0 },
             "hyperlab-desk project-new*": { "stdout": "{}", "code": 0 }
@@ -581,6 +582,41 @@ SCENARIOS = {
             } },
             { "wait": 400, "run": done => {
                 check(!visibleText("DESK"), "a loud Desk shows the Desk readout");
+                done();
+            } }
+        ];
+    }
+""",
+    "time": r"""
+    function scenario() {
+        QsHarness.processes = Object.assign({}, QsHarness.processes, {
+            "hyperlab-desk track report*": { "stdout": JSON.stringify({ "days": 1, "tracking": true,
+                "desks": [{ "desk": 1, "name": "Programming", "minutes": 83, "slots": [] },
+                          { "desk": 2, "name": "3D Design", "minutes": 0, "slots": [] }] }), "code": 0 } });
+        steps = [
+            { "wait": 900, "run": done => {
+                check(!texts().some(t => t.indexOf("TODAY") === 0), "time showed before the overview asked");
+                QsHarness.ipc.workspace.overview();
+                done();
+            } },
+            { "wait": 700, "run": done => {
+                check(ran("hyperlab-desk track report --days 1"), "the overview did not read today's time");
+                check(visibleText("TODAY 1 H 23 MIN"), "a Desk's time today is not shown");
+                check(visibleText("TODAY UNDER A MINUTE"), "an unused Desk's time is not shown");
+                capture("time", () => {
+                    QsHarness.processes = Object.assign({}, QsHarness.processes, {
+                        "hyperlab-desk track report*": { "stdout": JSON.stringify({ "days": 1,
+                            "tracking": false, "desks": [] }), "code": 0 } });
+                    check(QsHarness.ipc.workspace.overview() === "closed", "the overview did not close");
+                    done();
+                });
+            } },
+            { "wait": 300, "run": done => {
+                check(QsHarness.ipc.workspace.overview() === "open", "the overview did not reopen");
+                done();
+            } },
+            { "wait": 700, "run": done => {
+                check(!texts().some(t => t.indexOf("TODAY") === 0), "time showed with tracking off");
                 done();
             } }
         ];

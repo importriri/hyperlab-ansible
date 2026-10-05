@@ -2,6 +2,7 @@
 // with their live window counts, and a way to add a project.
 
 import QtQuick
+import "desks.js" as Desks
 
 Item {
     id: card
@@ -15,6 +16,8 @@ Item {
     property int selectedRow: -2
     property real shown: 1
     property int windows: 0
+    // Minutes on this Desk today, -1 when tracking is off.
+    property int minutesToday: -1
     property bool creating: false
 
     signal picked(int row)
@@ -114,6 +117,17 @@ Item {
             color: card.current ? card.theme.accent : card.theme.textMuted
             text: card.current ? "YOU ARE HERE" + (card.windows ? " · " + card.windows + " OPEN" : "")
                 : (card.windows ? card.windows + (card.windows === 1 ? " WINDOW" : " WINDOWS") + " OPEN" : "QUIET")
+            font.letterSpacing: 1.4
+        }
+
+        UiText {
+            width: parent.width
+            visible: card.minutesToday >= 0
+            theme: card.theme
+            mono: true
+            font.pixelSize: 12
+            color: card.theme.textMuted
+            text: "TODAY " + Desks.durationText(Math.max(0, card.minutesToday)).toUpperCase()
             font.letterSpacing: 1.4
         }
 

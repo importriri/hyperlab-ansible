@@ -53,6 +53,7 @@ PanelWindow {
             selectedDesk = Math.max(1, deskState.currentDesk);
             selectedRow = -1;
             creating = false;
+            deskState.refreshTime();
             keyScope.forceActiveFocus();
         }
     }
@@ -252,6 +253,7 @@ PanelWindow {
                         selectedRow: index + 1 === overview.selectedDesk ? overview.selectedRow : -2
                         shown: overview.shown
                         windows: overview.deskState.windowsOn(index + 1)
+                        minutesToday: overview.deskState.minutesOn(index + 1)
 
                         onPicked: row => {
                             overview.selectedDesk = index + 1;

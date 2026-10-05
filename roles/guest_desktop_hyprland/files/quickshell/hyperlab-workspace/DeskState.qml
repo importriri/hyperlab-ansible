@@ -49,6 +49,20 @@ Item {
     property real focusUntil: 0
     property bool calmPending: false
 
+    // Minutes per Desk today, only while the user has turned tracking on
+    // (hyperlab-desk track on); empty otherwise. Read when the overview opens.
+    property var minutesToday: ({})
+
+    function refreshTime() {
+        if (!timeProcess.running)
+            timeProcess.running = true;
+    }
+
+    function minutesOn(desk) {
+        const value = state.minutesToday[String(desk)];
+        return typeof value === "number" ? value : -1;
+    }
+
     // Last notice for the OSD: {text, detail, kind, serial}.
     property var notice: ({ "text": "", "detail": "", "kind": "", "serial": 0 })
 
@@ -135,6 +149,21 @@ Item {
     Component.onCompleted: {
         refreshModel();
         refreshCalm();
+    }
+
+    Process {
+        id: timeProcess
+
+        command: [state.helper, "track", "report", "--days", "1"]
+
+        stdout: StdioCollector {
+            onStreamFinished: state.minutesToday = Desks.parseTime(this.text)
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                state.minutesToday = ({});
+        }
     }
 
     Process {

@@ -407,6 +407,8 @@ def check_tracking(lab: Lab) -> None:
     sample(1180, 23)                 # Desk 2, slot 3
     sample(2000, 23)                 # a gap of 820 s: not credited
     sample(2060, 23)
+    require_tracking = lab.json("track", "report", "--days", "1", "--now", "2060")["tracking"]
+    assert require_tracking is True, "the report does not say tracking is on"
     desks = report(2060)
     assert desks[1]["minutes"] == 1 and desks[1]["slots"][0]["slot"] == 2
     assert desks[2]["minutes"] == 2 and [s["slot"] for s in desks[2]["slots"]] == [3]
@@ -421,6 +423,7 @@ def check_tracking(lab: Lab) -> None:
     assert len(days) == 1 and report(later + 60)[1]["minutes"] == 1
 
     lab.json("track", "off", "--now", str(later + 60))
+    assert lab.json("track", "report", "--days", "1", "--now", str(later + 60))["tracking"] is False
     sample(later + 120, 11)
     assert report(later + 120)[1]["minutes"] == 1, "a sample after off was credited"
     lab.run("track", "report", "--days", "36", ok=False)

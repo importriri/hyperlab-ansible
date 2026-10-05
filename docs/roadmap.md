@@ -153,7 +153,8 @@ Details and status: [Guest Workspace Shell](#guest-workspace-shell).
       tracking per Desk and slot, in the Desk helper (software-verified)
 - [x] the status island shows a quiet Desk and a running focus, from the
       helper (software-verified, offscreen runtime contract)
-- [ ] the time report in the shell
+- [x] the time report in the shell: today's time on each Desk card of the
+      overview, only while tracking is on (software-verified)
 - [x] the same shell on every workstation Template, not only `arch-dev-vfio`:
       the role's default, applied by every workstation Template's profile
       playbook and overridden by none (software-verified)

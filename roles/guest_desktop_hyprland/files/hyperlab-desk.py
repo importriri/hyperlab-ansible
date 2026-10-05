@@ -982,7 +982,7 @@ def track_report(model: dict[str, Any], days: int, now: float) -> dict[str, Any]
         ]
         report.append({"desk": index, "name": desk["name"],
                        "minutes": totals.get(str(index), 0) // 60, "slots": slots})
-    return {"days": days, "desks": report}
+    return {"days": days, "tracking": load_time().get("enabled") is True, "desks": report}
 
 
 def command_track(args: argparse.Namespace) -> dict[str, Any]:

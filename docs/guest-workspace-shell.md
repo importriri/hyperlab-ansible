@@ -189,7 +189,8 @@ sampler) is credited to nothing. The totals stay in
 `~/.local/state/hyperlab-workspace/desks-time.json` for five weeks, are never
 sent anywhere, and `track clear` erases them. It cannot tell an idle
 unlocked session from work. The sampler also ends a focus on time; it runs
-once per session and stops when Hyprland is gone.
+once per session and stops when Hyprland is gone. While tracking is on,
+each card in the Desks overview shows that Desk's time today.
 
 ## Files
 
