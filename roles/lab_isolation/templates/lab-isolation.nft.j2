@@ -24,6 +24,10 @@ table {{ lab_isolation_table }} {
 {% endif %}
 {% endfor %}
 {% endfor %}
+
+        # Fail closed: no routed traffic between any two guest bridges, a
+        # bridge nobody declared included.
+        iifname "virbr*" oifname "virbr*" counter drop
     }
 
     # Guest to host is default deny. A guest reaches the host only for what
@@ -41,5 +45,9 @@ table {{ lab_isolation_table }} {
         iifname "{{ d.bridge }}" ip daddr {{ d.gateway }} tcp dport 53 accept
         iifname "{{ d.bridge }}" counter drop
 {% endfor %}
+
+        # Fail closed: a guest bridge outside the declared networks reaches
+        # nothing on the host, not even DHCP.
+        iifname "virbr*" counter drop
     }
 }

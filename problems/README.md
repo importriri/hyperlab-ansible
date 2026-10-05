@@ -251,5 +251,8 @@ proof.
 - [`looking-glass-super-key-reached-guest.md`](looking-glass-super-key-reached-guest.md):
   a host SUPER shortcut reached a guest terminal as `8;10u`; Linux guests no
   longer receive SUPER.
+- [`guest-isolation-skipped-unknown-bridges.md`](guest-isolation-skipped-unknown-bridges.md):
+  a guest bridge outside the declared networks reached the host's services;
+  both isolation chains now fail closed.
 
 Author: [importriri](https://github.com/importriri).

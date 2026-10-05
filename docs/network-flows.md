@@ -34,7 +34,12 @@ Default deny. From each guest bridge the host accepts only:
 
 Everything else a guest sends to the host is dropped, IPv4 and IPv6 alike:
 host services listening on every address (LLMNR, mDNS and the like) are
-not reachable from any guest. The host itself reaches guests as it decides
+not reachable from any guest.
+
+Both chains fail closed. A `virbr*` bridge that is not one of the declared
+networks reaches nothing on the host, not even DHCP, and no packet is routed
+from any guest bridge to another
+([`../problems/guest-isolation-skipped-unknown-bridges.md`](../problems/guest-isolation-skipped-unknown-bridges.md)). The host itself reaches guests as it decides
 (SSH over the pinned channel, the guest agent over its virtio port).
 
 ## Not yet

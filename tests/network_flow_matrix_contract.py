@@ -11,7 +11,8 @@ network domains and checks, rule by rule, that:
      only domain without libvirt NAT;
   3. from each guest bridge the input chain accepts only replies, DHCP and
      DNS to that bridge's own gateway, then drops, and no rule accepts DNS
-     on another domain's gateway;
+     on another domain's gateway; both chains end by dropping every other
+     guest bridge (fail closed);
   4. the matrix page lists the same domains.
 """
 
@@ -53,6 +54,9 @@ def main() -> int:
     expected_forward = [f'iifname "{lab}" counter drop', f'oifname "{lab}" counter drop']
     expected_forward += [f'iifname "{a["bridge"]}" oifname "{b["bridge"]}" counter drop'
                          for a in domains for b in domains if a["name"] != b["name"]]
+    # Fail closed: any other bridge-to-bridge route, an undeclared bridge
+    # included (problems/guest-isolation-skipped-unknown-bridges.md).
+    expected_forward.append('iifname "virbr*" oifname "virbr*" counter drop')
     require(forward == expected_forward, "the forward chain differs from the frozen matrix")
 
     expected_input = []
@@ -65,6 +69,7 @@ def main() -> int:
             f'iifname "{bridge}" ip daddr {gateway} tcp dport 53 accept',
             f'iifname "{bridge}" counter drop',
         ]
+    expected_input.append('iifname "virbr*" counter drop')
     require(chain(ruleset, "input") == expected_input, "the guest-to-host chain differs from the frozen matrix")
     require("hook input priority -10; policy accept;" in ruleset,
             "the input chain must only add restrictions to the host's own policy")
