@@ -360,7 +360,7 @@ def test_domain_templates() -> None:
         assert domain.find("./devices/graphics").get("autoport") == "yes"
         sound = domain.find("./devices/sound")
         assert sound is not None and sound.get("model") == "ich9"
-        assert sound.find("./codec").get("type") == "duplex"
+        assert sound.find("./codec").get("type") == "output", "a guest got a capture device"
         assert sound.find("./audio").get("id") == "1"
         audio = domain.find("./devices/audio")
         assert audio is not None and audio.attrib == {"id": "1", "type": "spice"}
@@ -706,7 +706,7 @@ def test_xml_contract() -> None:
         assert legacy_dac.returncode == 0, legacy_dac.stderr
 
         expected.write_text(
-            "<domain><devices><sound model='ich9'><codec type='duplex'/>"
+            "<domain><devices><sound model='ich9'><codec type='output'/>"
             "<audio id='1'/></sound><audio id='1' type='spice'/></devices></domain>",
             encoding="utf-8",
         )
@@ -728,6 +728,22 @@ def test_xml_contract() -> None:
             "--allow-legacy-missing-spice-sound",
         )
         assert legacy_sound.returncode == 0, legacy_sound.stderr
+
+        # A domain defined with the duplex codec is recognised as legacy,
+        # never as the playback-only contract, and nothing else passes.
+        for codec, strict_ok, legacy_ok in (("duplex", False, True), ("micro", False, False),
+                                            ("output", True, True)):
+            actual.write_text(
+                f"<domain><devices><sound model='ich9'><codec type='{codec}'/>"
+                "<audio id='1'/></sound><audio id='1' type='spice'/></devices></domain>",
+                encoding="utf-8",
+            )
+            strict = run(sys.executable, str(XML_CONTRACT), "--expected", str(expected),
+                         "--actual", str(actual))
+            legacy = run(sys.executable, str(XML_CONTRACT), "--expected", str(expected),
+                         "--actual", str(actual), "--allow-legacy-duplex-codec")
+            assert (strict.returncode == 0) is strict_ok, (codec, strict.stderr)
+            assert (legacy.returncode == 0) is legacy_ok, (codec, legacy.stderr)
 
         actual.write_text(
             "<domain><devices><sound model='ac97'><audio id='1'/></sound>"

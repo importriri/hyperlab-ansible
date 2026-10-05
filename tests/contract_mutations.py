@@ -140,7 +140,7 @@ class ContractMutationTests(unittest.TestCase):
             path.write_text(
                 path.read_text().replace(
                     '    <sound model="ich9">\n'
-                    '      <codec type="duplex"/>\n'
+                    '      <codec type="output"/>\n'
                     '      <audio id="1"/>\n'
                     '    </sound>\n',
                     "",
@@ -149,7 +149,7 @@ class ContractMutationTests(unittest.TestCase):
 
         self.assert_mutation_fails(
             mutation,
-            "managed SPICE domains must expose an ICH9 duplex sound device",
+            "managed SPICE domains must expose an ICH9 playback-only sound device",
         )
 
     def test_managed_disk_must_refuse_dac_relabel(self) -> None:

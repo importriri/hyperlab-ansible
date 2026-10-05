@@ -2,9 +2,11 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: the Looking Glass client denies the microphone; the guest capture
-device is removed from new domain definitions and migrated out of existing
-ones in a following change. Found by review, not observed on hardware.
+Status: corrected in source. The Looking Glass client denies the
+microphone; new domains are playback only; an existing duplex domain is
+accepted as legacy, with a message, and reconciled to playback only by
+`playbooks/vm-create.yml` while it is shut off. Found by review, not observed
+on hardware.
 
 ## Symptom
 
@@ -47,4 +49,7 @@ about capture.
 - `tests/looking_glass_launcher_contract.py` and
   `tests/media_input_contract.py` refuse a Looking Glass launch without the
   deny, or with `allow` or `prompt`.
-- The codec change carries its own contract assertion.
+- `tests/media_input_contract.py` and `tests/static_contract.py` refuse a
+  duplex or microphone codec in the domain template; `tests/guest_contract.py`
+  shows the XML contract recognising a duplex domain only as legacy and
+  refusing any other codec.

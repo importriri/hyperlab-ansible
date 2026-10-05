@@ -102,6 +102,7 @@ def contract_value_matches(
     actual: dict[str, Any],
     allow_legacy_missing_dac_relabel: bool,
     allow_legacy_missing_spice_sound: bool = False,
+    allow_legacy_duplex_codec: bool = False,
 ) -> bool:
     if key == "machine":
         return machine_matches(expected[key], actual[key])
@@ -132,10 +133,14 @@ def contract_value_matches(
     }:
         legacy_expected = {
             "sound_model": "ich9",
-            "sound_codec": "duplex",
+            "sound_codec": "output",
             "sound_audio_id": "1",
         }
         return expected[key] == legacy_expected[key] and actual[key] is None
+    if allow_legacy_duplex_codec and key == "sound_codec":
+        # A domain defined before playback-only audio still carries a capture
+        # side; it is recognised, never mistaken for the current contract.
+        return expected[key] == "output" and actual[key] in {"output", "duplex"}
     return expected[key] == actual[key]
 
 
@@ -255,6 +260,7 @@ def main() -> int:
     parser.add_argument("--actual", required=True)
     parser.add_argument("--allow-legacy-missing-dac-relabel", action="store_true")
     parser.add_argument("--allow-legacy-missing-spice-sound", action="store_true")
+    parser.add_argument("--allow-legacy-duplex-codec", action="store_true")
     args = parser.parse_args()
     try:
         expected = signature(Path(args.expected))
@@ -271,6 +277,7 @@ def main() -> int:
             actual,
             args.allow_legacy_missing_dac_relabel,
             args.allow_legacy_missing_spice_sound,
+            args.allow_legacy_duplex_codec,
         )
     ]
     if errors:

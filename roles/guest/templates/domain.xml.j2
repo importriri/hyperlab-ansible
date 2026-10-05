@@ -130,8 +130,9 @@
       <clipboard copypaste="{{ 'yes' if guest_plan.clipboard else 'no' }}"/>
       <filetransfer enable="no"/>
     </graphics>
+    <!-- Playback only: no guest gets a capture device (ADR 0035). -->
     <sound model="ich9">
-      <codec type="duplex"/>
+      <codec type="output"/>
       <audio id="1"/>
     </sound>
     <audio id="1" type="spice"/>

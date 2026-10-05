@@ -12,7 +12,8 @@ The ordered hardware procedure is in
 The current Nitro work has established:
 
 - the RTX 3060 and HDMI-audio functions are attached to the guest;
-- a separate managed ICH9 duplex device carries usable guest audio over SPICE;
+- a separate managed ICH9 device carries guest playback over SPICE; it has no
+  capture side, so the guest gets no microphone;
 - the guest runs the reviewed Zen kernel and open NVIDIA driver;
 - nouveau is absent and NVIDIA DRM modesetting/fbdev are enabled;
 - the guest kvmfr device comes from the IVSHMEM function and is writable by the guest user;

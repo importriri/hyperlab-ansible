@@ -306,10 +306,11 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     )
     check(
         '<sound model="ich9">' in guest_template
-        and '<codec type="duplex"/>' in guest_template
+        and '<codec type="output"/>' in guest_template
+        and '<codec type="duplex"/>' not in guest_template
         and '<audio id="1"/>' in guest_template
         and '<audio id="1" type="spice"/>' in guest_template,
-        "managed SPICE domains must expose an ICH9 duplex sound device",
+        "managed SPICE domains must expose an ICH9 playback-only sound device",
     )
 
     guest_defaults = load_mapping(

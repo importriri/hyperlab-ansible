@@ -558,7 +558,7 @@ red check.
 - Break: delete the `<sound model="ich9">` block from
   `roles/guest/templates/domain.xml.j2`.
 - Red: `tests/static_contract.py` and `tests/contract_mutations.py`, "managed
-  SPICE domains must expose an ICH9 duplex sound device".
+  SPICE domains must expose an ICH9 playback-only sound device".
 - Restore: `git checkout -- roles/guest/templates/domain.xml.j2`
 
 ### A managed disk regains libvirt DAC relabel

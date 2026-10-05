@@ -4,7 +4,9 @@
 Roadmap milestone 6 keeps them off until a host action turns one on for one
 Machine (ADR 0034, ADR 0035, both proposed). This contract holds the default:
 
-  1. the Looking Glass client denies the microphone, with no prompt;
+  1. the Looking Glass client denies the microphone, with no prompt, and no
+     guest gets a capture device: the sound card is playback only, and a
+     domain defined before that is recognised as legacy and reconciled;
   2. the domain template passes no USB device, redirects no USB over SPICE,
      shares no folder and allows no SPICE file transfer;
   3. every checked-in VM spec keeps its USB allowlist empty and shares no
@@ -33,6 +35,13 @@ def main() -> int:
         require(permissive not in opener, f"Looking Glass may offer the microphone ({permissive})")
 
     template = (ROOT / "roles/guest/templates/domain.xml.j2").read_text()
+    require('<codec type="output"/>' in template, "the guest sound card is not playback only")
+    for codec in ("duplex", "micro"):
+        require(f'<codec type="{codec}"/>' not in template, f"a guest gets a {codec} capture device")
+    validate = (ROOT / "roles/guest/tasks/validate.yml").read_text()
+    require("--allow-legacy-duplex-codec" in validate
+            and "guest_has_legacy_duplex_codec and\n              guest_operation == 'create' and\n              guest_domain_state == 'shut off'" in validate,
+            "a legacy duplex domain is neither recognised nor reconciled when shut off")
     for needle, why in (
         ('type="usb"', "a USB device is passed to every guest"),
         ("<redirdev", "USB is redirected over SPICE"),
