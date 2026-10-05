@@ -256,6 +256,12 @@
           - "'policy accept' in render_nft_matrix"
           - "'iifname \"virbr-lab\" counter drop' in render_nft_matrix"
           - "'oifname \"virbr-lab\" counter drop' in render_nft_matrix"
+          # Guest to host: default deny per bridge, after only DHCP, DNS on
+          # its own gateway and replies.
+          - render_nft_matrix | regex_findall('(?m)^\s*iifname "virbr-[a-z]+" counter drop$') | length == network_domains | length + 1
+          - render_nft_matrix | regex_findall('ct state established,related accept') | length == network_domains | length
+          - render_nft_matrix | regex_findall('dport 53 accept') | length == 2 * (network_domains | length)
+          - "'hook input priority -10' in render_nft_matrix"
           - render_nft_conf | regex_findall('(?m)^\s*flush ruleset') | length == 0
           - "'include \"/etc/nftables.d/*.nft\"' in render_nft_conf"
           - "'state: reloaded' in render_nft_handlers"

@@ -25,4 +25,21 @@ table {{ lab_isolation_table }} {
 {% endfor %}
 {% endfor %}
     }
+
+    # Guest to host is default deny. A guest reaches the host only for what
+    # libvirt serves on its own bridge: DHCP, and DNS on its own gateway, so
+    # no network can query another's resolver. Replies to connections the
+    # host opened (SSH, provisioning) pass; everything else a guest sends to
+    # the host, in IPv4 or IPv6, is dropped.
+    chain input {
+        type filter hook input priority -10; policy accept;
+{% for d in network_domains %}
+
+        iifname "{{ d.bridge }}" ct state established,related accept
+        iifname "{{ d.bridge }}" udp sport 68 udp dport 67 accept
+        iifname "{{ d.bridge }}" ip daddr {{ d.gateway }} udp dport 53 accept
+        iifname "{{ d.bridge }}" ip daddr {{ d.gateway }} tcp dport 53 accept
+        iifname "{{ d.bridge }}" counter drop
+{% endfor %}
+    }
 }

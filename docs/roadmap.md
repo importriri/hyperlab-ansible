@@ -386,13 +386,21 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 9. Network security topology
 
-- [ ] frozen allowed-flow matrix between clean, dev, dirty, lab and services
-- [ ] `lab` enforced offline at the host, not only by guest configuration
-- [ ] per-network DNS, with no network able to query another's resolver
+- [x] frozen allowed-flow matrix between clean, dev, dirty, lab and services
+      ([`network-flows.md`](network-flows.md),
+      `tests/network_flow_matrix_contract.py`, software-verified)
+- [x] `lab` enforced offline at the host, not only by guest configuration:
+      no libvirt forward and a host forward drop in both directions
+      (software-verified)
+- [ ] the three above and the guest-to-host deny applied and observed on
+      Nitro
+- [x] per-network DNS, with no network able to query another's resolver
+      (software-verified)
 - [ ] optional per-network VPN egress with a kill switch: if the tunnel
       drops, that network has no internet
-- [ ] host firewall default deny for guest-to-host traffic, with the reviewed
-      exceptions listed
+- [x] host firewall default deny for guest-to-host traffic, with the reviewed
+      exceptions listed: replies, DHCP, DNS to the own gateway
+      ([`network-flows.md`](network-flows.md), software-verified)
 
 ### 10. Hypervisor hardening
 
