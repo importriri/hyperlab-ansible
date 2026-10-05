@@ -6,20 +6,33 @@ and is the operator's to run.
 ## Context
 
 Roadmap milestone 10 asks for a boot chain whose every piece is verified
-before the encrypted disk opens. What Nitro has today, read without
-privilege on 2026-10-05:
+before the encrypted disk opens. What Nitro showed on 2026-10-05, read as
+the operator's user without sudo, command by command:
 
-- Secure Boot is enabled in user mode with HyperLab's own `sbctl` keys; the
-  Microsoft and firmware-builtin Acer certificates are kept in `db` and `KEK`
-  ([`../nitro-secure-boot-acceptance.md`](../nitro-secure-boot-acceptance.md):
-  the enrollment audit found an Option ROM in the boot chain);
-- `sbctl` signs `systemd-boot` and `vmlinuz-linux-hardened`; systemd-boot
-  loads them as type 1 entries with a separate initramfs and a command line
-  from `/boot/loader/entries/` (`editor no`);
-- the root volume is LUKS2 opened by `sd-encrypt` with a passphrase; the TPM
-  is a TPM 2.0 and holds nothing; `bootctl` reports `Measured UKI: no`;
-- the ESP is a 1 GiB FAT partition with 859 MiB free; the initramfs alone is
-  132 MiB.
+- `bootctl status`: `Secure Boot: enabled (user)`, `TPM2 Support: yes`,
+  `Measured UKI: no`, `Measured OS: no`;
+- `sbctl status`: `Setup Mode: Disabled`, `Secure Boot: Enabled`, owner GUID
+  set, `Vendor Keys: microsoft builtin-db builtin-KEK`
+  ([`../nitro-secure-boot-acceptance.md`](../nitro-secure-boot-acceptance.md)
+  explains why: the enrollment audit found an Option ROM in the boot chain);
+- `/var/lib/sbctl/files.json`: the files `sbctl` signs are
+  `EFI/BOOT/BOOTX64.EFI`, `EFI/systemd/systemd-bootx64.efi` and
+  `vmlinuz-linux-hardened`, nothing else;
+- `ls /boot /boot/loader/entries /boot/EFI/Linux` and
+  `/boot/loader/loader.conf`: type 1 entries with a separate
+  `initramfs-linux-hardened.img`, no unified image in `EFI/Linux`, and
+  `editor no`;
+- `lsblk -o NAME,TYPE,FSTYPE`: `nvme0n1p2` is `crypto_LUKS`, opened as
+  `cryptroot`; `/etc/mkinitcpio.conf` has the `sd-encrypt` hook and
+  `/proc/cmdline` has `rd.luks` options;
+- `/sys/class/tpm/tpm0/tpm_version_major`: `2`;
+- `df -h /boot`: a 1 GiB ESP with 859 MiB free; `ls -la /boot`: the
+  initramfs alone is 132 MiB.
+
+Not seen, because it needs root: the LUKS version and key slots
+(`cryptsetup luksDump`), whether the TPM already holds anything, `sbctl
+verify`, and the firmware's `db` itself. The operator's test plan reads
+them first.
 
 The gap: the initramfs and the kernel command line are neither signed nor
 measured. Anyone who can write the ESP, offline or as root, can replace the
@@ -48,10 +61,10 @@ proves the loader and kernel, not the boot.
    does not match.
 3. *TPM2 unlock.* `systemd-cryptenroll` adds a TPM2 slot bound to PCR 7
    (Secure Boot state and keys) and to the signed PCR 11 policy, with a PIN
-   (`--tpm2-with-pin=yes`). The passphrase slot stays as the fallback. A
-   TPM-only slot is not recommended on a laptop: a stolen Nitro would boot to
-   the login screen with the disk open, leaving the volume key to memory and
-   bus attacks.
+   (`--tpm2-with-pin=yes`). The passphrase typed at boot today keeps its
+   slot as the fallback. A TPM-only slot is not recommended on a laptop: a
+   stolen Nitro would boot to the login screen with the disk open, leaving
+   the volume key to memory and bus attacks.
 4. *Recovery key.* `systemd-cryptenroll --recovery-key` adds a generated key,
    shown once, written down off the host (paper or the operator's password
    manager on another device), never stored on Nitro or in this repository.

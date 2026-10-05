@@ -13,7 +13,9 @@ is not behind IOMMU translation: a compromised Wi-Fi firmware can reach host
 memory by DMA. A device given to a Machine through VFIO is translated, and
 reaches only that Machine's memory.
 
-Read on Nitro without privilege on 2026-10-05:
+Read on Nitro without sudo on 2026-10-05, from `lspci -nn`,
+`/sys/kernel/iommu_groups`, each device's `reset_method` and `driver` in
+sysfs, and the DMAR units' `ecap`:
 
 | Device | PCI | IOMMU group | Reset | Host driver |
 |---|---|---|---|---|

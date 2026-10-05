@@ -17,7 +17,9 @@ This is feasible on Nitro because nothing the operator needs to drive the
 host is on USB: the internal keyboard is i8042 (`serio0`) and the touchpad
 is an I²C device on `00:15.x` (IOMMU group 8), both staying with the host.
 
-Read on Nitro without privilege on 2026-10-05:
+Read on Nitro without sudo on 2026-10-05, from `lspci -nn`,
+`/sys/kernel/iommu_groups`, each device's `reset_method` and `driver` in
+sysfs, and `/sys/bus/usb/devices`:
 
 | Device | PCI | IOMMU group | Reset |
 |---|---|---|---|
