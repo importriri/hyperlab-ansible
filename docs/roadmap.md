@@ -348,13 +348,18 @@ platform, recorded on the host:
 - [ ] host → guest clipboard accepted on Nitro into a workstation Machine
 - [ ] guest → host and guest → guest clipboard through the same host action;
       moving data from a lower trust class to a higher one asks for
-      confirmation and is logged
+      confirmation and is logged ([ADR 0032](adr/0032-guest-clipboard-out.md),
+      proposed)
 - [ ] file transfer into a guest through a host-mediated drop folder, one file
-      set and one target per action
+      set and one target per action ([ADR 0033](adr/0033-file-transfer-drop-folder.md),
+      proposed)
 - [ ] USB passthrough per Machine through an explicit host action, with a
-      host-side device allowlist
+      host-side device allowlist ([ADR 0034](adr/0034-usb-passthrough.md),
+      proposed; no USB device reaches a guest today, `tests/media_input_contract.py`)
 - [ ] microphone and camera off by default; on only per Machine and per
       session, with a host indicator while active
+      ([ADR 0035](adr/0035-microphone-and-camera.md), proposed); the Looking
+      Glass client already denies the microphone
 - [x] host keybinding cheatsheet that includes the crossing keys:
       `SUPER + F1`, checked against the bindings (software-verified)
 

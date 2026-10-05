@@ -46,6 +46,11 @@ def main() -> int:
         "Looking Glass open action does not enforce the reviewed private-input launch contract",
     )
     require(
+        '"audio:micDefault=deny",' in opener and "micDefault=allow" not in opener
+        and "micDefault=prompt" not in opener,
+        "Looking Glass may hand the host microphone to a guest",
+    )
+    require(
         '"looking-glass-client",\n                "-F"' not in opener,
         "Looking Glass open action still resolves the client through PATH",
     )

@@ -837,6 +837,10 @@ class OpenCommand(Command):
                 "spice:input=yes",
                 "input:captureOnly=yes",
                 "input:releaseKeysOnFocusLoss=yes",
+                # The microphone is off by default (roadmap milestone 6,
+                # ADR 0035): a guest that opens a capture stream gets
+                # nothing, with no prompt to click through.
+                "audio:micDefault=deny",
             ]
             if transport == "linux-experimental":
                 argv.append("egl:mapHDRtoSDR=no")

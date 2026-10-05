@@ -79,6 +79,17 @@ entered the pipeline.
 31. [`0031-service-appliance-templates.md`](0031-service-appliance-templates.md)
     — proposed: a services Template names its reviewed service spec, which
     owns the appliance's address, exposure and backups.
+32. [`0032-guest-clipboard-out.md`](0032-guest-clipboard-out.md) — proposed:
+    clipboard out of a guest is a host pull with confirmation upward and
+    control characters refused.
+33. [`0033-file-transfer-drop-folder.md`](0033-file-transfer-drop-folder.md)
+    — proposed: files reach a guest's inbox over the pinned SSH channel, one
+    set and one target per action.
+34. [`0034-usb-passthrough.md`](0034-usb-passthrough.md) — proposed: a host
+    allowlist and a live-only attach action per device and Machine.
+35. [`0035-microphone-and-camera.md`](0035-microphone-and-camera.md) —
+    proposed: capture streams linked by the host on demand, with a host
+    indicator.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

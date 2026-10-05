@@ -83,6 +83,10 @@ there.
 | [0027](adr/0027-guest-notification-owner.md) | whether mako or the guest shell owns notifications |
 | [0030](adr/0030-disposable-browser-image.md) | how the disposable browser image gets its session |
 | [0031](adr/0031-service-appliance-templates.md) | how a service appliance is created from a Template |
+| [0032](adr/0032-guest-clipboard-out.md) | clipboard out of a guest, to the host and to another guest |
+| [0033](adr/0033-file-transfer-drop-folder.md) | files into a guest |
+| [0034](adr/0034-usb-passthrough.md) | USB passthrough per Machine |
+| [0035](adr/0035-microphone-and-camera.md) | microphone and camera per Machine and session |
 
 ## 5. Questions the maintainer wants answered
 
