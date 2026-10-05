@@ -239,5 +239,8 @@ proof.
 - [`c10-contract-fixtures-behind-runtime.md`](c10-contract-fixtures-behind-runtime.md):
   the focused C10 gate passed while three discovered contracts still encoded
   pre-C10 fixtures.
+- [`session-test-pid-file-race.md`](session-test-pid-file-race.md): the
+  session reload tests read a pid file the old manager had just removed as a
+  new manager's pid, and failed under load.
 
 Author: [importriri](https://github.com/importriri).

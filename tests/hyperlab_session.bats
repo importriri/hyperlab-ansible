@@ -78,12 +78,22 @@ teardown() {
   rm -rf -- "${TEST_ROOT}"
 }
 
-wait_for_pid_change() {
-  local old_pid=$1
+# One read of the pid file. The old manager removes it on exit and the new
+# one truncates it before writing, so a failed or empty read is "no pid", not
+# a different pid (problems/session-test-pid-file-race.md).
+read_manager_pid() {
+  local pid
 
-  for _ in {1..200}; do
-    if [[ -r ${HYPERLAB_TEST_PID_FILE} ]] && \
-       [[ $(<"${HYPERLAB_TEST_PID_FILE}") != "${old_pid}" ]]; then
+  { pid=$(<"${HYPERLAB_TEST_PID_FILE}"); } 2>/dev/null || return 1
+  [[ -n ${pid} ]] || return 1
+  printf '%s\n' "${pid}"
+}
+
+wait_for_pid_change() {
+  local old_pid=$1 attempts=${2:-200} pid
+
+  for ((i = 0; i < attempts; i++)); do
+    if pid=$(read_manager_pid) && [[ ${pid} != "${old_pid}" ]]; then
       return 0
     fi
     sleep 0.02
@@ -104,6 +114,29 @@ start_old_manager() {
 
   [[ -r ${HYPERLAB_TEST_PID_FILE} ]]
   [[ $(<"${HYPERLAB_TEST_PID_FILE}") == "${OLD_MANAGER_PID}" ]]
+}
+
+@test "a missing, unreadable or empty pid file is not a new manager" {
+  rm -f -- "${HYPERLAB_TEST_PID_FILE}"
+  run wait_for_pid_change 12345 3
+  [[ ${status} -eq 1 ]]
+
+  # -r succeeds and the read fails, as when the old manager removes the
+  # file between the two.
+  mkdir -- "${HYPERLAB_TEST_PID_FILE}"
+  run wait_for_pid_change 12345 3
+  rmdir -- "${HYPERLAB_TEST_PID_FILE}"
+  [[ ${status} -eq 1 ]]
+
+  : >"${HYPERLAB_TEST_PID_FILE}"
+  run wait_for_pid_change 12345 3
+  rm -f -- "${HYPERLAB_TEST_PID_FILE}"
+  [[ ${status} -eq 1 ]]
+
+  printf '67890\n' >"${HYPERLAB_TEST_PID_FILE}"
+  run wait_for_pid_change 12345 3
+  rm -f -- "${HYPERLAB_TEST_PID_FILE}"
+  [[ ${status} -eq 0 ]]
 }
 
 @test "a reload replaces the resident manager before warming the new source" {
@@ -149,7 +182,8 @@ start_old_manager() {
   for pid in "${reload_pids[@]}"; do
     if [[ ${pid} != "${current}" ]]; then
       wait "${pid}"
-      ! kill -0 "${pid}" 2>/dev/null
+      run kill -0 "${pid}"
+      [[ ${status} -ne 0 ]]
     fi
   done
 
