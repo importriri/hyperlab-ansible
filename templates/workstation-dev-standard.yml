@@ -5,6 +5,7 @@ display_name: Development Workstation (no GPU)
 version: "1.0"
 # Draft until arch-dev-standard is captured through the Workbench and sealed.
 status: draft
+class: workstation
 image: arch-dev-standard
 description: >-
   Everyday Arch development on the dev network without the dedicated GPU,

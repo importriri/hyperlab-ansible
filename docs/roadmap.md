@@ -267,8 +267,9 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [ ] Windows masters sealed through the workshop; `win11clean` and
       `win11dirty` Templates
 - [ ] `svc-jellyfin` as a services Template
-- [ ] Template review gate: a Template cannot request a network, GPU profile
-      or device its class forbids
+- [x] Template review gate: a Template cannot request a network, GPU profile
+      or device its class forbids ([ADR 0029](adr/0029-template-review-gate.md),
+      software-verified)
 
 ### 5. C10 Machine Factory to product
 

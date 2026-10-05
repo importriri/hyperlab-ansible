@@ -4,6 +4,7 @@ id: server-fedora
 display_name: Fedora Server
 version: "1.0"
 status: ready
+class: server
 image: fedora
 description: >-
   A headless Fedora Machine reached over SSH only: the sealed upstream Fedora

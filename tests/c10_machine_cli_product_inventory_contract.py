@@ -76,6 +76,7 @@ def prepare_repo(
         "display_name": "Development Workstation",
         "version": "1.0",
         "status": "ready",
+        "class": "workstation",
         "image": "arch",
         "lifecycles": {
             "permanent": True,
@@ -86,17 +87,13 @@ def prepare_repo(
             "vfio": True,
         },
         "gpu_handoff_profiles": {
-            "clean": True,
+            "clean": False,
             "dev": True,
             "dirty": True,
             "lab": True,
         },
         "network_allowlist": [
-            "clean",
             "dev",
-            "services",
-            "dirty",
-            "lab",
         ],
         "resource_profiles": {
             "minimum": True,

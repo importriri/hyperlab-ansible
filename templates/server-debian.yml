@@ -7,6 +7,7 @@ version: "1.0"
 # new Machine's SSH host key could not be read and pinned. It returns to
 # ready on debian-server, the Workbench capture that carries the agent.
 status: draft
+class: server
 image: debian-server
 description: >-
   A headless Debian Machine reached over SSH only: the Debian cloud image with

@@ -16,6 +16,9 @@ from typing import Any, Iterable
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/hyperlabctl"))
+from hyperlabctl.machine_factory import template_class_problems  # noqa: E402
+
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 SECRET_HINTS = ("password", "passwd", "token", "secret", "api_key", "private_key")
 
@@ -307,6 +310,9 @@ class RepositoryValidator:
 
         if not image.get("generalized"):
             self.fail(where, "a product Template requires a generalized image")
+
+        for problem in template_class_problems(template):
+            self.fail(where, problem)
 
         if image.get("contains_personal_data"):
             self.fail(where, "a product Template cannot use a personal image")

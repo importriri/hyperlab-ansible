@@ -121,6 +121,39 @@ class SchemaMutationTests(unittest.TestCase):
 
         self.assert_mutation_fails(mutation, "document root must be a mapping")
 
+    def test_template_class_is_required(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "templates/server-arch.yml", lambda d: d.pop("class")),
+            "class is required",
+        )
+
+    def test_a_server_template_cannot_offer_vfio(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "templates/server-arch.yml",
+                                          lambda d: d["device_capabilities"].update(vfio=True)),
+            "a server Template cannot offer the vfio device",
+        )
+
+    def test_a_workstation_template_stays_on_dev(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "templates/workstation-dev.yml",
+                                          lambda d: d["network_allowlist"].append("clean")),
+            "a workstation Template cannot use the clean network",
+        )
+
+    def test_a_template_cannot_offer_a_gpu_profile_above_its_networks(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "templates/workstation-dev.yml",
+                                          lambda d: d["gpu_handoff_profiles"].update(clean=True)),
+            "GPU profile clean is above the class of every network this Template offers",
+        )
+
+    def test_a_template_cannot_change_class_to_escape_the_gate(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "templates/workstation-dev.yml", lambda d: d.update({"class": "gaming"})),
+            "a gaming Template cannot use the dev network",
+        )
+
     def test_singleton_cannot_have_two_specs(self) -> None:
         def mutation(root: Path) -> None:
             original = yaml.safe_load((root / "vm-specs/win11clean-valley.yml").read_text())

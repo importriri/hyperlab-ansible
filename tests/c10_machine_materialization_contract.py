@@ -27,6 +27,18 @@ from hyperlabctl.machine_factory import (
 from hyperlabctl.machine_registry import (
     read_machine,
 )
+from hyperlabctl import machine_factory
+
+# The per-Machine checks below need a Template that offers every network and
+# GPU profile, which no real class allows. That class is registered only in
+# this process; the real classes are tests/template_review_gate_contract.py.
+machine_factory.TEMPLATE_CLASSES["contract-any"] = {
+    "networks": {"clean", "dev", "services", "dirty", "lab"},
+    "devices": {"standard", "vfio"},
+    "gpu": frozenset({"clean", "dev", "dirty", "lab"}),
+    "lifecycles": frozenset({"permanent", "disposable"}),
+    "looking_glass": True,
+}
 
 
 IMAGE_SHA = "a" * 64
@@ -101,6 +113,7 @@ def template(
         "display_name": "Development Workstation",
         "version": version,
         "status": status,
+        "class": "contract-any",
         "image": "arch-workstation",
         "lifecycles": {
             "permanent": True,

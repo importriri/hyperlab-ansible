@@ -30,6 +30,12 @@ transient disk, so every stop throws away what the Machine wrote and every
 start is a first boot from the sealed image, with new SSH host keys
 ([ADR 0018](../docs/adr/0018-disposable-discards-on-stop.md)).
 
+Every Template names its `class` (server, workstation, gaming, services or
+disposable), and the class bounds the networks, devices, GPU profiles,
+lifecycles and Looking Glass it may offer
+([ADR 0029](../docs/adr/0029-template-review-gate.md)). A Template outside
+its class fails the schema validation and the factory's catalogue.
+
 Checked-in VM specs remain development and hardware fixtures.
 
 runtime       user-created Machine records outside Git

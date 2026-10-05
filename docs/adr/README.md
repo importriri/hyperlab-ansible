@@ -70,6 +70,9 @@ entered the pipeline.
 28. [`0028-image-build-provenance.md`](0028-image-build-provenance.md) — a
     Workbench image's manifest records the checkout commit, the base and its
     digest, and a package list read offline and pinned by digest.
+29. [`0029-template-review-gate.md`](0029-template-review-gate.md) — every
+    Template names a class that bounds its networks, devices, GPU profiles,
+    lifecycles and presentation.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

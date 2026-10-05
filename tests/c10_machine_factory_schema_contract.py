@@ -54,6 +54,7 @@ def main() -> int:
         "display_name": "Development Workstation",
         "version": "1.0",
         "status": "ready",
+        "class": "workstation",
         "image": "arch",
         "lifecycles": {
             "permanent": True,
@@ -64,15 +65,13 @@ def main() -> int:
             "vfio": True,
         },
         "gpu_handoff_profiles": {
-            "clean": True,
+            "clean": False,
             "dev": True,
             "dirty": True,
             "lab": True,
         },
         "network_allowlist": [
-            "clean",
             "dev",
-            "services",
         ],
         "resource_profiles": {
             "minimum": True,

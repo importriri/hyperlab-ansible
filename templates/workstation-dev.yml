@@ -4,6 +4,7 @@ id: workstation-dev
 display_name: Development Workstation
 version: "1.0"
 status: ready
+class: workstation
 image: arch-dev-20261003
 description: >-
   Everyday Arch development on the dev network with the dedicated GPU and the

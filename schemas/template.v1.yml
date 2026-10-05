@@ -14,6 +14,9 @@ fields:
     min_length: 1
     pattern: "^[0-9]+([.][0-9]+){0,2}$"
   status: {type: str, enum: [draft, ready]}
+  # The review gate (ADR 0029): the class bounds the networks, devices, GPU
+  # profiles, lifecycles and presentation this Template may offer.
+  class: {type: str, enum: [server, workstation, gaming, services, disposable]}
   image:
     type: str
     min_length: 1

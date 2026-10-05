@@ -24,6 +24,71 @@ from .machine_registry import (
 # the class a ranked network identity implies; services is not ranked.
 GPU_HANDOFF_LADDER = {"clean": 3, "dev": 2, "dirty": 1, "lab": 0}
 
+# The Template review gate (ADR 0029): what each class of Template may ask
+# for. The catalogue refuses a Template outside its class when it loads it,
+# and the repository's schema validator refuses it before it is committed;
+# both read this one table.
+_ALL_GPU = frozenset(GPU_HANDOFF_LADDER)
+_BOTH_LIFECYCLES = frozenset({"permanent", "disposable"})
+TEMPLATE_CLASSES = {
+    "server": {"networks": {"dev", "services", "lab"}, "devices": {"standard"},
+               "gpu": frozenset(), "lifecycles": _BOTH_LIFECYCLES, "looking_glass": False},
+    "workstation": {"networks": {"dev"}, "devices": {"standard", "vfio"},
+                    "gpu": _ALL_GPU, "lifecycles": _BOTH_LIFECYCLES, "looking_glass": True},
+    "gaming": {"networks": {"clean", "dirty", "lab"}, "devices": {"standard", "vfio"},
+               "gpu": _ALL_GPU, "lifecycles": _BOTH_LIFECYCLES, "looking_glass": True,
+               "single_network": True},
+    "services": {"networks": {"services"}, "devices": {"standard", "vfio"},
+                 "gpu": _ALL_GPU, "lifecycles": _BOTH_LIFECYCLES, "looking_glass": False},
+    "disposable": {"networks": {"dirty", "lab"}, "devices": {"standard"},
+                   "gpu": frozenset(), "lifecycles": frozenset({"disposable"}),
+                   "looking_glass": False},
+}
+
+
+def template_class_problems(template: dict[str, Any]) -> list[str]:
+    """Review a Template document against its class; empty means it passes."""
+    kind = template.get("class")
+    rules = TEMPLATE_CLASSES.get(kind) if isinstance(kind, str) else None
+    if rules is None:
+        return ["Template class %r is not one of %s" % (kind, ", ".join(sorted(TEMPLATE_CLASSES)))]
+
+    def enabled(field: str, names: tuple[str, ...]) -> list[str]:
+        mapping = template.get(field)
+        return [name for name in names if isinstance(mapping, dict) and mapping.get(name) is True]
+
+    networks = [item for item in template.get("network_allowlist") or [] if isinstance(item, str)]
+    devices = enabled("device_capabilities", ("standard", "vfio"))
+    gpu = enabled("gpu_handoff_profiles", ("clean", "dev", "dirty", "lab"))
+    lifecycles = enabled("lifecycles", ("permanent", "disposable"))
+    presentation = template.get("presentation")
+    mode = presentation.get("looking_glass_mode") if isinstance(presentation, dict) else None
+
+    problems = []
+    problems += ["a %s Template cannot use the %s network" % (kind, item)
+                 for item in networks if item not in rules["networks"]]
+    problems += ["a %s Template cannot offer the %s device" % (kind, item)
+                 for item in devices if item not in rules["devices"]]
+    problems += ["a %s Template cannot offer the %s GPU profile" % (kind, item)
+                 for item in gpu if item not in rules["gpu"]]
+    problems += ["a %s Template cannot be %s" % (kind, item)
+                 for item in lifecycles if item not in rules["lifecycles"]]
+    if mode not in (None, "disabled") and not rules["looking_glass"]:
+        problems.append("a %s Template cannot present through Looking Glass" % kind)
+    if rules.get("single_network") and len(networks) != 1:
+        problems.append("a %s Template has exactly one network: store accounts never "
+                        "share one with modded or offline games" % kind)
+    # The ceiling rule (ADR 0022): a handoff profile may lower the class a
+    # ranked network implies, never raise it. A Template may not offer a
+    # profile that none of its networks allows; which pair a Machine gets is
+    # checked again when the Machine is made. A services network has no
+    # rung, so its GPU profiles are whatever its reviewed Template allows.
+    ranks = [GPU_HANDOFF_LADDER[item] for item in networks if item in GPU_HANDOFF_LADDER]
+    if ranks and "services" not in networks:
+        problems += ["GPU profile %s is above the class of every network this Template offers" % profile
+                     for profile in gpu if GPU_HANDOFF_LADDER[profile] > max(ranks)]
+    return problems
+
 
 ID_RE = re.compile(
     r"^[a-z0-9][a-z0-9-]*$"
@@ -369,6 +434,15 @@ def _validate_template(
     ):
         raise ContractError(
             "Template image is not generalized"
+        )
+
+    class_problems = template_class_problems(
+        template
+    )
+
+    if class_problems:
+        raise ContractError(
+            class_problems[0]
         )
 
     if image.get(

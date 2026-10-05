@@ -4,6 +4,7 @@ id: server-arch
 display_name: Arch Server
 version: "1.0"
 status: ready
+class: server
 image: arch
 description: >-
   A headless Arch Machine reached over SSH only: the sealed upstream Arch
