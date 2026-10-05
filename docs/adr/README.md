@@ -73,6 +73,9 @@ entered the pipeline.
 29. [`0029-template-review-gate.md`](0029-template-review-gate.md) — every
     Template names a class that bounds its networks, devices, GPU profiles,
     lifecycles and presentation.
+30. [`0030-disposable-browser-image.md`](0030-disposable-browser-image.md)
+    — proposed: the disposable browser image gets its session through a
+    Workbench capture of a reviewed kiosk profile.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

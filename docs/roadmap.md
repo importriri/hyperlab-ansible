@@ -266,7 +266,11 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       `arch-gaming-clean` and `arch-gaming-dirty`
 - [ ] `gaming-offline` (needs its own rice profile) and the Windows gaming
       Templates, pinned to sealed images of those profiles
-- [ ] `browser-disposable` with reset on shutdown
+- [x] `browser-disposable` draft Template (class disposable, dirty network,
+      transient disk) and the `arch-browser` placeholder (software-verified)
+- [ ] `browser-disposable` ready: its image built as
+      [ADR 0030](adr/0030-disposable-browser-image.md) decides, sealed, and a
+      Machine reset on shutdown proven on Nitro
 - [ ] Debian, Fedora and Parrot images prepared and sealed; `debian-dev`,
       `fedora-dev` and `parrot-disposable` proven from them
 - [ ] Windows masters sealed through the workshop; `win11clean` and

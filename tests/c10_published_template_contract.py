@@ -201,6 +201,19 @@ def check_gaming_drafts() -> None:
         assert (ROOT / PROFILE_PLAYBOOKS[profile]).is_file()
 
 
+def check_browser_draft() -> None:
+    """browser-disposable waits for ADR 0030 and a sealed arch-browser."""
+    template = yaml.safe_load((ROOT / "templates/browser-disposable.yml").read_text())
+    image = yaml.safe_load((ROOT / "images/arch-browser.yml").read_text())
+    assert template["status"] == "draft" and template["class"] == "disposable"
+    assert template["lifecycles"] == {"permanent": False, "disposable": True}
+    assert template["network_allowlist"] == ["dirty"] and not any(template["gpu_handoff_profiles"].values())
+    assert template["device_capabilities"] == {"standard": True, "vfio": False}
+    assert image["status"] == "not-built" and image["sha256"] is None
+    entries = {entry["id"]: entry for entry in template_catalog(ROOT)}
+    assert entries["browser-disposable"]["ready"] is False
+
+
 def main() -> int:
     check_catalogue()
     check_refusals()
@@ -208,6 +221,7 @@ def main() -> int:
     check_server_arch()
     check_workstation_standard()
     check_gaming_drafts()
+    check_browser_draft()
     print("C10 published Template contract: OK")
     return 0
 

@@ -1,0 +1,41 @@
+---
+schema_version: 1
+id: arch-browser
+display_name: HyperLab disposable browser
+os_family: linux
+os_variant: archlinux
+version: "pinned-at-build"
+format: qcow2
+
+# Placeholder: it reserves the id for the browser image of the
+# browser-disposable Template. How the image is built is ADR 0030, proposed;
+# until it is decided and sealed, the Template stays a draft.
+status: not-built
+sha256: null
+
+private: true
+contains_personal_data: false
+generalized: true
+instance_policy: multiple
+
+source_type: local
+source_url: null
+source_checksum_url: null
+source_sha256: null
+filename: arch-browser.qcow2
+
+virtual_size_gib: 16
+minimum_size_gib: 16
+min_memory_mb: 2048
+
+supports: {standard: true, vfio: false, cloud_init: true, qemu_guest_agent: true}
+requires: {uefi: true, secure_boot: false, tpm2: false}
+defaults: {lifecycle: disposable, device_profile: standard, network_profile: dirty}
+network_allowlist: [dirty]
+licensing: {redistributable: false}
+
+looking_glass_host_build_required: null
+looking_glass_host_build_observed: null
+notes: >-
+  A minimal session that opens one browser and nothing else, on the dirty
+  network, for throwaway browsing. Every stop discards what the Machine wrote.

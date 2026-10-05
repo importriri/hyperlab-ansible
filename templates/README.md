@@ -20,6 +20,7 @@ carry runtime observations.
 | [`server-fedora`](server-fedora.yml) | `fedora` | permanent or disposable, standard device, dev or lab network, SSH only |
 | [`gaming-clean`](gaming-clean.yml) | `arch-gaming-clean` (placeholder; draft) | permanent, VFIO, clean network, GPU class `clean`, Linux Looking Glass |
 | [`gaming-dirty`](gaming-dirty.yml) | `arch-gaming-dirty` (placeholder; draft) | permanent, VFIO, dirty network, GPU class `dirty`, Linux Looking Glass |
+| [`browser-disposable`](browser-disposable.yml) | `arch-browser` (placeholder; draft, [ADR 0030](../docs/adr/0030-disposable-browser-image.md)) | disposable only, standard device, dirty network, no GPU |
 
 `workstation-dev` offers only VFIO Machines: its image carries the
 NVIDIA-only session of the workstation it was captured from. It offers no
