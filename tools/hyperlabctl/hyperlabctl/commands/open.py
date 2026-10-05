@@ -844,6 +844,13 @@ class OpenCommand(Command):
             ]
             if transport == "linux-experimental":
                 argv.append("egl:mapHDRtoSDR=no")
+                # SUPER is the host's modifier; a Linux guest uses ALT and
+                # binds nothing to it. Passed through, a host shortcut such
+                # as SUPER+SHIFT+L reached the focused guest application as
+                # a key it cannot read
+                # (problems/looking-glass-super-key-reached-guest.md).
+                # Windows guests keep their Windows key.
+                argv.append("input:ignoreWindowsKeys=yes")
 
             managed_surface_kind = "looking-glass"
             managed_surface_domain = args.domain

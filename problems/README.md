@@ -248,5 +248,8 @@ proof.
 - [`looking-glass-sender-streaming-without-frames.md`](looking-glass-sender-streaming-without-frames.md):
   the Linux sender lost a PipeWire buffer on every empty frame and froze
   silently; it now queues them back and restarts a capture without frames.
+- [`looking-glass-super-key-reached-guest.md`](looking-glass-super-key-reached-guest.md):
+  a host SUPER shortcut reached a guest terminal as `8;10u`; Linux guests no
+  longer receive SUPER.
 
 Author: [importriri](https://github.com/importriri).
