@@ -254,5 +254,8 @@ proof.
 - [`guest-isolation-skipped-unknown-bridges.md`](guest-isolation-skipped-unknown-bridges.md):
   a guest bridge outside the declared networks reached the host's services;
   both isolation chains now fail closed.
+- [`hyperlabctl-deadline-tests-timed-the-host.md`](hyperlabctl-deadline-tests-timed-the-host.md):
+  two fullscreen deadline tests failed on a loaded host; they now check the
+  outcome, not the wall clock.
 
 Author: [importriri](https://github.com/importriri).

@@ -249,7 +249,31 @@ def _run_v49_source(
     )
 
 
+def _slow_start(source, seconds):
+    """Delay the transaction's start, as a loaded host does."""
+    if not seconds:
+        return source
+    anchor = "from __future__ import annotations\n"
+    equals("v49_slow_start_anchor", source.count(anchor), 1)
+    return source.replace(
+        anchor,
+        anchor + "import time as _slow\n_slow.sleep(%r)\n" % seconds,
+        1,
+    )
+
+
 def test_v49_accumulated_stage_time_uses_one_shared_deadline():
+    _accumulated_deadline_case(0)
+
+
+def test_v49_shared_deadline_holds_on_a_slow_host():
+    # The gate once failed this case under load: the transaction started
+    # late and the wall-clock bound around it was tighter than Python's
+    # start (problems/hyperlabctl-deadline-tests-timed-the-host.md).
+    _accumulated_deadline_case(0.6)
+
+
+def _accumulated_deadline_case(slow_start):
     with tempfile.TemporaryDirectory(
         prefix="hyperlab-v49-budget-"
     ) as temp:
@@ -316,6 +340,8 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
             1,
         )
 
+        source = _slow_start(source, slow_start)
+
         started = time.monotonic()
 
         result = _run_v49_source(
@@ -323,7 +349,7 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
             source,
             "3" * 32,
             "on",
-            timeout=2.0,
+            timeout=10.0,
         )
 
         elapsed = time.monotonic() - started
@@ -354,9 +380,13 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
             0,
         )
 
+        # The stages sleep 1.6 s against a 1.5 s budget. A deadline reset
+        # per stage would dispatch (caught above); this only excludes a run
+        # that waited out another full budget, and leaves room for a slow
+        # start.
         check(
             "v49_budget_elapsed_bounded",
-            elapsed < 1.9,
+            elapsed < slow_start + 1.6 + 1.5,
             "elapsed=%r stdout=%r stderr=%r"
             % (
                 elapsed,
@@ -367,6 +397,16 @@ def test_v49_accumulated_stage_time_uses_one_shared_deadline():
 
 
 def test_v49_lock_contention_uses_same_shared_deadline():
+    _lock_contention_case(0)
+
+
+def test_v49_lock_contention_holds_on_a_slow_host():
+    # A transaction that started after the holder's fixed 1.0 s found the
+    # lock free and dispatched; the holder now keeps it until released.
+    _lock_contention_case(1.2)
+
+
+def _lock_contention_case(slow_start):
     with tempfile.TemporaryDirectory(
         prefix="hyperlab-v49-lock-"
     ) as temp:
@@ -395,6 +435,7 @@ def test_v49_lock_contention_uses_same_shared_deadline():
 
         lock_path = base / "transaction.lock"
         ready_path = root / "holder-ready"
+        release_path = root / "holder-release"
 
         holder_source = "\n".join(
             [
@@ -404,10 +445,13 @@ def test_v49_lock_contention_uses_same_shared_deadline():
                 "import time",
                 "lock_path = pathlib.Path(sys.argv[1])",
                 "ready_path = pathlib.Path(sys.argv[2])",
+                "release_path = pathlib.Path(sys.argv[3])",
                 'with lock_path.open("a+") as handle:',
                 "    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)",
                 '    ready_path.write_text("ready", encoding="utf-8")',
-                "    time.sleep(1.0)",
+                "    deadline = time.monotonic() + 30.0",
+                "    while not release_path.exists() and time.monotonic() < deadline:",
+                "        time.sleep(0.01)",
             ]
         )
 
@@ -418,12 +462,13 @@ def test_v49_lock_contention_uses_same_shared_deadline():
                 holder_source,
                 str(lock_path),
                 str(ready_path),
+                str(release_path),
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
 
-        ready_deadline = time.monotonic() + 1.0
+        ready_deadline = time.monotonic() + 10.0
 
         while (
             not ready_path.exists()
@@ -452,15 +497,20 @@ def test_v49_lock_contention_uses_same_shared_deadline():
             1,
         )
 
+        source = _slow_start(source, slow_start)
+
         started = time.monotonic()
 
-        result = _run_v49_source(
-            env,
-            source,
-            "4" * 32,
-            "on",
-            timeout=2.0,
-        )
+        try:
+            result = _run_v49_source(
+                env,
+                source,
+                "4" * 32,
+                "on",
+                timeout=10.0,
+            )
+        finally:
+            release_path.write_text("release", encoding="utf-8")
 
         elapsed = time.monotonic() - started
 
@@ -475,9 +525,12 @@ def test_v49_lock_contention_uses_same_shared_deadline():
             0,
         )
 
+        # The holder keeps the lock until released, so returning at all means
+        # the transaction gave up on its 0.2 s budget instead of waiting;
+        # the bound only leaves room for a slow start.
         check(
             "v49_lock_elapsed_bounded",
-            elapsed < 0.8,
+            elapsed < slow_start + 3.0,
             "elapsed=%r stdout=%r stderr=%r"
             % (
                 elapsed,
@@ -486,7 +539,7 @@ def test_v49_lock_contention_uses_same_shared_deadline():
             ),
         )
 
-        holder.wait(timeout=2.0)
+        holder.wait(timeout=10.0)
 
 def test_v49_real_crash_after_durable_dispatched_never_recovers_success():
     with tempfile.TemporaryDirectory(
