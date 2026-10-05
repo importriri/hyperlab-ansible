@@ -24,6 +24,25 @@
     mode: "0440"
     validate: visudo -cf %s
 
+# Guest memory the host swaps out must never land on an unencrypted disk:
+# only zram (memory) or a dm-crypt mapping may back swap.
+- name: Read the active swap devices
+  ansible.builtin.slurp:
+    src: /proc/swaps
+  register: base_swaps
+
+- name: Refuse swap on an unencrypted device
+  ansible.builtin.assert:
+    that:
+      - item is match('^/dev/(zram[0-9]+|mapper/[A-Za-z0-9._-]+)$')
+    fail_msg: >-
+      Swap on {{ item }} could write guest memory to an unencrypted disk.
+      Use zram or swap on a dm-crypt mapping.
+    quiet: true
+  loop: >-
+    {{ (base_swaps.content | b64decode).splitlines()[1:]
+       | map('split') | map('first') | list }}
+
 - name: Install kernel hardening sysctls
   ansible.builtin.copy:
     src: 99-hardening.conf

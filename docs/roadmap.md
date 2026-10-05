@@ -420,8 +420,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       transfer, USB redirection): no Machine gets the SPICE agent channel or
       USB redirection, and file transfer is off (`tests/media_input_contract.py`,
       software-verified)
-- [ ] VM disks at rest on the encrypted host volume only, with swap and
-      temporary files of guests never on unencrypted storage
+- [x] VM disks at rest on the encrypted host volume only, with swap and
+      temporary files of guests never on unencrypted storage: the store
+      guard accepts only a dm-crypt source, guest disks, transient overlays
+      and their swap and temporary files live in it, and the host refuses
+      swap that is not zram or dm-crypt (`tests/bootstrap_storage_contract.py`,
+      `tests/host_swap_contract.py`, software-verified)
 - [ ] firmware updates through `fwupd`, with a recorded result on Nitro
 - [ ] host USB device policy so a new device is not trusted automatically
 

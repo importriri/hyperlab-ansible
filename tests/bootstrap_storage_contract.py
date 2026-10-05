@@ -163,6 +163,16 @@ def test_legacy_adoption_derives_only_the_two_supported_shapes() -> None:
     )
     assert unknown.returncode == 2 and "supports only" in unknown.stderr
 
+    # A VM store on a plain, unencrypted partition is refused in both modes.
+    plain = run(sys.executable, str(GUARD), "--mode", "adopt", "--hyperlab-root", HYPERLAB_ROOT,
+                stdin=observation("/dev/nvme0n1p3", "/"))
+    assert plain.returncode == 2 and "device-mapper path" in plain.stderr
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "contract.yml"
+        write_contract(path, contract("dedicated-disk"))
+        plain = validate(path, observation("/dev/nvme0n1p3", "/"))
+        assert plain.returncode == 2 and "device-mapper path" in plain.stderr, plain.stderr
+
 
 def test_role_orders_validation_before_image_store_writes() -> None:
     playbook = (ROOT / "playbooks/image-store.yml").read_text(encoding="utf-8")
