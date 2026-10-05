@@ -90,6 +90,9 @@ entered the pipeline.
 35. [`0035-microphone-and-camera.md`](0035-microphone-and-camera.md) —
     proposed: capture streams linked by the host on demand, with a host
     indicator.
+36. [`0036-machine-snapshots-and-backups.md`](0036-machine-snapshots-and-backups.md)
+    — proposed: offline independent snapshots with retention, and restic
+    backups to a host-only target.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

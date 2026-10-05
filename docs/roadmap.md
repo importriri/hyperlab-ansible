@@ -365,6 +365,8 @@ platform, recorded on the host:
 
 ### 7. Snapshots, backups and recovery (M12, second half)
 
+Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (proposed).
+
 - [ ] snapshots for permanent Machines, from the shell, with retention
 - [ ] encrypted backups of Machines, the Machine registry and host
       configuration, to a target that the guests cannot reach
