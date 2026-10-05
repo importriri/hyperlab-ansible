@@ -92,6 +92,7 @@ there.
 | [0038](adr/0038-host-usb-device-policy.md) | the host's policy for new USB devices |
 | [0039](adr/0039-host-frame-around-fullscreen-guests.md) | the host frame around a fullscreen guest window |
 | [0040](adr/0040-security-plane.md) | the security plane's tools and boundaries |
+| [0041](adr/0041-seamless-guest-applications.md) | seamless guest applications |
 
 ## 5. Questions the maintainer wants answered
 

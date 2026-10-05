@@ -104,6 +104,9 @@ entered the pipeline.
 40. [`0040-security-plane.md`](0040-security-plane.md) — proposed: auditd
     and AIDE on the host, Suricata on bridge mirrors, a read-only
     correlation shown in Diagnostics.
+41. [`0041-seamless-guest-applications.md`](0041-seamless-guest-applications.md)
+    — proposed: whole desktops for now; later waypipe per application,
+    confined and without clipboard forwarding.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

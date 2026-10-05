@@ -487,7 +487,8 @@ Measured with the complete security plane active.
 ### Later
 
 - **M13 — seamless guest applications:** future work, and never described as
-  providing Qubes OS security properties.
+  providing Qubes OS security properties; its shape is
+  [ADR 0041](adr/0041-seamless-guest-applications.md), proposed.
 - Sway native parity acceptance (Sway remains the recovery session)
 
 ## C10 — Machine Factory
