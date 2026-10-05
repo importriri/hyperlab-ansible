@@ -1,7 +1,9 @@
 # ADR 0038 - A new USB device is not trusted by the host automatically
 
-Status: proposed. The operator chooses before it is built; today the host
-accepts every USB device it is given.
+Status: accepted (2026-10-05, option A): generate the policy from the
+devices attached, then block every other device. Built as
+`roles/host_usbguard` (`playbooks/host-usbguard.yml`); allowing a device
+from the host shell is still to build.
 
 ## Context
 
@@ -29,6 +31,19 @@ controllers and authorize devices through sysfs from a small host tool.
 Fewer moving parts, but no rule language and no daemon to ask.
 
 **C. Leave USB open.** Rejected: the roadmap asks for the opposite.
+
+## Implementation
+
+`roles/host_usbguard` installs USBGuard and, only when no policy exists,
+generates one from the devices attached now; it installs that policy
+root-only after checking it allows exactly as many devices as the kernel
+reports. Only then does it set the implicit block, apply the policy to
+present and inserted devices, keep the controllers, restrict IPC to root and
+start the daemon (`tests/host_usbguard_contract.py`). On Nitro today the
+attached USB devices are the two xHCI root hubs, the Intel Bluetooth adapter
+(`8087:0026`) and the user-facing camera (`0408:a061`). Until the shell can
+allow a device, `sudo usbguard list-devices` and
+`sudo usbguard allow-device <id>` (with `-p` to make it permanent) do it.
 
 ## Recommendation
 

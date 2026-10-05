@@ -1,0 +1,11 @@
+---
+# The host's USB device policy (ADR 0038): generate the policy from the
+# devices attached now, then block every other device until it is allowed.
+- name: Apply the host USB device policy
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_usbguard
+    - host_usbguard

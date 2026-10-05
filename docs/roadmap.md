@@ -433,8 +433,11 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       swap that is not zram or dm-crypt (`tests/bootstrap_storage_contract.py`,
       `tests/host_swap_contract.py`, software-verified)
 - [ ] firmware updates through `fwupd`, with a recorded result on Nitro
-- [ ] host USB device policy so a new device is not trusted automatically
-      ([ADR 0038](adr/0038-host-usb-device-policy.md), proposed)
+- [x] host USB device policy so a new device is not trusted automatically
+      ([ADR 0038](adr/0038-host-usb-device-policy.md), `roles/host_usbguard`,
+      `tests/host_usbguard_contract.py`, software-verified)
+- [ ] that policy applied on Nitro, with the internal keyboard and touchpad
+      proved unaffected, and a device allowed from the host shell
 
 ### 11. Visual provenance and trust model
 

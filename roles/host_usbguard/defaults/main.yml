@@ -1,0 +1,15 @@
+---
+# The host's USB policy (ADR 0038): devices attached when the policy is first
+# generated are allowed; any other device is blocked until the operator
+# allows it. Nitro's keyboard (i8042) and touchpad (I2C) are not USB, so
+# blocking USB cannot lock the operator out.
+host_usbguard_rules: /etc/usbguard/rules.conf
+host_usbguard_daemon_conf: /etc/usbguard/usbguard-daemon.conf
+host_usbguard_settings:
+  RuleFile: /etc/usbguard/rules.conf
+  ImplicitPolicyTarget: block
+  PresentDevicePolicy: apply-policy
+  PresentControllerPolicy: keep
+  InsertedDevicePolicy: apply-policy
+  IPCAllowedUsers: root
+  IPCAllowedGroups: ""

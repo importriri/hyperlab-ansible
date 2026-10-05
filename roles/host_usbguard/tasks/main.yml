@@ -1,0 +1,80 @@
+---
+- name: Install USBGuard
+  community.general.pacman:
+    name: usbguard
+    state: present
+
+- name: Read any existing USB policy
+  ansible.builtin.stat:
+    path: "{{ host_usbguard_rules }}"
+  register: host_usbguard_existing
+
+# The policy is generated once, from the devices attached now, and never
+# overwritten: a reviewed or extended policy stays the operator's.
+- name: Generate the policy from the devices attached now
+  when: not host_usbguard_existing.stat.exists or host_usbguard_existing.stat.size == 0
+  block:
+    - name: Ask USBGuard for a policy that allows every attached device
+      ansible.builtin.command:
+        argv: [usbguard, generate-policy]
+      register: host_usbguard_generated
+      changed_when: false
+
+    - name: Count the attached USB devices the kernel reports
+      ansible.builtin.find:
+        paths: /sys/bus/usb/devices
+        file_type: link
+        patterns: "*"
+      register: host_usbguard_sysfs
+
+    - name: Read which of them are devices
+      ansible.builtin.stat:
+        path: "{{ item.path }}/idVendor"
+      loop: "{{ host_usbguard_sysfs.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: host_usbguard_vendor
+
+    - name: Refuse a generated policy that would block an attached device
+      ansible.builtin.assert:
+        that:
+          - host_usbguard_allows | length > 0
+          - host_usbguard_allows | length == host_usbguard_devices | length
+        fail_msg: >-
+          usbguard generate-policy allowed {{ host_usbguard_allows | length }}
+          devices but the kernel reports {{ host_usbguard_devices | length }};
+          refusing to block USB with a policy that misses one.
+      vars:
+        host_usbguard_allows: "{{ host_usbguard_generated.stdout_lines | select('match', '^allow ') | list }}"
+        host_usbguard_devices: "{{ host_usbguard_vendor.results | selectattr('stat.exists') | list }}"
+
+    - name: Install the generated policy
+      ansible.builtin.copy:
+        content: "{{ host_usbguard_generated.stdout }}\n"
+        dest: "{{ host_usbguard_rules }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+- name: Block every device the policy does not allow
+  ansible.builtin.lineinfile:
+    path: "{{ host_usbguard_daemon_conf }}"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  loop: "{{ host_usbguard_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart USBGuard
+
+- name: Start USBGuard now and at every boot
+  ansible.builtin.systemd_service:
+    name: usbguard
+    enabled: true
+    state: started
+
+- name: Record that the host_usbguard brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_usbguard

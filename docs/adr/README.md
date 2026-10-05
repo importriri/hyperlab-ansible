@@ -97,7 +97,7 @@ entered the pipeline.
     — proposed: AppArmor with libvirt's per-domain profiles first, then
     per-Machine DAC identities.
 38. [`0038-host-usb-device-policy.md`](0038-host-usb-device-policy.md) —
-    proposed: USBGuard blocks a new USB device until the operator allows it.
+    accepted: USBGuard blocks a new USB device until the operator allows it.
 39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)
     — proposed: a host-drawn provenance ring on the overlay layer around a
     fullscreen guest window.

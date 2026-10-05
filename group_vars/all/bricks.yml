@@ -30,6 +30,7 @@ brick_requires:
   workstation_kernel: []
   workstation_access: []
   guest_access_close: []
+  host_usbguard: [base]
   guest_desktop_hyprland: [workstation_kernel, workstation_access]
   guest_visual_assets: [guest_desktop_hyprland]
   guest_gpu_nvidia: [guest_desktop_hyprland]
@@ -64,6 +65,7 @@ brick_playbooks:
   workstation_kernel: playbooks/guest-arch-hyprland.yml
   workstation_access: playbooks/guest-arch-hyprland.yml
   guest_access_close: playbooks/guest-close-access.yml
+  host_usbguard: playbooks/host-usbguard.yml
   guest_desktop_hyprland: playbooks/guest-arch-hyprland.yml
   guest_visual_assets: playbooks/guest-visual-assets.yml
   guest_gpu_nvidia: playbooks/guest-gpu-nvidia.yml
