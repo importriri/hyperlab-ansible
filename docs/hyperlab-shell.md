@@ -30,10 +30,11 @@ Three rules shape everything else:
 HyperLab Platform
   Desktop                  wallpaper + rail, per output
   Top rail                 identity · workspaces | context · clock | host state
-  Workspace                one ordinary window, three destinations
+  Workspace                one ordinary window, four destinations
     Machines               inventory, and the selected machine
     Control Center         Session · Audio and network · Input and appearance
     Diagnostics            Overview · Isolation and GPU · Inventory · Session
+    Workbench              Golden Image candidates, never product Machines
   Launcher                 Destinations · Machines · Commands
   System panel             quick adjustments, on the summoning output
   OSD                      transient confirmed host feedback
@@ -41,7 +42,7 @@ HyperLab Platform
   Lock                     hyprlock / swaylock, in the product language
 ```
 
-The three destinations are **native application destinations**, not renamed
+The four destinations are **native application destinations**, not renamed
 compositor workspace numbers, and they share one compositor-managed window.
 It is opened deliberately, it takes keyboard focus like any other
 application, the compositor places and stacks it normally, and closing it
@@ -240,6 +241,26 @@ Read-only, ordered by the questions an operator asks.
   PID and window), the resolved provenance with its state, source, domain and
   reason code, host telemetry, and the appearance state including whether the
   provenance colour table is complete.
+
+## Workbench
+
+Golden Image candidates ([ADR 0015](adr/0015-golden-image-capture.md)):
+domains adopted to be captured into an image. A candidate is never a product
+Machine, so it never appears in Machines, and the Workbench refuses to adopt
+or seal a product Machine. The view reads the machine bridge's `workbench`
+answer (the root-owned registry joined with live state) when it opens, every
+15 seconds while it is shown and after each operation; a reading that does
+not validate is reported as unavailable, never shown as a list.
+
+Each candidate shows its target image, profile and base, and whether it is a
+candidate or captured (with the start of its digest). Start, Shut down and
+Console reach it as they reach any domain. **Seal** is offered only for a
+shut-off candidate: the bridge checks the registry and the live state again
+and hands it to the operation runner, whose window asks for the password and
+runs `playbooks/workbench-seal.yml`. The seal is verified only when a fresh
+Workbench reading shows the candidate captured; a shut-off domain is never
+taken as proof. Import, validation and release stay in the terminal, with the
+commands the seal prints.
 
 ## Durable machine operations
 

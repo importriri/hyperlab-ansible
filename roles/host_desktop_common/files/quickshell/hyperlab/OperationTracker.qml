@@ -116,10 +116,15 @@ QtObject {
             const record = Object.assign({}, original);
             const newer = tracker.records.some(r => r.machine === record.machine
                 && r.created > record.created);
+            const candidate = tracker.workbench.find(c => c.domain === record.machine);
             const machine = tracker.inventory.find(m => m.name === record.machine);
+            // A Workbench candidate is not in the product inventory; its
+            // power state comes from the Workbench reading instead.
+            const observed = machine ? String(machine.state).toLowerCase()
+                : candidate ? String(candidate.runtime).toLowerCase() : "";
+            const observedAt = machine ? tracker.inventoryObservedAt : tracker.workbenchObservedAt;
             const needsTransitionProof =
                 ["reboot", "power-cycle"].indexOf(record.verb) >= 0;
-            const candidate = tracker.workbench.find(c => c.domain === record.machine);
             // Provisioning creates and starts the domain, so it ends Running.
             const wanted = record.verb === "start" || record.verb === "provision"
                 ? "running" : "shut off";
@@ -148,10 +153,10 @@ QtObject {
                 record.phase = "unverified";
                 record.detail =
                     "Execution succeeded; lifecycle transition was not independently verified";
-            } else if (!newer && machine
-                && tracker.inventoryObservedAt >= record.updated
-                && tracker.inventoryObservedAt <= record.updated + tracker.settlingMs
-                && String(machine.state).toLowerCase() === wanted) {
+            } else if (!newer && observed.length
+                && observedAt >= record.updated
+                && observedAt <= record.updated + tracker.settlingMs
+                && observed === wanted) {
                 record.phase = "completed";
                 record.detail =
                     "Execution succeeded; backend state verified: " + wanted;

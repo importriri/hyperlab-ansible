@@ -174,8 +174,9 @@ Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
       (software-verified)
 - [x] the first real seal of `arch-dev-vfio` on Nitro, imported and validated
       as `arch-dev-20261003` (Nitro-verified)
-- [ ] **Workbench** section in the shell: start, stop, open and seal a
-      candidate, never shown as a product Machine
+- [x] **Workbench** section in the shell: start, stop, open and seal a
+      candidate, never shown as a product Machine; a product Machine is
+      refused at adoption and seal (software-verified)
 - [x] build commits and the package list in the image manifest
       ([ADR 0028](adr/0028-image-build-provenance.md), software-verified)
 - [x] a sealed image is read-only and verified by digest at every use:

@@ -38,7 +38,9 @@ Machine holds a person's work; a Golden Image is built for capture.
 
 ## 2. Seal
 
-Shut the domain down first, then:
+Shut the domain down first, then either press **Seal** on the candidate in
+the shell's Workbench destination, which runs the same playbook through the
+operation runner, or:
 
 ```bash
 ansible-playbook -K playbooks/workbench-seal.yml -e workbench_domain=arch-dev-vfio

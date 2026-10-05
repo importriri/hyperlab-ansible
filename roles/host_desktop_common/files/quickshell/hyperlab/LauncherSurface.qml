@@ -73,6 +73,10 @@ PanelWindow {
           glyph: launcher.icons.diagnostics, workspace: "diagnostics",
           page: "overview",
           aliases: "health sources observations problems" },
+        { title: "Workbench", hint: "Golden Image candidates, captured and sealed",
+          glyph: launcher.icons.workbench, workspace: "workbench",
+          page: "candidates",
+          aliases: "golden image candidate capture seal" },
         { title: "Isolation and GPU", hint: "Ownership, boot claim and policy",
           glyph: launcher.icons.isolation, workspace: "diagnostics",
           page: "isolation", aliases: "gpu vfio passthrough trust ladder" }

@@ -120,6 +120,8 @@ Scope {
             return "Reset";
         case "provision":
             return "Provision";
+        case "seal":
+            return "Seal";
         case "clipboard":
             return "Send clipboard";
         default:
@@ -235,7 +237,8 @@ Scope {
         const name = String(machine);
 
         if (
-            machineActions.verbs.indexOf(operation) < 0
+            (machineActions.verbs.indexOf(operation) < 0
+                && machineActions.workbenchVerbs.indexOf(operation) < 0)
             || name.length === 0
         ) {
             return false;
@@ -618,6 +621,85 @@ Scope {
                 machineActions.createPhase = "failed";
                 machineActions.createDetail = "Machine bridge unavailable";
             }
+        }
+    }
+
+    // ----------------------------------------------------------- Workbench
+
+    // Golden Image candidates (ADR 0015), never product Machines. The list
+    // is presentation only: the bridge checks a seal again against the
+    // registry and live state before it hands it to the operation runner,
+    // and the tracker verifies a seal only against a fresh reading of it.
+    readonly property var workbenchVerbs: ["seal"]
+    property var workbenchCandidates: []
+    property var workbenchErrors: []
+    // unknown until the bridge answers; ready, empty or unavailable after.
+    property string workbenchState: "unknown"
+    property string workbenchDetail: ""
+
+    function requestWorkbench() {
+        if (workbenchRunner.running)
+            return false;
+        workbenchRunner.buffer = "";
+        workbenchRunner.detail = "";
+        workbenchRunner.running = true;
+        return true;
+    }
+
+    function validCandidate(row) {
+        return row !== null && typeof row === "object"
+            && typeof row.domain === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(row.domain)
+            && typeof row.image_id === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(row.image_id)
+            && ["candidate", "captured"].indexOf(row.state) >= 0
+            && typeof row.runtime === "string" && row.runtime.length <= 32
+            && (row.sha256 === null || (typeof row.sha256 === "string" && /^[0-9a-f]{64}$/.test(row.sha256)));
+    }
+
+    function applyWorkbench(text, exitCode, detail) {
+        let parsed = null;
+        try {
+            parsed = JSON.parse(String(text));
+        } catch (error) {
+            parsed = null;
+        }
+        if (
+            exitCode !== 0 || parsed === null || parsed.phase !== "workbench"
+            || !Array.isArray(parsed.candidates)
+            || !parsed.candidates.every(row => machineActions.validCandidate(row))
+        ) {
+            machineActions.workbenchState = "unavailable";
+            machineActions.workbenchDetail = String(detail || "").replace(/^HyperLab: /, "").slice(0, 300)
+                || "The Workbench could not be read";
+            return false;
+        }
+        machineActions.workbenchCandidates = parsed.candidates;
+        machineActions.workbenchErrors = Array.isArray(parsed.errors)
+            ? parsed.errors.map(error => String(error).slice(0, 300)) : [];
+        machineActions.workbenchState = parsed.candidates.length ? "ready" : "empty";
+        machineActions.workbenchDetail = "";
+        operationState.workbench = parsed.candidates;
+        operationState.workbenchObservedAt = Date.now();
+        return true;
+    }
+
+    Process {
+        id: workbenchRunner
+
+        property string buffer: ""
+        property string detail: ""
+
+        command: [machineActions.bridge, "workbench"]
+
+        stdout: StdioCollector {
+            onStreamFinished: workbenchRunner.buffer = String(this.text)
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: workbenchRunner.detail = String(this.text).trim()
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.applyWorkbench(workbenchRunner.buffer, exitCode, workbenchRunner.detail);
         }
     }
 

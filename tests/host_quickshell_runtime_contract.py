@@ -388,6 +388,7 @@ Window {
             case "ssh": return "SSH";
             case "looking-glass": return "Looking Glass";
             case "force-stop": return "Force stop";
+            case "seal": return "Seal";
             default: return "Operation";
             }
         }
@@ -448,6 +449,32 @@ Window {
             created = created.concat([args]);
             createMachine = String(args[1]);
             createPhase = "pending";
+            return true;
+        }
+
+        // Workbench transport (ADR 0015). The answer is what the real
+        // MachineActions.applyWorkbench accepted; null is a bridge that
+        // could not answer.
+        signal inventoryRefreshRequested()
+        readonly property var workbenchVerbs: ["seal"]
+        property var workbenchAnswer: null
+        property var workbenchCandidates: []
+        property var workbenchErrors: []
+        property string workbenchState: "unknown"
+        property string workbenchDetail: ""
+        property int workbenchReads: 0
+
+        function requestWorkbench() {
+            workbenchReads += 1;
+            if (workbenchAnswer === null) {
+                workbenchState = "unavailable";
+                workbenchDetail = "fixture bridge unavailable";
+                return true;
+            }
+            workbenchCandidates = workbenchAnswer.candidates;
+            workbenchErrors = workbenchAnswer.errors || [];
+            workbenchState = workbenchAnswer.candidates.length ? "ready" : "empty";
+            workbenchDetail = "";
             return true;
         }
     }
@@ -787,7 +814,7 @@ IDLE = """
 """
 
 DESTINATIONS = """
-            for (const destination of ["machines", "controls", "diagnostics"]) {
+            for (const destination of ["machines", "controls", "workbench", "diagnostics"]) {
                 check(sharedSurfaces.openWorkspace(destination),
                       "destination refused: " + destination);
                 check(sharedSurfaces.workspaceOpen,
@@ -2089,6 +2116,60 @@ DIAGNOSTICS_ISOLATION = """
                   "a section that is not open is marked current");
 """
 
+WORKBENCH_ANSWER = {
+    "candidates": [
+        {"domain": "arch-dev", "image_id": "arch-dev-standard", "base_image": "arch",
+         "profile": "dev", "state": "candidate", "runtime": "shut off",
+         "adopted_at": "", "sha256": None},
+        {"domain": "arch-gaming", "image_id": "arch-gaming-clean-20261005",
+         "base_image": "arch", "profile": "gaming-clean", "state": "candidate",
+         "runtime": "running", "adopted_at": "", "sha256": None},
+        {"domain": "arch-old", "image_id": "arch-dev-20261003", "base_image": "arch",
+         "profile": "dev", "state": "captured", "runtime": "shut off", "adopted_at": "",
+         "sha256": "f016ef0a888fb30db1edb88ea6486fe2af3e5e7072c7128eb199877d4480194e"},
+    ],
+    "errors": ["broken.json: invalid state or profile"],
+}
+
+WORKBENCH = """
+            sharedMachineActions.workbenchAnswer = @@WORKBENCH@@;
+            check(sharedSurfaces.openWorkspace("workbench"), "the Workbench destination was refused");
+            check(sharedMachineActions.workbenchReads >= 1, "opening the Workbench did not read it");
+            check(sharedMachineActions.workbenchState === "ready", "the Workbench answer was not shown");
+            function control(verb, domain) {
+                return window.find(workspaceSurface, "workbench-" + verb + "-" + domain);
+            }
+            check(control("seal", "arch-dev") !== null && control("seal", "arch-dev").enabled,
+                  "a shut-off candidate cannot be sealed");
+            check(control("start", "arch-dev").enabled && !control("shutdown", "arch-dev").enabled,
+                  "a shut-off candidate offers the wrong power action");
+            check(!control("seal", "arch-gaming").enabled, "a running candidate offered Seal");
+            check(control("shutdown", "arch-gaming").enabled && control("console", "arch-gaming").enabled
+                  && !control("start", "arch-gaming").enabled,
+                  "a running candidate offers the wrong actions");
+            check(!control("seal", "arch-old").enabled, "a captured candidate offered Seal again");
+            check(sharedState.machineById("arch-dev") === null,
+                  "a Workbench candidate appeared among the product Machines");
+            control("seal", "arch-dev").activated();
+            check(sharedMachineActions.operations.indexOf("seal:arch-dev") >= 0,
+                  "Seal did not reach the machine bridge");
+"""
+
+WORKBENCH_EMPTY = """
+            sharedMachineActions.workbenchAnswer = {candidates: [], errors: []};
+            check(sharedSurfaces.openWorkspace("workbench"), "the Workbench destination was refused");
+            check(sharedMachineActions.workbenchState === "empty", "an empty Workbench was not empty");
+            check(window.find(workspaceSurface, "workbench-seal-arch-dev") === null,
+                  "an empty Workbench showed a candidate");
+"""
+
+WORKBENCH_UNAVAILABLE = """
+            sharedMachineActions.workbenchAnswer = null;
+            check(sharedSurfaces.openWorkspace("workbench"), "the Workbench destination was refused");
+            check(sharedMachineActions.workbenchState === "unavailable",
+                  "an unreadable Workbench was not reported");
+"""
+
 LAUNCHER_OPEN = """
             sharedSurfaces.openLauncher("");
             launcher.query = "f";
@@ -2219,6 +2300,12 @@ def main() -> int:
             ("system-panel", 1920, 1080, populated, PANEL_OPEN),
             ("confirmation-open", 1920, 1080, populated, CONFIRM_OPEN),
             ("machines-dense", 1920, 1080, machines(24), SELECTION),
+            ("workbench", 1920, 1080, populated,
+             WORKBENCH.replace("@@WORKBENCH@@", json.dumps(WORKBENCH_ANSWER))),
+            ("workbench-narrow", 800, 600, populated,
+             WORKBENCH.replace("@@WORKBENCH@@", json.dumps(WORKBENCH_ANSWER))),
+            ("workbench-empty", 1920, 1080, populated, WORKBENCH_EMPTY),
+            ("workbench-unavailable", 1920, 1080, populated, WORKBENCH_UNAVAILABLE),
         ]
 
         for name, width, height, inventory, body in cases:

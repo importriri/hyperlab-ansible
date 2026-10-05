@@ -30,7 +30,8 @@ FloatingWindow {
     readonly property var destinations: [
         { "id": "machines", "label": "Machines", "glyph": workspace.icons.machines },
         { "id": "controls", "label": "Control Center", "glyph": workspace.icons.controlCenter },
-        { "id": "diagnostics", "label": "Diagnostics", "glyph": workspace.icons.diagnostics }
+        { "id": "diagnostics", "label": "Diagnostics", "glyph": workspace.icons.diagnostics },
+        { "id": "workbench", "label": "Workbench", "glyph": workspace.icons.workbench }
     ]
 
     readonly property bool compact:
@@ -42,6 +43,8 @@ FloatingWindow {
             return "HyperLab · Control Center";
         case "diagnostics":
             return "HyperLab · Diagnostics";
+        case "workbench":
+            return "HyperLab · Workbench";
         default:
             return "HyperLab · Machines";
         }
@@ -269,6 +272,17 @@ FloatingWindow {
                     icons: workspace.icons
                     shellState: workspace.shellState
                     shellActions: workspace.shellActions
+                    shellSurfaces: workspace.shellSurfaces
+                }
+
+                WorkbenchView {
+                    anchors.fill: parent
+                    visible: workspace.view === "workbench"
+
+                    tokens: workspace.tokens
+                    theme: workspace.theme
+                    icons: workspace.icons
+                    machineActions: workspace.machineActions
                     shellSurfaces: workspace.shellSurfaces
                 }
 

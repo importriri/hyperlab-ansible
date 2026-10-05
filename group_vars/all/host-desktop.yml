@@ -208,6 +208,7 @@ host_desktop_common_shell_stage:
     - MachineListRow.qml
     - MachineContextPane.qml
     - CreateMachineView.qml
+    - WorkbenchView.qml
     - ControlCenterView.qml
     - DiagnosticsView.qml
     - OwnershipInstrument.qml
@@ -242,6 +243,7 @@ host_desktop_common_shell_stage:
     - machines
     - controls
     - diagnostics
+    - workbench
   # The idle desktop is wallpaper, the rail and nothing else. It sits on the
   # bottom layer with an empty input region, so no click is intercepted by an
   # invisible surface.

@@ -193,6 +193,52 @@ BODY = r'''
                   && recovery.records[0].detail.indexOf("did not show the capture") >= 0,
                   "an unobserved seal was not reported unverified");
 
+            // A candidate is not in the product inventory: its Start is
+            // verified by a fresh Workbench reading showing it running.
+            recovery.records = [];
+            recovery.inventory = [];
+            recovery.workbench = [{domain: "arch-gaming", state: "candidate", runtime: "shut off"}];
+            recovery.workbenchObservedAt = (epoch + 1) * 1000;
+            recovery.now = (epoch + 1) * 1000;
+            const eight = "2".repeat(32);
+            recovery.snapshot({schema: 1, operations: [
+                payload(eight, "arch-gaming", "succeeded", 2, 0, "vm.managed-start")]});
+            check(recovery.records[0].phase === "verifying",
+                  "a candidate's Start was verified by a stale reading");
+            recovery.workbench = [{domain: "arch-gaming", state: "candidate", runtime: "running"}];
+            recovery.workbenchObservedAt = (epoch + 3) * 1000;
+            check(recovery.records[0].phase === "completed",
+                  "a fresh Workbench reading did not verify the candidate's Start");
+
+            // The Workbench answer is validated by the real transport: a
+            // well-formed reading reaches the view and the tracker, anything
+            // else is unavailable and never a list of candidates.
+            const bench = {phase: "workbench", available: true, errors: [], candidates: [
+                {domain: "arch-dev", image_id: "arch-dev-standard", base_image: "arch",
+                 profile: "dev", state: "candidate", runtime: "shut off", adopted_at: "",
+                 sha256: null}]};
+            check(lifecycle.applyWorkbench(JSON.stringify(bench), 0, "")
+                  && lifecycle.workbenchState === "ready"
+                  && lifecycle.workbenchCandidates.length === 1,
+                  "a valid Workbench reading was refused");
+            check(lifecycle.trackerFixture.workbench.length === 1
+                  && lifecycle.trackerFixture.workbenchObservedAt > 0,
+                  "the tracker did not receive the Workbench reading");
+            for (const bad of [
+                Object.assign({}, bench, {phase: "capabilities"}),
+                Object.assign({}, bench, {candidates: [Object.assign({}, bench.candidates[0], {domain: "../etc"})]}),
+                Object.assign({}, bench, {candidates: [Object.assign({}, bench.candidates[0], {state: "sealed"})]}),
+                Object.assign({}, bench, {candidates: [Object.assign({}, bench.candidates[0], {sha256: "abc"})]})]) {
+                check(!lifecycle.applyWorkbench(JSON.stringify(bad), 0, "")
+                      && lifecycle.workbenchState === "unavailable",
+                      "a malformed Workbench reading was accepted");
+            }
+            check(!lifecycle.applyWorkbench(JSON.stringify(bench), 2, "HyperLab: registry unreadable")
+                  && lifecycle.workbenchDetail === "registry unreadable",
+                  "a failed Workbench read did not say why");
+            check(lifecycle.applyWorkbench(JSON.stringify(Object.assign({}, bench, {candidates: []})), 0, "")
+                  && lifecycle.workbenchState === "empty", "an empty Workbench was not empty");
+
 
 '''
 

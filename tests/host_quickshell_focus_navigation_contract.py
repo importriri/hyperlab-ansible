@@ -28,7 +28,7 @@ def check_routes() -> None:
         for path in QML.glob("*.qml")
     }
     expected = {
-        "openWorkspace": {"HyperLabBar.qml": 2, "ShellIpc.qml": 3,
+        "openWorkspace": {"HyperLabBar.qml": 2, "ShellIpc.qml": 4,
                           "ShellSurfaces.qml": 1},
         "openWorkspacePage": {"HyperLabBar.qml": 2, "LauncherSurface.qml": 1,
                               "SystemPanel.qml": 1, "ShellSurfaces.qml": 3},

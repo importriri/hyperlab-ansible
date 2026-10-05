@@ -113,6 +113,11 @@ Scope {
             return "diagnostics";
         }
 
+        function workbench(): string {
+            ipc.shellSurfaces.openWorkspace("workbench");
+            return "workbench";
+        }
+
         function close(): string {
             ipc.shellSurfaces.closeWorkspace();
             return "closed";
