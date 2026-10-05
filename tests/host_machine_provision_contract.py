@@ -51,6 +51,9 @@ def steps(machine: str, workstation: bool) -> dict:
              "argv": [*profile, "-e", "@{access_file}"]},
             {"id": "profile-second", "label": "Profile again", "password": False, "argv": profile},
         ]
+    result.append({"id": "close-access", "label": "Close", "password": False,
+                   "argv": ["ansible-playbook", "-i", "inventory.ini", "-i", f"/run/user/1/{machine}.ini",
+                            "playbooks/guest-close-access.yml"]})
     return {"schema": 1, "machine": machine, "spec": spec, "steps": result}
 
 
@@ -117,7 +120,8 @@ def main() -> int:
         rc, calls, runtime, _ = run(module, Path(temp), steps("srv-a", False),
                                     ["--spec", "vm-specs/.generated/srv-a.yml", "srv-a"])
         require(rc == 0, f"server provisioning failed: {rc}")
-        require([call["argv"][0] for call in calls] == ["playbooks/vm-create.yml", "playbooks/vm-guest-inventory.yml"],
+        require([call["argv"][0] for call in calls[:2]] == ["playbooks/vm-create.yml", "playbooks/vm-guest-inventory.yml"]
+                and len(calls) == 3 and calls[2]["argv"][-1] == "playbooks/guest-close-access.yml",
                 f"server steps ran out of order: {calls}")
         require(not (runtime / "hyperlab/provision").exists(), "a server asked for a password")
 
@@ -126,7 +130,8 @@ def main() -> int:
                                          ["--spec", "vm-specs/.generated/dev-a.yml", "dev-a"],
                                          passwords=[SECRET, SECRET])
         require(rc == 0, f"workstation provisioning failed: {rc}")
-        require(len(calls) == 4, f"workstation steps: {calls}")
+        require(len(calls) == 5 and calls[4]["argv"][-1] == "playbooks/guest-close-access.yml",
+                f"workstation steps: {calls}")
         first = calls[2]
         require(first.get("file_mode") == 0o600, f"hash file not private: {first}")
         value = first["file"].split("'")[1]
@@ -170,6 +175,10 @@ def main() -> int:
         "become prompt": tampered(lambda p: p["steps"][0]["argv"].remove("-K")),
         "host privilege": tampered(lambda p: p["steps"][3]["argv"].append("-K")),
         "order": tampered(lambda p: p["steps"].reverse()),
+        "close-access early": tampered(lambda p: p["steps"].insert(2, p["steps"].pop())),
+        "close-access as a profile": tampered(lambda p: p["steps"][2]["argv"].__setitem__(
+            5, "playbooks/guest-close-access.yml")),
+        "close-access dropped": tampered(lambda p: p["steps"].pop()),
         "another spec": tampered(lambda p: p.__setitem__("spec", "vm-specs/arch-dev.yml")),
         "another binary": tampered(lambda p: p["steps"][0]["argv"].__setitem__(0, "bash")),
         "placeholder": tampered(lambda p: p["steps"][1]["argv"].append("{access_file}")),

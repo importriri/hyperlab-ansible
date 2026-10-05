@@ -1,0 +1,63 @@
+---
+# The last step of a Machine's first provisioning (roadmap milestone 10):
+# restrict the QEMU Guest Agent and end passwordless sudo when the account
+# has a password, then prove from the host that guest-exec is refused and
+# the SSH host key is still read through the agent.
+- name: Close a Machine's provisioning access
+  hosts: workstations
+  become: true
+  roles:
+    - guest_access_close
+
+- name: Prove the agent restriction from the host
+  hosts: workstations
+  gather_facts: false
+  vars:
+    guest_close_repository_root: "{{ playbook_dir | dirname }}"
+  tasks:
+    - name: Wait for the agent to answer again
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv: [virsh, -c, "qemu:///system", qemu-agent-command, "{{ inventory_hostname }}",
+               '{"execute":"guest-ping"}']
+      register: guest_close_ping
+      changed_when: false
+      retries: 15
+      delay: 2
+      until: guest_close_ping.rc == 0
+
+    - name: Refuse unless guest-exec is disabled
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv: [virsh, -c, "qemu:///system", qemu-agent-command, "{{ inventory_hostname }}",
+               '{"execute":"guest-exec","arguments":{"path":"/bin/true"}}']
+      register: guest_close_exec
+      changed_when: false
+      failed_when: >-
+        guest_close_exec.rc == 0 or
+        'disabled' not in (guest_close_exec.stderr | lower)
+
+    - name: Read the SSH host key through the agent once more
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ guest_close_repository_root }}/tools/guest_host_key.py"
+          - --virsh-bin
+          - /usr/bin/virsh
+          - --domain
+          - "{{ inventory_hostname }}"
+          - --address
+          - "{{ ansible_host }}"
+      register: guest_close_host_key
+      changed_when: false
+
+    - name: Refuse a host key that differs from the pinned one
+      delegate_to: localhost
+      ansible.builtin.command:
+        argv: [ssh-keygen, -F, "{{ ansible_host }}"]
+      register: guest_close_pinned
+      changed_when: false
+      failed_when: >-
+        guest_close_pinned.rc != 0 or
+        (guest_close_host_key.stdout.split()[2]) not in guest_close_pinned.stdout

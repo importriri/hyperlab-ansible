@@ -84,10 +84,18 @@ ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
 rm -v /run/user/$UID/dev-01-access.yml
 ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
   playbooks/guest-arch-dev-vfio.yml
+ansible-playbook -i inventory.ini -i /run/user/$UID/dev-01.ini \
+  playbooks/guest-close-access.yml
 ```
 
-`openssl passwd -6` asks twice without echo and prints only the hash. Later
-passes need no password: the account is already usable.
+`openssl passwd -6` asks twice without echo and prints only the hash.
+
+The last step closes the provisioning access. The QEMU Guest Agent then
+answers only the calls HyperLab uses (no `guest-exec`), and, since the
+account now has a password, cloud-init's passwordless sudo rule is removed:
+later profile passes need `-K` and the Machine account's password. The step
+proves from the host that `guest-exec` is refused and that the host key read
+through the agent is still the pinned one.
 
 The inventory step also reads the new Machine's SSH host key through QEMU
 Guest Agent and pins it in `~/.ssh/known_hosts` for its address, so the
@@ -113,7 +121,13 @@ ansible-playbook -K playbooks/vm-create.yml \
 ansible-playbook -K playbooks/vm-guest-inventory.yml \
   -e guest_spec=vm-specs/.generated/srv-01.yml
 ansible srv-01 -i inventory.ini -i /run/user/$UID/srv-01.ini -m ping
+ansible-playbook -i inventory.ini -i /run/user/$UID/srv-01.ini \
+  playbooks/guest-close-access.yml
 ```
+
+A server account has no password, so the last step restricts the guest
+agent and keeps its passwordless sudo: removing it would leave the Machine
+without administration.
 
 The inventory step pins the new host key, so plain `ssh` to the address it
 wrote works with strict checking too.

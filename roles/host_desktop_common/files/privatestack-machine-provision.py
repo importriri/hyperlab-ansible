@@ -30,7 +30,10 @@ HASH_RE = re.compile(r"^\$6\$[^$]{1,16}\$[./A-Za-z0-9]{86}$")
 PLAYBOOKS = {"playbooks/vm-create.yml", "playbooks/vm-guest-inventory.yml"}
 PROFILE_RE = re.compile(r"^playbooks/guest-[a-z0-9-]+\.yml$")
 ACCESS_FILE = "{access_file}"
-STEP_IDS = ("create-domain", "inventory", "profile-first", "profile-second")
+STEP_IDS = ("create-domain", "inventory", "profile-first", "profile-second", "close-access")
+# A server has no profile; every Machine ends by closing its provisioning access.
+SERVER_STEPS = ["create-domain", "inventory", "close-access"]
+CLOSE_PLAYBOOK = "playbooks/guest-close-access.yml"
 PASSWORD_MIN = 8
 
 
@@ -84,6 +87,8 @@ def valid_step(step: object, spec: str) -> dict:
     require(files == (["@" + ACCESS_FILE] if step["password"] else []),
             "a provisioning step reads an unexpected variables file")
     require(step["password"] or ACCESS_FILE not in argv, "unexpected password placeholder")
+    require((step["id"] == "close-access") == (playbooks[0] == CLOSE_PLAYBOOK),
+            "the access-closing playbook runs only as the close-access step")
     if playbooks[0] in PLAYBOOKS:
         require("-K" in argv and f"guest_spec={spec}" in argv, "a host step lost its spec or become prompt")
     else:
@@ -100,7 +105,7 @@ def steps_for(repo: Path, machine: str, spec: str) -> list[dict]:
             and plan.get("spec") == spec and isinstance(plan.get("steps"), list), "invalid provisioning plan")
     steps = [valid_step(step, spec) for step in plan["steps"]]
     ids = [step["id"] for step in steps]
-    require(ids in (list(STEP_IDS[:2]), list(STEP_IDS)), "provisioning steps out of order")
+    require(ids in (SERVER_STEPS, list(STEP_IDS)), "provisioning steps out of order")
     return steps
 
 

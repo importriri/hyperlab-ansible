@@ -1,0 +1,28 @@
+---
+# The QEMU Guest Agent calls HyperLab and libvirt use (roadmap milestone 10,
+# decided 2026-10-04): the libvirt handshake, readiness and host name, the
+# address lookup, the read of the public SSH host key, and agent shutdown
+# and reboot. guest-exec and every other call are refused. The agent filters
+# by call, not by mode: guest-file-open can still open a file for writing,
+# which ADR 0025 addresses.
+guest_access_close_agent_rpcs:
+  - guest-sync-delimited
+  - guest-sync
+  - guest-ping
+  - guest-info
+  - guest-get-host-name
+  - guest-network-get-interfaces
+  - guest-shutdown
+  - guest-file-open
+  - guest-file-read
+  - guest-file-close
+
+# The NOPASSWD rule cloud-init writes for the Machine account.
+guest_access_close_nopasswd_file: /etc/sudoers.d/90-cloud-init-users
+
+# The rule that keeps the administrator group able to sudo with its password.
+guest_access_close_admin_file: /etc/sudoers.d/10-hyperlab-admin
+
+# passwd -S states that mean the account has a usable password (shadow on
+# Arch and Debian prints P, Fedora's passwd prints PS).
+guest_access_close_usable_password_states: [P, PS]

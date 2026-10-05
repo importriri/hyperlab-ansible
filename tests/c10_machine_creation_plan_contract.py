@@ -144,8 +144,11 @@ def check_steps(repo: Path, home: Path, state: Path) -> None:
             Unavailable, "not projected")
     write_projected_vm_spec(repo, read_machine("srv-test", state_home=state))
     server = provision_steps(repo, "srv-test", home=home, runtime_dir=runtime, state_home=state)
-    require([step["id"] for step in server["steps"]] == ["create-domain", "inventory"],
+    require([step["id"] for step in server["steps"]] == ["create-domain", "inventory", "close-access"],
             f"server steps differ from docs/first-machine.md: {server}")
+    require(server["steps"][2]["argv"] == ["ansible-playbook", "-i", "inventory.ini", "-i",
+                                           "/run/user/1000/srv-test.ini", "playbooks/guest-close-access.yml"],
+            f"the close-access step differs: {server['steps'][2]}")
     create = server["steps"][0]["argv"]
     require(create[:3] == ["ansible-playbook", "playbooks/vm-create.yml", "-K"]
             and "guest_spec=vm-specs/.generated/srv-test.yml" in create
@@ -162,7 +165,8 @@ def check_steps(repo: Path, home: Path, state: Path) -> None:
     write_projected_vm_spec(repo, read_machine("dev-test", state_home=state))
     work = provision_steps(repo, "dev-test", home=home, runtime_dir=runtime, state_home=state)
     ids = [step["id"] for step in work["steps"]]
-    require(ids == ["create-domain", "inventory", "profile-first", "profile-second"], f"steps: {ids}")
+    require(ids == ["create-domain", "inventory", "profile-first", "profile-second", "close-access"],
+            f"steps: {ids}")
     first, second = work["steps"][2], work["steps"][3]
     require(first["password"] is True and second["password"] is False, "password step misplaced")
     require(first["argv"][-2:] == ["-e", "@{access_file}"], f"hash file not a placeholder: {first}")

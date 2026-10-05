@@ -189,4 +189,11 @@ def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
                       "password": True, "argv": [*profile, "-e", "@" + ACCESS_FILE]})
         steps.append({"id": "profile-second", "label": "Apply the profile again (expect no changes)",
                       "password": False, "argv": profile})
+    # Last, once the host key is pinned and the profile has run: restrict the
+    # guest agent, and end passwordless sudo when the account has a password.
+    steps.append({"id": "close-access",
+                  "label": "Restrict the guest agent and end passwordless sudo",
+                  "password": False,
+                  "argv": ["ansible-playbook", "-i", "inventory.ini", "-i", inventory,
+                           "playbooks/guest-close-access.yml"]})
     return {"schema": 1, "machine": machine_id, "spec": spec, "steps": steps}

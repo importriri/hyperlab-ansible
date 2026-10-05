@@ -1,0 +1,90 @@
+---
+# The last step of a Machine's first provisioning (roadmap milestone 10).
+# Before it the host has pinned the SSH host key through the agent and the
+# profile has run; after it the agent answers only the calls HyperLab uses
+# and, when the account has a password, sudo asks for it.
+
+- name: Make the agent configuration directory
+  ansible.builtin.file:
+    path: /etc/qemu
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Restrict the QEMU Guest Agent to the calls HyperLab uses
+  ansible.builtin.copy:
+    content: |
+      # Managed by hyperlab-ansible (guest_access_close). Needs qemu-ga 8.1+.
+      [general]
+      allow-rpcs={{ guest_access_close_agent_rpcs | join(',') }}
+    dest: /etc/qemu/qemu-ga.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart the QEMU Guest Agent
+
+# Restart now, while become needs no password yet.
+- name: Restart the agent on its restricted configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the groups the Machine account may administer through
+  ansible.builtin.getent:
+    database: group
+
+- name: Read whether the Machine account has a usable password
+  ansible.builtin.command:
+    argv: [passwd, -S, "{{ ansible_user }}"]
+  register: guest_access_close_password
+  changed_when: false
+
+- name: Classify the account password
+  ansible.builtin.set_fact:
+    guest_access_close_has_password: >-
+      {{ (guest_access_close_password.stdout.split() + ['', ''])[1]
+         in guest_access_close_usable_password_states }}
+    guest_access_close_admin_group: >-
+      {{ guest_admin_groups[ansible_facts['distribution'] | lower] | default('') }}
+
+- name: Say why passwordless sudo stays
+  when: not guest_access_close_has_password
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}'s account has no password, so its NOPASSWD rule
+      stays: removing it would leave the Machine without administration.
+
+- name: End passwordless sudo once the account has a password
+  when: guest_access_close_has_password
+  block:
+    - name: Require the reviewed administrator group
+      ansible.builtin.assert:
+        that:
+          - guest_access_close_admin_group is match('^[a-z_][a-z0-9_-]{0,30}$')
+          - guest_access_close_admin_group in ansible_facts['getent_group']
+        fail_msg: >-
+          {{ ansible_facts['distribution'] }} has no reviewed administrator group.
+
+    - name: Let the administrator group sudo with its password
+      ansible.builtin.copy:
+        content: |
+          # Managed by hyperlab-ansible (guest_access_close).
+          %{{ guest_access_close_admin_group }} ALL=(ALL:ALL) ALL
+        dest: "{{ guest_access_close_admin_file }}"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+
+    # The last task that uses become: after it sudo asks for the password.
+    - name: Remove cloud-init's passwordless sudo rule
+      ansible.builtin.file:
+        path: "{{ guest_access_close_nopasswd_file }}"
+        state: absent
+
+    - name: Prove sudo now asks for the password
+      become: false
+      ansible.builtin.command:
+        argv: [sudo, -n, "true"]
+      register: guest_access_close_sudo
+      changed_when: false
+      failed_when: guest_access_close_sudo.rc == 0

@@ -405,12 +405,14 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 ### 10. Hypervisor hardening
 
 - [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed
-- [ ] QEMU guest agent restricted to the commands HyperLab uses; no guest
-      command execution
-- [ ] remove the Machine account's passwordless sudo at the end of its
-      first provisioning, so every Machine ends without `NOPASSWD`; later
-      profile passes then ask for the guest account's password (decided
-      2026-10-04)
+- [x] QEMU guest agent restricted to the commands HyperLab uses; no guest
+      command execution: the last provisioning step writes the allowlist and
+      proves `guest-exec` refused from the host (software-verified)
+- [x] remove the Machine account's passwordless sudo at the end of its
+      first provisioning; later profile passes then ask for the guest
+      account's password (decided 2026-10-04): done for every Machine whose
+      account has a password (software-verified)
+- [ ] the same for server Machines, whose account has no password today
 - [ ] SPICE channels a Template does not need disabled (clipboard, file
       transfer, USB redirection)
 - [ ] VM disks at rest on the encrypted host volume only, with swap and
