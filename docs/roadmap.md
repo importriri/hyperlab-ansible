@@ -428,6 +428,7 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `tests/host_swap_contract.py`, software-verified)
 - [ ] firmware updates through `fwupd`, with a recorded result on Nitro
 - [ ] host USB device policy so a new device is not trusted automatically
+      ([ADR 0038](adr/0038-host-usb-device-policy.md), proposed)
 
 ### 11. Visual provenance and trust model
 

@@ -96,6 +96,8 @@ entered the pipeline.
 37. [`0037-qemu-process-confinement.md`](0037-qemu-process-confinement.md)
     — proposed: AppArmor with libvirt's per-domain profiles first, then
     per-Machine DAC identities.
+38. [`0038-host-usb-device-policy.md`](0038-host-usb-device-policy.md) —
+    proposed: USBGuard blocks a new USB device until the operator allows it.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
