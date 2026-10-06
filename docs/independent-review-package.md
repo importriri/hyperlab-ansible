@@ -96,6 +96,7 @@ there.
 | [0046](adr/0046-nested-lab-host.md) | a nested lab host for host-level tests |
 | [0047](adr/0047-emergency-stop.md) | one host key that pauses every Machine and cuts its network |
 | [0048](adr/0048-key-vault.md) | a key vault: SSH keys in a Machine without a network |
+| [0050](adr/0050-hardware-readiness-and-profile.md) | hardware readiness and a host profile proposal before install |
 
 ## 5. Questions the maintainer wants answered
 

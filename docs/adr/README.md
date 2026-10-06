@@ -129,6 +129,9 @@ entered the pipeline.
 48. [`0048-key-vault.md`](0048-key-vault.md) — proposed: SSH keys in a vault
     Machine without a network, reached through a host relay that asks the
     operator before every signature.
+50. [`0050-hardware-readiness-and-profile.md`](0050-hardware-readiness-and-profile.md)
+    — proposed: a read-only readiness check before install that proposes a
+    host profile for the operator to review.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

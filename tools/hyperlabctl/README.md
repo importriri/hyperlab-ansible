@@ -14,6 +14,7 @@ registry does not expose.
 | `hyperlabctl status` | complete read-only host document |
 | `hyperlabctl panel` | terminal cockpit over that document |
 | `hyperlabctl doctor` | contract problems with concrete remedies |
+| `hyperlabctl doctor --hardware [--profile NAME]` | whether this computer can run HyperLab, read without privilege, and a host profile proposal to review |
 | `hyperlabctl vm list` | managed/unmanaged domain state |
 | `hyperlabctl net list` | five trust-domain networks |
 | `hyperlabctl image list` | image manifests and sealed-base state |

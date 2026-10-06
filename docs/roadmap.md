@@ -584,6 +584,12 @@ Measured with the complete security plane active.
 
 ### 14. Release qualification and the Doppiari release
 
+- [x] C10, C11: a read-only readiness check before install and a host
+      profile proposal to review (`hyperlabctl doctor --hardware [--profile
+      NAME]`, [ADR 0050](adr/0050-hardware-readiness-and-profile.md),
+      proposed; `tools/hyperlabctl/tests/test_hardware.py`; run read-only on
+      the Nitro: every check ok)
+- [ ] the same on the Predator and in the lab host
 - [ ] release qualification: idempotence, reboot, cold start, recovery and
       hardware gates, in the checked-in order: repository-software,
       bootstrap-dry-run, bootstrap-clean-install, storage-handoff,
