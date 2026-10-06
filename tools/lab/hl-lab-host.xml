@@ -50,8 +50,10 @@
       <listen type="address" address="127.0.0.1"/>
       <filetransfer enable="no"/>
     </graphics>
+    <!-- The model every Machine uses: Nitro's qemu-base ships no virtio-gpu
+         display module. -->
     <video>
-      <model type="virtio" heads="1" primary="yes"/>
+      <model type="vga" vram="16384" heads="1" primary="yes"/>
     </video>
     <tpm model="tpm-crb">
       <backend type="emulator" version="2.0"/>

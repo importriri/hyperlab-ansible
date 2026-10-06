@@ -259,5 +259,7 @@ proof.
   outcome, not the wall clock.
 - [`hl-lab-vol-list-name-option.md`](hl-lab-vol-list-name-option.md): the lab
   host tool asked virsh's vol-list for a --name option it does not have.
+- [`hl-lab-virtio-video-model.md`](hl-lab-virtio-video-model.md): the lab host
+  asked for a virtio display device Nitro's QEMU does not ship.
 
 Author: [importriri](https://github.com/importriri).

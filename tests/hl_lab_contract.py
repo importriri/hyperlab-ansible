@@ -47,6 +47,12 @@ def check_definition() -> None:
         require(problems(ET.fromstring(xml)) == [],
                 f"the reviewed definition was refused ({with_iso=}): {problems(ET.fromstring(xml))}")
     require("cdrom" not in hl_lab.domain_xml(False), "install media attached without an ISO")
+    # The host's QEMU provides the display model the Machines use; Nitro's
+    # qemu-base has no virtio-gpu module (problems/hl-lab-virtio-video-model.md).
+    guest = (ROOT / "roles/guest/templates/domain.xml.j2").read_text()
+    guest_model = re.search(r'<video>\s*<model type="([a-z0-9-]+)"', guest).group(1)
+    lab_model = ET.fromstring(hl_lab.domain_xml(False)).find("./devices/video/model").get("type")
+    require(lab_model == guest_model, f"the lab host's video model {lab_model} is not the Machines' {guest_model}")
     xml = hl_lab.domain_xml(False)
     end = "  </devices>"
     refused = {
