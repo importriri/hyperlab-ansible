@@ -1,0 +1,71 @@
+---
+# One AppArmor profile for every QEMU process (ADR 0037, option A2).
+
+- name: Refuse an unreviewed profile mode
+  ansible.builtin.assert:
+    that:
+      - qemu_apparmor_mode in ['complain', 'enforce']
+    fail_msg: "qemu_apparmor_mode must be complain or enforce, not {{ qemu_apparmor_mode }}"
+    quiet: true
+
+- name: Install AppArmor's parser and tools
+  community.general.pacman:
+    name: apparmor
+    state: present
+
+- name: Install the QEMU profile
+  ansible.builtin.template:
+    src: hyperlab-qemu.j2
+    dest: "{{ qemu_apparmor_profile_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    # A profile the parser refuses never replaces the one in place.
+    validate: apparmor_parser --skip-kernel-load --skip-cache --quiet %s
+  notify: Load the QEMU profile
+
+# The profile is enforced only by a kernel running AppArmor: booted from the
+# AppArmor entry (roles/vfio_boot). Otherwise it waits on disk, and says so.
+- name: Read whether the running kernel enforces AppArmor
+  ansible.builtin.stat:
+    path: /sys/kernel/security/apparmor/profiles
+  register: qemu_apparmor_kernel
+
+- name: Say the profile waits for an AppArmor boot
+  when: not qemu_apparmor_kernel.stat.exists
+  ansible.builtin.debug:
+    msg: >-
+      The running kernel does not run AppArmor, so {{ qemu_apparmor_profile_name }}
+      is installed but not loaded. Boot the AppArmor entry to load it.
+
+- name: Load profiles at every boot
+  when: qemu_apparmor_kernel.stat.exists
+  ansible.builtin.systemd_service:
+    name: apparmor.service
+    enabled: true
+    state: started
+
+- name: Load the QEMU profile now
+  when: qemu_apparmor_kernel.stat.exists
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the loaded profiles
+  when: qemu_apparmor_kernel.stat.exists and not ansible_check_mode
+  ansible.builtin.slurp:
+    src: /sys/kernel/security/apparmor/profiles
+  register: qemu_apparmor_loaded
+
+- name: Require the QEMU profile loaded in the reviewed mode
+  when: qemu_apparmor_kernel.stat.exists and not ansible_check_mode
+  ansible.builtin.assert:
+    that:
+      - (qemu_apparmor_profile_name ~ ' (' ~ qemu_apparmor_mode ~ ')') in (qemu_apparmor_loaded.content | b64decode)
+    fail_msg: "{{ qemu_apparmor_profile_name }} is not loaded in {{ qemu_apparmor_mode }} mode."
+    quiet: true
+
+- name: Record that the qemu_apparmor brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: qemu_apparmor

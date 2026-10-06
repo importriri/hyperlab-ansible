@@ -7,9 +7,11 @@ pending decision. This contract keeps the repository honest about it:
 
   1. while the roadmap item is open, the gap is documented and the ADR is
      still proposed;
-  2. the moment the item is checked, the repository must actually configure
-     a MAC security driver for libvirt and enable it in the kernel command
-     line it manages, and the domain template must not opt out of it.
+  2. the moment the item is checked, the repository must actually confine
+     QEMU as ADR 0037 decided (option A2): the shared AppArmor profile in
+     enforce mode, a kernel command line that enables AppArmor, and
+     per-Machine DAC identities on by default; the domain template must not
+     opt out of the security driver.
 """
 
 from __future__ import annotations
@@ -43,12 +45,17 @@ def main() -> int:
     if item.group(1) == " ":
         require((ROOT / "problems/qemu-processes-share-one-identity.md").is_file(),
                 "the confinement gap is open but not documented")
-        require("Status: proposed" in adr, "the confinement gap is open but ADR 0037 is not proposed")
+        require("Status: proposed" in adr or "Status: accepted" in adr,
+                "the confinement gap is open but ADR 0037 records no decision")
     else:
-        require(re.search(r'security_driver\s*=\s*"?(apparmor|selinux)', roles) is not None,
-                "confinement is claimed but libvirt has no MAC security driver")
-        require("apparmor" in roles and re.search(r"lsm=[^ \"']*apparmor", roles) is not None,
+        profile = (ROOT / "roles/qemu_apparmor/defaults/main.yml").read_text()
+        require("qemu_apparmor_mode: enforce" in profile,
+                "confinement is claimed but the QEMU profile is not enforced")
+        require(re.search(r"lsm=[^ \"']*apparmor", roles) is not None,
                 "confinement is claimed but the kernel command line does not enable AppArmor")
+        guest = (ROOT / "roles/guest/defaults/main.yml").read_text()
+        require(re.search(r"^guest_qemu_identity_mode:\s*per-machine\s*$", guest, re.M) is not None,
+                "confinement is claimed but Machines still share one QEMU identity")
     print("QEMU confinement contract: OK")
     return 0
 

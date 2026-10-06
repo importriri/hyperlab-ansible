@@ -1,7 +1,8 @@
 # ADR 0037 - Confining each QEMU process to its own Machine
 
-Status: proposed. AppArmor was chosen on 2026-10-05; the libvirt driver it
-assumed is not in Arch's package, so the way to it is open again below.
+Status: accepted (2026-10-06, option A2, chosen on the operator's
+delegation). Part 1, the QEMU profile, is built; part 2, the per-Machine
+identities, is next. Neither is proved on hardware yet.
 
 ## Context
 
@@ -53,3 +54,40 @@ The kernel side is the same for A1 and A2 and is prepared now: a fifth
 systemd-boot entry, `Arch-Linux-Hardened-Vfio-AppArmor.conf`, identical to
 the VFIO entry but for `lsm=landlock,lockdown,yama,integrity,apparmor,bpf`,
 not the default until Nitro has proved it (`tests/apparmor_boot_contract.py`).
+
+## Decision
+
+A2. A1 would give per-domain MAC profiles, but HyperLab would own a rebuilt
+hypervisor package: every libvirt security fix would wait for that rebuild,
+and the build would join the trusted base. A2 uses only what Arch ships, and
+splits the two properties between the mechanisms that can each enforce one:
+DAC keeps one Machine's QEMU from another Machine's files, AppArmor keeps
+every QEMU from the host's own data. If Arch ever builds libvirt with its
+AppArmor driver, per-domain profiles can replace the shared one.
+
+## Implementation
+
+**Part 1, the QEMU profile** (`roles/qemu_apparmor`,
+`playbooks/qemu-apparmor.yml`, `tests/qemu_apparmor_contract.py`). One
+profile, `hyperlab-qemu`, attaches to `/usr/bin/qemu-system-x86_64`. It
+grants the Machine store as each part needs it (disks, transient overlays
+and NVRAM read and written; seeds and sealed bases read only), libvirt's
+runtime files, the devices a Machine can be given (`/dev/kvm`, VFIO groups,
+`kvmfr`, tun, vhost), the SPICE socket directory and the lab host's pool. It
+gives QEMU no capability, and denies with an audit the homes, `/root`,
+shadow, sudoers, SSH, the store's state and TPM directories, writes to
+`/boot`, `/etc/libvirt` and the GPU policy. The role validates the profile
+with `apparmor_parser` before installing it, installs it always, and loads
+it only on a kernel running AppArmor (the AppArmor boot entry), in
+`complain` until the lab host and then Nitro have run every Machine kind
+under it with no denial, then `enforce`.
+
+**Part 2, per-Machine identities** (next). Each managed Machine gets a
+system user and group; its domain carries a static DAC label with that
+identity; its disk, seed and NVRAM become `0600` files of that user; sealed
+bases are read through a group that grants nothing else; a Looking Glass
+Machine gets its own SPICE socket directory, readable by the operator
+through an ACL and by no other Machine, and `kvmfr` access through a group
+only VFIO Machines join. Existing Machines move when shut off, through the
+guest role's reconcile path. It ships behind a switch that stays off until
+the lab host has proved it.

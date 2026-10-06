@@ -1,0 +1,14 @@
+---
+# One AppArmor profile for every QEMU process (ADR 0037, option A2). It keeps
+# QEMU away from the rest of the host; per-Machine DAC identities keep each
+# QEMU away from the other Machines' files.
+
+# complain logs what enforce would refuse; enforce refuses. The profile goes
+# to enforce only after the lab host and then Nitro have run every Machine
+# kind under it with no denial in the log.
+qemu_apparmor_mode: complain
+qemu_apparmor_profile_name: hyperlab-qemu
+qemu_apparmor_profile_path: /etc/apparmor.d/hyperlab-qemu
+qemu_apparmor_binary: /usr/bin/qemu-system-x86_64
+# The nested lab host's pool (ADR 0046): its QEMU is the same binary.
+qemu_apparmor_lab_pool: /var/lib/libvirt/images/hl-lab

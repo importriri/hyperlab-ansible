@@ -1,0 +1,11 @@
+---
+# One AppArmor profile for every QEMU process (ADR 0037): installed always,
+# loaded when the host runs the AppArmor boot entry.
+- name: Confine QEMU with AppArmor
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: qemu_apparmor
+    - qemu_apparmor

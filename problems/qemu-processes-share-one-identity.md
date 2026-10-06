@@ -2,7 +2,7 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: open; the decision is ADR 0037, proposed. Found by review on
+Status: open; ADR 0037 accepted (A2), part 1 built, part 2 next. Found by review on
 2026-10-05 from read-only observations on Nitro; nothing was exploited.
 
 ## Symptom
@@ -39,14 +39,15 @@ was written as a check of something assumed present.
 
 ## Fix
 
-Pending ADR 0037. The chosen route, AppArmor with libvirt's per-domain
-profiles, is not available with Arch's libvirt, which is built without its
-AppArmor and SELinux drivers; the ADR now weighs a local libvirt build
-against per-Machine DAC identities with one AppArmor profile for QEMU. The
-kernel side is prepared: an AppArmor boot entry that is not the default.
+ADR 0037 is accepted with option A2. Part 1 is built: one AppArmor profile,
+`hyperlab-qemu`, keeps every QEMU process from the host's own data; it loads
+when the host boots the AppArmor entry, in complain mode until proved. Part
+2, a DAC identity per Machine so one QEMU cannot open another Machine's
+files, is next. Until both are proved and enforced the gap stays open.
 
 ## Regression proof
 
 `tests/qemu_confinement_contract.py` records today's state as an explicit,
-reviewed gap: it fails if the guest role starts claiming confinement
-without a security driver, and it is where the chosen fix's checks go.
+reviewed gap: the roadmap item may be ticked only when the profile is
+enforced, the kernel line enables AppArmor and per-Machine identities are
+on by default. `tests/qemu_apparmor_contract.py` checks the profile itself.

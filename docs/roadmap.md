@@ -430,9 +430,15 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 - [ ] sVirt/AppArmor confinement of every QEMU process verified, not assumed:
       verified absent on Nitro (DAC only, one QEMU user for every Machine;
-      [`problems/qemu-processes-share-one-identity.md`](../problems/qemu-processes-share-one-identity.md)),
-      decision in [ADR 0037](adr/0037-qemu-process-confinement.md), proposed;
-      Arch's libvirt has no AppArmor driver, so the route is open again
+      [`problems/qemu-processes-share-one-identity.md`](../problems/qemu-processes-share-one-identity.md));
+      [ADR 0037](adr/0037-qemu-process-confinement.md) accepted, option A2:
+      per-Machine DAC identities plus one AppArmor profile for QEMU
+- [x] the shared QEMU AppArmor profile (`roles/qemu_apparmor`,
+      `tests/qemu_apparmor_contract.py`; compiled by `apparmor_parser`,
+      software-verified), starting in complain mode
+- [ ] per-Machine QEMU identities (ADR 0037 part 2), behind a switch until
+      the lab host proves them
+- [ ] both proved in the lab host, then on Nitro, and the profile enforced
 - [x] the kernel side of AppArmor prepared: a VFIO boot entry with AppArmor in
       `lsm=`, not the default (`tests/apparmor_boot_contract.py`,
       software-verified)

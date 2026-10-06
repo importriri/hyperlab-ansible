@@ -88,7 +88,6 @@ there.
 | [0034](adr/0034-usb-passthrough.md) | USB passthrough per Machine |
 | [0035](adr/0035-microphone-and-camera.md) | microphone and camera per Machine and session |
 | [0036](adr/0036-machine-snapshots-and-backups.md) | snapshots and encrypted backups of Machines |
-| [0037](adr/0037-qemu-process-confinement.md) | confining each QEMU process to its own Machine |
 | [0041](adr/0041-seamless-guest-applications.md) | seamless guest applications |
 | [0042](adr/0042-network-device-machine.md) | the Wi-Fi card in a network Machine |
 | [0043](adr/0043-usb-controller-machine.md) | the USB controller in a USB Machine |

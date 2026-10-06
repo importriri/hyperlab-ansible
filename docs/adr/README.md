@@ -94,8 +94,8 @@ entered the pipeline.
     — proposed: offline independent snapshots with retention, and restic
     backups to a host-only target.
 37. [`0037-qemu-process-confinement.md`](0037-qemu-process-confinement.md)
-    — proposed: AppArmor with libvirt's per-domain profiles first, then
-    per-Machine DAC identities.
+    — accepted: per-Machine DAC identities plus one AppArmor profile for
+    every QEMU process; Arch's libvirt has no AppArmor driver.
 38. [`0038-host-usb-device-policy.md`](0038-host-usb-device-policy.md) —
     accepted: USBGuard blocks a new USB device until the operator allows it.
 39. [`0039-host-frame-around-fullscreen-guests.md`](0039-host-frame-around-fullscreen-guests.md)

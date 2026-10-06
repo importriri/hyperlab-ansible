@@ -48,7 +48,9 @@ not provide.
   no MAC confinement, so code that escapes one Machine's QEMU can open every
   other Machine's disk
   ([`../problems/qemu-processes-share-one-identity.md`](../problems/qemu-processes-share-one-identity.md),
-  [ADR 0037](adr/0037-qemu-process-confinement.md), proposed). An escape
+  [ADR 0037](adr/0037-qemu-process-confinement.md), accepted: a shared
+  AppArmor profile is built, per-Machine identities are next, neither is
+  proved yet). An escape
   into the host kernel or KVM defeats everything here.
 - **Hardware side channels** between Machines sharing the CPU, caches and
   memory: HyperLab pins vCPUs for performance, not as a side-channel

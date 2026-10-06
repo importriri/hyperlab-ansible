@@ -1,0 +1,6 @@
+---
+- name: Load the QEMU profile
+  when: qemu_apparmor_kernel.stat.exists | default(false)
+  ansible.builtin.command:
+    argv: [apparmor_parser, --replace, --write-cache, "{{ qemu_apparmor_profile_path }}"]
+  changed_when: true

@@ -1,0 +1,98 @@
+# Managed by hyperlab-ansible (roles/qemu_apparmor). ADR 0037, option A2.
+#
+# Every QEMU process libvirt starts runs this profile: Arch's libvirt has no
+# AppArmor driver, so there are no per-domain profiles. It allows what a
+# HyperLab Machine's QEMU needs and nothing of the host's own data. QEMU runs
+# as an unprivileged user, so it is given no capability.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile {{ qemu_apparmor_profile_name }} {{ qemu_apparmor_binary }} flags=({{ qemu_apparmor_mode }}) {
+  include <abstractions/base>
+
+  # The binary, its modules and firmware.
+  {{ qemu_apparmor_binary }} mr,
+  /usr/lib/qemu/*.so mr,
+  /usr/share/qemu/** r,
+  /usr/share/edk2/** rk,
+  /usr/share/edk2-ovmf/** rk,
+  / r,
+
+  # Virtualization and the devices a Machine may be given.
+  /dev/kvm rw,
+  /dev/net/tun rw,
+  /dev/vhost-net rw,
+  /dev/vhost-vsock rw,
+  /dev/vfio/vfio rw,
+  /dev/vfio/[0-9]* rw,
+  /dev/kvmfr[0-9]* rw,
+  /dev/hugepages/** rw,
+  /dev/ptmx rw,
+  /dev/pts/[0-9]* rw,
+  /dev/urandom r,
+  /dev/random r,
+  owner /{dev,run}/shm/spice.* rw,
+
+  # What libvirt manages for the domain: monitor sockets, logs, NVRAM.
+  /var/lib/libvirt/qemu/ r,
+  /var/lib/libvirt/qemu/** rwk,
+  /run/libvirt/qemu/** rw,
+  /var/log/libvirt/qemu/*.log w,
+  /var/cache/libvirt/qemu/** rw,
+
+  # The Machine store: sealed bases are read only; disks, transient overlays
+  # and NVRAM are read and written; seeds are read only.
+  {{ hyperlab_root }}/bases/** r,
+  {{ hyperlab_root }}/permanent/ r,
+  {{ hyperlab_root }}/permanent/* rwk,
+  {{ hyperlab_root }}/disposable/ r,
+  {{ hyperlab_root }}/disposable/* rwk,
+  {{ hyperlab_root }}/cloud-init/*/seed.iso r,
+  {{ hyperlab_root }}/nvram/*_VARS.fd rwk,
+  {{ qemu_apparmor_lab_pool }}/ r,
+  {{ qemu_apparmor_lab_pool }}/hl-lab-* rwk,
+
+  # The SPICE display socket of a Looking Glass Machine.
+  {{ hyperlab_looking_glass_spice_socket_dir }}/ r,
+  {{ hyperlab_looking_glass_spice_socket_dir }}/** rw,
+
+  # Reads QEMU and VFIO need about the host.
+  @{PROC}/sys/kernel/cap_last_cap r,
+  @{PROC}/sys/vm/max_map_count r,
+  @{PROC}/sys/vm/overcommit_memory r,
+  @{PROC}/@{pid}/cmdline r,
+  owner @{PROC}/@{pid}/task/@{tid}/comm rw,
+  owner @{PROC}/@{pid}/auxv r,
+  @{PROC}/*/status r,
+  @{sys}/devices/** r,
+  @{sys}/bus/pci/** r,
+  @{sys}/kernel/iommu_groups/** r,
+  @{sys}/module/vhost/parameters/max_mem_regions r,
+  @{sys}/kernel/mm/transparent_hugepage/** r,
+
+  # SPICE on loopback, the guest agent and monitor sockets.
+  network inet stream,
+  network inet6 stream,
+  network unix stream,
+  network unix dgram,
+  unix (send, receive) type=stream addr=none,
+
+  signal (receive) peer=unconfined,
+
+  # The host's own data, named so a denial is logged even if a broader rule
+  # is ever added above.
+  audit deny @{HOME}/** rwklx,
+  audit deny /root/** rwklx,
+  audit deny /etc/shadow* rwklx,
+  audit deny /etc/gshadow* rwklx,
+  audit deny /etc/sudoers* rwklx,
+  audit deny /etc/ssh/** rwklx,
+  audit deny /boot/** wklx,
+  audit deny {{ hyperlab_root }}/state/** rwklx,
+  audit deny {{ hyperlab_root }}/tpm/** rwklx,
+  audit deny {{ hyperlab_root }}/bases/** wklx,
+  audit deny /etc/gpu-handoff/** wklx,
+  audit deny /etc/libvirt/** wklx,
+  audit deny capability,
+}
