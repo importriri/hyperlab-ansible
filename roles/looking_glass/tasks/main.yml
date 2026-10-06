@@ -194,6 +194,12 @@
     group: root
     mode: "0644"
 
+- name: Create the group that may open the Looking Glass memory
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+  ansible.builtin.group:
+    name: "{{ hyperlab_kvmfr_group }}"
+    system: true
+
 - name: Own the device node - QEMU writes it, the session reads it
   ansible.builtin.template:
     src: 70-kvmfr.rules.j2
@@ -528,3 +534,45 @@
       - "{{ looking_glass_spice_tmpfiles_path }}"
   changed_when: false
   check_mode: false
+
+# ADR 0037 part 2: each Machine's SPICE directory, made at start as root by
+# a libvirt hook that reads the domain's own static DAC label. Present only
+# in per-machine mode; in shared mode it would refuse every start.
+- name: Create the hook configuration and hook directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/hyperlab
+    - /etc/libvirt/hooks
+    - /etc/libvirt/hooks/qemu.d
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+
+- name: Write the SPICE directory hook configuration
+  ansible.builtin.copy:
+    content: "{{ {'root': looking_glass_spice_socket_dir, 'operator': admin_user} | to_nice_json }}\n"
+    dest: /etc/hyperlab/spice-dir.json
+    owner: root
+    group: root
+    mode: "0644"
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+
+- name: Install or remove the per-Machine SPICE directory hook
+  ansible.builtin.copy:
+    src: hyperlab-spice-dir.py
+    dest: /etc/libvirt/hooks/qemu.d/50-hyperlab-spice-dir
+    owner: root
+    group: root
+    mode: "0755"
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+  notify: Restart libvirt for the SPICE directory hook
+
+- name: Remove the per-Machine SPICE directory hook in shared mode
+  ansible.builtin.file:
+    path: /etc/libvirt/hooks/qemu.d/50-hyperlab-spice-dir
+    state: absent
+  when: hyperlab_qemu_identity_mode == 'shared'
+  notify: Restart libvirt for the SPICE directory hook

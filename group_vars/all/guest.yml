@@ -46,3 +46,14 @@ guest_rmdir_bin: /usr/bin/rmdir
 guest_mv_bin: /usr/bin/mv
 guest_realpath_bin: /usr/bin/realpath
 guest_readlink_bin: /usr/bin/readlink
+
+# Which identity runs each Machine's QEMU (ADR 0037, part 2). `shared`: every
+# Machine's QEMU is the store's QEMU user, as today. `per-machine`: each
+# Machine has its own system user and group (guest_plan.qemu_identity), owns
+# only its disk, seed and NVRAM, and gets its own SPICE socket directory, so
+# one QEMU cannot open another Machine's files. Off until the lab host has
+# proved it; existing Machines move only when shut off.
+hyperlab_qemu_identity_mode: shared
+# The group that may open the Looking Glass shared memory in per-machine
+# mode; only VFIO Machines with Looking Glass join it.
+hyperlab_kvmfr_group: hyperlab-kvmfr

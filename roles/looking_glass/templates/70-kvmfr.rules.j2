@@ -5,4 +5,11 @@
 # backend when the guest starts. TAG+="uaccess" puts an ACL on top for the
 # logged-in seat, which is how the client gets in - without the node being
 # made world-writable and without the admin user joining a group for it.
+{% if hyperlab_qemu_identity_mode == 'per-machine' %}
+#
+# Per-Machine QEMU identities (ADR 0037): no single QEMU user owns the node;
+# only the identities of VFIO Machines with Looking Glass are in this group.
+SUBSYSTEM=="kvmfr", OWNER="root", GROUP="{{ hyperlab_kvmfr_group }}", MODE="0660", TAG+="uaccess"
+{% else %}
 SUBSYSTEM=="kvmfr", OWNER="{{ looking_glass_qemu_user }}", GROUP="{{ looking_glass_device_group }}", MODE="0660", TAG+="uaccess"
+{% endif %}

@@ -58,6 +58,13 @@
     guest_swtpm_user: "{{ guest_store_layout.swtpm_identity.split(':', 1)[0] }}"
     guest_swtpm_group: "{{ guest_store_layout.swtpm_identity.split(':', 1)[1] }}"
 
+- name: Refuse an unknown QEMU identity mode
+  ansible.builtin.assert:
+    that:
+      - hyperlab_qemu_identity_mode in ['shared', 'per-machine']
+    fail_msg: hyperlab_qemu_identity_mode must be shared or per-machine.
+    quiet: true
+
 - name: Validate the selected VM spec against the repository schema
   ansible.builtin.command:
     argv:
@@ -99,6 +106,49 @@
 - name: Publish the deterministic guest plan
   ansible.builtin.set_fact:
     guest_plan: "{{ guest_plan_command.stdout | from_json }}"
+
+# ADR 0037 part 2: in per-machine mode the Machine's own identity owns its
+# disk, seed and NVRAM, and its domain carries that identity as a static DAC
+# label. The identity is created only by the create operation.
+- name: Resolve the identity that owns this Machine's files
+  ansible.builtin.set_fact:
+    guest_files_user: >-
+      {{ guest_plan.qemu_identity if hyperlab_qemu_identity_mode == 'per-machine' else guest_qemu_user }}
+    guest_files_group: >-
+      {{ guest_plan.qemu_identity if hyperlab_qemu_identity_mode == 'per-machine' else guest_qemu_group }}
+    guest_disk_mode: "{{ '0600' if hyperlab_qemu_identity_mode == 'per-machine' else '0640' }}"
+    guest_seed_mode: "{{ '0400' if hyperlab_qemu_identity_mode == 'per-machine' else '0440' }}"
+    guest_spice_socket: >-
+      {{ hyperlab_looking_glass_spice_socket_dir ~ '/' ~ guest_plan.name ~ '/' ~ guest_plan.name ~ '.sock'
+         if hyperlab_qemu_identity_mode == 'per-machine'
+         else hyperlab_looking_glass_spice_socket_dir ~ '/' ~ guest_plan.name ~ '.sock' }}
+
+- name: Read the Machine's own QEMU identity
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ guest_plan.qemu_identity }}"
+    fail_key: false
+
+- name: Publish the Machine identity's numeric ids for its DAC label
+  when:
+    - hyperlab_qemu_identity_mode == 'per-machine'
+    - (ansible_facts.getent_passwd | default({})).get(guest_plan.qemu_identity) is not none
+  ansible.builtin.set_fact:
+    guest_machine_uid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][1] }}"
+    guest_machine_gid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][2] }}"
+
+- name: Refuse a per-machine Machine without its identity
+  when:
+    - hyperlab_qemu_identity_mode == 'per-machine'
+    - guest_operation != 'create'
+  ansible.builtin.assert:
+    that:
+      - (ansible_facts.getent_passwd | default({})).get(guest_plan.qemu_identity) is not none
+    fail_msg: >-
+      {{ guest_plan.name }} has no QEMU identity {{ guest_plan.qemu_identity }};
+      run the create operation, which makes it, or reconcile the Machine.
+    quiet: true
 
 - name: Verify managed store paths before inspecting guest-owned artefacts
   ansible.builtin.command:

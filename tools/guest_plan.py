@@ -397,7 +397,26 @@ def build_plan(
         "lock_path": str(lock_root / f"{name}.lock"),
         "capacity_lock_path": str(lock_root / "capacity.lock"),
         "gpu_lock_path": str(lock_root / "gpu.lock"),
+        "qemu_identity": qemu_identity_name(name),
     }
+
+
+QEMU_IDENTITY_PREFIX = "hlq-"
+QEMU_IDENTITY_LIMIT = 32  # useradd's name limit
+
+
+def qemu_identity_name(name: str) -> str:
+    """The Machine's own QEMU user and group (ADR 0037, part 2).
+
+    Readable for the usual Machine names; a long name keeps a prefix and an
+    eight-character digest, so two long names never share an identity.
+    """
+    readable = QEMU_IDENTITY_PREFIX + name
+    if len(readable) <= QEMU_IDENTITY_LIMIT:
+        return readable
+    digest = hashlib.sha256(name.encode()).hexdigest()[:8]
+    keep = QEMU_IDENTITY_LIMIT - len(QEMU_IDENTITY_PREFIX) - 1 - len(digest)
+    return f"{QEMU_IDENTITY_PREFIX}{name[:keep].rstrip('-')}-{digest}"
 
 
 def parse_args() -> argparse.Namespace:

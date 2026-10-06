@@ -53,8 +53,8 @@ def main() -> int:
                 "confinement is claimed but the QEMU profile is not enforced")
         require(re.search(r"lsm=[^ \"']*apparmor", roles) is not None,
                 "confinement is claimed but the kernel command line does not enable AppArmor")
-        guest = (ROOT / "roles/guest/defaults/main.yml").read_text()
-        require(re.search(r"^guest_qemu_identity_mode:\s*per-machine\s*$", guest, re.M) is not None,
+        guest = (ROOT / "group_vars/all/guest.yml").read_text()
+        require(re.search(r"^hyperlab_qemu_identity_mode:\s*per-machine\s*$", guest, re.M) is not None,
                 "confinement is claimed but Machines still share one QEMU identity")
     print("QEMU confinement contract: OK")
     return 0

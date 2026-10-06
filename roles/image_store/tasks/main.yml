@@ -121,7 +121,8 @@
     state: directory
     owner: "{{ image_store_owner }}"
     group: "{{ image_store_access_groups[item.access] }}"
-    mode: "{{ item.mode }}"
+    mode: >-
+      {{ image_store_qemu_traverse_mode if item.path in image_store_qemu_traverse_paths else item.mode }}
   loop: "{{ image_store_layout }}"
   loop_control:
     label: "{{ item.path | default('<root>', true) }}"
@@ -148,7 +149,9 @@
           - item.stat.dev == image_store_final_root_device
           - item.stat.pw_name == image_store_owner
           - item.stat.gr_name == image_store_access_groups[item.item.access]
-          - item.stat.mode == item.item.mode
+          - >-
+            item.stat.mode == (image_store_qemu_traverse_mode
+            if item.item.path in image_store_qemu_traverse_paths else item.item.mode)
         fail_msg: >-
           {{ (hyperlab_root, item.item.path) | path_join }} failed its post-condition.
           Expected a real directory on device {{ image_store_final_root_device }},

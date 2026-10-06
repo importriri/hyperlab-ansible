@@ -90,7 +90,14 @@
 {% if guest_plan.cloud_init %}
     <disk type="file" device="cdrom">
       <driver name="qemu" type="raw"/>
+{% if hyperlab_qemu_identity_mode | default('shared') == 'per-machine' %}
+      <!-- ADR 0037: the seed is the Machine identity's own file. -->
+      <source file="{{ guest_plan.seed_image }}">
+        <seclabel model="dac" relabel="no"/>
+      </source>
+{% else %}
       <source file="{{ guest_plan.seed_image }}"/>
+{% endif %}
       <target dev="sda" bus="sata"/>
       <readonly/>
     </disk>
@@ -123,7 +130,7 @@
 {% endif %}
     <graphics type="spice"{% if guest_plan.device_profile != 'vfio' %} autoport="yes" listen="127.0.0.1"{% endif %}>
 {% if guest_plan.device_profile == 'vfio' %}
-      <listen type="socket" socket="{{ hyperlab_looking_glass_spice_socket_dir }}/{{ guest_plan.name }}.sock"/>
+      <listen type="socket" socket="{{ guest_spice_socket | default(hyperlab_looking_glass_spice_socket_dir ~ '/' ~ guest_plan.name ~ '.sock') }}"/>
 {% else %}
       <listen type="address" address="127.0.0.1"/>
 {% endif %}
@@ -154,6 +161,12 @@
 {% endif %}
     <memballoon model="{{ 'none' if guest_plan.device_profile == 'vfio' else 'virtio' }}"/>
   </devices>
+{% if hyperlab_qemu_identity_mode | default('shared') == 'per-machine' %}
+  <!-- ADR 0037 part 2: this Machine's QEMU runs as its own identity. -->
+  <seclabel type="static" model="dac" relabel="yes">
+    <label>+{{ guest_machine_uid }}:+{{ guest_machine_gid }}</label>
+  </seclabel>
+{% endif %}
 {% if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass %}
   <qemu:commandline>
     <qemu:arg value="-device"/>

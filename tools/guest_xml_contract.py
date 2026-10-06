@@ -272,6 +272,17 @@ def signature(path: Path) -> dict[str, Any]:
         "tpm_path": None if tpm_source is None else tpm_source.get("path"),
         "graphics": None if graphics is None else graphics.get("type"),
         "graphics_count": len(root.findall("./devices/graphics")),
+        # The identity QEMU runs as (ADR 0037 part 2): none in shared mode, a
+        # static DAC label in per-machine mode. Drift either way is refused.
+        "domain_seclabels": sorted(
+            (
+                node.get("type"),
+                node.get("model"),
+                node.get("relabel"),
+                (node.findtext("./label") or "").strip() or None,
+            )
+            for node in root.findall("./seclabel")
+        ),
         "graphics_listen": graphics_listen(root),
         "graphics_port": None if graphics is None or not is_vfio else graphics.get("port"),
         "graphics_autoport": None if graphics is None else graphics.get("autoport"),

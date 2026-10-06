@@ -80,9 +80,9 @@
       - guest_xml_stat.stat.pw_name == 'root'
       - guest_xml_stat.stat.gr_name == 'root'
       - guest_xml_stat.stat.mode == '0640'
-      - guest_disk_stat.stat.pw_name == guest_qemu_user
-      - guest_disk_stat.stat.gr_name == guest_qemu_group
-      - guest_disk_stat.stat.mode == '0640'
+      - guest_disk_stat.stat.pw_name == guest_files_user
+      - guest_disk_stat.stat.gr_name == guest_files_group
+      - guest_disk_stat.stat.mode == guest_disk_mode
     fail_msg: Managed state, XML or disk ownership/mode drifted from the guest contract.
 
 - name: Verify cloud-init artefact ownership and modes
@@ -92,7 +92,7 @@
       - guest_seed_dir_stat.stat.isdir
       - not guest_seed_dir_stat.stat.islnk
       - guest_seed_dir_stat.stat.pw_name == 'root'
-      - guest_seed_dir_stat.stat.gr_name == guest_qemu_group
+      - guest_seed_dir_stat.stat.gr_name == guest_files_group
       - guest_seed_dir_stat.stat.mode == '0750'
       - guest_seed_user_data_stat.stat.isreg
       - guest_seed_user_data_stat.stat.pw_name == 'root'
@@ -103,9 +103,9 @@
       - guest_seed_meta_data_stat.stat.gr_name == 'root'
       - guest_seed_meta_data_stat.stat.mode == '0600'
       - guest_seed_image_stat.stat.isreg
-      - guest_seed_image_stat.stat.pw_name == guest_qemu_user
-      - guest_seed_image_stat.stat.gr_name == guest_qemu_group
-      - guest_seed_image_stat.stat.mode == '0440'
+      - guest_seed_image_stat.stat.pw_name == guest_files_user
+      - guest_seed_image_stat.stat.gr_name == guest_files_group
+      - guest_seed_image_stat.stat.mode == guest_seed_mode
     fail_msg: The NoCloud seed transaction is incomplete or has unsafe permissions.
 
 - name: Verify private swtpm state ownership and mode

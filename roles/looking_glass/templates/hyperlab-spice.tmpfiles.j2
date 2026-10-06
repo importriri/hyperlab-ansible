@@ -1,3 +1,11 @@
 # Managed by hyperlab-ansible. VFIO SPICE sockets are private host-local IPC.
+{% if hyperlab_qemu_identity_mode == 'per-machine' %}
+# Per-Machine QEMU identities (ADR 0037): no Machine may write here, so none
+# can rename another's directory or put a socket in its place. Each Machine's
+# directory is made at start by the hyperlab-spice-dir libvirt hook.
+d {{ looking_glass_spice_socket_dir }} 0711 root root -
+a+ {{ looking_glass_spice_socket_dir }} - - - - u:{{ admin_user }}:rx
+{% else %}
 d {{ looking_glass_spice_socket_dir }} 0770 root libvirt-qemu -
 a+ {{ looking_glass_spice_socket_dir }} - - - - u:{{ admin_user }}:rwx,d:u:{{ admin_user }}:rwX,d:o::---
+{% endif %}

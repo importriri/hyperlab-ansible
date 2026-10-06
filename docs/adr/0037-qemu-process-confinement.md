@@ -1,8 +1,9 @@
 # ADR 0037 - Confining each QEMU process to its own Machine
 
 Status: accepted (2026-10-06, option A2, chosen on the operator's
-delegation). Part 1, the QEMU profile, is built; part 2, the per-Machine
-identities, is next. Neither is proved on hardware yet.
+delegation). Part 1, the QEMU profile, is built; part 2a, per-Machine
+identities for permanent Machines, is built behind a switch that is off;
+part 2b is next. Nothing is proved on hardware yet.
 
 ## Context
 
@@ -82,12 +83,32 @@ it only on a kernel running AppArmor (the AppArmor boot entry), in
 `complain` until the lab host and then Nitro have run every Machine kind
 under it with no denial, then `enforce`.
 
-**Part 2, per-Machine identities** (next). Each managed Machine gets a
-system user and group; its domain carries a static DAC label with that
-identity; its disk, seed and NVRAM become `0600` files of that user; sealed
-bases are read through a group that grants nothing else; a Looking Glass
-Machine gets its own SPICE socket directory, readable by the operator
-through an ACL and by no other Machine, and `kvmfr` access through a group
-only VFIO Machines join. Existing Machines move when shut off, through the
-guest role's reconcile path. It ships behind a switch that stays off until
-the lab host has proved it.
+**Part 2a, per-Machine identities for permanent Machines**
+(`hyperlab_qemu_identity_mode: per-machine`, off by default;
+`tests/qemu_identity_contract.py`). The guest plan derives each Machine's
+identity from its name (`hlq-<name>`, or a prefix and a digest for long
+names). The create operation makes it, before any file it will own, as a
+system user and group with no home, shell or password, and refuses one that
+was made for another purpose. The domain carries it as a static DAC label;
+the disk (`0600`) and the seed (`0400`) are its files and are not relabelled
+by libvirt; NVRAM is relabelled by libvirt to it at start. The store's
+`permanent`, `cloud-init` and `nvram` directories give traverse without
+listing. A Looking Glass Machine's SPICE socket sits in its own directory,
+made at start by a libvirt hook from the domain's own label, owned by the
+identity, with an ACL for the operator; the SPICE root is no Machine's to
+write, so none can rename another's directory or plant a socket. The kvmfr
+node belongs to a group only VFIO Looking Glass Machines join. The domain
+XML guard refuses a domain whose label drifted.
+
+**Part 2b** (next): sealed bases readable through their own group, so
+disposable Machines (refused in per-machine mode until then) can read their
+backing base; and the move of existing Machines, when shut off, through the
+guest role's reconcile path.
+
+**What the lab host must show before the switch is turned on**: a permanent
+Machine created and started in per-machine mode with its QEMU running as its
+identity; that QEMU unable to open another Machine's disk; NVRAM relabelled
+and restored; a Looking Glass Machine's SPICE socket reachable by the
+operator and by no other identity; the hook removing the directory at stop;
+and how libvirt creates a disposable Machine's transient overlay in
+`disposable/` (owner and mode), which part 2b depends on.

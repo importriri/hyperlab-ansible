@@ -436,8 +436,11 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 - [x] the shared QEMU AppArmor profile (`roles/qemu_apparmor`,
       `tests/qemu_apparmor_contract.py`; compiled by `apparmor_parser`,
       software-verified), starting in complain mode
-- [ ] per-Machine QEMU identities (ADR 0037 part 2), behind a switch until
-      the lab host proves them
+- [x] per-Machine QEMU identities for permanent Machines (ADR 0037 part
+      2a), behind `hyperlab_qemu_identity_mode`, off
+      (`tests/qemu_identity_contract.py`, software-verified)
+- [ ] sealed bases with their own reader group and the move of existing
+      Machines (ADR 0037 part 2b)
 - [ ] both proved in the lab host, then on Nitro, and the profile enforced
 - [x] the kernel side of AppArmor prepared: a VFIO boot entry with AppArmor in
       `lsm=`, not the default (`tests/apparmor_boot_contract.py`,
