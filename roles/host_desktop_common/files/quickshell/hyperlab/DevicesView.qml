@@ -93,7 +93,15 @@ Item {
             return "A device that presents a keyboard or mouse is allowed only from a terminal";
         if (!device.interfaces.length)
             return "What it presents could not be read; allow it from a terminal";
+        if (!view.machineActions.validUsbIdentity(view.identityOf(device)))
+            return "Its vendor or product id could not be read; allow it from a terminal";
         return "";
+    }
+
+    // The vendor:product the operator sees here travels with the allow, so
+    // a different device plugged into the same port meanwhile is refused.
+    function identityOf(device) {
+        return String(device.vendor_id) + ":" + String(device.product_id);
     }
 
     function actionsFor(device) {
@@ -269,7 +277,9 @@ Item {
                                     onActivated: {
                                         view.machineActions.allowUsb(
                                             card.modelData.port,
-                                            control.modelData.scope
+                                            control.modelData.scope,
+                                            card.modelData.vendor_id + ":"
+                                                + card.modelData.product_id
                                         );
                                     }
                                 }

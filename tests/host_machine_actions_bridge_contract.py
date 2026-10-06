@@ -448,36 +448,45 @@ def usb_cases(bridge) -> None:
     check(ports == ["1-2", "1-3.4", "1-6", "1-7", "1-5"],
           "blocked devices are not listed first, or a bad port was listed: %r" % ports)
 
-    def attempt(port, scope):
+    def attempt(port, scope, identity):
         calls.clear()
         launched.clear()
         try:
-            bridge.usb_allow(port, scope)
+            bridge.usb_allow(port, scope, identity)
         except bridge.Refused as exc:
             return "refused: " + str(exc)
         return "launched"
 
     for scope in ("once", "permanent"):
-        check(attempt("1-2", scope) == "launched"
-              and launched == [("usb.allow", "usb:1-2:%s" % scope)],
-              "a blocked storage device was not handed to the runner: %r" % launched)
+        check(attempt("1-2", scope, "0781:5581") == "launched"
+              and launched == [("usb.allow", "usb:1-2:%s:0781:5581" % scope)],
+              "a blocked storage device was not handed to the runner with its id: %r" % launched)
         check(calls == [("usb", "list")], "the device list was not read again before allowing")
     refusals = {
-        ("1-3.4", "once"): "keyboard or mouse is allowed only from a terminal",
-        ("1-5", "once"): "not blocked",
-        ("1-6", "once"): "could not be read",
-        ("1-7", "once"): "keyboard or mouse",
-        ("1-9", "once"): "no USB device",
-        ("../1-8", "once"): "invalid USB port",
-        ("usb1", "once"): "invalid USB port",
-        ("1-2\n", "once"): "invalid USB port",
-        ("1-2", "always"): "once or permanent",
-        ("1-2", "Once"): "once or permanent",
+        ("1-3.4", "once", "1234:abcd"): "keyboard or mouse is allowed only from a terminal",
+        ("1-5", "once", "0408:a061"): "not blocked",
+        ("1-6", "once", "dead:beef"): "could not be read",
+        ("1-7", "once", "dead:0001"): "keyboard or mouse",
+        ("1-9", "once", "0781:5581"): "no USB device",
+        ("../1-8", "once", "dead:0002"): "invalid USB port",
+        ("usb1", "once", "0781:5581"): "invalid USB port",
+        ("1-2\n", "once", "0781:5581"): "invalid USB port",
+        ("1-2", "always", "0781:5581"): "once or permanent",
+        ("1-2", "Once", "0781:5581"): "once or permanent",
+        # The allow is bound to the device the operator saw: another device
+        # now at that port, even a blocked storage one, is refused.
+        ("1-2", "once", "1234:abcd"): "no longer the one shown",
+        ("1-2", "permanent", "0781:5582"): "no longer the one shown",
+        ("1-2", "once", ""): "invalid USB device id",
+        ("1-2", "once", "0781:558A"): "invalid USB device id",
+        ("1-2", "once", "0781-5581"): "invalid USB device id",
+        ("1-2", "once", "0781:5581\n"): "invalid USB device id",
     }
-    for (port, scope), reason in refusals.items():
-        result = attempt(port, scope)
+    for (port, scope, identity), reason in refusals.items():
+        result = attempt(port, scope, identity)
         check(result.startswith("refused") and reason in result and not launched,
-              "usb-allow %r %r: expected refusal mentioning %r, got %r" % (port, scope, reason, result))
+              "usb-allow %r %r %r: expected refusal mentioning %r, got %r"
+              % (port, scope, identity, reason, result))
     check(not any(call != ("usb", "list") for call in calls), "a refusal called something else")
 
 

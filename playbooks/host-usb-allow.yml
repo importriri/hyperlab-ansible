@@ -2,7 +2,10 @@
 # Allow one blocked USB device (ADR 0038), once or permanently. The shell's
 # USB devices view reaches this through the operation runner:
 #   ansible-playbook playbooks/host-usb-allow.yml -K \
-#     -e host_usb_allow_port=1-2 -e host_usb_allow_scope=once
+#     -e host_usb_allow_port=1-2 -e host_usb_allow_scope=once \
+#     -e host_usb_allow_device=0781:5581
+# The device id binds the allow to the device shown at that port; a
+# different device plugged in there meanwhile is refused.
 # A device that presents a keyboard or mouse is refused; allow it from a
 # terminal with `sudo usbguard allow-device <id>` after checking it.
 - name: Allow one blocked USB device

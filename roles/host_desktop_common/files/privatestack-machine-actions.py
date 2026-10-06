@@ -25,8 +25,9 @@ product Machines, and start, shutdown and console reach them as any domain:
 A blocked USB device crosses it as two more (ADR 0038); a device is never a
 Machine, and only one that presents no keyboard or mouse is allowed here:
 
-  usb                    the host's USB devices, blocked ones first
-  usb-allow PORT SCOPE   allow one blocked device once or permanently
+  usb                           the host's USB devices, blocked ones first
+  usb-allow PORT SCOPE DEVICE   allow the blocked device DEVICE (vendor:product)
+                                at PORT, once or permanently
 
 Creation crosses it as two more questions (ADR 0017):
 
@@ -528,6 +529,7 @@ def seal(name: str) -> None:
 
 USB_PORT = re.compile(r"^[0-9]+-[0-9]+(\.[0-9]+)*$")
 USB_SCOPES = ("once", "permanent")
+USB_DEVICE = re.compile(r"^[0-9a-f]{4}:[0-9a-f]{4}$")
 
 
 def usb_devices() -> list[dict[str, Any]]:
@@ -546,16 +548,25 @@ def usb() -> dict[str, Any]:
     return {"phase": "usb", "devices": usb_devices()}
 
 
-def usb_allow(port: str, scope: str) -> None:
-    """Hand one blocked device that is not a keyboard or mouse to the runner."""
+def usb_allow(port: str, scope: str, identity: str) -> None:
+    """Hand one blocked device that is not a keyboard or mouse to the runner.
+
+    The allow is bound to the device the operator saw (vendor:product), not
+    to the port alone: another device plugged into that port meanwhile is
+    refused here, and again by the playbook.
+    """
     if len(port) > 32 or not USB_PORT.fullmatch(port):
         raise Refused("invalid USB port")
     if scope not in USB_SCOPES:
         raise Refused("the scope must be once or permanent")
+    if not USB_DEVICE.fullmatch(identity):
+        raise Refused("invalid USB device id")
     matches = [row for row in usb_devices() if row["port"] == port]
     if len(matches) != 1:
         raise Refused("no USB device is attached at that port")
     device = matches[0]
+    if f"{device.get('vendor_id')}:{device.get('product_id')}" != identity:
+        raise Refused("the device at that port is no longer the one shown")
     if device.get("authorized") != 0:
         raise Refused("the device is not blocked")
     if device.get("hid") is not False:
@@ -565,7 +576,7 @@ def usb_allow(port: str, scope: str) -> None:
         # means they could not be read, which is never taken as harmless.
         raise Refused("what the device presents could not be read; allow it from a terminal")
     # The runner resolves the playbook itself; the playbook checks it again as root.
-    privileged("usb.allow", f"usb:{port}:{scope}")
+    privileged("usb.allow", f"usb:{port}:{scope}:{identity}")
 
 
 def checkout() -> str:
@@ -606,8 +617,8 @@ def main() -> int:
     if sys.argv[1:] == ["usb"]:
         emit(usb())
         return 0
-    if len(sys.argv) == 4 and sys.argv[1] == "usb-allow":
-        usb_allow(sys.argv[2], sys.argv[3])
+    if len(sys.argv) == 5 and sys.argv[1] == "usb-allow":
+        usb_allow(sys.argv[2], sys.argv[3], sys.argv[4])
         return 127
     if sys.argv[1:] == ["create-plan"]:
         emit({"phase": "create-plan", "plan": create_plan()})

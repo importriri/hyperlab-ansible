@@ -261,5 +261,8 @@ proof.
   host tool asked virsh's vol-list for a --name option it does not have.
 - [`hl-lab-virtio-video-model.md`](hl-lab-virtio-video-model.md): the lab host
   asked for a virtio display device Nitro's QEMU does not ship.
+- [`usb-allow-bound-to-port-only.md`](usb-allow-bound-to-port-only.md): the
+  shell's USB allow named only a port, so another device plugged in there
+  before the root run would have been allowed.
 
 Author: [importriri](https://github.com/importriri).

@@ -53,12 +53,16 @@ once** and **Allow always** are offered for a blocked device that presents
 no keyboard or mouse (interface class 03); input-class devices, and devices
 whose interfaces cannot be read, are allowed only from a terminal. The
 machine bridge reads the list again and refuses the same cases, then hands
-`usb:PORT:SCOPE` to the operation runner, which resolves the registry action
-`usb.allow` to `playbooks/host-usb-allow.yml -K` with that port and scope and
-pins the target in its record. As root, the playbook checks once more that
-sysfs reports the device blocked with no keyboard or mouse interface, that
-USBGuard lists exactly one device at that `via-port`, blocked, whose
-`with-interface` has no class 03, and only then runs
+`usb:PORT:SCOPE:VVVV:PPPP` to the operation runner, which resolves the
+registry action `usb.allow` to `playbooks/host-usb-allow.yml -K` with that
+port, scope and device and pins the target in its record. The allow is bound
+to the vendor:product id the operator saw, not to the port alone: the bridge
+and the playbook each refuse it when the device now at that port has another
+id ([problem](../../problems/usb-allow-bound-to-port-only.md)). As root, the
+playbook checks once more that sysfs reports the device blocked with no
+keyboard or mouse interface, that USBGuard lists exactly one device at that
+`via-port`, blocked, whose `with-interface` has no class 03 and whose `id` is
+the one shown, and only then runs
 `usbguard allow-device <id>` (`-p` for always, which appends a rule to the
 policy); it reads `authorized` back from sysfs before it reports
 (`tests/host_usbguard_contract.py`, `tests/host_machine_actions_bridge_contract.py`,

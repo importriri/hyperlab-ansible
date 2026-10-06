@@ -1,10 +1,12 @@
 ---
 # Allow one blocked USB device (ADR 0038), once or permanently. The shell
-# names the device by its kernel port path; everything else is read again
-# here, as root, from sysfs and from USBGuard itself. Every refusal comes
-# before the one allow-device call, and the result is read back from sysfs.
+# names the device by its kernel port path and the vendor:product id the
+# operator saw there; everything else is read again here, as root, from
+# sysfs and from USBGuard itself, and a different device now at that port is
+# refused. Every refusal comes before the one allow-device call, and the
+# result is read back from sysfs.
 
-- name: Refuse a malformed port or scope
+- name: Refuse a malformed port, scope or device
   ansible.builtin.assert:
     that:
       - host_usb_allow_port is defined
@@ -13,9 +15,13 @@
       - host_usb_allow_port is match('^[0-9]+-[0-9]+([.][0-9]+)*$')
       - host_usb_allow_scope is defined
       - host_usb_allow_scope in ['once', 'permanent']
+      - host_usb_allow_device is defined
+      - host_usb_allow_device is string
+      - host_usb_allow_device is match('^[0-9a-f]{4}:[0-9a-f]{4}$')
     fail_msg: >-
-      host_usb_allow_port must be a USB port path such as 1-2 or 1-3.4 and
-      host_usb_allow_scope must be once or permanent.
+      host_usb_allow_port must be a USB port path such as 1-2 or 1-3.4,
+      host_usb_allow_scope must be once or permanent, and host_usb_allow_device
+      must be the vendor:product id shown for the device, such as 0781:5581.
 
 - name: Read whether the kernel has authorized the device at that port
   ansible.builtin.slurp:
@@ -84,6 +90,24 @@
     host_usbguard_allow_interfaces: >-
       {{ (host_usbguard_allow_matches[0] | default(''))
          | regex_search('with-interface ([{][^}]*[}]|[^ ]+)') | default('', true) }}
+
+# The port alone does not name a device: between the operator's click and
+# this run another device can be plugged into it. Only the device shown is
+# allowed.
+- name: Refuse a device that is no longer the one shown
+  ansible.builtin.assert:
+    that:
+      - host_usbguard_allow_line is search(' id ' ~ host_usb_allow_device ~ ' ')
+    fail_msg: >-
+      The device at {{ host_usb_allow_port }} is no longer the one shown:
+      expected id {{ host_usb_allow_device }}, found
+      {{ host_usbguard_allow_line | regex_search(' id [^ ]+ ') | default(' no id ', true) | trim }}.
+      Nothing was allowed.
+  vars:
+    host_usbguard_allow_line: >-
+      {{ host_usbguard_allow_devices.stdout_lines
+         | select('search', 'via-port "' ~ (host_usb_allow_port | regex_escape) ~ '"( |$)')
+         | first }}
 
 - name: Allow the device {{ 'permanently' if host_usb_allow_scope == 'permanent' else 'for this insertion' }}
   ansible.builtin.command:

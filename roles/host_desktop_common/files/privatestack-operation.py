@@ -36,8 +36,11 @@ ACTIONS = {"vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
            "machine.provision": "provision", "workbench.seal": "seal",
            "usb.allow": "usb-allow"}
 # Allowing a blocked USB device (ADR 0038) acts on no Machine. Its record's
-# machine field names the device instead: usb:<kernel port path>:<scope>.
-USB_TARGET = re.compile(r"usb:([0-9]+-[0-9]+(?:\.[0-9]+)*):(once|permanent)")
+# machine field names the device instead:
+# usb:<kernel port path>:<scope>:<vendor id>:<product id>. The ids bind the
+# allow to the device the operator saw; the playbook refuses any other.
+USB_TARGET = re.compile(
+    r"usb:([0-9]+-[0-9]+(?:\.[0-9]+)*):(once|permanent):([0-9a-f]{4}:[0-9a-f]{4})")
 # Provisioning is the one action that is not a single playbook: the reviewed
 # provisioner runs the documented steps, each -K playbook asking in the PTY.
 PROVISION = "/usr/local/bin/privatestack-machine-provision"
@@ -209,7 +212,7 @@ def usb_target(target):
     match = (USB_TARGET.fullmatch(target)
              if isinstance(target, str) and len(target) <= 64 else None)
     require(match is not None, "invalid-usb-target")
-    return match.group(1), match.group(2)
+    return match.group(1), match.group(2), match.group(3)
 
 
 def holder(action, machine):
@@ -229,11 +232,12 @@ def resolve(action, machine, repo):
     require(action in ACTIONS, "unsupported-action")
     require(repo == checkout(), "checkout-changed")
     if action == "usb.allow":
-        # The target is parsed here and only its two validated parts reach
-        # the resolver; the playbook checks the device again as root.
-        port, scope = usb_target(machine)
+        # The target is parsed here and only its validated parts reach the
+        # resolver; the playbook checks the device again as root.
+        port, scope, device = usb_target(machine)
         argv = reviewed(cli(repo, "actions", "--resolve", action,
-                            "--usb-port", port, "--usb-scope", scope))
+                            "--usb-port", port, "--usb-scope", scope,
+                            "--usb-device", device))
         require(argv[0] == "ansible-playbook" and "-K" in argv, "invalid-reviewed-command")
         argv[0] = "/usr/bin/ansible-playbook"
         info = repo.stat()

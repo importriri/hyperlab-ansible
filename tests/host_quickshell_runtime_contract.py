@@ -517,7 +517,7 @@ Window {
 
         // USB transport (ADR 0038). The answer is what the real
         // MachineActions.applyUsb accepted; null is a bridge that could not
-        // answer. Allows are recorded only, as "PORT SCOPE".
+        // answer. Allows are recorded only, as "PORT SCOPE DEVICE".
         property var usbAnswer: null
         property var usbDevices: []
         property string usbState: "unknown"
@@ -538,8 +538,13 @@ Window {
             return true;
         }
         function usbBusy(port) { return busy; }
-        function allowUsb(port, scope) {
-            usbAllowed = usbAllowed.concat([String(port) + " " + String(scope)]);
+        // Mirrors MachineActions.validUsbIdentity.
+        function validUsbIdentity(device) {
+            return typeof device === "string" && /^[0-9a-f]{4}:[0-9a-f]{4}$/.test(device);
+        }
+        function allowUsb(port, scope, device) {
+            usbAllowed = usbAllowed.concat(
+                [String(port) + " " + String(scope) + " " + String(device)]);
             return true;
         }
     }
@@ -2258,6 +2263,9 @@ USB_ANSWER = {
         {"port": "1-5", "vendor_id": "0408", "product_id": "a061", "manufacturer": "SunplusIT Inc",
          "product": "HD User Facing", "serial": None, "authorized": 1, "interfaces": ["0e"],
          "hid": False},
+        {"port": "1-6", "vendor_id": "dead", "product_id": None, "manufacturer": None,
+         "product": "No product id", "serial": None, "authorized": 0, "interfaces": ["08"],
+         "hid": False},
     ],
 }
 
@@ -2288,10 +2296,13 @@ USB = """
                   "an allowed device was offered an allow");
             check(sharedState.machineById("1-2") === null,
                   "a USB device appeared among the product Machines");
+            check(!control("once", "1-6").enabled && !control("permanent", "1-6").enabled
+                  && reason("1-6").text.indexOf("vendor or product id could not be read") >= 0,
+                  "a device without a readable id was offered an allow");
             control("once", "1-2").activated();
             check(sharedMachineActions.usbAllowed.length === 1
-                  && sharedMachineActions.usbAllowed[0] === "1-2 once",
-                  "Allow once did not reach the bridge exactly once with its port and scope");
+                  && sharedMachineActions.usbAllowed[0] === "1-2 once 0781:5581",
+                  "Allow once did not reach the bridge exactly once with its port, scope and the shown id");
             check(!control("once", "1-3.4").actionable && !control("permanent", "1-5").actionable,
                   "a disabled allow can still be activated");
 """

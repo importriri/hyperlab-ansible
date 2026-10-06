@@ -239,44 +239,63 @@ BODY = r'''
             check(lifecycle.applyWorkbench(JSON.stringify(Object.assign({}, bench, {candidates: []})), 0, "")
                   && lifecycle.workbenchState === "empty", "an empty Workbench was not empty");
 
-            // Allowing a USB device (ADR 0038) is its own operation: one per
-            // port whatever its scope, its refusal says why, and only a fresh
-            // USB reading showing the port authorized verifies it.
+            // Allowing a USB device (ADR 0038) is its own operation, bound to
+            // the vendor:product the operator saw: one per port whatever its
+            // scope or device, its refusal says why, and only a fresh USB
+            // reading showing that same device authorized verifies it.
             const usbTracker = lifecycle.trackerFixture;
             lifecycle.runnerFixture.running = false;
             lifecycle.pendingVerb = "";
             lifecycle.pendingMachine = "";
             usbTracker.records = [];
             check(usbTracker.snapshot({schema: 1, operations: []}), "the USB fixture snapshot was refused");
-            check(!lifecycle.allowUsb("usb1", "once") && !lifecycle.allowUsb("1-2", "always")
-                  && !lifecycle.allowUsb("1-2/../x", "once") && !lifecycle.allowUsb("1-2\n", "once"),
+            check(!lifecycle.allowUsb("usb1", "once", "0781:5581")
+                  && !lifecycle.allowUsb("1-2", "always", "0781:5581")
+                  && !lifecycle.allowUsb("1-2/../x", "once", "0781:5581")
+                  && !lifecycle.allowUsb("1-2\n", "once", "0781:5581"),
                   "a malformed USB allow was dispatched");
-            check(lifecycle.allowUsb("1-2", "once"), "a valid USB allow was refused");
+            // Without the shown id the allow would be bound to the port only.
+            for (const device of [undefined, null, "", "0781", "0781:558", "0781:558A",
+                                  "0781-5581", "07815581", "0781:5581 ", "dead:null"]) {
+                check(!lifecycle.allowUsb("1-2", "once", device),
+                      "a USB allow without a valid device id was dispatched");
+            }
+            check(lifecycle.allowUsb("1-2", "once", "0781:5581"), "a valid USB allow was refused");
             check(JSON.stringify(lifecycle.runnerFixture.command)
-                  === JSON.stringify([lifecycle.bridge, "usb-allow", "1-2", "once"]),
-                  "the USB allow did not reach the bridge as its port and scope");
-            check(!lifecycle.allowUsb("1-2", "permanent"), "a second allow of the same port was dispatched");
+                  === JSON.stringify([lifecycle.bridge, "usb-allow", "1-2", "once", "0781:5581"]),
+                  "the USB allow did not reach the bridge as its port, scope and device");
+            check(lifecycle.pendingMachine === "usb:1-2:once:0781:5581",
+                  "the USB allow is not tracked by its bound target");
+            check(!lifecycle.allowUsb("1-2", "permanent", "0781:5581")
+                  && !lifecycle.allowUsb("1-2", "once", "1234:abcd"),
+                  "a second allow of the same port was dispatched");
             const nine = "9".repeat(32);
             lifecycle.applyOperationLine(JSON.stringify(
-                payload(nine, "usb:1-2:once", "dispatched", 0, null, "usb.allow")));
+                payload(nine, "usb:1-2:once:0781:5581", "dispatched", 0, null, "usb.allow")));
             lifecycle.runnerFixture.running = false;
             lifecycle.runnerFixture.exited(0, 0);
-            check(lifecycle.usbBusy("1-2") && !lifecycle.usbBusy("1-3"),
+            check(usbTracker.records.some(r => r.id === nine),
+                  "the dispatched USB record was not adopted");
+            check(lifecycle.usbBusy("1-2") && !lifecycle.usbBusy("1-3") && !lifecycle.usbBusy("1-2.1"),
                   "a dispatched USB allow did not hold exactly its own port");
-            check(lifecycle.allowUsb("1-3", "permanent"), "another port was held by the first allow");
+            check(lifecycle.allowUsb("1-3", "permanent", "1234:abcd"),
+                  "another port was held by the first allow");
             lifecycle.applyOperationLine(JSON.stringify({phase: "refused",
-                reason: "a device that presents a keyboard or mouse is allowed only from a terminal"}));
-            check(lifecycle.runnerFixture.failureDetail.indexOf("keyboard or mouse") >= 0,
+                reason: "the device at that port is no longer the one shown"}));
+            check(lifecycle.runnerFixture.failureDetail.indexOf("no longer the one shown") >= 0,
                   "a USB refusal lost its reason");
             lifecycle.runnerFixture.running = false;
             lifecycle.runnerFixture.exited(2, 0);
             const usbPhase = () => usbTracker.records.find(r => r.id === nine).phase;
-            usbTracker.apply(payload(nine, "usb:1-2:once", "succeeded", 2, 0, "usb.allow"), nine);
+            usbTracker.apply(payload(nine, "usb:1-2:once:0781:5581", "succeeded", 2, 0, "usb.allow"), nine);
             check(usbPhase() === "verifying", "a USB allow claimed success before a reading");
-            usbTracker.usb = [{port: "1-2", authorized: 0}];
+            usbTracker.usb = [{port: "1-2", vendor_id: "0781", product_id: "5581", authorized: 0}];
             usbTracker.usbObservedAt = (epoch + 3) * 1000;
             check(usbPhase() === "verifying", "a device still blocked verified the allow");
-            usbTracker.usb = [{port: "1-2", authorized: 1}];
+            usbTracker.usb = [{port: "1-2", vendor_id: "1234", product_id: "abcd", authorized: 1}];
+            usbTracker.usbObservedAt = (epoch + 3.5) * 1000;
+            check(usbPhase() === "verifying", "another device allowed at that port verified the allow");
+            usbTracker.usb = [{port: "1-2", vendor_id: "0781", product_id: "5581", authorized: 1}];
             usbTracker.usbObservedAt = (epoch + 4) * 1000;
             check(usbPhase() === "completed" && !lifecycle.usbBusy("1-2"),
                   "a fresh reading of the allowed device did not verify the allow");

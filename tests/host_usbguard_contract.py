@@ -72,10 +72,11 @@ def main() -> int:
 def allow_contract() -> None:
     """Allowing one blocked device from the shell (ADR 0038).
 
-    4. every refusal -- a malformed port or scope, a device that is not
-       blocked, a configured keyboard or mouse interface, anything but exactly
-       one blocked USBGuard device at that port, or one whose interfaces
-       include class 03 -- comes before the single allow-device call;
+    4. every refusal -- a malformed port, scope or device id, a device that
+       is not blocked, a configured keyboard or mouse interface, anything but
+       exactly one blocked USBGuard device at that port, one whose interfaces
+       include class 03, or one that is not the vendor:product the operator
+       saw -- comes before the single allow-device call;
     5. only permanent adds -p, and sysfs is read back afterwards;
     6. it runs from its own playbook, as root, and the registry resolves to it.
     """
@@ -99,17 +100,21 @@ def allow_contract() -> None:
     require(len(allows) == 1, "allow-device must be called exactly once")
     allow = allows[0]
     refusals = [index for index, name in enumerate(names) if name.startswith("Refuse")]
-    require(len(refusals) == 4 and max(refusals) < allow,
+    require(len(refusals) == 5 and max(refusals) < allow,
             "a refusal comes after allow-device, or one is missing")
 
     def that(prefix: str) -> list[str]:
         return next(task for task in tasks if task["name"].startswith(prefix))["ansible.builtin.assert"]["that"]
 
-    shape = that("Refuse a malformed port or scope")
+    shape = that("Refuse a malformed port, scope or device")
     require("host_usb_allow_port is match('^[0-9]+-[0-9]+([.][0-9]+)*$')" in shape
             and "host_usb_allow_scope in ['once', 'permanent']" in shape,
             "the port or scope is not validated")
-    require(names.index("Refuse a malformed port or scope") == 0, "a task runs before the inputs are checked")
+    require("host_usb_allow_device is defined" in shape
+            and "host_usb_allow_device is match('^[0-9a-f]{4}:[0-9a-f]{4}$')" in shape,
+            "the device id is not required and validated")
+    require(names.index("Refuse a malformed port, scope or device") == 0,
+            "a task runs before the inputs are checked")
     require(that("Refuse a device that is not blocked") == [
         "host_usbguard_allow_before.content | b64decode | trim == '0'"], "an allowed device is not refused")
     sysfs_hid = next(task for task in tasks if task["name"].startswith(
@@ -129,6 +134,21 @@ def allow_contract() -> None:
                                   "or mouse is at that port") < allow,
             "the USBGuard device is not checked before it is allowed")
 
+    # The port alone does not name a device: the line USBGuard reports at
+    # that port must carry the id the operator saw, checked after the line is
+    # known to be the only one there and before it is allowed.
+    same = names.index("Refuse a device that is no longer the one shown")
+    require(names.index("Refuse unless exactly one blocked device that is not a keyboard "
+                        "or mouse is at that port") < same < allow,
+            "the device id is not checked between the USBGuard listing and the allow")
+    require(that("Refuse a device that is no longer the one shown") == [
+        "host_usbguard_allow_line is search(' id ' ~ host_usb_allow_device ~ ' ')"],
+            "a different device at the same port can be allowed")
+    require('via-port "' in tasks[same]["vars"]["host_usbguard_allow_line"]
+            and "host_usb_allow_device" in tasks[same]["ansible.builtin.assert"]["fail_msg"]
+            and "id [^ ]+" in tasks[same]["ansible.builtin.assert"]["fail_msg"],
+            "the id refusal does not read the line at that port or name both ids")
+
     argv = tasks[allow]["ansible.builtin.command"]["argv"]
     require("['-p'] if host_usb_allow_scope == 'permanent' else []" in argv,
             "only a permanent allow may add a rule")
@@ -143,6 +163,7 @@ def allow_contract() -> None:
     from hyperlabctl.registry import by_id
     action = by_id("usb.allow")
     require(action["command"][:3] == ["ansible-playbook", "playbooks/host-usb-allow.yml", "-K"]
+            and "host_usb_allow_device={usb_device}" in action["command"]
             and action["privileged"] is True,
             "the registry does not resolve usb.allow to this playbook")
 

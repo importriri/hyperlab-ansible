@@ -357,7 +357,8 @@ ACTIONS = [
         "label": "Allow one blocked USB device, once or always",
         "command": ["ansible-playbook", "playbooks/host-usb-allow.yml", "-K",
                     "-e", "host_usb_allow_port={usb_port}",
-                    "-e", "host_usb_allow_scope={usb_scope}"],
+                    "-e", "host_usb_allow_scope={usb_scope}",
+                    "-e", "host_usb_allow_device={usb_device}"],
         "privileged": True,
         "destructive": False,
         "target": "usb",
@@ -467,6 +468,9 @@ def _repo_target(value, kind, repo_root):
 # same name /sys/bus/usb/devices and USBGuard's via-port use (ADR 0038).
 USB_PORT_RE = re.compile(r"^[0-9]+-[0-9]+(\.[0-9]+)*$")
 USB_SCOPES = ("once", "permanent")
+# The device the operator saw at that port, as vendor:product. The allow is
+# bound to it, so a different device plugged into the same port is refused.
+USB_DEVICE_RE = re.compile(r"^[0-9a-f]{4}:[0-9a-f]{4}$")
 
 
 def _usb_port(value):
@@ -483,8 +487,15 @@ def _usb_scope(value):
     return value
 
 
+def _usb_device(value):
+    value = _safe_scalar(value, "usb device")
+    if not USB_DEVICE_RE.fullmatch(value):
+        raise ContractError("%s is not a vendor:product USB id" % value)
+    return value
+
+
 def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None,
-            usb_port=None, usb_scope=None):
+            usb_port=None, usb_scope=None, usb_device=None):
     """Resolve one action to an argv list, rejecting missing or unsafe targets."""
     action = by_id(action_id)
     if action is None:
@@ -503,6 +514,8 @@ def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None,
         values["usb_port"] = _usb_port(usb_port)
     if "usb_scope" in fields:
         values["usb_scope"] = _usb_scope(usb_scope)
+    if "usb_device" in fields:
+        values["usb_device"] = _usb_device(usb_device)
     if "domain" in fields:
         if domain is None and spec is not None:
             domain = Path(values["spec"]).stem

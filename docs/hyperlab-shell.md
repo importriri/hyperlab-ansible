@@ -292,12 +292,15 @@ only for a blocked device that presents no keyboard or mouse: a disabled
 action says why, and a device that presents one is allowed only from a
 terminal (`sudo usbguard allow-device <id>`), after checking it. The bridge
 reads the device list again and refuses the same cases, then hands
-`usb:PORT:SCOPE` to the operation runner, whose window asks for the password
-and runs `playbooks/host-usb-allow.yml`. As root, that playbook checks sysfs
-and USBGuard again: exactly one blocked device at that port, no keyboard or
-mouse interface, then `usbguard allow-device` (with `-p` for always), then
-reads the kernel's authorization back. The allow is verified only when a
-fresh USB reading shows the port authorized.
+`usb:PORT:SCOPE:VVVV:PPPP` to the operation runner, whose window asks for the
+password and runs `playbooks/host-usb-allow.yml`. The vendor:product id shown
+on the card travels with the allow, so a different device plugged into the
+same port meanwhile is refused by the bridge and again by the playbook. As
+root, that playbook checks sysfs and USBGuard again: exactly one blocked
+device at that port, with that id, no keyboard or mouse interface, then
+`usbguard allow-device` (with `-p` for always), then reads the kernel's
+authorization back. The allow is verified only when a fresh USB reading
+shows that device authorized at that port.
 
 ## Fullscreen frame
 

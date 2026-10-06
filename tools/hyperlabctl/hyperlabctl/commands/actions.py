@@ -24,12 +24,14 @@ class ActionsCommand(Command):
         parser.add_argument("--manifest")
         parser.add_argument("--usb-port", dest="usb_port")
         parser.add_argument("--usb-scope", dest="usb_scope")
+        parser.add_argument("--usb-device", dest="usb_device")
 
     def run(self, args, ctx):
         if args.resolve:
             argv = resolve(args.resolve, repo_root=ctx.config.repo_root,
                            domain=args.domain, spec=args.spec, manifest=args.manifest,
-                           usb_port=args.usb_port, usb_scope=args.usb_scope)
+                           usb_port=args.usb_port, usb_scope=args.usb_scope,
+                           usb_device=args.usb_device)
             print(json.dumps(argv) if args.json else shlex.join(argv))
             return 0
         if args.choices:

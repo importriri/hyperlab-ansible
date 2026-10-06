@@ -185,31 +185,47 @@ def observer_race_contract(op, base):
 
 
 def usb_contract(op, root, repo, base):
-    """Allowing a USB device (ADR 0038) names a device, never a Machine."""
-    for scope, flag in (('once', 'once'), ('permanent', 'permanent')):
-        target = f'usb:1-3.4:{scope}'
+    """Allowing a USB device (ADR 0038) names a device, never a Machine.
+
+    The target carries the vendor:product the operator saw, so the playbook
+    can refuse a different device plugged into the same port meanwhile.
+    """
+    for scope in ('once', 'permanent'):
+        target = f'usb:1-3.4:{scope}:0781:5581'
         argv, _, pinned = op.resolve('usb.allow', target, repo)
         require(argv == ['/usr/bin/ansible-playbook', 'playbooks/host-usb-allow.yml', '-K',
-                         '-e', 'host_usb_allow_port=1-3.4', '-e', f'host_usb_allow_scope={flag}'],
+                         '-e', 'host_usb_allow_port=1-3.4', '-e', f'host_usb_allow_scope={scope}',
+                         '-e', 'host_usb_allow_device=0781:5581'],
                 'the USB allow command is not the reviewed playbook: %r' % argv)
         require(pinned == op.digest(target.encode()), 'the USB target is not pinned')
-    for target in ('usb:usb1:once', 'usb:1-2:always', 'usb:1-2', 'usb:1-2:once:x',
-                   'usb:1-2 :once', 'usb:1-2:once\n', 'usb:-1-2:once', 'usb::once',
-                   'usb:1-\u0662:once', 'one', 'usb:1-2:' + 'x' * 70, '', 'USB:1-2:once'):
+    for target in ('usb:usb1:once:0781:5581', 'usb:1-2:always:0781:5581', 'usb:1-2',
+                   'usb:1-2:once:0781:5581:x', 'usb:1-2 :once:0781:5581',
+                   'usb:1-2:once:0781:5581\n', 'usb:-1-2:once:0781:5581', 'usb::once:0781:5581',
+                   'usb:1-٢:once:0781:5581', 'one', 'usb:1-2:once:' + 'x' * 70, '',
+                   'USB:1-2:once:0781:5581',
+                   # Without the device, or with a malformed one, the allow
+                   # would be bound to the port only.
+                   'usb:1-2:once', 'usb:1-2:permanent', 'usb:1-2:once:0781',
+                   'usb:1-2:once:0781:558', 'usb:1-2:once:0781:558A', 'usb:1-2:once:0781-5581',
+                   'usb:1-2:once:07815581', 'usb:1-2:once::5581', 'usb:1-2:once:0781:5581 '):
         refused(lambda target=target: op.resolve('usb.allow', target, repo))
         refused(lambda target=target: op.launch('usb.allow', target))
     # A machine action never accepts a USB target, nor the reverse.
-    refused(lambda: op.resolve('vm.managed-start', 'usb:1-2:once', repo))
+    refused(lambda: op.resolve('vm.managed-start', 'usb:1-2:once:0781:5581', repo))
     refused(lambda: op.resolve('usb.allow', 'two', repo))
 
-    record = op.launch('usb.allow', 'usb:1-2:once')
+    record = op.launch('usb.allow', 'usb:1-2:once:0781:5581')
     require(record['phase'] == 'dispatched' and record['action_id'] == 'usb.allow'
-            and record['machine'] == 'usb:1-2:once', 'USB allow not launched as a durable operation')
-    require(record['spec_digest'] == op.digest(b'usb:1-2:once'), 'USB record does not pin its target')
-    # One allow per port at a time, whatever its scope; another port is free.
-    require(op.launch('usb.allow', 'usb:1-2:permanent')['reason'] == 'operation-in-progress',
-            'a second allow of the same port was not refused')
-    other = op.launch('usb.allow', 'usb:1-2.1:once')
+            and record['machine'] == 'usb:1-2:once:0781:5581',
+            'USB allow not launched as a durable operation')
+    require(record['spec_digest'] == op.digest(b'usb:1-2:once:0781:5581'),
+            'USB record does not pin its target')
+    # One allow per port at a time, whatever its scope or device; another
+    # port is free.
+    for busy in ('usb:1-2:permanent:0781:5581', 'usb:1-2:once:1234:abcd'):
+        require(op.launch('usb.allow', busy)['reason'] == 'operation-in-progress',
+                'a second allow of the same port was not refused: %s' % busy)
+    other = op.launch('usb.allow', 'usb:1-2.1:once:1234:abcd')
     require(other['phase'] == 'dispatched', 'another port was held by the first allow')
     executed = []
 
@@ -226,16 +242,20 @@ def usb_contract(op, root, repo, base):
     with patch.object(op.subprocess, 'Popen', Child):
         require(op.run(record['operation_id']) == 0, 'USB allow run failed')
     require(executed == [['/usr/bin/ansible-playbook', 'playbooks/host-usb-allow.yml', '-K',
-                          '-e', 'host_usb_allow_port=1-2', '-e', 'host_usb_allow_scope=once']],
+                          '-e', 'host_usb_allow_port=1-2', '-e', 'host_usb_allow_scope=once',
+                          '-e', 'host_usb_allow_device=0781:5581']],
             'the runner did not execute the reviewed USB command: %r' % executed)
-    # A record whose target was changed after launch never runs.
-    tampered = op.read(root, other['operation_id'])
-    tampered['machine'] = 'usb:1-2.1:permanent'
-    op.write(root, tampered)
-    with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('retargeted allow ran')):
-        op.run(other['operation_id'])
-    require(op.read(root, other['operation_id'])['phase'] == 'failed',
-            'a retargeted USB allow was executed')
+    # A record whose target was changed after launch never runs, whether its
+    # scope or its device was changed.
+    for retarget in ('usb:1-2.1:permanent:1234:abcd', 'usb:1-2.1:once:0781:5581'):
+        tampered = op.read(root, other['operation_id'])
+        tampered.update(machine=retarget, phase='dispatched', reason='execution-dispatched',
+                        rc=None)
+        op.write(root, tampered)
+        with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('retargeted allow ran')):
+            op.run(other['operation_id'])
+        require(op.read(root, other['operation_id'])['phase'] == 'failed',
+                'a retargeted USB allow was executed: %s' % retarget)
     for item in (record, other):
         (base / item['unit']).unlink()
 
@@ -272,10 +292,12 @@ def main():
                 return [{'path': path, 'spec': {'name': name}} for name, path in specs.items()]
             require(args[:2] == ('actions', '--resolve'), 'unreviewed lookup')
             if args[2] == 'usb.allow':
-                require(len(args) == 7 and args[3] == '--usb-port' and args[5] == '--usb-scope',
-                        'a USB allow was resolved with something other than its port and scope')
+                require(len(args) == 9 and args[3] == '--usb-port' and args[5] == '--usb-scope'
+                        and args[7] == '--usb-device',
+                        'a USB allow was resolved with something other than its port, '
+                        'scope and device')
                 return registry_resolve(args[2], repo_root=repo, usb_port=args[4],
-                                        usb_scope=args[6])
+                                        usb_scope=args[6], usb_device=args[8])
             return registry_resolve(args[2], repo_root=repo, spec=args[4], domain=args[6])
 
         def fake_call(argv, **kwargs):

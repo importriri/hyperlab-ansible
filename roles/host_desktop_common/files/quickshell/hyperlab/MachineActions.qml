@@ -819,7 +819,8 @@ Scope {
     // presentation only: the bridge reads it again before an allow and
     // refuses a device that is not blocked or presents a keyboard or mouse,
     // and the playbook checks the device once more as root. An allow is a
-    // durable operation whose record names the device as usb:PORT:SCOPE; the
+    // durable operation whose record names the device as
+    // usb:PORT:SCOPE:VVVV:PPPP, bound to the vendor:product shown; the
     // tracker verifies it only against a fresh reading of the list.
     readonly property var usbScopes: ["once", "permanent"]
     property var usbDevices: []
@@ -880,30 +881,48 @@ Scope {
         return true;
     }
 
-    function usbTarget(port, scope) {
-        return "usb:" + String(port) + ":" + String(scope);
+    // The device the operator saw, as vendor:product. An allow is bound to
+    // it, so a different device plugged into the same port is refused.
+    function validUsbIdentity(device) {
+        return typeof device === "string" && /^[0-9a-f]{4}:[0-9a-f]{4}$/.test(device);
     }
 
-    // Any operation still open on this port, whatever its scope.
+    function usbTarget(port, scope, device) {
+        return "usb:" + String(port) + ":" + String(scope) + ":" + String(device);
+    }
+
+    // The port a usb:PORT:SCOPE:VVVV:PPPP target names, or "".
+    function usbPort(target) {
+        const parts = String(target).split(":");
+        return parts.length === 5 && parts[0] === "usb" ? parts[1] : "";
+    }
+
+    // Any operation still open on this port, whatever its scope or device.
+    // Until the operation records are known, every port is busy.
     function usbBusy(port) {
-        return machineActions.usbScopes.some(
-            scope => machineActions.busyFor(machineActions.usbTarget(port, scope)));
+        const name = String(port);
+        return !operationState.known
+            || machineActions.usbPort(machineActions.pendingMachine) === name
+            || operationState.records.some(r => r.verb === "usb-allow"
+                && !operationState.terminal(r.phase)
+                && machineActions.usbPort(r.machine) === name);
     }
 
-    function allowUsb(port, scope) {
+    function allowUsb(port, scope, device) {
         const name = String(port);
         const how = String(scope);
 
         if (
             !machineActions.validUsbPort(name)
             || machineActions.usbScopes.indexOf(how) < 0
+            || !machineActions.validUsbIdentity(device)
             || operationRunner.running
             || machineActions.usbBusy(name)
         )
             return false;
 
-        return machineActions.dispatch("usb-allow", machineActions.usbTarget(name, how),
-            [machineActions.bridge, "usb-allow", name, how]);
+        return machineActions.dispatch("usb-allow", machineActions.usbTarget(name, how, device),
+            [machineActions.bridge, "usb-allow", name, how, device]);
     }
 
     Process {

@@ -248,29 +248,50 @@ def test_usb_allow_is_a_privileged_reviewed_playbook():
     equals("usb_allow_requires", action["requires"], "playbooks/host-usb-allow.yml")
 
 
-def test_usb_allow_resolves_port_and_scope():
+def test_usb_allow_resolves_port_scope_and_device():
     repo = _usb_repo().config.repo_root
     for scope in ("once", "permanent"):
         equals("usb_allow_resolves_%s" % scope,
-               registry.resolve("usb.allow", repo_root=repo, usb_port="1-3.4", usb_scope=scope),
+               registry.resolve("usb.allow", repo_root=repo, usb_port="1-3.4", usb_scope=scope,
+                                usb_device="0781:5581"),
                ["ansible-playbook", "playbooks/host-usb-allow.yml", "-K",
-                "-e", "host_usb_allow_port=1-3.4", "-e", "host_usb_allow_scope=%s" % scope])
+                "-e", "host_usb_allow_port=1-3.4", "-e", "host_usb_allow_scope=%s" % scope,
+                "-e", "host_usb_allow_device=0781:5581"])
+
+
+def _refused(name, **target):
+    from hyperlabctl.errors import ContractError
+    repo = _usb_repo().config.repo_root
+    try:
+        registry.resolve("usb.allow", repo_root=repo, **target)
+    except ContractError:
+        check(name, True)
+    else:
+        check(name, False)
 
 
 def test_usb_allow_refuses_a_malformed_port_or_scope():
-    from hyperlabctl.errors import ContractError
-    repo = _usb_repo().config.repo_root
     cases = [("usb1", "once"), ("1-2 x", "once"), ("1-2\n", "once"), ("-1-2", "once"),
-             ("1-2.", "once"), ("1", "once"), ("1-٢", "once"), ("1-2", "always"),
+             ("1-2.", "once"), ("1", "once"), ("1-\u0662", "once"), ("1-2", "always"),
              ("1-2", ""), (None, "once"), ("1-2", None),
              ("1-2 host_usb_allow_scope=permanent", "once")]
     for port, scope in cases:
-        try:
-            registry.resolve("usb.allow", repo_root=repo, usb_port=port, usb_scope=scope)
-        except ContractError:
-            check("usb_allow_refuses_%r_%r" % (port, scope), True)
-        else:
-            check("usb_allow_refuses_%r_%r" % (port, scope), False)
+        _refused("usb_allow_refuses_%r_%r" % (port, scope),
+                 usb_port=port, usb_scope=scope, usb_device="0781:5581")
+
+
+def test_usb_allow_refuses_a_missing_or_malformed_device():
+    # Without the device the allow is bound to a port only: whatever is
+    # plugged in there by the time the playbook runs would be allowed.
+    for device in (None, "", "0781", "0781:558", "0781:55811", "0781-5581", "0781:5581 ",
+                   "0781:558G", "0781:5581\n", "0781:5581:1", "07815581",
+                   "0781:5581 host_usb_allow_scope=permanent"):
+        _refused("usb_allow_refuses_device_%r" % device,
+                 usb_port="1-2", usb_scope="once", usb_device=device)
+    # Uppercase is refused, not folded: sysfs and USBGuard print lowercase,
+    # and the id must match what they print exactly.
+    _refused("usb_allow_refuses_uppercase_device", usb_port="1-2", usb_scope="once",
+             usb_device="0781:558A")
 
 
 def test_usb_allow_is_unavailable_without_its_playbook():
@@ -278,7 +299,7 @@ def test_usb_allow_is_unavailable_without_its_playbook():
     ctx = world.build(trust=None)
     try:
         registry.resolve("usb.allow", repo_root=ctx.config.repo_root,
-                         usb_port="1-2", usb_scope="once")
+                         usb_port="1-2", usb_scope="once", usb_device="0781:5581")
     except Unavailable:
         check("usb_allow_needs_playbook", True)
     else:
@@ -294,7 +315,8 @@ def test_actions_resolve_accepts_usb_flags():
     buffer = io.StringIO()
     with redirect_stdout(buffer):
         code = main(["--json", "actions", "--resolve", "usb.allow", "--usb-port", "1-2",
-                     "--usb-scope", "permanent"], ctx=ctx)
+                     "--usb-scope", "permanent", "--usb-device", "0781:5581"], ctx=ctx)
     equals("usb_cli_exit", code, 0)
-    equals("usb_cli_argv", json.loads(buffer.getvalue())[-4:],
-           ["-e", "host_usb_allow_port=1-2", "-e", "host_usb_allow_scope=permanent"])
+    equals("usb_cli_argv", json.loads(buffer.getvalue())[-6:],
+           ["-e", "host_usb_allow_port=1-2", "-e", "host_usb_allow_scope=permanent",
+            "-e", "host_usb_allow_device=0781:5581"])

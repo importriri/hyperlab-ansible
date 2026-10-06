@@ -140,11 +140,14 @@ QtObject {
             // publishes a typed transition proof, execution success is kept
             // explicit and fails closed as unverified presentation state.
             if (record.verb === "usb-allow") {
-                // The record names usb:PORT:SCOPE. Only a USB reading taken
-                // after the allow finished, showing that port authorized,
-                // verifies it.
-                const port = String(record.machine).split(":")[1];
-                const device = tracker.usb.find(d => d.port === port);
+                // The record names usb:PORT:SCOPE:VVVV:PPPP. Only a USB
+                // reading taken after the allow finished, showing that same
+                // device authorized at that port, verifies it.
+                const parts = String(record.machine).split(":");
+                const port = parts.length === 5 ? parts[1] : "";
+                const identity = parts.length === 5 ? parts[3] + ":" + parts[4] : "";
+                const device = tracker.usb.find(d => d.port === port
+                    && d.vendor_id + ":" + d.product_id === identity);
                 if (!newer && device
                     && tracker.usbObservedAt >= record.updated
                     && tracker.usbObservedAt <= record.updated + tracker.settlingMs
