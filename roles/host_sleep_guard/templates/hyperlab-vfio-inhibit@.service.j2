@@ -1,0 +1,9 @@
+# Managed by hyperlab-ansible (roles/host_sleep_guard).
+# Started by the hyperlab-vfio-sleep-guard libvirt hook while %i holds a
+# passed-through PCI device: suspending the host would break the device.
+[Unit]
+Description=Keep the host awake while %i holds a passed-through device
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/systemd-inhibit --what={{ host_sleep_guard_what }} --who=HyperLab --why="%i holds a passed-through PCI device; suspending would break it" --mode=block /usr/bin/sleep infinity

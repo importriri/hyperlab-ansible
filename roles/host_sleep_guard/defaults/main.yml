@@ -1,0 +1,6 @@
+---
+# What a running VFIO Machine keeps the host from doing (systemd-inhibit).
+# handle-lid-switch is named because logind ignores sleep inhibitors for the
+# lid by default (LidSwitchIgnoreInhibited=yes).
+host_sleep_guard_what: sleep:idle:handle-suspend-key:handle-hibernate-key:handle-lid-switch
+host_sleep_guard_hook: /etc/libvirt/hooks/qemu.d/60-hyperlab-vfio-sleep-guard

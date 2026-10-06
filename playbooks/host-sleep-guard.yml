@@ -1,0 +1,10 @@
+---
+# No host suspend while a Machine holds a passed-through PCI device.
+- name: Keep the host awake while a VFIO Machine runs
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_sleep_guard
+    - host_sleep_guard

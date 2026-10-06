@@ -1,0 +1,29 @@
+---
+- name: Load the inhibitor unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+# libvirt reads its hook scripts when it starts. It is restarted only with
+# no domain running; otherwise the change waits and the run says so.
+- name: Read active domains before the sleep guard hook reload
+  listen: Restart libvirt for the sleep guard hook
+  ansible.builtin.command:
+    argv: [virsh, list, --name]
+  register: host_sleep_guard_active
+  changed_when: false
+  check_mode: false
+
+- name: Refuse a libvirt restart while any domain is active
+  listen: Restart libvirt for the sleep guard hook
+  ansible.builtin.assert:
+    that:
+      - host_sleep_guard_active.stdout_lines | reject('equalto', '') | list | length == 0
+    fail_msg: >-
+      Stop every libvirt domain before installing the sleep guard hook. The
+      hook was written, but libvirt was not restarted and it is not active yet.
+
+- name: Restart libvirt for the sleep guard hook
+  listen: Restart libvirt for the sleep guard hook
+  ansible.builtin.systemd_service:
+    name: libvirtd.service
+    state: restarted

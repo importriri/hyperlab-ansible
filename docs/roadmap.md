@@ -404,7 +404,13 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `hyperlabctl looking-glass`, `tools/hyperlabctl/tests/test_looking_glass.py`,
       the runtime contract's stream-health scenario; software-verified)
 - [ ] the same accepted on Nitro with the rebuilt sender
-- [ ] no host suspend while a VFIO Machine holds the GPU
+- [x] no host suspend while a VFIO Machine holds the GPU: a libvirt hook
+      holds a systemd block inhibitor (sleep, idle, suspend and hibernate
+      keys, lid) for each running domain with a PCI hostdev
+      (`roles/host_sleep_guard`, `tests/host_sleep_guard_contract.py`,
+      software-verified)
+- [ ] the same seen on Nitro: Suspend from the shell refused while `dev-01`
+      holds the GPU, accepted after it stops
 - [ ] "collect diagnostics": one archive of a Machine's host and guest logs,
       with sensitive data removed
 

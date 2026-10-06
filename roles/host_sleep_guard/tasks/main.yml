@@ -1,0 +1,36 @@
+---
+- name: Create the libvirt hook directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/libvirt/hooks
+    - /etc/libvirt/hooks/qemu.d
+
+- name: Install the inhibitor unit a VFIO Machine holds while it runs
+  ansible.builtin.template:
+    src: hyperlab-vfio-inhibit@.service.j2
+    dest: /etc/systemd/system/hyperlab-vfio-inhibit@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Load the inhibitor unit
+
+- name: Install the hook that starts and stops it
+  ansible.builtin.copy:
+    src: hyperlab-vfio-sleep-guard.py
+    dest: "{{ host_sleep_guard_hook }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart libvirt for the sleep guard hook
+
+- name: Record that the host_sleep_guard brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_sleep_guard
