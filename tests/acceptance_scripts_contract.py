@@ -15,7 +15,10 @@
      check helper records PASS and FAIL into a private evidence tree;
   5. no script or lib.sh runs `hostname`, which Arch does not install
      (inetutils), and the report names the host it ran on
-     (problems/acceptance-report-without-host.md).
+     (problems/acceptance-report-without-host.md);
+  6. a failed playbook leaves in the report, not only in its own log, the
+     name of each failed task and its message, redacted, and the report
+     names the full log (problems/acceptance-check-log-only-recap.md).
 """
 
 from __future__ import annotations
@@ -151,11 +154,63 @@ echo "evidence=$EVIDENCE"
             require(secret not in logged, f"the log kept {secret}: {logged}")
 
 
+FAKE_FAILED_PLAYBOOK = r"""#!/bin/sh
+cat <<'OUT'
+PLAY [Apply the host USB device policy] ****************************************
+TASK [host_usbguard : Ask USBGuard for a policy that allows every attached device] ***
+skipping: [localhost]
+TASK [host_usbguard : Refuse a generated policy that would block an attached device] ***
+fatal: [localhost]: FAILED! => {
+    "assertion": "host_usbguard_allows | length > 0",
+    "changed": false,
+    "evaluated_to": false,
+    "msg": "usbguard generate-policy allowed 0 devices but the kernel reports 4; token=abc123"
+}
+PLAY RECAP *********************************************************************
+localhost                  : ok=8    changed=1    unreachable=0    failed=1    skipped=1
+OUT
+exit 2
+"""
+
+
+def check_failed_playbook_report() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        fake = Path(td) / "bin"
+        fake.mkdir()
+        (fake / "ansible-playbook").write_text(FAKE_FAILED_PLAYBOOK)
+        # Passwordless for the test only: become_once must not read a terminal.
+        (fake / "sudo").write_text("#!/bin/sh\nexit 0\n")
+        for tool in fake.iterdir():
+            tool.chmod(0o755)
+        script = f"""
+ACCEPTANCE_GROUP=contract
+source {LIB}
+acceptance_start 2>/dev/null
+check "usbguard check mode" playbook "usbguard check" -i inventory.ini playbooks/host-usbguard.yml --check 2>/dev/null
+acceptance_end 2>/dev/null
+echo "evidence=$EVIDENCE"
+"""
+        env = dict(os.environ, HYPERLAB_EVIDENCE_ROOT=td, PATH=f"{fake}:{os.environ['PATH']}")
+        result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False, env=env)
+        evidence = Path(result.stdout.split("evidence=", 1)[1].strip())
+        report = (evidence / "report.txt").read_text()
+        require("FAIL  usbguard check mode" in report, f"the failed check mode was not a FAIL: {report}")
+        require("FAILED TASK: host_usbguard : Refuse a generated policy that would block an attached device" in report,
+                f"the report does not name the failed task: {report}")
+        require("msg: \"usbguard generate-policy allowed 0 devices but the kernel reports 4" in report,
+                f"the report does not carry the failed task's message: {report}")
+        require("abc123" not in report and "token=[redacted]" in report, f"the message was not redacted: {report}")
+        require(f"full log: {evidence}/usbguard-check.log" in report, f"the report does not name the full log: {report}")
+        check_log = (evidence / "usbguard-check-mode.log").read_text()
+        require("FAILED TASK: host_usbguard : Refuse" in check_log, "the check's own log has only the recap")
+
+
 def main() -> int:
     check_no_hostname_command()
     check_scripts()
     check_library()
     check_library_runs()
+    check_failed_playbook_report()
     print("Acceptance scripts contract: OK")
     return 0
 

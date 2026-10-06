@@ -151,7 +151,7 @@ playbook() {
     shift
     become_once
     log="$EVIDENCE/$(slug "$why").log"
-    report "PLAY  $why: ansible-playbook $*"
+    report "PLAY  $why: ansible-playbook $*  (full log: $log)"
     if (( _nopasswd )); then
         (cd "$ACCEPTANCE_REPO" && ansible-playbook "$@") 2>&1 | redact >"$log"
         rc=${PIPESTATUS[0]}
@@ -167,7 +167,30 @@ playbook() {
         rm -f -- "$fifo"
     fi
     tail -n 3 "$log" | tee -a "$REPORT" >&2
+    if (( rc != 0 )); then
+        failed_tasks "$log" | tee -a "$REPORT" >&2
+    fi
     return "$rc"
+}
+
+# failed_tasks LOG: each failed task's name and message, read from an
+# already redacted ansible-playbook log, so the report says what failed and
+# not only the recap.
+failed_tasks() {
+    awk '
+        /^TASK \[/ { task = $0; sub(/^TASK \[/, "", task); sub(/\] \**$/, "", task); next }
+        /^(fatal|failed): \[/ {
+            print "FAILED TASK: " (task == "" ? "(before any task)" : task)
+            inside = 1; found = 1; next
+        }
+        inside && /"msg":/ {
+            line = $0; sub(/^[[:space:]]*"msg":[[:space:]]*/, "", line); sub(/,$/, "", line)
+            print "  msg: " line
+        }
+        inside && /^}/ { inside = 0 }
+        /^ERROR!|^\[ERROR\]:/ { print "ERROR: " $0; found = 1 }
+        END { if (!found) print "FAILED TASK: none named in the log; read the full log" }
+    ' "$1"
 }
 
 # backup NAME COMMAND...: the command's output, kept before a risky step.

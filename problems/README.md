@@ -280,5 +280,7 @@ proof.
   an unreadable emergency stop record stopped the stop itself.
 - [`problem-index-missing-and-duplicate-entries.md`](problem-index-missing-and-duplicate-entries.md):
   this index missed five notes and listed one twice.
+- [`acceptance-check-log-only-recap.md`](acceptance-check-log-only-recap.md):
+  a failed check mode left only the play recap in the log the report named.
 
 Author: [importriri](https://github.com/importriri).
