@@ -8,13 +8,18 @@ ruleset against this page.
 
 ## Between guests and out
 
-| From \ To | clean | dev | dirty | lab | services | internet |
-|---|---|---|---|---|---|---|
-| clean | same network | no | no | no | no | yes, NAT |
-| dev | no | same network | no | no | no | yes, NAT |
-| dirty | no | no | same network | no | no | yes, NAT |
-| lab | no | no | no | same network | no | **no** |
-| services | no | no | no | no | same network | yes, NAT |
+| From \ To | clean | dev | dirty | lab | services | hl-lab-testbed | internet |
+|---|---|---|---|---|---|---|---|
+| clean | same network | no | no | no | no | no | yes, NAT |
+| dev | no | same network | no | no | no | no | yes, NAT |
+| dirty | no | no | same network | no | no | no | yes, NAT |
+| lab | no | no | no | same network | no | no | **no** |
+| services | no | no | no | no | same network | no | yes, NAT |
+| hl-lab-testbed | no | no | no | no | no | same network | yes, NAT |
+
+`hl-lab-testbed` is not a product network: it is the nested lab host's own
+network ([ADR 0046](adr/0046-nested-lab-host.md)). No Template offers it and
+it has no GPU class; it reaches the internet for packages and nothing else.
 
 Traffic between two domains is dropped in both directions, one rule per
 ordered pair. `lab` has no libvirt forward at all and, at the host, nothing

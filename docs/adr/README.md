@@ -120,6 +120,9 @@ entered the pipeline.
 45. [`0045-looking-glass-stream-health.md`](0045-looking-glass-stream-health.md)
     — proposed: the shell asks the guest's sender whether its stream is
     alive and restarts the capture without restarting the Machine.
+46. [`0046-nested-lab-host.md`](0046-nested-lab-host.md) — proposed: an
+    `hl-lab-host` VM, made by a script without privilege and installed like
+    the host, where host-level changes are tested with root.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

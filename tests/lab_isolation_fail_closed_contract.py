@@ -10,7 +10,9 @@ against it with first-match semantics:
 
   1. from an undeclared virbr* bridge nothing reaches the host, not even
      DHCP, and nothing is routed to another guest bridge;
-  2. declared networks keep exactly their reviewed flows, and the host's own
+  2. the nested lab host's network (ADR 0046) is declared: DHCP and DNS on
+     its own gateway, replies, its NAT route, and nothing else;
+  3. declared networks keep exactly their reviewed flows, and the host's own
      traffic (not a guest bridge) is untouched.
 
 `--template PATH` evaluates another template, to show the reproduction on
@@ -91,10 +93,13 @@ def main() -> int:
     parser.add_argument("--template", type=Path, default=TEMPLATE)
     args = parser.parse_args()
 
-    domains = yaml.safe_load((ROOT / "group_vars/all/networks.yml").read_text())["network_domains"]
+    networks = yaml.safe_load((ROOT / "group_vars/all/networks.yml").read_text())
+    domains = networks["network_domains"]
+    lab_nets = networks["lab_host_networks"]
     lab = next(d for d in domains if d["forward"] == "isolated")["bridge"]
     ruleset = jinja2.Template(args.template.read_text()).render(
-        network_domains=domains, lab_isolation_table="inet lab_isolation", lab_isolation_lab_bridge=lab)
+        network_domains=domains, lab_isolation_guest_networks=domains + lab_nets,
+        lab_isolation_table="inet lab_isolation", lab_isolation_lab_bridge=lab)
     rules_in, rules_fwd = chain(ruleset, "input"), chain(ruleset, "forward")
 
     def host(iif: str, **packet) -> str:
@@ -113,8 +118,27 @@ def main() -> int:
     ):
         require(host(rogue, **packet) == "drop",
                 f"a guest on an undeclared bridge reached the host: {label}")
-    for target in ("virbr-dev", "virbr-services", "virbr-other"):
+    for target in ("virbr-dev", "virbr-services", "virbr-hl-lab", "virbr-other"):
         require(routed(rogue, target) == "drop", f"an undeclared bridge was routed to {target}")
+
+    labnet = "virbr-hl-lab"
+    require([n["bridge"] for n in lab_nets] == [labnet], "the lab host's network is not declared")
+    require(host(labnet, proto="udp", daddr="10.10.9.1", sport=40000, dport=53, ct="new") == "accept",
+            "the lab host cannot resolve names on its own gateway")
+    require(host(labnet, proto="udp", daddr="255.255.255.255", sport=68, dport=67, ct="new") == "accept",
+            "the lab host gets no DHCP")
+    require(host(labnet, proto="tcp", daddr="10.10.9.1", sport=22, dport=50000, ct="established") == "accept",
+            "replies to the host's own SSH into the lab host are dropped")
+    for label, packet in (
+        ("another network's resolver", {"proto": "udp", "daddr": "10.10.3.1", "sport": 40000, "dport": 53, "ct": "new"}),
+        ("LLMNR", {"proto": "udp", "daddr": "10.10.9.1", "sport": 5355, "dport": 5355, "ct": "new"}),
+        ("a host port", {"proto": "tcp", "daddr": "10.10.9.1", "sport": 40000, "dport": 8765, "ct": "new"}),
+    ):
+        require(host(labnet, **packet) == "drop", f"the lab host reached the host: {label}")
+    for domain in domains:
+        require(routed(labnet, domain["bridge"]) == "drop" and routed(domain["bridge"], labnet) == "drop",
+                f"the lab host and {domain['name']} can reach each other")
+    require(routed(labnet, "wlan0") == "accept", "the lab host lost its NAT route to the internet")
 
     require(host("virbr-dev", proto="udp", daddr="10.10.3.1", sport=40000, dport=53, ct="new") == "accept",
             "dev lost DNS on its own gateway")

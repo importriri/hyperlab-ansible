@@ -27,6 +27,18 @@ network_domains:
     gateway: 10.10.5.1
     forward: nat
 
+# The nested lab host's own network (ADR 0046). Not a product network: no
+# Template offers it and it has no GPU class. It is in the flow matrix like
+# any guest network: NAT to the internet for packages, nothing to the other
+# networks, and only DHCP and DNS on its own gateway to the host. The hl-lab-
+# prefix marks every lab resource; tools/lab/hl-lab.sh defines them.
+lab_host_networks:
+  - name: hl-lab-testbed
+    bridge: virbr-hl-lab
+    subnet: 10.10.9.0/24
+    gateway: 10.10.9.1
+    forward: nat
+
 # Domain trust - higher means cleaner. This maps security domains, not VM names.
 gpu_trust_levels:
   clean: 3

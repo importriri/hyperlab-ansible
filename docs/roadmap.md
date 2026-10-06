@@ -385,6 +385,16 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       shell action bridge resolves to root-owned desktop files
       (software-verified; also the shell checklist item below)
 
+### 8a. Test infrastructure
+
+- [x] a nested lab host for host-level tests, made without privilege and
+      touching only `hl-lab-*` resources, with its own network in the flow
+      matrix ([ADR 0046](adr/0046-nested-lab-host.md), proposed;
+      `tools/lab/hl_lab.py`, `tests/hl_lab_contract.py`; software-verified)
+- [ ] the lab host started on Nitro once the guest isolation with the
+      fail-closed catch-all is loaded, installed with `arch-bootstrap`, and
+      the host playbooks applied inside
+
 ### 8b. Reliability
 
 - [x] Looking Glass stream health in the host shell: the guest agent's

@@ -6,3 +6,8 @@ lab_isolation_lab_bridge: "{{ (network_domains | selectattr('forward', 'equalto'
 # The table this brick owns. Written by the template, asked for by the task
 # that checks the kernel - one name, never two literals to keep in sync.
 lab_isolation_table: inet lab_isolation
+
+# Every guest network the host isolates by name: the five domains and the
+# nested lab host's network (ADR 0046). Any other virbr* bridge is dropped by
+# the catch-all rules.
+lab_isolation_guest_networks: "{{ network_domains + lab_host_networks }}"

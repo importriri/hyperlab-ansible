@@ -16,9 +16,9 @@ table {{ lab_isolation_table }} {
         iifname "{{ lab_isolation_lab_bridge }}" counter drop
         oifname "{{ lab_isolation_lab_bridge }}" counter drop
 
-        # default-deny matrix: no cross-bridge traffic between domains
-{% for a in network_domains %}
-{% for b in network_domains %}
+        # default-deny matrix: no cross-bridge traffic between declared networks
+{% for a in lab_isolation_guest_networks %}
+{% for b in lab_isolation_guest_networks %}
 {% if a.name != b.name %}
         iifname "{{ a.bridge }}" oifname "{{ b.bridge }}" counter drop
 {% endif %}
@@ -37,7 +37,7 @@ table {{ lab_isolation_table }} {
     # the host, in IPv4 or IPv6, is dropped.
     chain input {
         type filter hook input priority -10; policy accept;
-{% for d in network_domains %}
+{% for d in lab_isolation_guest_networks %}
 
         iifname "{{ d.bridge }}" ct state established,related accept
         iifname "{{ d.bridge }}" udp sport 68 udp dport 67 accept

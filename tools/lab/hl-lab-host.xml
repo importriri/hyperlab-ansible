@@ -1,0 +1,64 @@
+<!-- The nested lab host of ADR 0046, defined by tools/lab/hl_lab.py. A VM and
+     nothing more: no passed-through, redirected or shared host resource.
+     tools/lab/hl_lab_check.py refuses this definition otherwise. -->
+<domain type="kvm">
+  <name>@@NAME@@</name>
+  <memory unit="MiB">@@MEMORY@@</memory>
+  <currentMemory unit="MiB">@@MEMORY@@</currentMemory>
+  <vcpu placement="static">@@VCPUS@@</vcpu>
+  <!-- Secure Boot firmware with no enrolled keys: setup mode, so sbctl inside
+       can enroll its own. -->
+  <os firmware="efi">
+    <type arch="x86_64" machine="q35">hvm</type>
+    <firmware>
+      <feature enabled="yes" name="secure-boot"/>
+      <feature enabled="no" name="enrolled-keys"/>
+    </firmware>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <smm state="on"/>
+  </features>
+  <!-- host-passthrough exposes VMX, so Machines can run inside. -->
+  <cpu mode="host-passthrough" check="none" migratable="off"/>
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <disk type="volume" device="disk">
+      <driver name="qemu" type="qcow2" discard="unmap"/>
+      <source pool="@@POOL@@" volume="@@DISK@@"/>
+      <target dev="vda" bus="virtio"/>
+      <boot order="1"/>
+    </disk>
+@@INSTALL@@
+    <controller type="usb" model="qemu-xhci"/>
+    <interface type="network">
+      <source network="@@NETWORK@@"/>
+      <model type="virtio"/>
+    </interface>
+    <serial type="pty">
+      <target port="0"/>
+    </serial>
+    <console type="pty">
+      <target type="serial" port="0"/>
+    </console>
+    <input type="tablet" bus="usb"/>
+    <graphics type="spice" autoport="yes" listen="127.0.0.1">
+      <listen type="address" address="127.0.0.1"/>
+      <filetransfer enable="no"/>
+    </graphics>
+    <video>
+      <model type="virtio" heads="1" primary="yes"/>
+    </video>
+    <tpm model="tpm-crb">
+      <backend type="emulator" version="2.0"/>
+    </tpm>
+    <rng model="virtio">
+      <backend model="random">/dev/urandom</backend>
+    </rng>
+    <memballoon model="virtio"/>
+  </devices>
+</domain>
