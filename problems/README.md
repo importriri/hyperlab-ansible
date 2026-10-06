@@ -257,5 +257,7 @@ proof.
 - [`hyperlabctl-deadline-tests-timed-the-host.md`](hyperlabctl-deadline-tests-timed-the-host.md):
   two fullscreen deadline tests failed on a loaded host; they now check the
   outcome, not the wall clock.
+- [`hl-lab-vol-list-name-option.md`](hl-lab-vol-list-name-option.md): the lab
+  host tool asked virsh's vol-list for a --name option it does not have.
 
 Author: [importriri](https://github.com/importriri).

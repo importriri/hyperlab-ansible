@@ -112,6 +112,14 @@ def names(kind: str) -> set[str]:
     return {line.strip() for line in virsh(*listing).stdout.splitlines() if line.strip()}
 
 
+def volumes() -> list[str]:
+    """Volume names of the lab pool. virsh's vol-list has no --name option:
+    it prints a Name/Path table."""
+    lines = virsh("vol-list", POOL).stdout.splitlines()
+    rows = [line.split()[0] for line in lines[2:] if line.strip()]
+    return rows
+
+
 def lab_network() -> dict:
     networks = yaml.safe_load((ROOT / "group_vars/all/networks.yml").read_text())["lab_host_networks"]
     match = [n for n in networks if n["name"] == NETWORK]
@@ -220,12 +228,12 @@ def create(iso: Path | None) -> None:
             virsh("pool-build", POOL)
             virsh("pool-start", POOL)
             virsh("pool-autostart", POOL)
-        volumes = set(virsh("vol-list", POOL, "--name").stdout.split())
-        if DISK not in volumes:
+        present = set(volumes())
+        if DISK not in present:
             virsh("vol-create-as", POOL, DISK, f"{DISK_GIB}G", "--format", "qcow2")
-        if iso is not None and ISO_VOLUME not in volumes:
+        if iso is not None and ISO_VOLUME not in present:
             upload(iso, ISO_VOLUME)
-        if iso is not None and SEED_VOLUME not in volumes:
+        if iso is not None and SEED_VOLUME not in present:
             upload(seed_image(public_key, directory), SEED_VOLUME)
         if DOMAIN not in names("dom"):
             xml = domain_xml(with_iso=iso is not None)
@@ -268,7 +276,7 @@ def destroy() -> None:
             virsh("destroy", DOMAIN)
         virsh("undefine", DOMAIN, "--nvram", "--tpm")
     if POOL in names("pool"):
-        for volume in virsh("vol-list", POOL, "--name").stdout.split():
+        for volume in volumes():
             virsh("vol-delete", lab_name(volume), "--pool", POOL)
         virsh("pool-destroy", POOL, check=False)
         virsh("pool-delete", POOL, check=False)

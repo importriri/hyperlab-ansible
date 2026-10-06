@@ -90,7 +90,15 @@ class FakeLibvirt:
         elif args[0] == "list":
             out = "dev-01\nhl-lab-host\n" if self.defined else "dev-01\n"
         elif args[0] == "vol-list":
-            out = "hl-lab-host.qcow2\nhl-lab-install.iso\n" if self.defined else ""
+            # The installed virsh has no --name for vol-list; it prints a
+            # Name/Path table (problems/hl-lab-vol-list-name-option.md).
+            if "--name" in args:
+                return SimpleNamespace(returncode=1, stdout="",
+                                       stderr="error: command 'vol-list' doesn't support option --name")
+            out = " Name   Path\n--------------\n"
+            if self.defined:
+                out += (" hl-lab-host.qcow2    /var/lib/libvirt/images/hl-lab/hl-lab-host.qcow2\n"
+                        " hl-lab-install.iso   /var/lib/libvirt/images/hl-lab/hl-lab-install.iso\n")
         elif args[0] == "dumpxml":
             out = hl_lab.domain_xml(True)
         return SimpleNamespace(returncode=0, stdout=out, stderr="")
@@ -131,6 +139,10 @@ def check_guard() -> None:
             if action == "create":
                 require(not any(c[0] == "start" or c[0] == "net-start" for c in fake.calls),
                         "create started something")
+            else:
+                deleted = [c[1] for c in fake.calls if c[0] == "vol-delete"]
+                require(deleted == ["hl-lab-host.qcow2", "hl-lab-install.iso"],
+                        f"destroy did not read the volume table: {deleted}")
     finally:
         (hl_lab.virsh, hl_lab.check_host, hl_lab.ensure_key, hl_lab.upload, hl_lab.seed_image) = saved
 
