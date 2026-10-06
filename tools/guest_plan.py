@@ -142,8 +142,14 @@ def build_plan(
 
     network = spec.get("network_profile")
     allowlist = manifest.get("network_allowlist", [])
-    require(isinstance(network, str) and network in allowlist,
+    # ADR 0048: the key vault has no network at all. "none" is not a network
+    # an image may allow; it is reserved for the vault, checked below.
+    require(isinstance(network, str) and (network in allowlist or network == "none"),
             f"network {network!r} is outside image {image_id} allowlist")
+    key_vault = spec.get("key_vault")
+    require(key_vault in (None, "client", "vault"), "spec.key_vault must be client, vault or absent")
+    require((network == "none") == (key_vault == "vault"),
+            "only the key vault, and always the key vault, has network none")
 
     gpu_handoff_profile = spec.get("gpu_handoff_profile")
 
@@ -326,6 +332,17 @@ def build_plan(
                 "standard guests cannot carry a Looking Glass mode")
         lg_required = None
 
+    if key_vault is not None:
+        require(os_family == "linux", "the key vault and its clients are Linux Machines")
+    if key_vault == "vault":
+        # No channel into the vault but its own vsock port: no GPU, no guest
+        # agent, no clipboard; and its keys outlive a stop.
+        require(device_profile == "standard", "the key vault is a standard Machine")
+        require(lifecycle == "permanent", "the key vault is permanent")
+        require(not qemu_guest_agent, "the key vault runs no QEMU Guest Agent")
+        require(not clipboard, "the key vault has no clipboard")
+        require(cloud_init, "the key vault is configured by cloud-init: nothing reaches it later")
+
     owner = spec.get("owner")
     purpose = spec.get("purpose")
     tags = spec.get("tags")
@@ -356,6 +373,7 @@ def build_plan(
         "lifecycle": lifecycle,
         "device_profile": device_profile,
         "network_profile": network,
+        "key_vault": key_vault,
         "gpu_handoff_profile": gpu_handoff_profile,
         "resource_profile": selected_resource_profile,
         "memory_request": memory_request,

@@ -102,11 +102,13 @@
       <readonly/>
     </disk>
 {% endif %}
+{% if guest_plan.network_profile != 'none' %}
     <interface type="network">
       <mac address="{{ guest_plan.mac }}"/>
       <source network="{{ guest_plan.network_profile }}"/>
       <model type="virtio"/>
     </interface>
+{% endif %}
     <serial type="pty">
       <target type="isa-serial" port="0"/>
     </serial>
@@ -158,6 +160,12 @@
         <source type="dir" path="{{ guest_plan.tpm_path }}"/>
       </backend>
     </tpm>
+{% endif %}
+{% if guest_plan.key_vault | default(none) in ['client', 'vault'] %}
+    <!-- ADR 0048: the key vault's only channel; libvirt picks the context id. -->
+    <vsock model="virtio">
+      <cid auto="yes"/>
+    </vsock>
 {% endif %}
     <memballoon model="{{ 'none' if guest_plan.device_profile == 'vfio' else 'virtio' }}"/>
   </devices>

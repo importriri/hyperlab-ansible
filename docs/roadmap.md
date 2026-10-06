@@ -547,8 +547,11 @@ Suricata on bridge mirrors, logs shipped off the host).
       signature, per Machine and key, with a capped time allowance
       ([ADR 0048](adr/0048-key-vault.md), proposed; `roles/host_vault`,
       `tests/vault_relay_contract.py`, software-verified)
-- [ ] the vault Machine (no interface, vsock only), the client forwarder at
-      `SSH_AUTH_SOCK` and the vault listener
+- [x] the vault Machine's domain: `key_vault: vault` plans no interface and
+      one vsock device, `key_vault: client` adds the vsock device, and the
+      domain XML guard refuses either added to a live domain
+      (`tests/key_vault_domain_contract.py`, software-verified)
+- [ ] the client forwarder at `SSH_AUTH_SOCK` and the vault listener
 - [ ] the same seen on Nitro: `ssh -T git@github.com` from `dev-01` asks on
       the host, succeeds when allowed, fails when denied or ignored
 

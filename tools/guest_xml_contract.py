@@ -215,6 +215,7 @@ def signature(path: Path) -> dict[str, Any]:
     seed_source = None if seed is None else seed.find("./source")
     seed_target = None if seed is None else seed.find("./target")
     interface = root.find("./devices/interface")
+    vsock = root.find("./devices/vsock")
     tpm = root.find("./devices/tpm")
     tpm_backend = None if tpm is None else tpm.find("./backend")
     tpm_source = None if tpm_backend is None else tpm_backend.find("./source")
@@ -270,6 +271,12 @@ def signature(path: Path) -> dict[str, Any]:
         "network": None if interface is None else attr(interface, "./source", "network"),
         "mac": None if interface is None else attr(interface, "./mac", "address"),
         "network_model": None if interface is None else attr(interface, "./model", "type"),
+        # The key vault has none; any other Machine exactly one (ADR 0048).
+        "interface_count": len(root.findall("./devices/interface")),
+        # A vsock device is a channel to host listeners: only where planned.
+        # The context id libvirt assigns at start is not compared.
+        "vsock": None if vsock is None else (vsock.get("model"), attr(vsock, "./cid", "auto")),
+        "vsock_count": len(root.findall("./devices/vsock")),
         "qga": qga is not None,
         "tpm_model": None if tpm is None else tpm.get("model"),
         "tpm_backend": None if tpm_backend is None else tpm_backend.get("type"),

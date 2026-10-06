@@ -90,6 +90,8 @@
          if guest_domain_defined else 'undefined' }}
 
 - name: Inspect the selected libvirt network
+  # The key vault has no network to inspect (ADR 0048).
+  when: guest_plan.network_profile != 'none'
   ansible.builtin.command:
     argv:
       - "{{ guest_virsh_bin }}"
@@ -102,10 +104,10 @@
 
 - name: Record selected network state
   ansible.builtin.set_fact:
-    guest_network_defined: "{{ guest_network_info.rc == 0 }}"
+    guest_network_defined: "{{ guest_plan.network_profile == 'none' or guest_network_info.rc == 0 }}"
     guest_network_active: >-
-      {{ guest_network_info.rc == 0 and
-         (guest_network_info.stdout | regex_search('(?m)^Active:\s+yes\s*$')) is not none }}
+      {{ guest_plan.network_profile == 'none' or (guest_network_info.rc == 0 and
+         (guest_network_info.stdout | regex_search('(?m)^Active:\s+yes\s*$')) is not none) }}
 
 - name: Build the required and transient artifact observations
   ansible.builtin.set_fact:

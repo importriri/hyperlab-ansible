@@ -61,8 +61,16 @@ of the graphical session, because the operator answers there; its unit uses
 only restrictions a user unit can apply without a user namespace, which the
 hardened kernel refuses to unprivileged users.
 
-The vault Machine itself (a Template with no interface and a vsock device),
-the client's forwarder at `SSH_AUTH_SOCK` and the vault's listener come
+A VM spec names a Machine's part with `key_vault`: `client` gives it a
+vsock device next to its network; `vault` gives it the vsock device and no
+interface at all, under the reserved network name `none`, which no image
+can allow and only the vault may use. The vault is a permanent, standard,
+Linux Machine configured by cloud-init, without the QEMU Guest Agent or the
+clipboard: nothing reaches it after its first boot but its vsock port. The
+domain XML guard compares the number of interfaces and vsock devices, so a
+vsock device or an interface added to a live domain is drift.
+
+The vault's listener and the client's forwarder at `SSH_AUTH_SOCK` come
 next, on the same contract.
 
 ## What this does not cover
