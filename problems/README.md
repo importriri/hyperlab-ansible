@@ -264,5 +264,11 @@ proof.
 - [`usb-allow-bound-to-port-only.md`](usb-allow-bound-to-port-only.md): the
   shell's USB allow named only a port, so another device plugged in there
   before the root run would have been allowed.
+- [`acceptance-report-without-host.md`](acceptance-report-without-host.md):
+  the acceptance report ran `hostname`, which Arch does not install, and
+  named no host.
+- [`acceptance-report-without-host.md`](acceptance-report-without-host.md):
+  the acceptance report ran `hostname`, which Arch does not install, and
+  named no host.
 
 Author: [importriri](https://github.com/importriri).

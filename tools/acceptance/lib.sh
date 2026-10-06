@@ -37,7 +37,8 @@ acceptance_start() {
     _runtime=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/hyperlab-acceptance.XXXXXX")
     trap acceptance_cleanup EXIT
     trap 'acceptance_cleanup; exit 130' INT TERM
-    report "group $ACCEPTANCE_GROUP on $(hostname) at $(date --iso-8601=seconds)"
+    # The kernel's own name: Arch does not install the hostname command.
+    report "group $ACCEPTANCE_GROUP on $(< /proc/sys/kernel/hostname) at $(date --iso-8601=seconds)"
     report "repository $(git -C "$ACCEPTANCE_REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
     report "evidence $EVIDENCE"
 }

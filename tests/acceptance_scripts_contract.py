@@ -12,7 +12,10 @@
   4. lib.sh never prints the password, never traces, hands it over only on
      stdin with -k or on a fresh 0600 FIFO, and redacts what it logs;
      run for real, its redactor removes keys, passwords and hashes and its
-     check helper records PASS and FAIL into a private evidence tree.
+     check helper records PASS and FAIL into a private evidence tree;
+  5. no script or lib.sh runs `hostname`, which Arch does not install
+     (inetutils), and the report names the host it ran on
+     (problems/acceptance-report-without-host.md).
 """
 
 from __future__ import annotations
@@ -44,6 +47,18 @@ def require(condition: bool, message: str) -> None:
 
 def unquoted(line: str) -> str:
     return re.sub(r'"(?:\\.|[^"\\])*"|\'[^\']*\'', '""', line.split(" #", 1)[0])
+
+
+HOSTNAME_COMMAND = re.compile(r"(\$\(|`|^|[;&|]|\bthen\b|\bdo\b)\s*hostname\b")
+
+
+def check_no_hostname_command() -> None:
+    for path in sorted(DIR.glob("*.sh")):
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            require(HOSTNAME_COMMAND.search(line) is None,
+                    f"{path.name}:{number} runs hostname, which Arch does not install: {line.strip()}")
 
 
 def check_scripts() -> None:
@@ -128,12 +143,16 @@ echo "evidence=$EVIDENCE"
         require("PASS  passes" in report and "FAIL  fails" in report
                 and "1 failed" in report, f"the report does not record PASS and FAIL: {report}")
         require(stat.S_IMODE(evidence.stat().st_mode) == 0o700, "the evidence directory is not private")
+        host = Path("/proc/sys/kernel/hostname").read_text().strip()
+        require(f"group contract on {host} at " in report, f"the report does not name the host: {report}")
+        require("command not found" not in result.stderr, f"lib.sh ran a missing command: {result.stderr}")
         logged = (evidence / "leaks.log").read_text()
         for secret in ("hunter2", "b3BlbnNzaC1rZXk", "hashhashhash", "hunter3"):
             require(secret not in logged, f"the log kept {secret}: {logged}")
 
 
 def main() -> int:
+    check_no_hostname_command()
     check_scripts()
     check_library()
     check_library_runs()
