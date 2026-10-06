@@ -44,6 +44,7 @@ brick_requires:
   guest_looking_glass_linux: [guest_desktop_hyprland]
   dev_ide: [guest_desktop_hyprland]
   guest_vault_client: []
+  guest_safe_documents: []
   looking_glass: [host_desktop_sway, kvm_host]
   host_gaming_mode: [hardware_probe, kvm_host]
   nitro_sense: [base, hardware_probe]
@@ -86,6 +87,7 @@ brick_playbooks:
   guest_looking_glass_linux: playbooks/guest-looking-glass-linux.yml
   dev_ide: playbooks/guest-arch-dev.yml
   guest_vault_client: playbooks/guest-vault-client.yml
+  guest_safe_documents: playbooks/guest-safe-documents.yml
   looking_glass: playbooks/looking-glass.yml
   host_gaming_mode: playbooks/host-gaming-mode.yml
   nitro_sense: playbooks/nitro-sense.yml

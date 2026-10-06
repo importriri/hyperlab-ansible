@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            shellcheck bats nftables lua5.4 \
+            shellcheck bats nftables lua5.4 poppler-utils \
             qmlscene-qt6 \
             qml6-module-qtquick \
             qml6-module-qtquick-window \

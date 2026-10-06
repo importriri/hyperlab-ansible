@@ -132,6 +132,9 @@ entered the pipeline.
 50. [`0050-hardware-readiness-and-profile.md`](0050-hardware-readiness-and-profile.md)
     — proposed: a read-only readiness check before install that proposes a
     host profile for the operator to review.
+51. [`0051-disposable-viewer-and-safe-documents.md`](0051-disposable-viewer-and-safe-documents.md)
+    — proposed: documents open in a disposable viewer without a network, and
+    a PDF is rebuilt from its pixels only.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

@@ -1,0 +1,6 @@
+---
+# pdftoppm renders the pages inside the disposable Machine (ADR 0051); the
+# Machine that rebuilds the PDF needs only Python.
+guest_safe_documents_packages:
+  Archlinux: [poppler]
+  Debian: [poppler-utils]

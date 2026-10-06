@@ -1,0 +1,28 @@
+---
+- name: Refuse a distribution without a reviewed package name
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in guest_safe_documents_packages
+    fail_msg: >-
+      guest_safe_documents knows the poppler package only for
+      {{ guest_safe_documents_packages.keys() | join(', ') }}.
+
+- name: Install poppler for pdftoppm
+  ansible.builtin.package:
+    name: "{{ guest_safe_documents_packages[ansible_facts['os_family']] }}"
+    state: present
+
+- name: Install hyperlab-safe-pdf
+  ansible.builtin.copy:
+    src: hyperlab-safe-pdf.py
+    dest: /usr/local/bin/hyperlab-safe-pdf
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Record that the guest_safe_documents brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_safe_documents

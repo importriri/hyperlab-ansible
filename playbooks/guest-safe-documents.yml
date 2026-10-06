@@ -1,0 +1,11 @@
+---
+# hyperlab-safe-pdf in a Machine (ADR 0051): to-pixels for a disposable
+# viewer, from-pixels for the Machine that rebuilds a document.
+- name: Install the safe document converter
+  hosts: workstations
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest_safe_documents
+    - guest_safe_documents

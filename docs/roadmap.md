@@ -361,6 +361,15 @@ platform, recorded on the host:
       session, with a host indicator while active
       ([ADR 0035](adr/0035-microphone-and-camera.md), proposed); the Looking
       Glass client already denies the microphone
+- [x] a PDF rebuilt from its pixels only: the stream reader trusts nothing,
+      and a PDF carrying JavaScript, an embedded file, a link and a form comes
+      back with the same picture and none of them
+      ([ADR 0051](adr/0051-disposable-viewer-and-safe-documents.md), proposed;
+      `roles/guest_safe_documents`, `tests/safe_pdf_contract.py`,
+      software-verified)
+- [ ] the disposable viewer Machine without a network, the host relay and
+      `hyperlab-open-disposable` (ADR 0051 steps 2–4)
+- [ ] the same seen in the lab host and on Nitro (ADR 0051 hardware test)
 - [x] host keybinding cheatsheet that includes the crossing keys:
       `SUPER + F1`, checked against the bindings (software-verified)
 
