@@ -27,14 +27,16 @@ QtObject {
         "machines",
         "controls",
         "diagnostics",
-        "workbench"
+        "workbench",
+        "devices"
     ]
 
     readonly property var subpages: ({
         "machines": ["inventory"],
         "controls": ["session", "audio", "appearance"],
         "diagnostics": ["overview", "isolation", "inventory", "session"],
-        "workbench": ["candidates"]
+        "workbench": ["candidates"],
+        "devices": ["usb"]
     })
 
     property bool workspaceOpen: false

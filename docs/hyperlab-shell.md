@@ -30,11 +30,12 @@ Three rules shape everything else:
 HyperLab Platform
   Desktop                  wallpaper + rail, per output
   Top rail                 identity · workspaces | context · clock | host state
-  Workspace                one ordinary window, four destinations
+  Workspace                one ordinary window, five destinations
     Machines               inventory, and the selected machine
     Control Center         Session · Audio and network · Input and appearance
     Diagnostics            Overview · Isolation and GPU · Inventory · Session
     Workbench              Golden Image candidates, never product Machines
+    USB devices            blocked devices, allowed once or always
   Launcher                 Destinations · Machines · Commands
   System panel             quick adjustments, on the summoning output
   OSD                      transient confirmed host feedback
@@ -42,7 +43,7 @@ HyperLab Platform
   Lock                     hyprlock / swaylock, in the product language
 ```
 
-The four destinations are **native application destinations**, not renamed
+The five destinations are **native application destinations**, not renamed
 compositor workspace numbers, and they share one compositor-managed window.
 It is opened deliberately, it takes keyboard focus like any other
 application, the compositor places and stacks it normally, and closing it
@@ -273,6 +274,30 @@ runs `playbooks/workbench-seal.yml`. The seal is verified only when a fresh
 Workbench reading shows the candidate captured; a shut-off domain is never
 taken as proof. Import, validation and release stay in the terminal, with the
 commands the seal prints.
+
+## USB devices
+
+The host blocks every USB device its policy does not name
+([ADR 0038](adr/0038-host-usb-device-policy.md)). This view lists the
+devices the kernel reports, blocked ones first, each with its name,
+`vendor:product` id, port and what it presents (storage, video, keyboard or
+mouse...). It reads the machine bridge's `usb` answer, itself
+`hyperlabctl usb list` over `/sys/bus/usb/devices` without privilege, when it
+opens and every 15 seconds while it is shown; a reading that does not
+validate is reported as unavailable, never shown as a list.
+
+**Allow once** lets a blocked device in until it is unplugged; **Allow
+always** also appends a rule for it to the USBGuard policy. Both are offered
+only for a blocked device that presents no keyboard or mouse: a disabled
+action says why, and a device that presents one is allowed only from a
+terminal (`sudo usbguard allow-device <id>`), after checking it. The bridge
+reads the device list again and refuses the same cases, then hands
+`usb:PORT:SCOPE` to the operation runner, whose window asks for the password
+and runs `playbooks/host-usb-allow.yml`. As root, that playbook checks sysfs
+and USBGuard again: exactly one blocked device at that port, no keyboard or
+mouse interface, then `usbguard allow-device` (with `-p` for always), then
+reads the kernel's authorization back. The allow is verified only when a
+fresh USB reading shows the port authorized.
 
 ## Fullscreen frame
 

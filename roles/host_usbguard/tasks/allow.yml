@@ -1,0 +1,119 @@
+---
+# Allow one blocked USB device (ADR 0038), once or permanently. The shell
+# names the device by its kernel port path; everything else is read again
+# here, as root, from sysfs and from USBGuard itself. Every refusal comes
+# before the one allow-device call, and the result is read back from sysfs.
+
+- name: Refuse a malformed port or scope
+  ansible.builtin.assert:
+    that:
+      - host_usb_allow_port is defined
+      - host_usb_allow_port is string
+      - host_usb_allow_port | length <= 32
+      - host_usb_allow_port is match('^[0-9]+-[0-9]+([.][0-9]+)*$')
+      - host_usb_allow_scope is defined
+      - host_usb_allow_scope in ['once', 'permanent']
+    fail_msg: >-
+      host_usb_allow_port must be a USB port path such as 1-2 or 1-3.4 and
+      host_usb_allow_scope must be once or permanent.
+
+- name: Read whether the kernel has authorized the device at that port
+  ansible.builtin.slurp:
+    src: "/sys/bus/usb/devices/{{ host_usb_allow_port }}/authorized"
+  register: host_usbguard_allow_before
+
+- name: Refuse a device that is not blocked
+  ansible.builtin.assert:
+    that:
+      - host_usbguard_allow_before.content | b64decode | trim == '0'
+    fail_msg: >-
+      The device at {{ host_usb_allow_port }} is not blocked; nothing to allow.
+
+- name: Find the interfaces the device has configured
+  ansible.builtin.find:
+    paths: /sys/bus/usb/devices
+    file_type: any
+    patterns: "{{ host_usb_allow_port }}:*"
+  register: host_usbguard_allow_sysfs_interfaces
+
+- name: Read the class of each configured interface
+  ansible.builtin.slurp:
+    src: "{{ item.path }}/bInterfaceClass"
+  loop: "{{ host_usbguard_allow_sysfs_interfaces.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: host_usbguard_allow_sysfs_classes
+
+- name: Refuse a device whose configured interfaces include a keyboard or mouse
+  ansible.builtin.assert:
+    that:
+      - host_usbguard_allow_hid_interfaces | length == 0
+    fail_msg: >-
+      The device at {{ host_usb_allow_port }} presents a keyboard or mouse
+      (interface class 03). Allow it from a terminal, after checking it.
+  vars:
+    host_usbguard_allow_hid_interfaces: >-
+      {{ host_usbguard_allow_sysfs_classes.results | map(attribute='content')
+         | map('b64decode') | map('trim') | select('equalto', '03') | list }}
+
+- name: Ask USBGuard which device is at that port
+  ansible.builtin.command:
+    argv: [usbguard, list-devices]
+  register: host_usbguard_allow_devices
+  changed_when: false
+
+# A blocked device is not configured, so sysfs has no interfaces for it yet;
+# USBGuard's with-interface comes from its descriptors and is the check that
+# matters for a blocked device.
+- name: Refuse unless exactly one blocked device that is not a keyboard or mouse is at that port
+  ansible.builtin.assert:
+    that:
+      - host_usbguard_allow_matches | length == 1
+      - "host_usbguard_allow_matches[0] is match('^[0-9]+: block ')"
+      - host_usbguard_allow_matches[0] is search('with-interface ')
+      - host_usbguard_allow_interfaces is not search('(^|[ {])03:')
+    fail_msg: >-
+      USBGuard reports {{ host_usbguard_allow_matches | length }} device(s) at
+      {{ host_usb_allow_port }}: {{ host_usbguard_allow_matches }}. Only exactly
+      one blocked device that presents no keyboard or mouse is allowed here.
+  vars:
+    host_usbguard_allow_matches: >-
+      {{ host_usbguard_allow_devices.stdout_lines
+         | select('search', 'via-port "' ~ (host_usb_allow_port | regex_escape) ~ '"( |$)')
+         | list }}
+    host_usbguard_allow_interfaces: >-
+      {{ (host_usbguard_allow_matches[0] | default(''))
+         | regex_search('with-interface ([{][^}]*[}]|[^ ]+)') | default('', true) }}
+
+- name: Allow the device {{ 'permanently' if host_usb_allow_scope == 'permanent' else 'for this insertion' }}
+  ansible.builtin.command:
+    argv: "{{ ['usbguard', 'allow-device']
+              + (['-p'] if host_usb_allow_scope == 'permanent' else [])
+              + [host_usbguard_allow_id] }}"
+  vars:
+    host_usbguard_allow_id: >-
+      {{ (host_usbguard_allow_devices.stdout_lines
+          | select('search', 'via-port "' ~ (host_usb_allow_port | regex_escape) ~ '"( |$)')
+          | first).split(':')[0] | trim }}
+  changed_when: true
+
+- name: Read the kernel's authorization back
+  ansible.builtin.slurp:
+    src: "/sys/bus/usb/devices/{{ host_usb_allow_port }}/authorized"
+  register: host_usbguard_allow_after
+  until: host_usbguard_allow_after.content | b64decode | trim == '1'
+  retries: 10
+  delay: 1
+
+- name: Report what was allowed
+  ansible.builtin.debug:
+    msg: >-
+      Allowed {{ host_usbguard_allow_line | regex_replace('^[0-9]+: block ', '') }}
+      at {{ host_usb_allow_port }}
+      {{ 'permanently: USBGuard keeps a rule for it' if host_usb_allow_scope == 'permanent'
+         else 'for this insertion only' }}.
+  vars:
+    host_usbguard_allow_line: >-
+      {{ host_usbguard_allow_devices.stdout_lines
+         | select('search', 'via-port "' ~ (host_usb_allow_port | regex_escape) ~ '"( |$)')
+         | first }}

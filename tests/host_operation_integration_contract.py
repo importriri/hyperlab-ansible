@@ -28,8 +28,11 @@ def main():
                                         'state': 'shut off', 'vfio': True}
     bridge.managed_spec = lambda name: {'path': 'vm-specs/one.yml', 'spec': {'name': name}}
     bridge.resolve = lambda *args: ['ansible-playbook', 'reviewed-command']
+    bridge.cli_json = lambda *args: {'devices': [
+        {'port': '1-2', 'authorized': 0, 'interfaces': ['08'], 'hid': False}]}
     for args, expected in (
         (['start', 'one'], ['launch', 'vm.managed-start', 'one']),
+        (['usb-allow', '1-2', 'permanent'], ['launch', 'usb.allow', 'usb:1-2:permanent']),
         (['operation', 'a' * 32], ['operation', 'a' * 32]),
         (['operations'], ['operations']),
         (['operation-view', 'a' * 32], ['view', 'a' * 32]),

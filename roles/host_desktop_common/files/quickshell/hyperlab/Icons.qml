@@ -21,6 +21,7 @@ QtObject {
     readonly property string controlCenter: icons.glyph(0xF062E) // tune
     readonly property string diagnostics: icons.glyph(0xF04D9)   // stethoscope
     readonly property string workbench: icons.glyph(0xF03D6)     // package variant
+    readonly property string usbDevices: icons.glyph(0xF0553)    // usb
     readonly property string isolation: icons.glyph(0xF0328)     // layers
     readonly property string launcher: icons.glyph(0xF0349)      // magnify
     readonly property string theme: icons.glyph(0xF03D8)         // palette

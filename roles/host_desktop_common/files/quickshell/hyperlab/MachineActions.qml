@@ -129,6 +129,8 @@ Scope {
             return "Seal";
         case "clipboard":
             return "Send clipboard";
+        case "usb-allow":
+            return "Allow USB device";
         default:
             return "Operation";
         }
@@ -340,12 +342,19 @@ Scope {
         if (operationRunner.running || machineActions.busyFor(name))
             return false;
 
+        return machineActions.dispatch(operation, name,
+            [machineActions.bridge, operation, name]);
+    }
+
+    // One short dispatch through the bridge; what it answers is tracked by
+    // applyOperationLine against this verb and target.
+    function dispatch(operation, target, command) {
         machineActions.pendingVerb = operation;
-        machineActions.pendingMachine = name;
+        machineActions.pendingMachine = target;
         machineActions.pendingMode = "";
         machineActions.pendingPhase = "";
         operationRunner.failureDetail = "";
-        operationRunner.command = [machineActions.bridge, operation, name];
+        operationRunner.command = command;
         operationRunner.running = true;
         return true;
     }
@@ -391,9 +400,16 @@ Scope {
         }
 
         if (parsed.phase === "refused") {
+            const usb = machineActions.pendingVerb === "usb-allow";
+
             machineActions.pendingPhase = "refused";
+            // A USB refusal names its reason (a keyboard, a device that is
+            // no longer blocked); the operator has nothing else to act on.
             operationRunner.failureDetail = parsed.reason === "operation-in-progress"
-                ? "An operation is already in progress for this machine"
+                ? "An operation is already in progress for this "
+                    + (usb ? "device" : "machine")
+                : usb && String(parsed.reason || "").length > 0
+                ? String(parsed.reason).slice(0, 300)
                 : "The machine operation was refused";
         }
     }
@@ -500,6 +516,10 @@ Scope {
             }
             if (operationState.records.some(r => r.phase === "verifying"))
                 machineActions.inventoryRefreshRequested();
+            // An allowed device is verified only by a fresh USB reading,
+            // whether or not the USB devices view is open.
+            if (operationState.records.some(r => r.phase === "verifying" && r.verb === "usb-allow"))
+                machineActions.requestUsb();
         }
     }
 
@@ -790,6 +810,120 @@ Scope {
 
         onExited: (exitCode, exitStatus) => {
             machineActions.applyWorkbench(workbenchRunner.buffer, exitCode, workbenchRunner.detail);
+        }
+    }
+
+    // --------------------------------------------------------- USB devices
+
+    // The host's USB devices (ADR 0038), never Machines. The list is
+    // presentation only: the bridge reads it again before an allow and
+    // refuses a device that is not blocked or presents a keyboard or mouse,
+    // and the playbook checks the device once more as root. An allow is a
+    // durable operation whose record names the device as usb:PORT:SCOPE; the
+    // tracker verifies it only against a fresh reading of the list.
+    readonly property var usbScopes: ["once", "permanent"]
+    property var usbDevices: []
+    // unknown until the bridge answers; ready, empty or unavailable after.
+    property string usbState: "unknown"
+    property string usbDetail: ""
+
+    function requestUsb() {
+        if (usbRunner.running)
+            return false;
+        usbRunner.buffer = "";
+        usbRunner.detail = "";
+        usbRunner.running = true;
+        return true;
+    }
+
+    function validUsbPort(port) {
+        return typeof port === "string" && port.length <= 32
+            && /^[0-9]+-[0-9]+(\.[0-9]+)*$/.test(port);
+    }
+
+    function validUsbDevice(row) {
+        const text = value => value === null || (typeof value === "string" && value.length <= 128);
+        return row !== null && typeof row === "object"
+            && machineActions.validUsbPort(row.port)
+            && typeof row.vendor_id === "string" && /^[0-9a-f]{4}$/.test(row.vendor_id)
+            && (row.product_id === null
+                || (typeof row.product_id === "string" && /^[0-9a-f]{4}$/.test(row.product_id)))
+            && text(row.manufacturer) && text(row.product) && text(row.serial)
+            && (row.authorized === 0 || row.authorized === 1 || row.authorized === null)
+            && Array.isArray(row.interfaces)
+            && row.interfaces.every(value => typeof value === "string" && /^[0-9a-f]{2}$/.test(value))
+            && typeof row.hid === "boolean";
+    }
+
+    function applyUsb(text, exitCode, detail) {
+        let parsed = null;
+        try {
+            parsed = JSON.parse(String(text));
+        } catch (error) {
+            parsed = null;
+        }
+        if (
+            exitCode !== 0 || parsed === null || parsed.phase !== "usb"
+            || !Array.isArray(parsed.devices)
+            || !parsed.devices.every(row => machineActions.validUsbDevice(row))
+        ) {
+            machineActions.usbState = "unavailable";
+            machineActions.usbDetail = String(detail || "").replace(/^HyperLab: /, "").slice(0, 300)
+                || "The USB devices could not be read";
+            return false;
+        }
+        machineActions.usbDevices = parsed.devices;
+        machineActions.usbState = parsed.devices.length ? "ready" : "empty";
+        machineActions.usbDetail = "";
+        operationState.usb = parsed.devices;
+        operationState.usbObservedAt = Date.now();
+        return true;
+    }
+
+    function usbTarget(port, scope) {
+        return "usb:" + String(port) + ":" + String(scope);
+    }
+
+    // Any operation still open on this port, whatever its scope.
+    function usbBusy(port) {
+        return machineActions.usbScopes.some(
+            scope => machineActions.busyFor(machineActions.usbTarget(port, scope)));
+    }
+
+    function allowUsb(port, scope) {
+        const name = String(port);
+        const how = String(scope);
+
+        if (
+            !machineActions.validUsbPort(name)
+            || machineActions.usbScopes.indexOf(how) < 0
+            || operationRunner.running
+            || machineActions.usbBusy(name)
+        )
+            return false;
+
+        return machineActions.dispatch("usb-allow", machineActions.usbTarget(name, how),
+            [machineActions.bridge, "usb-allow", name, how]);
+    }
+
+    Process {
+        id: usbRunner
+
+        property string buffer: ""
+        property string detail: ""
+
+        command: [machineActions.bridge, "usb"]
+
+        stdout: StdioCollector {
+            onStreamFinished: usbRunner.buffer = String(this.text)
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: usbRunner.detail = String(this.text).trim()
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.applyUsb(usbRunner.buffer, exitCode, usbRunner.detail);
         }
     }
 

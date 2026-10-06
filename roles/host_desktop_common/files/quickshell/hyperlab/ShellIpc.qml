@@ -118,6 +118,11 @@ Scope {
             return "workbench";
         }
 
+        function devices(): string {
+            ipc.shellSurfaces.openWorkspace("devices");
+            return "devices";
+        }
+
         function close(): string {
             ipc.shellSurfaces.closeWorkspace();
             return "closed";

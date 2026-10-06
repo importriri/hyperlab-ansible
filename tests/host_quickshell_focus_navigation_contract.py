@@ -28,7 +28,9 @@ def check_routes() -> None:
         for path in QML.glob("*.qml")
     }
     expected = {
-        "openWorkspace": {"HyperLabBar.qml": 2, "ShellIpc.qml": 4,
+        # ShellIpc: one external IPC route per destination (workspace
+        # machines, controls, diagnostics, workbench, devices).
+        "openWorkspace": {"HyperLabBar.qml": 2, "ShellIpc.qml": 5,
                           "ShellSurfaces.qml": 1},
         "openWorkspacePage": {"HyperLabBar.qml": 2, "LauncherSurface.qml": 1,
                               "SystemPanel.qml": 1, "ShellSurfaces.qml": 3},

@@ -33,7 +33,11 @@ POINTER = Path("/etc/hyperlabctl/checkout")
 ACTIONS = {"vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
            "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
            "vm.power-cycle": "power-cycle", "vm.reset": "reset",
-           "machine.provision": "provision", "workbench.seal": "seal"}
+           "machine.provision": "provision", "workbench.seal": "seal",
+           "usb.allow": "usb-allow"}
+# Allowing a blocked USB device (ADR 0038) acts on no Machine. Its record's
+# machine field names the device instead: usb:<kernel port path>:<scope>.
+USB_TARGET = re.compile(r"usb:([0-9]+-[0-9]+(?:\.[0-9]+)*):(once|permanent)")
 # Provisioning is the one action that is not a single playbook: the reviewed
 # provisioner runs the documented steps, each -K playbook asking in the PTY.
 PROVISION = "/usr/local/bin/privatestack-machine-provision"
@@ -201,9 +205,40 @@ def digest(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def usb_target(target):
+    match = (USB_TARGET.fullmatch(target)
+             if isinstance(target, str) and len(target) <= 64 else None)
+    require(match is not None, "invalid-usb-target")
+    return match.group(1), match.group(2)
+
+
+def holder(action, machine):
+    """What one operation at a time is held for: a machine, or a USB port."""
+    if action == "usb.allow":
+        return "usb:" + usb_target(machine)[0]
+    return machine
+
+
+def reviewed(argv):
+    require(isinstance(argv, list) and argv and all(isinstance(x, str) and x for x in argv),
+            "invalid-reviewed-command")
+    return argv
+
+
 def resolve(action, machine, repo):
     require(action in ACTIONS, "unsupported-action")
     require(repo == checkout(), "checkout-changed")
+    if action == "usb.allow":
+        # The target is parsed here and only its two validated parts reach
+        # the resolver; the playbook checks the device again as root.
+        port, scope = usb_target(machine)
+        argv = reviewed(cli(repo, "actions", "--resolve", action,
+                            "--usb-port", port, "--usb-scope", scope))
+        require(argv[0] == "ansible-playbook" and "-K" in argv, "invalid-reviewed-command")
+        argv[0] = "/usr/bin/ansible-playbook"
+        info = repo.stat()
+        # No spec describes a device; the target itself is what is pinned.
+        return argv, f"{info.st_dev}:{info.st_ino}", digest(machine.encode())
     rows = cli(repo, "compose", "list")
     require(isinstance(rows, list), "invalid-spec-inventory")
     matches = [r for r in rows if isinstance(r, dict)
@@ -214,8 +249,7 @@ def resolve(action, machine, repo):
                "--domain", machine)
     # The entire command is supplied by the existing resolver, never by the
     # caller or record. Normalize only its reviewed executable token.
-    require(isinstance(argv, list) and argv and all(isinstance(x, str) and x for x in argv),
-            "invalid-reviewed-command")
+    reviewed(argv)
     if action == "machine.provision":
         # Only a Machine's own projection is provisioned, never a fixture spec.
         require(row["path"] == f"vm-specs/.generated/{machine}.yml"
@@ -269,10 +303,12 @@ def records(root):
 
 def launch(action, machine):
     require(action in ACTIONS, "unsupported-action")
+    held = holder(action, machine)
     root = directory()
     with locked(root):
         for record in records(root):
-            if record["machine"] == machine and record["phase"] not in FINAL:
+            if (holder(record["action_id"], record["machine"]) == held
+                    and record["phase"] not in FINAL):
                 return {"phase": "refused", "reason": "operation-in-progress",
                         "operation_id": record["operation_id"], "machine": machine}
         repo = checkout()

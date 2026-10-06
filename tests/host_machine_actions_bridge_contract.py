@@ -414,6 +414,73 @@ def workbench_cases(bridge) -> None:
     check("shut the candidate down" in result and not launched, "a running candidate was sealed")
 
 
+def usb_cases(bridge) -> None:
+    """Allowing a USB device (ADR 0038): blocked, not HID, then the runner."""
+    devices = [
+        {"port": "1-5", "vendor_id": "0408", "product_id": "a061", "authorized": 1,
+         "interfaces": ["0e"], "hid": False, "product": "HD User Facing"},
+        {"port": "1-2", "vendor_id": "0781", "product_id": "5581", "authorized": 0,
+         "interfaces": ["08"], "hid": False, "product": "Ultra"},
+        {"port": "1-3.4", "vendor_id": "1234", "product_id": "abcd", "authorized": 0,
+         "interfaces": ["03", "08"], "hid": True, "product": "Stick with a keyboard"},
+        {"port": "1-6", "vendor_id": "dead", "product_id": "beef", "authorized": 0,
+         "interfaces": [], "hid": False},
+        {"port": "1-7", "vendor_id": "dead", "product_id": "0001", "authorized": 0,
+         "interfaces": ["08"]},
+        {"port": "../1-8", "vendor_id": "dead", "product_id": "0002", "authorized": 0,
+         "interfaces": ["08"], "hid": False},
+    ]
+    calls: list[tuple[str, ...]] = []
+    launched: list[tuple[str, str]] = []
+
+    def fake_cli(*args):
+        calls.append(args)
+        if args == ("usb", "list"):
+            return {"devices": [dict(row) for row in devices]}
+        raise AssertionError("unexpected hyperlabctl call %r" % (args,))
+
+    bridge.cli_json = fake_cli
+    bridge.privileged = lambda action, name: launched.append((action, name))
+
+    payload = bridge.usb()
+    check(payload["phase"] == "usb", "USB payload shape")
+    ports = [row["port"] for row in payload["devices"]]
+    check(ports == ["1-2", "1-3.4", "1-6", "1-7", "1-5"],
+          "blocked devices are not listed first, or a bad port was listed: %r" % ports)
+
+    def attempt(port, scope):
+        calls.clear()
+        launched.clear()
+        try:
+            bridge.usb_allow(port, scope)
+        except bridge.Refused as exc:
+            return "refused: " + str(exc)
+        return "launched"
+
+    for scope in ("once", "permanent"):
+        check(attempt("1-2", scope) == "launched"
+              and launched == [("usb.allow", "usb:1-2:%s" % scope)],
+              "a blocked storage device was not handed to the runner: %r" % launched)
+        check(calls == [("usb", "list")], "the device list was not read again before allowing")
+    refusals = {
+        ("1-3.4", "once"): "keyboard or mouse is allowed only from a terminal",
+        ("1-5", "once"): "not blocked",
+        ("1-6", "once"): "could not be read",
+        ("1-7", "once"): "keyboard or mouse",
+        ("1-9", "once"): "no USB device",
+        ("../1-8", "once"): "invalid USB port",
+        ("usb1", "once"): "invalid USB port",
+        ("1-2\n", "once"): "invalid USB port",
+        ("1-2", "always"): "once or permanent",
+        ("1-2", "Once"): "once or permanent",
+    }
+    for (port, scope), reason in refusals.items():
+        result = attempt(port, scope)
+        check(result.startswith("refused") and reason in result and not launched,
+              "usb-allow %r %r: expected refusal mentioning %r, got %r" % (port, scope, reason, result))
+    check(not any(call != ("usb", "list") for call in calls), "a refusal called something else")
+
+
 def main() -> int:
     bridge = load_bridge()
     choose_action_cases(bridge)
@@ -422,6 +489,7 @@ def main() -> int:
     static_cases(bridge)
     creation_cases(bridge)
     workbench_cases(bridge)
+    usb_cases(bridge)
 
     if FAILURES:
         for failure in FAILURES:

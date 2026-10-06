@@ -77,6 +77,10 @@ PanelWindow {
           glyph: launcher.icons.workbench, workspace: "workbench",
           page: "candidates",
           aliases: "golden image candidate capture seal" },
+        { title: "USB devices", hint: "Blocked USB devices, allowed once or always",
+          glyph: launcher.icons.usbDevices, workspace: "devices",
+          page: "usb",
+          aliases: "usb usbguard device stick allow blocked" },
         { title: "Isolation and GPU", hint: "Ownership, boot claim and policy",
           glyph: launcher.icons.isolation, workspace: "diagnostics",
           page: "isolation", aliases: "gpu vfio passthrough trust ladder" }

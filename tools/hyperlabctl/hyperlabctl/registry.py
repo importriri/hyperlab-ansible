@@ -9,6 +9,7 @@ an argv list; shell surfaces receive only ``shlex.join`` output from that argv,
 never a string assembled from a libvirt name.
 """
 
+import re
 from pathlib import Path
 from string import Formatter
 
@@ -352,6 +353,17 @@ ACTIONS = [
         "requires": "playbooks/workbench-seal.yml",
     },
     {
+        "id": "usb.allow",
+        "label": "Allow one blocked USB device, once or always",
+        "command": ["ansible-playbook", "playbooks/host-usb-allow.yml", "-K",
+                    "-e", "host_usb_allow_port={usb_port}",
+                    "-e", "host_usb_allow_scope={usb_scope}"],
+        "privileged": True,
+        "destructive": False,
+        "target": "usb",
+        "requires": "playbooks/host-usb-allow.yml",
+    },
+    {
         "id": "store.layout",
         "label": "Lay out and verify the image store",
         "command": ["ansible-playbook", "playbooks/image-store.yml", "-K"],
@@ -451,7 +463,28 @@ def _repo_target(value, kind, repo_root):
     return value
 
 
-def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None):
+# A USB device is named by its kernel port path (bus-port[.port...]), the
+# same name /sys/bus/usb/devices and USBGuard's via-port use (ADR 0038).
+USB_PORT_RE = re.compile(r"^[0-9]+-[0-9]+(\.[0-9]+)*$")
+USB_SCOPES = ("once", "permanent")
+
+
+def _usb_port(value):
+    value = _safe_scalar(value, "usb port")
+    if len(value) > 32 or not USB_PORT_RE.fullmatch(value):
+        raise ContractError("%s is not a USB port path" % value)
+    return value
+
+
+def _usb_scope(value):
+    value = _safe_scalar(value, "usb scope")
+    if value not in USB_SCOPES:
+        raise ContractError("usb scope must be one of %s" % ", ".join(USB_SCOPES))
+    return value
+
+
+def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None,
+            usb_port=None, usb_scope=None):
     """Resolve one action to an argv list, rejecting missing or unsafe targets."""
     action = by_id(action_id)
     if action is None:
@@ -466,6 +499,10 @@ def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None):
         values["spec"] = _repo_target(spec, "spec", repo_root)
     if "manifest" in fields:
         values["manifest"] = _repo_target(manifest, "manifest", repo_root)
+    if "usb_port" in fields:
+        values["usb_port"] = _usb_port(usb_port)
+    if "usb_scope" in fields:
+        values["usb_scope"] = _usb_scope(usb_scope)
     if "domain" in fields:
         if domain is None and spec is not None:
             domain = Path(values["spec"]).stem

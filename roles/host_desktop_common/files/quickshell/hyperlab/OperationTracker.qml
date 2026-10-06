@@ -10,6 +10,10 @@ QtObject {
     // verified against the registry, never against the domain's power state.
     property var workbench: []
     property real workbenchObservedAt: 0
+    // USB devices as the bridge last reported them; an allow is verified
+    // against that reading, never against any Machine (ADR 0038).
+    property var usb: []
+    property real usbObservedAt: 0
     property real now: Date.now()
     property bool known: false
     readonly property int settlingMs: 60000
@@ -17,7 +21,8 @@ QtObject {
         "vm.managed-start": "start", "vm.managed-shutdown": "shutdown",
         "vm.managed-reboot": "reboot", "vm.force-stop": "force-stop",
         "vm.power-cycle": "power-cycle", "vm.reset": "reset",
-        "machine.provision": "provision", "workbench.seal": "seal"
+        "machine.provision": "provision", "workbench.seal": "seal",
+        "usb.allow": "usb-allow"
     })
     signal changed(var record)
     signal refreshRequested()
@@ -134,7 +139,25 @@ QtObject {
             // requested lifecycle boundary occurred. Until the backend
             // publishes a typed transition proof, execution success is kept
             // explicit and fails closed as unverified presentation state.
-            if (record.verb === "seal") {
+            if (record.verb === "usb-allow") {
+                // The record names usb:PORT:SCOPE. Only a USB reading taken
+                // after the allow finished, showing that port authorized,
+                // verifies it.
+                const port = String(record.machine).split(":")[1];
+                const device = tracker.usb.find(d => d.port === port);
+                if (!newer && device
+                    && tracker.usbObservedAt >= record.updated
+                    && tracker.usbObservedAt <= record.updated + tracker.settlingMs
+                    && device.authorized === 1) {
+                    record.phase = "completed";
+                    record.detail = "Execution succeeded; the device is allowed";
+                } else if (newer || tracker.now - record.updated >= tracker.settlingMs) {
+                    record.phase = "unverified";
+                    record.detail = "Execution succeeded; the USB list did not show the device allowed";
+                } else {
+                    continue;
+                }
+            } else if (record.verb === "seal") {
                 // A seal leaves the domain shut off; only the Workbench
                 // registry, read after it finished, shows the capture.
                 if (!newer && candidate
@@ -173,5 +196,6 @@ QtObject {
     }
     onInventoryObservedAtChanged: tracker.reconcile()
     onWorkbenchObservedAtChanged: tracker.reconcile()
+    onUsbObservedAtChanged: tracker.reconcile()
     onNowChanged: tracker.reconcile()
 }

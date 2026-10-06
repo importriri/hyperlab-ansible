@@ -239,6 +239,69 @@ BODY = r'''
             check(lifecycle.applyWorkbench(JSON.stringify(Object.assign({}, bench, {candidates: []})), 0, "")
                   && lifecycle.workbenchState === "empty", "an empty Workbench was not empty");
 
+            // Allowing a USB device (ADR 0038) is its own operation: one per
+            // port whatever its scope, its refusal says why, and only a fresh
+            // USB reading showing the port authorized verifies it.
+            const usbTracker = lifecycle.trackerFixture;
+            lifecycle.runnerFixture.running = false;
+            lifecycle.pendingVerb = "";
+            lifecycle.pendingMachine = "";
+            usbTracker.records = [];
+            check(usbTracker.snapshot({schema: 1, operations: []}), "the USB fixture snapshot was refused");
+            check(!lifecycle.allowUsb("usb1", "once") && !lifecycle.allowUsb("1-2", "always")
+                  && !lifecycle.allowUsb("1-2/../x", "once") && !lifecycle.allowUsb("1-2\n", "once"),
+                  "a malformed USB allow was dispatched");
+            check(lifecycle.allowUsb("1-2", "once"), "a valid USB allow was refused");
+            check(JSON.stringify(lifecycle.runnerFixture.command)
+                  === JSON.stringify([lifecycle.bridge, "usb-allow", "1-2", "once"]),
+                  "the USB allow did not reach the bridge as its port and scope");
+            check(!lifecycle.allowUsb("1-2", "permanent"), "a second allow of the same port was dispatched");
+            const nine = "9".repeat(32);
+            lifecycle.applyOperationLine(JSON.stringify(
+                payload(nine, "usb:1-2:once", "dispatched", 0, null, "usb.allow")));
+            lifecycle.runnerFixture.running = false;
+            lifecycle.runnerFixture.exited(0, 0);
+            check(lifecycle.usbBusy("1-2") && !lifecycle.usbBusy("1-3"),
+                  "a dispatched USB allow did not hold exactly its own port");
+            check(lifecycle.allowUsb("1-3", "permanent"), "another port was held by the first allow");
+            lifecycle.applyOperationLine(JSON.stringify({phase: "refused",
+                reason: "a device that presents a keyboard or mouse is allowed only from a terminal"}));
+            check(lifecycle.runnerFixture.failureDetail.indexOf("keyboard or mouse") >= 0,
+                  "a USB refusal lost its reason");
+            lifecycle.runnerFixture.running = false;
+            lifecycle.runnerFixture.exited(2, 0);
+            const usbPhase = () => usbTracker.records.find(r => r.id === nine).phase;
+            usbTracker.apply(payload(nine, "usb:1-2:once", "succeeded", 2, 0, "usb.allow"), nine);
+            check(usbPhase() === "verifying", "a USB allow claimed success before a reading");
+            usbTracker.usb = [{port: "1-2", authorized: 0}];
+            usbTracker.usbObservedAt = (epoch + 3) * 1000;
+            check(usbPhase() === "verifying", "a device still blocked verified the allow");
+            usbTracker.usb = [{port: "1-2", authorized: 1}];
+            usbTracker.usbObservedAt = (epoch + 4) * 1000;
+            check(usbPhase() === "completed" && !lifecycle.usbBusy("1-2"),
+                  "a fresh reading of the allowed device did not verify the allow");
+
+            // The USB answer is validated by the real transport.
+            const usbAnswer = {phase: "usb", devices: [
+                {port: "1-2", vendor_id: "0781", product_id: "5581", manufacturer: "SanDisk",
+                 product: "Ultra", serial: null, authorized: 0, interfaces: ["08"], hid: false}]};
+            check(lifecycle.applyUsb(JSON.stringify(usbAnswer), 0, "")
+                  && lifecycle.usbState === "ready" && lifecycle.usbDevices.length === 1
+                  && usbTracker.usb.length === 1,
+                  "a valid USB reading was refused or did not reach the tracker");
+            for (const change of [{port: "../1-2"}, {port: "usb1"}, {hid: "no"}, {authorized: 2},
+                                  {interfaces: ["3"]}, {vendor_id: "XYZ1"}, {product: 7}]) {
+                const bad = {phase: "usb", devices: [Object.assign({}, usbAnswer.devices[0], change)]};
+                check(!lifecycle.applyUsb(JSON.stringify(bad), 0, "")
+                      && lifecycle.usbState === "unavailable",
+                      "a malformed USB reading was accepted");
+            }
+            check(!lifecycle.applyUsb(JSON.stringify(usbAnswer), 2, "HyperLab: invalid USB device list")
+                  && lifecycle.usbDetail === "invalid USB device list",
+                  "a failed USB read did not say why");
+            check(lifecycle.applyUsb(JSON.stringify({phase: "usb", devices: []}), 0, "")
+                  && lifecycle.usbState === "empty", "no USB devices was not empty");
+
 
 '''
 

@@ -231,3 +231,70 @@ def test_guest_fullscreen_is_a_typed_unprivileged_vm_action():
         registry.resolve("vm.guest-fullscreen", domain="demo"),
         ["hyperlabctl", "vm", "guest-fullscreen", "demo"],
     )
+
+
+def _usb_repo():
+    ctx = world.build(trust=None)
+    (ctx.config.repo_root / "playbooks").mkdir(exist_ok=True)
+    (ctx.config.repo_root / "playbooks/host-usb-allow.yml").write_text("---\n")
+    return ctx
+
+
+def test_usb_allow_is_a_privileged_reviewed_playbook():
+    action = registry.by_id("usb.allow")
+    equals("usb_allow_privileged", action["privileged"], True)
+    equals("usb_allow_destructive", action["destructive"], False)
+    equals("usb_allow_target", action["target"], "usb")
+    equals("usb_allow_requires", action["requires"], "playbooks/host-usb-allow.yml")
+
+
+def test_usb_allow_resolves_port_and_scope():
+    repo = _usb_repo().config.repo_root
+    for scope in ("once", "permanent"):
+        equals("usb_allow_resolves_%s" % scope,
+               registry.resolve("usb.allow", repo_root=repo, usb_port="1-3.4", usb_scope=scope),
+               ["ansible-playbook", "playbooks/host-usb-allow.yml", "-K",
+                "-e", "host_usb_allow_port=1-3.4", "-e", "host_usb_allow_scope=%s" % scope])
+
+
+def test_usb_allow_refuses_a_malformed_port_or_scope():
+    from hyperlabctl.errors import ContractError
+    repo = _usb_repo().config.repo_root
+    cases = [("usb1", "once"), ("1-2 x", "once"), ("1-2\n", "once"), ("-1-2", "once"),
+             ("1-2.", "once"), ("1", "once"), ("1-٢", "once"), ("1-2", "always"),
+             ("1-2", ""), (None, "once"), ("1-2", None),
+             ("1-2 host_usb_allow_scope=permanent", "once")]
+    for port, scope in cases:
+        try:
+            registry.resolve("usb.allow", repo_root=repo, usb_port=port, usb_scope=scope)
+        except ContractError:
+            check("usb_allow_refuses_%r_%r" % (port, scope), True)
+        else:
+            check("usb_allow_refuses_%r_%r" % (port, scope), False)
+
+
+def test_usb_allow_is_unavailable_without_its_playbook():
+    from hyperlabctl.errors import Unavailable
+    ctx = world.build(trust=None)
+    try:
+        registry.resolve("usb.allow", repo_root=ctx.config.repo_root,
+                         usb_port="1-2", usb_scope="once")
+    except Unavailable:
+        check("usb_allow_needs_playbook", True)
+    else:
+        check("usb_allow_needs_playbook", False)
+
+
+def test_actions_resolve_accepts_usb_flags():
+    import io
+    import json
+    from contextlib import redirect_stdout
+    from hyperlabctl.cli import main
+    ctx = _usb_repo()
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = main(["--json", "actions", "--resolve", "usb.allow", "--usb-port", "1-2",
+                     "--usb-scope", "permanent"], ctx=ctx)
+    equals("usb_cli_exit", code, 0)
+    equals("usb_cli_argv", json.loads(buffer.getvalue())[-4:],
+           ["-e", "host_usb_allow_port=1-2", "-e", "host_usb_allow_scope=permanent"])

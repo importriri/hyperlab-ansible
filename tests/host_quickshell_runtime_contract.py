@@ -514,6 +514,34 @@ Window {
             workbenchDetail = "";
             return true;
         }
+
+        // USB transport (ADR 0038). The answer is what the real
+        // MachineActions.applyUsb accepted; null is a bridge that could not
+        // answer. Allows are recorded only, as "PORT SCOPE".
+        property var usbAnswer: null
+        property var usbDevices: []
+        property string usbState: "unknown"
+        property string usbDetail: ""
+        property int usbReads: 0
+        property var usbAllowed: []
+
+        function requestUsb() {
+            usbReads += 1;
+            if (usbAnswer === null) {
+                usbState = "unavailable";
+                usbDetail = "fixture bridge unavailable";
+                return true;
+            }
+            usbDevices = usbAnswer.devices;
+            usbState = usbAnswer.devices.length ? "ready" : "empty";
+            usbDetail = "";
+            return true;
+        }
+        function usbBusy(port) { return busy; }
+        function allowUsb(port, scope) {
+            usbAllowed = usbAllowed.concat([String(port) + " " + String(scope)]);
+            return true;
+        }
     }
 
     Rectangle { anchors.fill: parent; color: sharedTheme.base }
@@ -861,7 +889,8 @@ IDLE = """
 """
 
 DESTINATIONS = """
-            for (const destination of ["machines", "controls", "workbench", "diagnostics"]) {
+            for (const destination of ["machines", "controls", "workbench", "devices",
+                                       "diagnostics"]) {
                 check(sharedSurfaces.openWorkspace(destination),
                       "destination refused: " + destination);
                 check(sharedSurfaces.workspaceOpen,
@@ -2217,6 +2246,65 @@ WORKBENCH_UNAVAILABLE = """
                   "an unreadable Workbench was not reported");
 """
 
+USB_ANSWER = {
+    "phase": "usb",
+    "devices": [
+        {"port": "1-2", "vendor_id": "0781", "product_id": "5581", "manufacturer": "SanDisk",
+         "product": "Ultra", "serial": "4C530001", "authorized": 0, "interfaces": ["08"],
+         "hid": False},
+        {"port": "1-3.4", "vendor_id": "1234", "product_id": "abcd", "manufacturer": None,
+         "product": "Stick with a keyboard", "serial": None, "authorized": 0,
+         "interfaces": ["03", "08"], "hid": True},
+        {"port": "1-5", "vendor_id": "0408", "product_id": "a061", "manufacturer": "SunplusIT Inc",
+         "product": "HD User Facing", "serial": None, "authorized": 1, "interfaces": ["0e"],
+         "hid": False},
+    ],
+}
+
+USB = """
+            sharedMachineActions.usbAnswer = @@USB@@;
+            check(sharedSurfaces.openWorkspace("devices"), "the USB devices destination was refused");
+            check(sharedMachineActions.usbReads >= 1, "opening USB devices did not read them");
+            check(sharedMachineActions.usbState === "ready", "the USB answer was not shown");
+            function control(scope, port) {
+                return window.find(workspaceSurface, "usb-" + scope + "-" + port);
+            }
+            function reason(port) {
+                return window.find(workspaceSurface, "usb-reason-" + port);
+            }
+            check(window.find(workspaceSurface, "usb-1-2") !== null,
+                  "a blocked device was not listed");
+            check(control("once", "1-2") !== null && control("once", "1-2").enabled
+                  && control("permanent", "1-2") !== null && control("permanent", "1-2").enabled,
+                  "a blocked storage device cannot be allowed once and always");
+            check(!reason("1-2").visible, "an allowable device shows a refusal");
+            check(!control("once", "1-3.4").enabled && !control("permanent", "1-3.4").enabled,
+                  "a device that presents a keyboard was offered an allow");
+            check(reason("1-3.4").visible
+                  && reason("1-3.4").text.indexOf("keyboard or mouse is allowed only from a terminal") >= 0
+                  && control("once", "1-3.4").disabledReason === reason("1-3.4").text,
+                  "a keyboard device's disabled action does not say why");
+            check(!control("once", "1-5").enabled && reason("1-5").text === "Already allowed",
+                  "an allowed device was offered an allow");
+            check(sharedState.machineById("1-2") === null,
+                  "a USB device appeared among the product Machines");
+            control("once", "1-2").activated();
+            check(sharedMachineActions.usbAllowed.length === 1
+                  && sharedMachineActions.usbAllowed[0] === "1-2 once",
+                  "Allow once did not reach the bridge exactly once with its port and scope");
+            check(!control("once", "1-3.4").actionable && !control("permanent", "1-5").actionable,
+                  "a disabled allow can still be activated");
+"""
+
+USB_UNAVAILABLE = """
+            sharedMachineActions.usbAnswer = null;
+            check(sharedSurfaces.openWorkspace("devices"), "the USB devices destination was refused");
+            check(sharedMachineActions.usbState === "unavailable",
+                  "unreadable USB devices were not reported as unavailable");
+            check(window.find(workspaceSurface, "usb-once-1-2") === null,
+                  "unreadable USB devices still offered an allow");
+"""
+
 APPLICATIONS = """
             sharedSurfaces.openLauncher("");
             check(!launcher.results.some(result => result.kind === "application"),
@@ -2537,6 +2625,11 @@ def main() -> int:
              WORKBENCH.replace("@@WORKBENCH@@", json.dumps(WORKBENCH_ANSWER))),
             ("workbench-empty", 1920, 1080, populated, WORKBENCH_EMPTY),
             ("workbench-unavailable", 1920, 1080, populated, WORKBENCH_UNAVAILABLE),
+            ("usb-devices", 1920, 1080, populated,
+             USB.replace("@@USB@@", json.dumps(USB_ANSWER))),
+            ("usb-devices-narrow", 800, 600, populated,
+             USB.replace("@@USB@@", json.dumps(USB_ANSWER))),
+            ("usb-devices-unavailable", 1920, 1080, populated, USB_UNAVAILABLE),
             ("stream-health", 1920, 1080, populated, STREAM_HEALTH),
             ("fullscreen-frame", 1920, 1080, populated,
              FULLSCREEN.replace("@@PROVENANCE@@", json.dumps(resolver_answers()))),

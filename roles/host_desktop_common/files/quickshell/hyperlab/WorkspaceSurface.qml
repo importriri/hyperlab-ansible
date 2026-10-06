@@ -31,7 +31,8 @@ FloatingWindow {
         { "id": "machines", "label": "Machines", "glyph": workspace.icons.machines },
         { "id": "controls", "label": "Control Center", "glyph": workspace.icons.controlCenter },
         { "id": "diagnostics", "label": "Diagnostics", "glyph": workspace.icons.diagnostics },
-        { "id": "workbench", "label": "Workbench", "glyph": workspace.icons.workbench }
+        { "id": "workbench", "label": "Workbench", "glyph": workspace.icons.workbench },
+        { "id": "devices", "label": "USB devices", "glyph": workspace.icons.usbDevices }
     ]
 
     readonly property bool compact:
@@ -45,6 +46,8 @@ FloatingWindow {
             return "HyperLab · Diagnostics";
         case "workbench":
             return "HyperLab · Workbench";
+        case "devices":
+            return "HyperLab · USB devices";
         default:
             return "HyperLab · Machines";
         }
@@ -278,6 +281,17 @@ FloatingWindow {
                 WorkbenchView {
                     anchors.fill: parent
                     visible: workspace.view === "workbench"
+
+                    tokens: workspace.tokens
+                    theme: workspace.theme
+                    icons: workspace.icons
+                    machineActions: workspace.machineActions
+                    shellSurfaces: workspace.shellSurfaces
+                }
+
+                DevicesView {
+                    anchors.fill: parent
+                    visible: workspace.view === "devices"
 
                     tokens: workspace.tokens
                     theme: workspace.theme

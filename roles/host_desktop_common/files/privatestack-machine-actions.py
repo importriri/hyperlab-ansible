@@ -22,6 +22,12 @@ product Machines, and start, shutdown and console reach them as any domain:
   workbench          Golden Image candidates with their live state
   seal NAME          capture a shut-off candidate through the operation runner
 
+A blocked USB device crosses it as two more (ADR 0038); a device is never a
+Machine, and only one that presents no keyboard or mouse is allowed here:
+
+  usb                    the host's USB devices, blocked ones first
+  usb-allow PORT SCOPE   allow one blocked device once or permanently
+
 Creation crosses it as two more questions (ADR 0017):
 
   create-plan                                   what may be created, within which limits
@@ -520,6 +526,48 @@ def seal(name: str) -> None:
     privileged("workbench.seal", name)
 
 
+USB_PORT = re.compile(r"^[0-9]+-[0-9]+(\.[0-9]+)*$")
+USB_SCOPES = ("once", "permanent")
+
+
+def usb_devices() -> list[dict[str, Any]]:
+    payload = cli_json("usb", "list")
+    if not isinstance(payload, dict) or not isinstance(payload.get("devices"), list):
+        raise Refused("invalid USB device list")
+    devices = [row for row in payload["devices"]
+               if isinstance(row, dict) and isinstance(row.get("port"), str)
+               and USB_PORT.fullmatch(row["port"])]
+    # Blocked first: those are the ones an operator comes here to allow.
+    return sorted(devices, key=lambda row: row.get("authorized") != 0)
+
+
+def usb() -> dict[str, Any]:
+    """The host's USB devices as the kernel reports them, for presentation."""
+    return {"phase": "usb", "devices": usb_devices()}
+
+
+def usb_allow(port: str, scope: str) -> None:
+    """Hand one blocked device that is not a keyboard or mouse to the runner."""
+    if len(port) > 32 or not USB_PORT.fullmatch(port):
+        raise Refused("invalid USB port")
+    if scope not in USB_SCOPES:
+        raise Refused("the scope must be once or permanent")
+    matches = [row for row in usb_devices() if row["port"] == port]
+    if len(matches) != 1:
+        raise Refused("no USB device is attached at that port")
+    device = matches[0]
+    if device.get("authorized") != 0:
+        raise Refused("the device is not blocked")
+    if device.get("hid") is not False:
+        raise Refused("a device that presents a keyboard or mouse is allowed only from a terminal")
+    if not device.get("interfaces"):
+        # A blocked device reports its interfaces from its descriptors; none
+        # means they could not be read, which is never taken as harmless.
+        raise Refused("what the device presents could not be read; allow it from a terminal")
+    # The runner resolves the playbook itself; the playbook checks it again as root.
+    privileged("usb.allow", f"usb:{port}:{scope}")
+
+
 def checkout() -> str:
     value = CHECKOUT_POINTER.read_text(encoding="utf-8").strip()
     candidate = Path(value)
@@ -554,6 +602,12 @@ def main() -> int:
     if len(sys.argv) == 3 and sys.argv[1] == "seal":
         valid_name(sys.argv[2])
         seal(sys.argv[2])
+        return 127
+    if sys.argv[1:] == ["usb"]:
+        emit(usb())
+        return 0
+    if len(sys.argv) == 4 and sys.argv[1] == "usb-allow":
+        usb_allow(sys.argv[2], sys.argv[3])
         return 127
     if sys.argv[1:] == ["create-plan"]:
         emit({"phase": "create-plan", "plan": create_plan()})

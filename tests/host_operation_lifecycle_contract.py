@@ -184,6 +184,62 @@ def observer_race_contract(op, base):
     require(log_path.read_bytes() == b'late output', 'output lost around an observer hangup')
 
 
+def usb_contract(op, root, repo, base):
+    """Allowing a USB device (ADR 0038) names a device, never a Machine."""
+    for scope, flag in (('once', 'once'), ('permanent', 'permanent')):
+        target = f'usb:1-3.4:{scope}'
+        argv, _, pinned = op.resolve('usb.allow', target, repo)
+        require(argv == ['/usr/bin/ansible-playbook', 'playbooks/host-usb-allow.yml', '-K',
+                         '-e', 'host_usb_allow_port=1-3.4', '-e', f'host_usb_allow_scope={flag}'],
+                'the USB allow command is not the reviewed playbook: %r' % argv)
+        require(pinned == op.digest(target.encode()), 'the USB target is not pinned')
+    for target in ('usb:usb1:once', 'usb:1-2:always', 'usb:1-2', 'usb:1-2:once:x',
+                   'usb:1-2 :once', 'usb:1-2:once\n', 'usb:-1-2:once', 'usb::once',
+                   'usb:1-\u0662:once', 'one', 'usb:1-2:' + 'x' * 70, '', 'USB:1-2:once'):
+        refused(lambda target=target: op.resolve('usb.allow', target, repo))
+        refused(lambda target=target: op.launch('usb.allow', target))
+    # A machine action never accepts a USB target, nor the reverse.
+    refused(lambda: op.resolve('vm.managed-start', 'usb:1-2:once', repo))
+    refused(lambda: op.resolve('usb.allow', 'two', repo))
+
+    record = op.launch('usb.allow', 'usb:1-2:once')
+    require(record['phase'] == 'dispatched' and record['action_id'] == 'usb.allow'
+            and record['machine'] == 'usb:1-2:once', 'USB allow not launched as a durable operation')
+    require(record['spec_digest'] == op.digest(b'usb:1-2:once'), 'USB record does not pin its target')
+    # One allow per port at a time, whatever its scope; another port is free.
+    require(op.launch('usb.allow', 'usb:1-2:permanent')['reason'] == 'operation-in-progress',
+            'a second allow of the same port was not refused')
+    other = op.launch('usb.allow', 'usb:1-2.1:once')
+    require(other['phase'] == 'dispatched', 'another port was held by the first allow')
+    executed = []
+
+    class Child:
+        def __init__(self, argv, **kwargs):
+            executed.append(argv)
+
+        def wait(self, **kwargs):
+            return 0
+
+        def poll(self):
+            return 0
+
+    with patch.object(op.subprocess, 'Popen', Child):
+        require(op.run(record['operation_id']) == 0, 'USB allow run failed')
+    require(executed == [['/usr/bin/ansible-playbook', 'playbooks/host-usb-allow.yml', '-K',
+                          '-e', 'host_usb_allow_port=1-2', '-e', 'host_usb_allow_scope=once']],
+            'the runner did not execute the reviewed USB command: %r' % executed)
+    # A record whose target was changed after launch never runs.
+    tampered = op.read(root, other['operation_id'])
+    tampered['machine'] = 'usb:1-2.1:permanent'
+    op.write(root, tampered)
+    with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('retargeted allow ran')):
+        op.run(other['operation_id'])
+    require(op.read(root, other['operation_id'])['phase'] == 'failed',
+            'a retargeted USB allow was executed')
+    for item in (record, other):
+        (base / item['unit']).unlink()
+
+
 def main():
     spec = importlib.util.spec_from_file_location('operation', SOURCE)
     op = importlib.util.module_from_spec(spec)
@@ -198,6 +254,7 @@ def main():
         for name in ('start', 'shutdown', 'reboot', 'stop', 'power-cycle', 'reset', 'create'):
             (repo / f'playbooks/vm-{name}.yml').write_text('---\n')
         (repo / 'playbooks/workbench-seal.yml').write_text('---\n')
+        (repo / 'playbooks/host-usb-allow.yml').write_text('---\n')
         for machine in ('one', 'two'):
             (repo / f'vm-specs/{machine}.yml').write_text(f'name: {machine}\n')
         (repo / 'vm-specs/.generated').mkdir()
@@ -214,6 +271,11 @@ def main():
             if args == ('compose', 'list'):
                 return [{'path': path, 'spec': {'name': name}} for name, path in specs.items()]
             require(args[:2] == ('actions', '--resolve'), 'unreviewed lookup')
+            if args[2] == 'usb.allow':
+                require(len(args) == 7 and args[3] == '--usb-port' and args[5] == '--usb-scope',
+                        'a USB allow was resolved with something other than its port and scope')
+                return registry_resolve(args[2], repo_root=repo, usb_port=args[4],
+                                        usb_scope=args[6])
             return registry_resolve(args[2], repo_root=repo, spec=args[4], domain=args[6])
 
         def fake_call(argv, **kwargs):
@@ -367,7 +429,7 @@ def main():
             require(op.read(root, tampered['operation_id'])['phase'] == 'failed',
                     'context drift did not leave a durable failure')
             for action in op.ACTIONS:
-                if action == 'machine.provision':
+                if action in ('machine.provision', 'usb.allow'):
                     continue
                 argv, _, _ = op.resolve(action, 'two', repo)
                 require(argv[0] == '/usr/bin/ansible-playbook' and '-K' in argv,
@@ -393,6 +455,8 @@ def main():
                 op.run(provision['operation_id'])
             require(op.read(root, provision['operation_id'])['phase'] == 'failed',
                     'a spec changed after launch was provisioned')
+
+            usb_contract(op, root, repo, base)
 
             # A view that cannot open never fails or cancels the operation.
             viewless = op.launch('vm.managed-start', 'two')

@@ -482,6 +482,9 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `tests/host_usbguard_contract.py`, software-verified)
 - [ ] that policy applied on Nitro, with the internal keyboard and touchpad
       proved unaffected, and a device allowed from the host shell
+      (the shell action is built and software-verified: the USB devices view,
+      `playbooks/host-usb-allow.yml`, `tests/host_usbguard_contract.py`;
+      Nitro acceptance remains)
 - [ ] Wi-Fi card in a sys-net Machine through VFIO, the host routing the five
       networks through it and keeping their isolation, with a tested way to
       give the card back to the host

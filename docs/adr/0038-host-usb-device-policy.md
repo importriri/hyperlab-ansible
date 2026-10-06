@@ -2,8 +2,9 @@
 
 Status: accepted (2026-10-05, option A): generate the policy from the
 devices attached, then block every other device. Built as
-`roles/host_usbguard` (`playbooks/host-usbguard.yml`); allowing a device
-from the host shell is still to build.
+`roles/host_usbguard` (`playbooks/host-usbguard.yml`); the shell action that
+allows a blocked device is built (`playbooks/host-usb-allow.yml`, the USB
+devices view), not yet exercised on Nitro.
 
 ## Context
 
@@ -41,9 +42,29 @@ reports. Only then does it set the implicit block, apply the policy to
 present and inserted devices, keep the controllers, restrict IPC to root and
 start the daemon (`tests/host_usbguard_contract.py`). On Nitro today the
 attached USB devices are the two xHCI root hubs, the Intel Bluetooth adapter
-(`8087:0026`) and the user-facing camera (`0408:a061`). Until the shell can
-allow a device, `sudo usbguard list-devices` and
-`sudo usbguard allow-device <id>` (with `-p` to make it permanent) do it.
+(`8087:0026`) and the user-facing camera (`0408:a061`).
+
+**Allowing a device.** The shell's USB devices view lists what
+`hyperlabctl usb list` reads from `/sys/bus/usb/devices` without privilege:
+each device's port, ids, strings, whether the kernel has authorized it, and
+its interface classes, taken from the raw descriptors because a blocked
+device is not configured and has no interface directories yet. **Allow
+once** and **Allow always** are offered for a blocked device that presents
+no keyboard or mouse (interface class 03); input-class devices, and devices
+whose interfaces cannot be read, are allowed only from a terminal. The
+machine bridge reads the list again and refuses the same cases, then hands
+`usb:PORT:SCOPE` to the operation runner, which resolves the registry action
+`usb.allow` to `playbooks/host-usb-allow.yml -K` with that port and scope and
+pins the target in its record. As root, the playbook checks once more that
+sysfs reports the device blocked with no keyboard or mouse interface, that
+USBGuard lists exactly one device at that `via-port`, blocked, whose
+`with-interface` has no class 03, and only then runs
+`usbguard allow-device <id>` (`-p` for always, which appends a rule to the
+policy); it reads `authorized` back from sysfs before it reports
+(`tests/host_usbguard_contract.py`, `tests/host_machine_actions_bridge_contract.py`,
+`tests/host_operation_lifecycle_contract.py`). From a terminal,
+`sudo usbguard list-devices` and `sudo usbguard allow-device <id>` (with
+`-p` to make it permanent) still do it.
 
 ## Recommendation
 
