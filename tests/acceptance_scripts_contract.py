@@ -23,7 +23,11 @@
      previews. Every `check … --check` is an `if check`, every confirm
      after it sits inside that block, and its else says the step was not
      offered; run for real, group 11 offers the block after a clean check
-     mode and only then (problems/acceptance-step-offered-after-failed-check.md).
+     mode and only then (problems/acceptance-step-offered-after-failed-check.md);
+  8. the report names the commit the run came from, marked +dirty when
+     tracked files differ from it, staged or not, with the redacted
+     `git diff --stat` and any untracked file in the evidence
+     (problems/acceptance-report-hid-a-dirty-tree.md).
 """
 
 from __future__ import annotations
@@ -273,6 +277,60 @@ def check_fail_closed_runs() -> None:
     require("BLOCK NOT OFFERED" not in passed, f"the block was refused after a clean check mode: {passed}")
 
 
+def header_in(repo: Path, evidence_root: Path) -> tuple[str, Path]:
+    # One root per run: two runs in the same second share an evidence name.
+    evidence_root = evidence_root / str(len(list(evidence_root.glob("*"))) if evidence_root.exists() else 0)
+    evidence_root.mkdir(parents=True)
+    script = f"""
+ACCEPTANCE_GROUP=contract
+source {repo}/tools/acceptance/lib.sh
+acceptance_start 2>/dev/null
+echo "evidence=$EVIDENCE"
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False,
+                            env=dict(os.environ, HYPERLAB_EVIDENCE_ROOT=str(evidence_root)))
+    evidence = Path(result.stdout.split("evidence=", 1)[1].strip())
+    return (evidence / "report.txt").read_text(), evidence
+
+
+def check_dirty_header() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td) / "repo"
+        (repo / "tools/acceptance").mkdir(parents=True)
+        (repo / "tools/acceptance/lib.sh").write_text(LIB.read_text())
+        (repo / "notes.txt").write_text("one\n")
+        git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run([*git, "add", "."], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "fixture"], check=True)
+        rev = subprocess.run([*git, "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+        root = Path(td) / "evidence"
+
+        report, evidence = header_in(repo, root)
+        require(f"repository {rev}\n" in report and "+dirty" not in report,
+                f"a clean checkout is not reported as its commit: {report}")
+        require(not (evidence / "repository-diff-stat.txt").exists(), "a clean checkout left a diff")
+
+        (repo / "notes.txt").write_text("one\npassword=hunter2\n")
+        report, evidence = header_in(repo, root)
+        require(f"repository {rev}+dirty" in report, f"a modified tracked file is not +dirty: {report}")
+        stat = (evidence / "repository-diff-stat.txt").read_text()
+        require("notes.txt" in stat and "hunter2" not in stat, f"the diff stat is missing or leaks: {stat}")
+
+        subprocess.run([*git, "add", "notes.txt"], check=True)
+        report, _ = header_in(repo, root)
+        require(f"repository {rev}+dirty" in report, f"a staged change is not +dirty: {report}")
+
+        subprocess.run([*git, "commit", "-q", "-m", "second"], check=True)
+        (repo / "scratch.txt").write_text("x\n")
+        report, evidence = header_in(repo, root)
+        require("+dirty" not in report and "1 untracked file(s)" in report,
+                f"an untracked file is not reported apart: {report}")
+        require("scratch.txt" in (evidence / "repository-untracked.txt").read_text(),
+                "the untracked file is not listed in the evidence")
+
+
 def main() -> int:
     check_no_hostname_command()
     check_scripts()
@@ -281,6 +339,7 @@ def main() -> int:
     check_failed_playbook_report()
     check_fail_closed()
     check_fail_closed_runs()
+    check_dirty_header()
     print("Acceptance scripts contract: OK")
     return 0
 

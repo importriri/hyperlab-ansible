@@ -288,5 +288,7 @@ proof.
 - [`usbguard-check-mode-failed-on-first-run.md`](usbguard-check-mode-failed-on-first-run.md):
   the USBGuard check mode refused an empty policy on a host that never had
   USBGuard.
+- [`acceptance-report-hid-a-dirty-tree.md`](acceptance-report-hid-a-dirty-tree.md):
+  the acceptance report named a commit while the checkout differed from it.
 
 Author: [importriri](https://github.com/importriri).

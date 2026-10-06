@@ -39,8 +39,31 @@ acceptance_start() {
     trap 'acceptance_cleanup; exit 130' INT TERM
     # The kernel's own name: Arch does not install the hostname command.
     report "group $ACCEPTANCE_GROUP on $(< /proc/sys/kernel/hostname) at $(date --iso-8601=seconds)"
-    report "repository $(git -C "$ACCEPTANCE_REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    repository_report
     report "evidence $EVIDENCE"
+}
+
+# repository_report: the commit the scripts and playbooks come from, marked
+# +dirty when tracked files differ from it, staged or not; what differs and
+# any untracked file are kept, redacted, in the evidence.
+repository_report() {
+    local rev changes untracked
+    rev=$(git -C "$ACCEPTANCE_REPO" rev-parse --short HEAD 2>/dev/null) || {
+        report "repository unknown (not a git checkout)"
+        return 0
+    }
+    changes=$(git -C "$ACCEPTANCE_REPO" status --porcelain --untracked-files=no 2>/dev/null)
+    untracked=$(git -C "$ACCEPTANCE_REPO" ls-files --others --exclude-standard 2>/dev/null)
+    if [[ -n $changes ]]; then
+        git -C "$ACCEPTANCE_REPO" diff --stat HEAD 2>&1 | redact >"$EVIDENCE/repository-diff-stat.txt"
+        report "repository $rev+dirty (tracked changes: $EVIDENCE/repository-diff-stat.txt)"
+    else
+        report "repository $rev"
+    fi
+    if [[ -n $untracked ]]; then
+        printf '%s\n' "$untracked" | redact >"$EVIDENCE/repository-untracked.txt"
+        report "repository has $(printf '%s\n' "$untracked" | wc -l) untracked file(s): $EVIDENCE/repository-untracked.txt"
+    fi
 }
 
 acceptance_cleanup() {
