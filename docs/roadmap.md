@@ -411,8 +411,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       software-verified)
 - [ ] the same seen on Nitro: Suspend from the shell refused while `dev-01`
       holds the GPU, accepted after it stops
-- [ ] "collect diagnostics": one archive of a Machine's host and guest logs,
-      with sensitive data removed
+- [x] "collect diagnostics": one private archive of a Machine's host and
+      guest logs, redacted (keys, passwords, hashes, tokens, emails), with a
+      manifest of what was and was not collected (`hyperlabctl diagnostics
+      collect`, `tools/hyperlabctl/tests/test_diagnostics.py`,
+      software-verified)
+- [ ] the same as an action on the Machine pane, and run once on Nitro
 
 ### 9. Network security topology
 
