@@ -123,6 +123,9 @@ entered the pipeline.
 46. [`0046-nested-lab-host.md`](0046-nested-lab-host.md) — proposed: an
     `hl-lab-host` VM, made by a script without privilege and installed like
     the host, where host-level changes are tested with root.
+48. [`0048-key-vault.md`](0048-key-vault.md) — proposed: SSH keys in a vault
+    Machine without a network, reached through a host relay that asks the
+    operator before every signature.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

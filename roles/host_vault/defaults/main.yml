@@ -1,0 +1,10 @@
+---
+# The key vault's host relay (ADR 0048). Client Machines reach it on the host
+# vsock port; it reaches the vault Machine's agent on the vault port.
+host_vault_listen_port: 7400
+host_vault_domain: vault
+host_vault_port: 7401
+# Seconds a signature request waits for the operator; no answer is a refusal.
+host_vault_confirm_timeout: 30
+# The longest an operator may allow one Machine and one key without asking.
+host_vault_allow_minutes_max: 10

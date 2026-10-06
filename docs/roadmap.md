@@ -542,6 +542,15 @@ Suricata on bridge mirrors, logs shipped off the host).
       the host, with the host journal sealed (forward-secure) and a stale
       shipping state shown in Diagnostics; auditd and AIDE are detection, not
       prevention, and their evidence counts only once it has left the host
+- [x] key vault, host side: a relay that passes only identity listing and
+      signing to a vault Machine and asks the operator before every
+      signature, per Machine and key, with a capped time allowance
+      ([ADR 0048](adr/0048-key-vault.md), proposed; `roles/host_vault`,
+      `tests/vault_relay_contract.py`, software-verified)
+- [ ] the vault Machine (no interface, vsock only), the client forwarder at
+      `SSH_AUTH_SOCK` and the vault listener
+- [ ] the same seen on Nitro: `ssh -T git@github.com` from `dev-01` asks on
+      the host, succeeds when allowed, fails when denied or ignored
 
 ### 13. Performance and gaming tuning
 

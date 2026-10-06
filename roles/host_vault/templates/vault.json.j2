@@ -1,0 +1,8 @@
+{{ {
+  "listen_port": host_vault_listen_port | int,
+  "vault_domain": host_vault_domain,
+  "vault_port": host_vault_port | int,
+  "confirm_command": ["/usr/local/bin/hyperlab-vault-confirm"],
+  "confirm_timeout": host_vault_confirm_timeout | int,
+  "allow_minutes_max": host_vault_allow_minutes_max | int
+} | to_nice_json }}

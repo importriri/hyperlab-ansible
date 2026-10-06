@@ -94,6 +94,7 @@ there.
 | [0044](adr/0044-measured-boot.md) | a signed and measured boot with TPM2 unlock |
 | [0045](adr/0045-looking-glass-stream-health.md) | Looking Glass stream health and a capture restart |
 | [0046](adr/0046-nested-lab-host.md) | a nested lab host for host-level tests |
+| [0048](adr/0048-key-vault.md) | a key vault: SSH keys in a Machine without a network |
 
 ## 5. Questions the maintainer wants answered
 

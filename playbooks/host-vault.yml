@@ -1,0 +1,12 @@
+---
+# The host side of the key vault (ADR 0048): a relay that asks the operator
+# before every signature. The operator starts it in the session with
+# `systemctl --user enable --now hyperlab-vault-relay.service`.
+- name: Install the key vault relay on the host
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_vault
+    - host_vault

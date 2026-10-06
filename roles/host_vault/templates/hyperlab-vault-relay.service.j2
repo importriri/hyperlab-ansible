@@ -1,0 +1,17 @@
+[Unit]
+Description=HyperLab key vault relay (asks before every signature)
+PartOf=hyperlab-hyprland-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hyperlab-vault-relay
+Restart=on-failure
+RestartSec=2
+# Only what a user unit can apply without a user namespace: the hardened
+# kernel refuses unprivileged ones, and the unit would not start at all.
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_VSOCK AF_UNIX
+
+[Install]
+WantedBy=hyperlab-hyprland-session.target

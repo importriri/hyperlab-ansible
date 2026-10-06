@@ -36,6 +36,7 @@ brick_requires:
   host_integrity: [base]
   measured_boot: [vfio_boot]
   host_sleep_guard: [kvm_host]
+  host_vault: [kvm_host]
   guest_desktop_hyprland: [workstation_kernel, workstation_access]
   guest_visual_assets: [guest_desktop_hyprland]
   guest_gpu_nvidia: [guest_desktop_hyprland]
@@ -76,6 +77,7 @@ brick_playbooks:
   host_integrity: playbooks/host-security-plane.yml
   measured_boot: playbooks/measured-boot.yml
   host_sleep_guard: playbooks/host-sleep-guard.yml
+  host_vault: playbooks/host-vault.yml
   guest_desktop_hyprland: playbooks/guest-arch-hyprland.yml
   guest_visual_assets: playbooks/guest-visual-assets.yml
   guest_gpu_nvidia: playbooks/guest-gpu-nvidia.yml

@@ -1,0 +1,57 @@
+---
+- name: Refuse a vault Machine name the relay cannot use
+  ansible.builtin.assert:
+    that:
+      - host_vault_domain is match('^[a-z0-9][a-z0-9-]{1,30}$')
+      - host_vault_listen_port | int != host_vault_port | int
+      - host_vault_listen_port | int >= 1024
+      - host_vault_port | int >= 1024
+      - host_vault_allow_minutes_max | int >= 0
+      - host_vault_allow_minutes_max | int <= 60
+      - host_vault_confirm_timeout | int >= 5
+    fail_msg: >-
+      host_vault_domain must be a plain Machine name, the two vsock ports
+      distinct and unprivileged, an allowance at most 60 minutes and the
+      confirmation at least 5 seconds.
+
+- name: Create the HyperLab configuration directory
+  ansible.builtin.file:
+    path: /etc/hyperlab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the key vault relay configuration
+  ansible.builtin.template:
+    src: vault.json.j2
+    dest: /etc/hyperlab/vault.json
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the relay and the confirmation helper
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/bin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - {src: hyperlab-vault-relay.py, dest: hyperlab-vault-relay}
+    - {src: hyperlab-vault-confirm.py, dest: hyperlab-vault-confirm}
+
+- name: Install the relay as a user service of the graphical session
+  ansible.builtin.template:
+    src: hyperlab-vault-relay.service.j2
+    dest: /etc/systemd/user/hyperlab-vault-relay.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Record that the host_vault brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_vault
