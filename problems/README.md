@@ -285,5 +285,8 @@ proof.
 - [`acceptance-step-offered-after-failed-check.md`](acceptance-step-offered-after-failed-check.md):
   a destructive step was offered after the check mode that previews it had
   failed.
+- [`usbguard-check-mode-failed-on-first-run.md`](usbguard-check-mode-failed-on-first-run.md):
+  the USBGuard check mode refused an empty policy on a host that never had
+  USBGuard.
 
 Author: [importriri](https://github.com/importriri).

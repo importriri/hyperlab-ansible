@@ -9,16 +9,43 @@
     path: "{{ host_usbguard_rules }}"
   register: host_usbguard_existing
 
+# A check mode run on a host that never had USBGuard cannot preview the
+# policy: the package is only "would be installed". It says so instead of
+# failing on a policy it could not generate, and skips only what needs the
+# package. A run that changes the host always has the package by now.
+- name: Look for the usbguard command
+  ansible.builtin.stat:
+    path: /usr/bin/usbguard
+  register: host_usbguard_command
+
+- name: Decide whether this run can only describe the policy
+  ansible.builtin.set_fact:
+    host_usbguard_describe_only: "{{ ansible_check_mode and not host_usbguard_command.stat.exists }}"
+
+- name: Say what a check mode run on a host without USBGuard cannot preview
+  when: host_usbguard_describe_only | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: usbguard is not installed yet, so the policy cannot be
+      previewed. When applied, the role installs it, generates the policy from
+      the USB devices attached then, refuses it if it misses one, and only
+      then turns the block on.
+
 # The policy is generated once, from the devices attached now, and never
 # overwritten: a reviewed or extended policy stays the operator's.
 - name: Generate the policy from the devices attached now
-  when: not host_usbguard_existing.stat.exists or host_usbguard_existing.stat.size == 0
+  when:
+    - not host_usbguard_describe_only | bool
+    - not host_usbguard_existing.stat.exists or host_usbguard_existing.stat.size == 0
   block:
+    # It only prints a policy, so it runs in check mode too: the check below
+    # then sees the policy the run would install.
     - name: Ask USBGuard for a policy that allows every attached device
       ansible.builtin.command:
         argv: [usbguard, generate-policy]
       register: host_usbguard_generated
       changed_when: false
+      check_mode: false
 
     - name: Count the attached USB devices the kernel reports
       ansible.builtin.find:
@@ -57,6 +84,7 @@
         mode: "0600"
 
 - name: Block every device the policy does not allow
+  when: not host_usbguard_describe_only | bool
   ansible.builtin.lineinfile:
     path: "{{ host_usbguard_daemon_conf }}"
     regexp: "^{{ item.key }}="
@@ -67,6 +95,7 @@
   notify: Restart USBGuard
 
 - name: Start USBGuard now and at every boot
+  when: not host_usbguard_describe_only | bool
   ansible.builtin.systemd_service:
     name: usbguard
     enabled: true

@@ -11,7 +11,13 @@ order and the safeguards of roles/host_usbguard:
   2. only then does the daemon get the implicit block, apply the policy to
      present and inserted devices, keep the controllers, and listen to root
      alone over IPC;
-  3. the daemon starts after both, and the role runs from its own playbook.
+  3. the daemon starts after both, and the role runs from its own playbook;
+  4. a check mode run is honest on a host that never had USBGuard: the
+     policy generation runs in check mode too (it only prints), so the check
+     sees the policy a run would install; without the usbguard command the
+     run says it cannot preview the policy and skips only what needs the
+     package, never failing on a policy it could not generate
+     (problems/usbguard-check-mode-failed-on-first-run.md).
 """
 
 from __future__ import annotations
@@ -38,7 +44,11 @@ def main() -> int:
     start = names.index("Start USBGuard now and at every boot")
     require(names.index("Generate the policy from the devices attached now") < block < start,
             "the implicit block or the daemon comes before the policy")
-    require("not host_usbguard_existing.stat.exists" in generate["when"],
+    def when(task: dict) -> str:
+        value = task.get("when", "")
+        return " and ".join(value) if isinstance(value, list) else str(value)
+
+    require("not host_usbguard_existing.stat.exists" in when(generate),
             "an existing policy can be overwritten")
     inner = {task["name"]: task for task in generate["block"]}
     guard = inner["Refuse a generated policy that would block an attached device"]["ansible.builtin.assert"]["that"]
@@ -49,6 +59,27 @@ def main() -> int:
     order = [task["name"] for task in generate["block"]]
     require(order.index("Refuse a generated policy that would block an attached device")
             < order.index("Install the generated policy"), "the policy is installed before it is checked")
+
+    # 4. Check mode on a host that never had USBGuard.
+    asked = inner["Ask USBGuard for a policy that allows every attached device"]
+    require(asked.get("check_mode") is False,
+            "check mode skips generate-policy, so the policy check fails on a policy it never saw")
+    command = tasks[names.index("Look for the usbguard command")]["ansible.builtin.stat"]
+    require(command["path"] == "/usr/bin/usbguard", "the role does not look for the usbguard command")
+    decide = tasks[names.index("Decide whether this run can only describe the policy")]["ansible.builtin.set_fact"]
+    require(decide["host_usbguard_describe_only"].replace(" ", "")
+            == "{{ansible_check_modeandnothost_usbguard_command.stat.exists}}",
+            "describe-only is not limited to check mode without the usbguard command")
+    say = tasks[names.index("Say what a check mode run on a host without USBGuard cannot preview")]
+    require(when(say) == "host_usbguard_describe_only | bool" and "cannot be" in say["ansible.builtin.debug"]["msg"],
+            "a check mode run without the package does not say what it could not preview")
+    for name in ("Generate the policy from the devices attached now", "Block every device the policy does not allow",
+                 "Start USBGuard now and at every boot"):
+        require("not host_usbguard_describe_only | bool" in when(tasks[names.index(name)]),
+                f"{name!r} runs in a check mode that has no usbguard to run against")
+    require(names.index("Install USBGuard") < names.index("Look for the usbguard command")
+            < names.index("Generate the policy from the devices attached now"),
+            "the usbguard command is looked for before the package step or after its use")
 
     settings = yaml.safe_load((ROLE / "defaults/main.yml").read_text())["host_usbguard_settings"]
     require(settings == {
