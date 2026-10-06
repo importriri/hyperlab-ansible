@@ -267,8 +267,18 @@ proof.
 - [`acceptance-report-without-host.md`](acceptance-report-without-host.md):
   the acceptance report ran `hostname`, which Arch does not install, and
   named no host.
-- [`acceptance-report-without-host.md`](acceptance-report-without-host.md):
-  the acceptance report ran `hostname`, which Arch does not install, and
-  named no host.
+- [`guests-reached-host-services.md`](guests-reached-host-services.md): every
+  guest could reach the host's own services and every network's resolver.
+- [`guest-capture-device-reaches-host-microphone.md`](guest-capture-device-reaches-host-microphone.md):
+  every guest had a sound capture device the host microphone could feed.
+- [`operation-relay-observer-race.md`](operation-relay-observer-race.md): a
+  successful operation was recorded as failed when an observer left during
+  its output.
+- [`qemu-processes-share-one-identity.md`](qemu-processes-share-one-identity.md):
+  every QEMU process could open every Machine's disk.
+- [`emergency-stop-blocked-by-its-record.md`](emergency-stop-blocked-by-its-record.md):
+  an unreadable emergency stop record stopped the stop itself.
+- [`problem-index-missing-and-duplicate-entries.md`](problem-index-missing-and-duplicate-entries.md):
+  this index missed five notes and listed one twice.
 
 Author: [importriri](https://github.com/importriri).

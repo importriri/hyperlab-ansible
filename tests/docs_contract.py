@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""User-facing documentation must stay navigable and executable."""
+"""User-facing documentation must stay navigable and executable.
+
+Every note in problems/ is listed in problems/README.md exactly once: a
+note missing from the index is not found from its symptom, and a listed
+twice index reads as two problems
+(problems/problem-index-missing-and-duplicate-entries.md).
+"""
 
 from __future__ import annotations
 
@@ -43,6 +49,14 @@ def main() -> int:
                 resolved.is_relative_to(ROOT) and resolved.exists(),
                 f"broken local link in {path.relative_to(ROOT)}: {raw_target}",
             )
+
+    problems = ROOT / "problems"
+    index = (problems / "README.md").read_text(encoding="utf-8")
+    for note in sorted(problems.glob("*.md")):
+        if note.name == "README.md":
+            continue
+        listed = len(re.findall(r"\(%s\)" % re.escape(note.name), index))
+        require(listed == 1, f"problems/README.md lists {note.name} {listed} times, not once")
 
     for path in sorted(DOCS.glob("*.md")):
         inbound = any(
