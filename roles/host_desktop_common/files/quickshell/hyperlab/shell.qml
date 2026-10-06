@@ -145,6 +145,17 @@ ShellRoot {
             sharedState.applyStreamHealth(serial, machine, raw, exitCode, detail);
         }
 
+        // The emergency stop: transport in, observation out (ADR 0047).
+        onPanicAnswered: (raw, exitCode, detail) => {
+            sharedState.applyPanicStatus(raw, exitCode, detail);
+        }
+
+        onPanicRestoreRequested: sharedState.beginPanicRestore()
+
+        onPanicRestoreAnswered: (raw, exitCode, detail) => {
+            sharedState.applyPanicRestore(raw, exitCode, detail);
+        }
+
         onCreatePlanRequested: sharedState.beginCreatePlan()
 
         onCreatePlanAnswered: (raw, exitCode, detail) => {

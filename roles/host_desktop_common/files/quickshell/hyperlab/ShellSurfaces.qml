@@ -449,6 +449,12 @@ QtObject {
             "consequence": String(record.consequence),
             "confirmLabel": String(record.confirmLabel),
             "requiresName": record.requiresName === true,
+            // What the typed word is, in the operator's words; a machine
+            // name unless the record says otherwise.
+            "namePrompt":
+                typeof record.namePrompt === "string" && record.namePrompt.length > 0
+                ? record.namePrompt
+                : "Type the exact machine name to continue.",
             "generation":
                 typeof record.generation === "number"
                 ? record.generation

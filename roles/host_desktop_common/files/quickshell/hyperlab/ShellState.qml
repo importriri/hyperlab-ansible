@@ -1731,6 +1731,84 @@ Scope {
             : "Public";
     }
 
+    // ------------------------------------------------------ emergency stop
+
+    // The emergency stop (ADR 0047), as the machine bridge's panic-status
+    // reports it. "unknown" until it answers, then "clear", "engaged" or
+    // "unavailable". A failed read never clears an engaged stop: the
+    // Machines are still paused whether or not the record could be read, so
+    // the engaged state stays until a valid answer says otherwise.
+    property string panicState: "unknown"
+    property var panicDomains: []
+    property real panicEngagedAt: 0
+    property string panicDetail: ""
+    property bool panicRestoring: false
+
+    readonly property bool panicEngaged: state.panicState === "engaged"
+    readonly property int panicPausedCount:
+        state.panicDomains.filter(domain => domain.paused).length
+    readonly property int panicLinksDown:
+        state.panicDomains.reduce((sum, domain) => sum + domain.links_down, 0)
+
+    function validPanicAnswer(parsed, phase) {
+        return parsed !== null && parsed.phase === phase
+            && typeof parsed.engaged === "boolean"
+            && Array.isArray(parsed.domains)
+            && parsed.domains.length <= 512
+            && parsed.domains.every(domain => domain !== null && typeof domain === "object"
+                && typeof domain.name === "string" && domain.name.length > 0
+                && domain.name.length <= 255
+                && typeof domain.paused === "boolean"
+                && Number.isInteger(domain.links_down) && domain.links_down >= 0)
+            && (parsed.engaged_at === null
+                || (typeof parsed.engaged_at === "number" && Number.isFinite(parsed.engaged_at)));
+    }
+
+    function adoptPanic(parsed) {
+        state.panicState = parsed.engaged ? "engaged" : "clear";
+        state.panicDomains = parsed.engaged ? parsed.domains : [];
+        state.panicEngagedAt = parsed.engaged && parsed.engaged_at !== null
+            ? parsed.engaged_at * 1000 : 0;
+    }
+
+    function applyPanicStatus(raw, exitCode, detail) {
+        const parsed = exitCode === 0 ? state.parseJson(raw) : null;
+
+        if (!state.validPanicAnswer(parsed, "panic")) {
+            if (state.panicState !== "engaged")
+                state.panicState = "unavailable";
+            return false;
+        }
+        state.adoptPanic(parsed);
+        if (!state.panicEngaged)
+            state.panicDetail = "";
+        return true;
+    }
+
+    function beginPanicRestore() {
+        state.panicRestoring = true;
+        state.panicDetail = "";
+    }
+
+    // A restore reports what is left. A partial one keeps the stop engaged
+    // and says what failed; restoring again retries only that.
+    function applyPanicRestore(raw, exitCode, detail) {
+        state.panicRestoring = false;
+        const parsed = state.parseJson(raw);
+
+        if (!state.validPanicAnswer(parsed, "panic-restore")) {
+            state.panicDetail = String(detail || "").replace(/^HyperLab: /, "").slice(0, 300)
+                || "The restore did not report an outcome";
+            return false;
+        }
+        state.adoptPanic(parsed);
+        const failures = Array.isArray(parsed.failures) ? parsed.failures : [];
+        state.panicDetail = failures.length
+            ? "Not everything was restored: " + failures.map(f => String(f)).join("; ").slice(0, 300)
+            : "";
+        return parsed.ok === true;
+    }
+
     // ------------------------------------------------------------- parsing
 
     function parseJson(raw) {

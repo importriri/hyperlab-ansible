@@ -135,6 +135,40 @@ PanelWindow {
             anchors.verticalCenterOffset: -1
             spacing: bar.tokens.spaceSm
 
+            // The emergency stop (ADR 0047) is never hidden while engaged:
+            // it is the first thing on the host side of every rail, and it
+            // opens Machines, where Restore is.
+            ShellControl {
+                objectName: "rail-panic"
+                anchors.verticalCenter: parent.verticalCenter
+                visible: bar.shellState.panicEngaged
+                height: bar.tokens.controlHeight
+                tokens: bar.tokens
+                theme: bar.theme
+                flat: true
+                accessibleName: "Emergency stop: Machines paused, networks cut"
+
+                content: [
+                    ShellIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        tokens: bar.tokens
+                        text: bar.icons.warning
+                        color: bar.theme.semanticStatusColor("error")
+                    },
+
+                    ShellLabel {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !bar.narrowRail
+                        tokens: bar.tokens
+                        role: "meta"
+                        text: "Emergency stop"
+                        color: bar.theme.semanticStatusColor("error")
+                    }
+                ]
+
+                onActivated: bar.shellSurfaces.openWorkspace("machines")
+            }
+
             ProvenanceBadge {
                 objectName: "provenance-badge"
                 anchors.verticalCenter: parent.verticalCenter

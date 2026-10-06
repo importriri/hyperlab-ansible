@@ -37,6 +37,12 @@ green with the reason, not quietly dropped.
 | 29 | `operations.py` | let a managed M3 domain use direct `virsh start` | red | `test_managed_domain_cannot_bypass_the_m3_start_playbook` |
 | 30 | `operations.py` | start anyway when the memory budget cannot be read | red | `test_start_refuses_when_the_memory_budget_cannot_be_read` |
 | 31 | `operations.py` | start a VFIO domain absent from `gpu_domain_profiles` | red | `test_unguarded_vfio_domain_cannot_start_from_the_cockpit` |
+| 32 | `commands/panic.py` | pause a domain before its links go down | red | `panic_failure_count` |
+| 33 | `commands/panic.py` | restore without `--confirm` | red | `panic_unconfirmed_exit` |
+| 34 | `commands/panic.py` | a second engage starts a new record | red | `panic_second_keeps_time` |
+| 35 | `commands/panic.py` | a link the operator had set down is recorded | red | `panic_restored_links` |
+| 36 | `commands/panic.py` | restore resumes a recorded domain the stop did not pause | red, after a test was added | `panic_unpaused_stays_paused` |
+| 37 | `commands/panic.py` | the record is written 0644 | red | `panic_file_mode` |
 
 
 ## Cockpit/M3 integration mutations

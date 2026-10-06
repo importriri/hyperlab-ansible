@@ -538,6 +538,24 @@ Window {
             return true;
         }
         function usbBusy(port) { return busy; }
+
+        // Emergency stop transport (ADR 0047). The answer is bridge-shaped
+        // JSON handed to the real ShellState; null is a bridge that could
+        // not answer. A restore is recorded only.
+        property var panicAnswer: null
+        property var panicRestores: []
+        function requestPanicStatus() {
+            if (panicAnswer === null)
+                sharedState.applyPanicStatus("", 2, "fixture bridge unavailable");
+            else
+                sharedState.applyPanicStatus(JSON.stringify(panicAnswer), 0, "");
+            return true;
+        }
+        function restorePanic() {
+            panicRestores = panicRestores.concat(["restore"]);
+            sharedState.beginPanicRestore();
+            return true;
+        }
         // Mirrors MachineActions.validUsbIdentity.
         function validUsbIdentity(device) {
             return typeof device === "string" && /^[0-9a-f]{4}:[0-9a-f]{4}$/.test(device);
@@ -2316,6 +2334,106 @@ USB_UNAVAILABLE = """
                   "unreadable USB devices still offered an allow");
 """
 
+PANIC_ANSWER = {
+    "phase": "panic", "engaged": True, "engaged_at": 1760000000.5,
+    "domains": [{"name": "fixture-001", "paused": True, "links_down": 2},
+                {"name": "fixture-002", "paused": True, "links_down": 1}],
+    "failures": [], "notes": [],
+}
+
+PANIC = """
+            sharedMachineActions.panicAnswer = @@PANIC@@;
+            sharedMachineActions.requestPanicStatus();
+            check(sharedState.panicEngaged, "an engaged emergency stop was not adopted");
+            const chip = window.find(rail, "rail-panic");
+            check(chip !== null && chip.visible, "the rail does not show the emergency stop");
+            chip.activated();
+            check(sharedSurfaces.workspaceOpen && sharedSurfaces.workspaceView === "machines",
+                  "the rail's emergency stop does not open Machines");
+            const banner = window.find(workspaceSurface, "panic-banner");
+            check(banner !== null && banner.visible && banner.height > 0,
+                  "the workspace does not show the emergency stop");
+            const detail = window.find(workspaceSurface, "panic-detail");
+            check(detail.text.indexOf("2 paused, 3 network links cut") === 0,
+                  "the emergency stop does not say what it changed: " + detail.text);
+            for (const destination of ["controls", "diagnostics", "workbench", "devices"]) {
+                sharedSurfaces.switchWorkspace(destination);
+                check(banner.visible, "the emergency stop is hidden on " + destination);
+            }
+            sharedSurfaces.switchWorkspace("machines");
+            window.find(workspaceSurface, "panic-restore").activated();
+            check(sharedMachineActions.panicRestores.length === 0,
+                  "Restore ran before it was confirmed");
+            check(sharedSurfaces.confirmation !== null
+                  && sharedSurfaces.confirmation.kind === "panic"
+                  && sharedSurfaces.confirmation.requiresName === true,
+                  "Restore did not ask for a typed confirmation");
+            const field = window.find(workspaceSurface, "confirmation-name");
+            const confirm = window.find(workspaceSurface, "confirmation-confirm");
+            check(!confirm.enabled, "Restore can be confirmed before the word is typed");
+            field.text = "restor";
+            check(!confirm.enabled, "a partial word enabled Restore");
+            field.text = "Restore";
+            check(!confirm.enabled, "a differently cased word enabled Restore");
+            field.text = "restore";
+            check(confirm.enabled, "the exact word did not enable Restore");
+            confirm.activated();
+            check(sharedMachineActions.panicRestores.length === 1,
+                  "the confirmed Restore did not reach the bridge exactly once");
+            check(sharedState.panicRestoring, "the restore in flight is not shown");
+            sharedState.applyPanicRestore(JSON.stringify({phase: "panic-restore", ok: false,
+                engaged: true, engaged_at: 1760000000.5,
+                domains: [{name: "fixture-002", paused: true, links_down: 0}],
+                failures: ["fixture-002: could not be resumed"], notes: []}), 1, "");
+            check(banner.visible && detail.text.indexOf("could not be resumed") >= 0,
+                  "a partial restore did not keep the stop and say what failed");
+            sharedState.applyPanicStatus("", 2, "fixture bridge unavailable");
+            check(banner.visible, "an unreadable record cleared an engaged emergency stop");
+            sharedState.applyPanicRestore(JSON.stringify({phase: "panic-restore", ok: true,
+                engaged: false, engaged_at: null, domains: [], failures: [], notes: []}), 0, "");
+            check(!banner.visible && !chip.visible && !sharedState.panicEngaged,
+                  "a full restore left the emergency stop shown");
+"""
+
+# Presentation: the stop engaged, the typed confirmation open over it.
+PANIC_OPEN = """
+            sharedMachineActions.panicAnswer = @@PANIC@@;
+            sharedMachineActions.requestPanicStatus();
+            sharedSurfaces.openWorkspace("machines");
+            window.find(workspaceSurface, "panic-restore").activated();
+            const footer = window.find(workspaceSurface, "confirmation-footer");
+            check(footer !== null && footer.visible, "the Restore dialog has no footer");
+            const point = footer.mapToItem(window.contentItem, 0, 0);
+            check(point.y >= 0 && point.y + footer.height <= window.height
+                  && point.x + footer.width <= window.width,
+                  "the Restore dialog buttons fell outside the window");
+            const restore = window.find(workspaceSurface, "panic-restore");
+            const corner = restore.mapToItem(window.contentItem, 0, 0);
+            check(corner.x >= 0 && corner.x + restore.width <= window.width,
+                  "the Restore button fell outside the window");
+"""
+
+PANIC_CLEAR = """
+            sharedMachineActions.panicAnswer = {phase: "panic", engaged: false, engaged_at: null,
+                                                domains: [], failures: [], notes: []};
+            sharedMachineActions.requestPanicStatus();
+            check(sharedState.panicState === "clear", "a clear answer was not adopted");
+            sharedSurfaces.openWorkspace("machines");
+            check(!window.find(workspaceSurface, "panic-banner").visible,
+                  "the emergency stop is shown without a record");
+            check(!window.find(rail, "rail-panic").visible,
+                  "the rail shows an emergency stop without a record");
+            sharedMachineActions.panicAnswer = null;
+            sharedMachineActions.requestPanicStatus();
+            check(sharedState.panicState === "unavailable"
+                  && !window.find(workspaceSurface, "panic-banner").visible,
+                  "an unreadable answer was shown as an engaged stop");
+            sharedMachineActions.panicAnswer = {phase: "panic", engaged: true, engaged_at: 1,
+                                                domains: [{name: "x", paused: "yes", links_down: 1}]};
+            sharedMachineActions.requestPanicStatus();
+            check(!sharedState.panicEngaged, "a malformed answer was adopted");
+"""
+
 APPLICATIONS = """
             sharedSurfaces.openLauncher("");
             check(!launcher.results.some(result => result.kind === "application"),
@@ -2544,6 +2662,9 @@ ROOT_WIRING = (
     "onCapabilitiesCleared: sharedState.clearCapabilities()",
     "sharedSurfaces.settleActionOsd(action, ok, detail);",
     'if (action === "session-lock")',
+    "sharedState.applyPanicStatus(raw, exitCode, detail);",
+    "onPanicRestoreRequested: sharedState.beginPanicRestore()",
+    "sharedState.applyPanicRestore(raw, exitCode, detail);",
 )
 
 
@@ -2641,6 +2762,15 @@ def main() -> int:
             ("usb-devices-narrow", 800, 600, populated,
              USB.replace("@@USB@@", json.dumps(USB_ANSWER))),
             ("usb-devices-unavailable", 1920, 1080, populated, USB_UNAVAILABLE),
+            ("emergency-stop", 1920, 1080, populated,
+             PANIC.replace("@@PANIC@@", json.dumps(PANIC_ANSWER))),
+            ("emergency-stop-narrow", 800, 600, populated,
+             PANIC.replace("@@PANIC@@", json.dumps(PANIC_ANSWER))),
+            ("emergency-stop-clear", 1920, 1080, populated, PANIC_CLEAR),
+            ("emergency-stop-open", 1920, 1080, populated,
+             PANIC_OPEN.replace("@@PANIC@@", json.dumps(PANIC_ANSWER))),
+            ("emergency-stop-open-narrow", 800, 600, populated,
+             PANIC_OPEN.replace("@@PANIC@@", json.dumps(PANIC_ANSWER))),
             ("stream-health", 1920, 1080, populated, STREAM_HEALTH),
             ("fullscreen-frame", 1920, 1080, populated,
              FULLSCREEN.replace("@@PROVENANCE@@", json.dumps(resolver_answers()))),

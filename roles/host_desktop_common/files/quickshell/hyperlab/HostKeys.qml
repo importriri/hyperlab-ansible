@@ -45,6 +45,7 @@ QtObject {
         ] },
         { "title": "Session and appearance", "keys": [
             { "keys": "SUPER+Escape", "does": "Lock the screen" },
+            { "keys": "SUPER+SHIFT+Escape", "does": "Emergency stop: cut every running Machine's network, then pause it; Restore is in the shell" },
             { "keys": "SUPER+SHIFT+T", "does": "Next theme" },
             { "keys": "SUPER+SHIFT+W", "does": "Wallpaper mode" },
             { "keys": "SUPER+CTRL+Space", "does": "Next keyboard layout" },

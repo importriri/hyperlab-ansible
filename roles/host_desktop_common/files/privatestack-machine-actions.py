@@ -29,6 +29,13 @@ Machine, and only one that presents no keyboard or mouse is allowed here:
   usb-allow PORT SCOPE DEVICE   allow the blocked device DEVICE (vendor:product)
                                 at PORT, once or permanently
 
+The emergency stop crosses it as two more (ADR 0047). Engaging it is a host
+key, never this bridge; the shell only reads it and restores it:
+
+  panic-status           whether an emergency stop is engaged, and on what
+  panic-restore          reconnect and resume exactly what it changed (the
+                         shell asks for a typed confirmation first)
+
 Creation crosses it as two more questions (ADR 0017):
 
   create-plan                                   what may be created, within which limits
@@ -579,6 +586,65 @@ def usb_allow(port: str, scope: str, identity: str) -> None:
     privileged("usb.allow", f"usb:{port}:{scope}:{identity}")
 
 
+PANIC_RESTORE_TIMEOUT = 180
+
+
+def panic_summary(payload: Any) -> dict[str, Any]:
+    """The emergency stop record, reduced to what the shell shows."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("engaged"), bool):
+        raise Refused("invalid emergency stop answer")
+    record = payload.get("record")
+    domains = []
+    engaged_at = None
+    if payload["engaged"]:
+        if not isinstance(record, dict) or not isinstance(record.get("domains"), dict):
+            raise Refused("invalid emergency stop record")
+        engaged_at = record.get("engaged_at")
+        for name, entry in sorted(record["domains"].items()):
+            if not isinstance(entry, dict):
+                raise Refused("invalid emergency stop record")
+            domains.append({
+                "name": str(name),
+                "paused": entry.get("paused") is True,
+                "links_down": len(entry.get("links_down") or []),
+            })
+    return {
+        "engaged": payload["engaged"],
+        "engaged_at": engaged_at if isinstance(engaged_at, (int, float)) else None,
+        "domains": domains,
+        "failures": [str(item) for item in payload.get("failures") or []],
+        "notes": [str(item) for item in payload.get("notes") or []],
+    }
+
+
+def panic_status() -> dict[str, Any]:
+    return {"phase": "panic", **panic_summary(cli_json("panic", "status"))}
+
+
+def panic_restore() -> int:
+    """Run the confirmed restore and report what is left, if anything.
+
+    A partial restore exits non-zero with its JSON still on stdout, so it is
+    read either way; anything else that fails is a refusal.
+    """
+    result = subprocess.run(
+        [HYPERLABCTL, "--json", "panic", "restore", "--confirm"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        timeout=PANIC_RESTORE_TIMEOUT,
+    )
+    if result.returncode not in (0, 1):
+        raise Refused(result.stderr.strip() or "the emergency stop could not be restored")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise Refused("invalid hyperlabctl JSON") from exc
+    emit({"phase": "panic-restore", "ok": result.returncode == 0, **panic_summary(payload)})
+    return 0 if result.returncode == 0 else 1
+
+
 def checkout() -> str:
     value = CHECKOUT_POINTER.read_text(encoding="utf-8").strip()
     candidate = Path(value)
@@ -614,6 +680,11 @@ def main() -> int:
         valid_name(sys.argv[2])
         seal(sys.argv[2])
         return 127
+    if sys.argv[1:] == ["panic-status"]:
+        emit(panic_status())
+        return 0
+    if sys.argv[1:] == ["panic-restore"]:
+        return panic_restore()
     if sys.argv[1:] == ["usb"]:
         emit(usb())
         return 0

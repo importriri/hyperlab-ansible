@@ -16,7 +16,7 @@
 // footer, so a long target or a short window never pushes them off screen.
 //
 // Destructive lifecycle operations may require the exact machine name to be
-// typed. That is an interaction safeguard, not a privilege boundary: the
+// typed, and restoring after the emergency stop a fixed word. That is an interaction safeguard, not a privilege boundary: the
 // reviewed backend remains the authority that enforces the operation.
 
 import QtQuick
@@ -249,7 +249,7 @@ Item {
                     tokens: confirmation.tokens
                     role: "meta"
                     wrapMode: Text.WordWrap
-                    text: "Type the exact machine name to continue."
+                    text: confirmation.open ? String(confirmation.record.namePrompt) : ""
                     color: confirmation.theme.textQuiet
                 }
 
@@ -292,7 +292,8 @@ Item {
                             confirmButton.actionable ? confirmButton : cancelButton
 
                         Accessible.role: Accessible.EditableText
-                        Accessible.name: "Exact machine name"
+                        Accessible.name:
+                            confirmation.open ? String(confirmation.record.namePrompt) : ""
 
                         onActiveFocusChanged: {
                             if (activeFocus)
@@ -369,7 +370,8 @@ Item {
                     confirmation.open
                     ? String(confirmation.record.confirmLabel)
                     : ""
-                disabledReason: "Exact machine name required"
+                disabledReason:
+                    confirmation.open ? String(confirmation.record.namePrompt) : ""
 
                 content: [
                     ShellLabel {

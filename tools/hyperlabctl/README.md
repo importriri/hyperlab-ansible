@@ -25,6 +25,10 @@ registry does not expose.
 | `hyperlabctl machine create-plan` | JSON: what the shell's Create view may offer, with the factory's limits |
 | `hyperlabctl machine provision-steps <id>` | JSON: the reviewed provisioning commands for one projected Machine |
 | `hyperlabctl clipboard send <id>` | send the host clipboard text to one running Machine, once |
+| `hyperlabctl panic engage` | emergency stop: cut every running domain's links, then pause it, recording what changed |
+| `hyperlabctl panic status` | what the engaged emergency stop changed, if any |
+| `hyperlabctl panic restore --confirm` | reconnect and resume exactly what the emergency stop changed |
+| `hyperlabctl usb list` | USB devices below the root hubs, blocked ones first |
 | `hyperlabctl trust` | current GPU trust owner and allowed transitions |
 | `hyperlabctl logs --level warn` | warning-or-higher HyperLab events |
 | `hyperlabctl schema` | discovered status providers and fields |

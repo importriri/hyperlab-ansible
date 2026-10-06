@@ -246,10 +246,140 @@ FloatingWindow {
                 }
             }
 
+            // The emergency stop (ADR 0047), above every destination for as
+            // long as it is engaged. Restore goes through the shared
+            // confirmation with a typed word, and the bridge runs it.
+            Rectangle {
+                id: panicBanner
+
+                objectName: "panic-banner"
+                anchors.top: destinationBar.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                visible: workspace.shellState.panicEngaged
+                height: visible ? panicRow.implicitHeight + workspace.tokens.spaceMd * 2 : 0
+                color: workspace.theme.mantle
+
+                Accessible.role: Accessible.AlertMessage
+                Accessible.name: "Emergency stop: Machines paused, networks cut"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: workspace.tokens.spaceXs
+                    color: workspace.theme.semanticStatusColor("error")
+                }
+
+                Row {
+                    id: panicRow
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: workspace.tokens.spaceLg
+                    anchors.rightMargin: workspace.tokens.spaceLg
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: workspace.tokens.spaceMd
+
+                    ShellIcon {
+                        id: panicIcon
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        tokens: workspace.tokens
+                        text: workspace.icons.warning
+                        color: workspace.theme.semanticStatusColor("error")
+                    }
+
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - restoreControl.width
+                            - panicIcon.width - workspace.tokens.spaceMd * 2
+                        spacing: workspace.tokens.spaceXs
+
+                        ShellLabel {
+                            width: parent.width
+                            tokens: workspace.tokens
+                            role: "heading"
+                            elide: Text.ElideRight
+                            text: "Emergency stop: Machines paused, networks cut"
+                            color: workspace.theme.textPrimary
+                        }
+
+                        ShellLabel {
+                            objectName: "panic-detail"
+                            width: parent.width
+                            tokens: workspace.tokens
+                            role: "meta"
+                            wrapMode: Text.Wrap
+                            text: workspace.shellState.panicDetail.length > 0
+                                ? workspace.shellState.panicDetail
+                                : workspace.shellState.panicPausedCount + " paused, "
+                                    + workspace.shellState.panicLinksDown
+                                    + " network links cut"
+                                    + (workspace.shellState.panicEngagedAt > 0
+                                        ? " since " + Qt.formatTime(
+                                            new Date(workspace.shellState.panicEngagedAt), "HH:mm")
+                                        : "")
+                                    + ". Restore reconnects and resumes exactly what the stop changed."
+                            color: workspace.shellState.panicDetail.length > 0
+                                ? workspace.theme.semanticStatusColor("warn")
+                                : workspace.theme.textSecondary
+                        }
+                    }
+
+                    ShellControl {
+                        id: restoreControl
+
+                        objectName: "panic-restore"
+                        anchors.verticalCenter: parent.verticalCenter
+                        tokens: workspace.tokens
+                        theme: workspace.theme
+                        busy: workspace.shellState.panicRestoring
+                        accessibleName: "Restore after the emergency stop"
+
+                        content: [
+                            ShellLabel {
+                                anchors.verticalCenter: parent.verticalCenter
+                                tokens: workspace.tokens
+                                role: "body"
+                                text: workspace.shellState.panicRestoring ? "Restoring" : "Restore"
+                                color: workspace.theme.textPrimary
+                            }
+                        ]
+
+                        onActivated: {
+                            workspace.shellSurfaces.requestConfirmation({
+                                "kind": "panic",
+                                "actionId": "panic-restore",
+                                "targetId": "emergency-stop",
+                                "targetName": "restore",
+                                "title": "Restore after the emergency stop?",
+                                "consequence":
+                                    "Every Machine the emergency stop paused resumes, and "
+                                    + "every network link it cut is reconnected. Machines "
+                                    + "that were paused or disconnected before it stay so.",
+                                "confirmLabel": "Restore",
+                                "requiresName": true,
+                                "namePrompt": "Type restore to continue.",
+                                "generation": -1
+                            });
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: workspace.theme.hairline
+                }
+            }
+
             Item {
                 id: viewHost
 
-                anchors.top: destinationBar.bottom
+                anchors.top: panicBanner.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
@@ -325,6 +455,14 @@ FloatingWindow {
             // The captured record is what executes. Routing is the only thing
             // this layer adds, and it adds nothing to the record.
             onConfirmed: record => {
+                if (record.kind === "panic") {
+                    // Re-read before it runs: a stop that is no longer
+                    // engaged has nothing to restore.
+                    if (workspace.shellState.panicEngaged)
+                        workspace.machineActions.restorePanic();
+                    return;
+                }
+
                 if (record.kind === "machine") {
                     // Revalidate the captured target, never a new selection:
                     // a machine that is no longer in the inventory is refused

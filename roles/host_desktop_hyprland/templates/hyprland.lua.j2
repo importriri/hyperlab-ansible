@@ -393,6 +393,16 @@ hl.bind(
     )
 )
 
+-- Emergency stop (ADR 0047, proposed key): cut every running Machine's
+-- network links, then pause it. Reversible: the shell's Restore, after a
+-- typed confirmation, undoes exactly what this changed.
+hl.bind(
+    main_mod .. " + SHIFT + Escape",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/hyperlabctl panic engage"
+    )
+)
+
 hl.bind(
     main_mod .. " + SHIFT + T",
     hl.dsp.exec_cmd(

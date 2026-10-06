@@ -946,6 +946,88 @@ Scope {
         }
     }
 
+    // ------------------------------------------------------ emergency stop
+
+    // The emergency stop (ADR 0047) is engaged by a host key, never from
+    // here. This transport only reads it, every few seconds so the shell
+    // shows a stop soon after the key, and runs the restore once the shell
+    // has had it confirmed. ShellState decides what an answer means.
+    signal panicAnswered(string raw, int exitCode, string detail)
+    signal panicRestoreRequested()
+    signal panicRestoreAnswered(string raw, int exitCode, string detail)
+
+    function requestPanicStatus() {
+        if (panicRunner.running || panicRestoreRunner.running)
+            return false;
+        panicRunner.buffer = "";
+        panicRunner.detail = "";
+        panicRunner.running = true;
+        return true;
+    }
+
+    function restorePanic() {
+        if (panicRestoreRunner.running)
+            return false;
+        machineActions.panicRestoreRequested();
+        panicRestoreRunner.buffer = "";
+        panicRestoreRunner.detail = "";
+        panicRestoreRunner.running = true;
+        return true;
+    }
+
+    Process {
+        id: panicRunner
+
+        property string buffer: ""
+        property string detail: ""
+
+        command: [machineActions.bridge, "panic-status"]
+
+        stdout: StdioCollector {
+            onStreamFinished: panicRunner.buffer = String(this.text)
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: panicRunner.detail = String(this.text).trim()
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.panicAnswered(panicRunner.buffer, exitCode, panicRunner.detail);
+        }
+    }
+
+    Process {
+        id: panicRestoreRunner
+
+        property string buffer: ""
+        property string detail: ""
+
+        command: [machineActions.bridge, "panic-restore"]
+
+        stdout: StdioCollector {
+            onStreamFinished: panicRestoreRunner.buffer = String(this.text)
+        }
+
+        stderr: StdioCollector {
+            onStreamFinished: panicRestoreRunner.detail = String(this.text).trim()
+        }
+
+        onExited: (exitCode, exitStatus) => {
+            machineActions.panicRestoreAnswered(
+                panicRestoreRunner.buffer, exitCode, panicRestoreRunner.detail);
+            // Resumed Machines change state; read the host back.
+            machineActions.inventoryRefreshRequested();
+        }
+    }
+
+    Timer {
+        interval: 5000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: machineActions.requestPanicStatus()
+    }
+
     // -------------------------------------------------------- connections
 
     // One entry per open connection: "<verb>\n<machine>".

@@ -24,6 +24,7 @@ terminal, and nothing is written outside a temporary directory.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -490,6 +491,85 @@ def usb_cases(bridge) -> None:
     check(not any(call != ("usb", "list") for call in calls), "a refusal called something else")
 
 
+def panic_cases(bridge) -> None:
+    """The emergency stop (ADR 0047): read it, restore it, never engage it."""
+    record = {"schema": 1, "engaged_at": 1760000000.5, "updated_at": 1760000001.0, "domains": {
+        "dev-01": {"paused": True, "links_down": [
+            {"mac": "52:54:00:00:00:01", "interface": "vnet0"},
+            {"mac": "52:54:00:00:00:02", "interface": "vnet1"}]},
+        "win-01": {"paused": False, "links_down": [
+            {"mac": "52:54:00:00:00:03", "interface": "vnet2"}]}}}
+    calls: list[tuple[str, ...]] = []
+
+    def fake_cli(*args):
+        calls.append(args)
+        if args == ("panic", "status"):
+            return {"engaged": True, "record": record, "failures": [], "notes": []}
+        raise AssertionError("unexpected hyperlabctl call %r" % (args,))
+
+    bridge.cli_json = fake_cli
+    answer = bridge.panic_status()
+    check(answer["phase"] == "panic" and answer["engaged"] is True
+          and answer["engaged_at"] == 1760000000.5,
+          "the emergency stop status lost its shape: %r" % answer)
+    check(answer["domains"] == [{"name": "dev-01", "paused": True, "links_down": 2},
+                                {"name": "win-01", "paused": False, "links_down": 1}],
+          "the emergency stop domains were not summarised: %r" % answer["domains"])
+    check(calls == [("panic", "status")], "panic-status asked for more than the status")
+    clear = bridge.panic_summary({"engaged": False, "record": None})
+    check(clear["engaged"] is False and clear["domains"] == [], "a clear status was not clear")
+    for bad in (None, [], {"engaged": "yes"}, {"engaged": True, "record": None},
+                {"engaged": True, "record": {"domains": {"x": "y"}}}):
+        try:
+            bridge.panic_summary(bad)
+            result = "accepted"
+        except bridge.Refused:
+            result = "refused"
+        check(result == "refused", "a malformed emergency stop answer was accepted: %r" % (bad,))
+
+    # Restore runs exactly the confirmed command and reports what is left.
+    runs: list[list[str]] = []
+    emitted: list[dict] = []
+    real_run, real_emit = bridge.subprocess.run, bridge.emit
+
+    def fake_run(argv, **kwargs):
+        runs.append(list(argv))
+        return outcome
+
+    class Done:
+        def __init__(self, returncode, stdout, stderr=""):
+            self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+    bridge.subprocess.run = fake_run
+    bridge.emit = emitted.append
+    try:
+        outcome = Done(0, json.dumps({"engaged": False, "record": None, "failures": [],
+                                       "notes": []}))
+        check(bridge.panic_restore() == 0 and emitted[-1]["phase"] == "panic-restore"
+              and emitted[-1]["ok"] is True and emitted[-1]["engaged"] is False,
+              "a full restore was not reported: %r" % emitted[-1:])
+        check(runs[-1] == [bridge.HYPERLABCTL, "--json", "panic", "restore", "--confirm"],
+              "restore ran something else: %r" % runs[-1])
+        outcome = Done(1, json.dumps({"engaged": True, "record": record,
+                                       "failures": ["win-01: could not be resumed"], "notes": []}))
+        check(bridge.panic_restore() == 1 and emitted[-1]["ok"] is False
+              and emitted[-1]["failures"] == ["win-01: could not be resumed"],
+              "a partial restore was not reported as partial")
+        outcome = Done(2, "", "hyperlabctl: the runtime directory is unavailable")
+        try:
+            bridge.panic_restore()
+            result = "accepted"
+        except bridge.Refused as exc:
+            result = str(exc)
+        check("runtime directory" in result, "a failed restore was not refused with its reason")
+    finally:
+        bridge.subprocess.run, bridge.emit = real_run, real_emit
+
+    source = BRIDGE.read_text(encoding="utf-8")
+    check('"panic", "engage"' not in source and "panic engage" not in source.split('"""', 2)[2],
+          "the bridge can engage the emergency stop; only the host key may")
+
+
 def main() -> int:
     bridge = load_bridge()
     choose_action_cases(bridge)
@@ -499,6 +579,7 @@ def main() -> int:
     creation_cases(bridge)
     workbench_cases(bridge)
     usb_cases(bridge)
+    panic_cases(bridge)
 
     if FAILURES:
         for failure in FAILURES:
