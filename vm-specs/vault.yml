@@ -1,0 +1,26 @@
+---
+schema_version: 1
+name: vault
+image: arch
+lifecycle: permanent
+device_profile: standard
+# ADR 0048: no network interface at all; its only channel is a vsock port
+# the host relay reaches, and it is configured by cloud-init alone.
+network_profile: none
+key_vault: vault
+resources:
+  memory_mb: 2048
+  vcpus: 1
+  disk_gib: null
+memory_overcommit: false
+autostart: false
+qemu_guest_agent: false
+looking_glass: false
+clipboard: false
+shared_folders: false
+usb_allowlist: []
+owner: sid
+purpose: Key vault (SSH keys, no network)
+tags: [linux, vault]
+snapshot_policy: none
+backup_policy: none

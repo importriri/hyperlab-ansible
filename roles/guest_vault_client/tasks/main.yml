@@ -1,0 +1,65 @@
+---
+- name: Install the key vault agent socket
+  ansible.builtin.copy:
+    src: hyperlab-vault-agent.py
+    dest: /usr/local/bin/hyperlab-vault-agent
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install it as a user service
+  ansible.builtin.template:
+    src: hyperlab-vault-agent.service.j2
+    dest: /etc/systemd/user/hyperlab-vault-agent.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the user default target wants directory
+  ansible.builtin.file:
+    path: /etc/systemd/user/default.target.wants
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Start it in every user session
+  ansible.builtin.file:
+    src: /etc/systemd/user/hyperlab-vault-agent.service
+    dest: /etc/systemd/user/default.target.wants/hyperlab-vault-agent.service
+    state: link
+
+- name: Make the vault the default agent for logins and the session
+  ansible.builtin.copy:
+    dest: "{{ item.dest }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - dest: /etc/profile.d/hyperlab-vault.sh
+      content: |
+        # The key vault (ADR 0048): the host asks before every signature.
+        export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR}/hyperlab-vault.sock"
+    - dest: /etc/environment.d/60-hyperlab-vault.conf
+      content: |
+        SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/hyperlab-vault.sock
+  loop_control:
+    label: "{{ item.dest }}"
+  when: guest_vault_client_default_agent | bool
+
+- name: Leave the Machine's own agent the default
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/profile.d/hyperlab-vault.sh
+    - /etc/environment.d/60-hyperlab-vault.conf
+  when: not guest_vault_client_default_agent | bool
+
+- name: Record that the guest_vault_client brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: guest_vault_client

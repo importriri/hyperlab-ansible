@@ -70,8 +70,23 @@ clipboard: nothing reaches it after its first boot but its vsock port. The
 domain XML guard compares the number of interfaces and vsock devices, so a
 vsock device or an interface added to a live domain is drift.
 
-The vault's listener and the client's forwarder at `SSH_AUTH_SOCK` come
-next, on the same contract.
+The vault (`vm-specs/vault.yml`) is configured by its cloud-init alone. On
+its first boot it makes its own ed25519 key, which never leaves it, and
+loads it into an `ssh-agent` whose socket only its listener uses. The
+listener (`hyperlab-vault-listen`) accepts only the host's context id and
+passes only identity listing and signing, so a host relay that went wrong
+still could not add, remove or lock keys. A client reads the public half
+with `ssh-add -L` and the operator registers it where it is needed (GitHub,
+`gpg.format=ssh` for commit signing). Importing an existing private key is
+not offered: a key typed into a Machine has already left the vault's
+protection.
+
+A client Machine applies `playbooks/guest-vault-client.yml`: a user service
+(`hyperlab-vault-agent`) listens at `$XDG_RUNTIME_DIR/hyperlab-vault.sock`,
+the user's alone, and carries each connection unchanged to the host relay.
+It decides nothing. It becomes the default `SSH_AUTH_SOCK` only when
+`guest_vault_client_default_agent` is set, so a Machine that already uses
+its own agent keeps it.
 
 ## What this does not cover
 
@@ -95,6 +110,9 @@ confirmation on the host and succeeds when allowed, fails when denied or
 ignored; `ssh-add -D` from `dev-01` is refused at the host and the vault
 keeps its keys; a connection from `dev-01` straight to the vault's context
 id fails; a signed commit verifies with the vault's public key; the
-private key is not readable anywhere but in the vault. `hyprland-dialog`
+private key is not readable anywhere but in the vault; the vault's key is
+made on its first boot and the agent has it after a reboot; with
+`guest_vault_client_default_agent` set, `SSH_AUTH_SOCK` in a login shell and
+in the client's graphical session names the vault socket. `hyprland-dialog`
 prints the button pressed on its standard output as the helper expects:
 this has not been seen yet, and until it is, any other output is a refusal.

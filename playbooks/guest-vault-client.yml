@@ -1,0 +1,12 @@
+---
+# A key vault client (ADR 0048): an agent socket in each user session that
+# reaches the host relay over vsock. The Machine's VM spec must say
+# key_vault: client, so its domain has the vsock device.
+- name: Give a Machine the key vault agent socket
+  hosts: workstations
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: guest_vault_client
+    - guest_vault_client

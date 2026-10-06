@@ -150,7 +150,7 @@ class RepositoryValidator:
             return
         if "enum" in rule and value not in rule["enum"]:
             self.fail(where, f"{key}={value!r} is not one of {rule['enum']}")
-        if rule.get("domain") and value not in self.valid_domains:
+        if rule.get("domain") and value not in self.valid_domains and value not in rule.get("reserved", []):
             self.fail(where, f"{key}={value!r} is not a declared network domain")
         if "pattern" in rule and isinstance(value, str) and re.fullmatch(rule["pattern"], value) is None:
             self.fail(where, f"{key}={value!r} does not match {rule['pattern']}")
@@ -454,7 +454,11 @@ class RepositoryValidator:
         where = self.relative(path)
         network = spec.get("network_profile")
         allowlist = image.get("network_allowlist") or []
-        if allowlist and network not in allowlist:
+        # ADR 0048: "none" is no network, the key vault's alone; no image
+        # allowlist grants it and the vault never has another.
+        if (network == "none") != (spec.get("key_vault") == "vault"):
+            self.fail(where, "only the key vault, and always the key vault, has network none")
+        elif network != "none" and allowlist and network not in allowlist:
             self.fail(where, f"{network} is not in the allowlist of image {spec.get('image')}")
         device = spec.get("device_profile")
         supports = image.get("supports", {})

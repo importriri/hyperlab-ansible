@@ -10,7 +10,8 @@ fields:
   image: {type: str, min_length: 1, pattern: "^[a-z0-9][a-z0-9-]*$"}
   lifecycle: {type: str, enum: [disposable, permanent]}
   device_profile: {type: str, enum: [standard, vfio]}
-  network_profile: {type: str, domain: true}
+  # "none" is reserved for the key vault, which has no interface (ADR 0048).
+  network_profile: {type: str, domain: true, reserved: [none]}
 
   resources:
     type: map
@@ -40,6 +41,8 @@ optional:
   looking_glass_mode:
     type: str
     enum: [windows, linux-experimental]
+  # The Machine's part in the key vault (ADR 0048).
+  key_vault: {type: str, enum: [client, vault]}
   resource_profile: {type: str, enum: [balanced, heavy]}
   snapshot_policy: {type: str, enum: [none, manual, daily]}
   backup_policy: {type: str, enum: [none, manual, weekly]}

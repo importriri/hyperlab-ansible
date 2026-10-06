@@ -1,0 +1,8 @@
+---
+# A key vault client Machine (ADR 0048). Its domain carries a vsock device
+# (key_vault: client in its VM spec); this role gives its users an agent
+# socket that reaches the host relay.
+guest_vault_client_relay_port: 7400
+# Make the vault the default agent for every login of this Machine. Off by
+# default: a Machine that already uses its own agent keeps it.
+guest_vault_client_default_agent: false

@@ -16,3 +16,58 @@ users:
       - {{ key | to_json }}
 {% endfor %}
 package_update: false
+{% if guest_plan.key_vault | default(none) == 'vault' %}
+{#- ADR 0048: the vault is configured here and nowhere else; nothing reaches
+    it after this but its vsock port. Its key is made on the first boot and
+    never leaves: a client reads the public half with ssh-add -L. #}
+{% set vault_agent_unit %}[Unit]
+Description=HyperLab key vault agent
+
+[Service]
+User={{ guest_cloud_init_user }}
+RuntimeDirectory=hyperlab-vault
+RuntimeDirectoryMode=0700
+ExecStartPre=/bin/sh -c 'test -f "$$HOME/.ssh/id_ed25519" || { mkdir -p -m 0700 "$$HOME/.ssh" && ssh-keygen -q -t ed25519 -N "" -C "hyperlab-vault@{{ guest_plan.name }}" -f "$$HOME/.ssh/id_ed25519"; }'
+ExecStart=/usr/bin/ssh-agent -D -a /run/hyperlab-vault/agent.sock
+ExecStartPost=/bin/sh -c 'for try in $$(seq 100); do test -S /run/hyperlab-vault/agent.sock && break; sleep 0.1; done; SSH_AUTH_SOCK=/run/hyperlab-vault/agent.sock ssh-add -q "$$HOME/.ssh/id_ed25519"'
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+{% endset %}
+{% set vault_listen_unit %}[Unit]
+Description=HyperLab key vault listener (host only, list and sign only)
+Requires=hyperlab-vault-agent.service
+After=hyperlab-vault-agent.service
+
+[Service]
+User={{ guest_cloud_init_user }}
+Environment=HYPERLAB_VAULT_PORT={{ guest_vault_port }}
+ExecStart=/usr/local/bin/hyperlab-vault-listen
+Restart=on-failure
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_VSOCK AF_UNIX
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+{% endset %}
+write_files:
+  - path: /usr/local/bin/hyperlab-vault-listen
+    owner: root:root
+    permissions: "0755"
+    content: {{ guest_vault_listener | to_json }}
+  - path: /etc/systemd/system/hyperlab-vault-agent.service
+    owner: root:root
+    permissions: "0644"
+    content: {{ vault_agent_unit | to_json }}
+  - path: /etc/systemd/system/hyperlab-vault-listen.service
+    owner: root:root
+    permissions: "0644"
+    content: {{ vault_listen_unit | to_json }}
+runcmd:
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, hyperlab-vault-agent.service, hyperlab-vault-listen.service]
+{% endif %}

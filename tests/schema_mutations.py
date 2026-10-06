@@ -48,6 +48,20 @@ class SchemaMutationTests(unittest.TestCase):
             "resources.vcpus=-4 is below minimum 1",
         )
 
+    def test_network_none_is_the_key_vault_alone(self) -> None:
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "vm-specs/debian-dev.yml", lambda d: d.update(network_profile="none")),
+            "only the key vault, and always the key vault, has network none",
+        )
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "vm-specs/vault.yml", lambda d: d.update(network_profile="dev")),
+            "only the key vault, and always the key vault, has network none",
+        )
+        self.assert_mutation_fails(
+            lambda root: self.mutate_yaml(root, "vm-specs/vault.yml", lambda d: d.update(key_vault="agent")),
+            "key_vault='agent' is not one of",
+        )
+
     def test_zero_image_size_is_rejected(self) -> None:
         self.assert_mutation_fails(
             lambda root: self.mutate_yaml(root, "images/debian.yml", lambda d: d.update(virtual_size_gib=0)),

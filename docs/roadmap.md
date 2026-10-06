@@ -551,7 +551,13 @@ Suricata on bridge mirrors, logs shipped off the host).
       one vsock device, `key_vault: client` adds the vsock device, and the
       domain XML guard refuses either added to a live domain
       (`tests/key_vault_domain_contract.py`, software-verified)
-- [ ] the client forwarder at `SSH_AUTH_SOCK` and the vault listener
+- [x] the vault's listener (host only, list and sign only) and its first-boot
+      key, from its cloud-init alone (`vm-specs/vault.yml`), and a client's
+      agent socket (`roles/guest_vault_client`,
+      `playbooks/guest-vault-client.yml`; `tests/vault_guest_contract.py`,
+      software-verified)
+- [ ] the vault created in the lab host and a client signing through the
+      relay there
 - [ ] the same seen on Nitro: `ssh -T git@github.com` from `dev-01` asks on
       the host, succeeds when allowed, fails when denied or ignored
 

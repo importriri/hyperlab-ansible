@@ -1,0 +1,14 @@
+[Unit]
+Description=HyperLab key vault agent socket (the host asks before every signature)
+
+[Service]
+Type=simple
+Environment=HYPERLAB_VAULT_RELAY_PORT={{ guest_vault_client_relay_port | int }}
+ExecStart=/usr/local/bin/hyperlab-vault-agent
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_VSOCK AF_UNIX
+
+[Install]
+WantedBy=default.target
