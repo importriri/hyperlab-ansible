@@ -1,7 +1,7 @@
 # ADR 0044 - Measured boot: signed unified kernel images and TPM2 unlock
 
-Status: proposed. Nothing is built; every step below changes how Nitro boots
-and is the operator's to run.
+Status: proposed. The UKI builder is built behind a switch that is off;
+every step that changes how Nitro boots stays the operator's to run.
 
 ## Context
 
@@ -132,6 +132,23 @@ On Nitro, in this order, with the commands in the operator's test plan:
 6. A kernel update rebuilds and re-signs the UKI and the PIN still unlocks
    without re-enrollment.
 7. Only then: make the UKI the default and remove the type 1 entries.
+
+## Implementation so far
+
+`roles/measured_boot` (`playbooks/measured-boot.yml`,
+`measured_boot_enabled: false`, `tests/measured_boot_contract.py`) builds
+step 1 and the measured part of step 2 of option A. One profile per type 1
+entry, with exactly that entry's command line (the contract compares
+them), joined by `ukify` into `EFI/Linux/hyperlab.efi` with signed PCR 11
+policies for the enter-initrd phase. The PCR signing key is made once and
+never replaced, since a new key needs a new TPM enrollment. The image is
+signed with `sbctl` and checked with `sbverify` against the host's `db`
+certificate before it replaces the image in use, which stays as
+`hyperlab-previous.efi`. An mkinitcpio post hook rebuilds it after every
+initramfs. The role never changes the default entry, the type 1 entries,
+the LUKS key slots or the firmware's keys: the TPM2 enrollment, the
+recovery key and the removal of the type 1 entries stay the operator's,
+first in the lab host (OVMF in setup mode, swtpm), then on Nitro.
 
 ## Out of scope
 

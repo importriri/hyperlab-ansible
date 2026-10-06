@@ -485,6 +485,10 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       an explicit host action
       ([ADR 0043](adr/0043-usb-controller-machine.md), proposed; one
       controller for every USB device, camera and Bluetooth included)
+- [x] the measured boot image builder: one signed multi-profile UKI whose
+      profiles mirror the boot entries, with signed PCR 11 policies, behind
+      `measured_boot_enabled` (off) (`roles/measured_boot`,
+      `tests/measured_boot_contract.py`, software-verified)
 - [ ] measured boot: the boot profiles as one signed multi-profile unified
       kernel image measured into PCR 11, TPM2 with a PIN for the root volume,
       a recovery key kept off the host, the type 1 entries removed last

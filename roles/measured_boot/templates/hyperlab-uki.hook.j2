@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Managed by hyperlab-ansible (roles/measured_boot). ADR 0044.
+# mkinitcpio runs this after it writes an image: rebuild and sign the UKI
+# from the new initramfs. A failed rebuild keeps the UKI in use and fails the
+# image build loudly, never silently.
+set -euo pipefail
+exec "{{ measured_boot_tool }}"

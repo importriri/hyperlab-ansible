@@ -1,0 +1,20 @@
+{#- One profile per type 1 entry, with exactly that entry's command line:
+    the options lines of roles/vfio_boot/templates/entry.conf.j2, joined in
+    order. tests/measured_boot_contract.py compares the two. -#}
+{%- set profiles = [] -%}
+{%- for item in vfio_boot_profiles -%}
+{%-   set groups = ['rd.luks.name=' ~ measured_boot_luks_uuid ~ '=' ~ luks_mapper_name ~ ' root=/dev/mapper/' ~ luks_mapper_name ~ ' rootfstype=btrfs rootflags=subvol=' ~ root_subvol ~ ' rw', 'zswap.enabled=0'] -%}
+{%-   if item.bind_vfio_devices | default(false) -%}
+{%-     set groups = groups + ['vfio-pci.ids=' ~ hardware_probe_vfio_ids_csv] -%}
+{%-   endif -%}
+{%-   set groups = groups + item.option_groups -%}
+{%-   set _ = profiles.append({'id': item.file | regex_replace('\.conf$', '') | lower | regex_replace('^arch-linux-', ''),
+                               'title': item.title, 'cmdline': groups | join(' ')}) -%}
+{%- endfor -%}
+{{ {'kernel': '/boot/vmlinuz-' ~ kernel_name,
+    'initrd': '/boot/initramfs-' ~ kernel_name ~ '.img',
+    'esp': measured_boot_esp,
+    'pcr_private_key': measured_boot_key_dir ~ '/pcr-private.pem',
+    'pcr_public_key': measured_boot_key_dir ~ '/pcr-public.pem',
+    'db_cert': '/var/lib/sbctl/keys/db/db.pem',
+    'profiles': profiles} | to_nice_json }}

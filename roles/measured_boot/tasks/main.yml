@@ -1,0 +1,133 @@
+---
+# ADR 0044. Builds a signed multi-profile UKI beside the type 1 entries,
+# which stay until the operator has booted every profile from it. The
+# default entry, the LUKS key slots and the firmware are never changed here.
+
+- name: Leave the boot chain as it is while the UKI is off
+  when: not measured_boot_enabled
+  ansible.builtin.debug:
+    msg: measured_boot_enabled is false; no UKI is built (ADR 0044).
+
+- name: Build the signed, measured UKI
+  when: measured_boot_enabled
+  block:
+    - name: Install ukify and its PE library
+      community.general.pacman:
+        name:
+          - systemd-ukify
+          - python-pefile
+          - sbsigntools
+        state: present
+
+    - name: Require the host's own Secure Boot keys
+      ansible.builtin.command:
+        argv: [sbctl, status, --json]
+      register: measured_boot_sbctl
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse to sign without installed sbctl keys
+      ansible.builtin.assert:
+        that:
+          - (measured_boot_sbctl.stdout | from_json).installed | default(false)
+        fail_msg: sbctl has no installed keys; the UKI could not be signed.
+        quiet: true
+
+    - name: Create the key and configuration directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - {path: /etc/hyperlab, mode: "0755"}
+        - {path: "{{ measured_boot_key_dir }}", mode: "0700"}
+        - {path: /etc/initcpio/post, mode: "0755"}
+
+    # The key that signs PCR 11 policies, made once. A new one would need a
+    # new TPM enrollment, so it is never replaced here.
+    - name: Make the PCR policy signing key, once
+      ansible.builtin.command:
+        argv:
+          - ukify
+          - genkey
+          - "--pcr-private-key={{ measured_boot_key_dir }}/pcr-private.pem"
+          - "--pcr-public-key={{ measured_boot_key_dir }}/pcr-public.pem"
+        creates: "{{ measured_boot_key_dir }}/pcr-private.pem"
+
+    - name: Protect the PCR policy signing key
+      ansible.builtin.file:
+        path: "{{ measured_boot_key_dir }}/pcr-private.pem"
+        owner: root
+        group: root
+        mode: "0600"
+
+    # The same sources roles/vfio_boot uses for the type 1 entries.
+    - name: Refuse a UKI without validated VFIO IDs
+      ansible.builtin.assert:
+        that:
+          - hardware_probe_vfio_ids_csv is defined
+          - hardware_probe_vfio_ids_csv is match('^[0-9a-f]{4}:[0-9a-f]{4}(,[0-9a-f]{4}:[0-9a-f]{4})+$')
+        fail_msg: Run hardware_probe first; the UKI command lines need its VFIO IDs.
+        quiet: true
+
+    - name: Read the LUKS UUID at runtime
+      ansible.builtin.command: cryptsetup luksUUID {{ luks_root_device }}
+      register: measured_boot_luks_raw
+      changed_when: false
+      check_mode: false
+
+    - name: Refuse anything that is not a LUKS UUID
+      ansible.builtin.assert:
+        that:
+          - measured_boot_luks_raw.stdout is match('^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        fail_msg: cryptsetup returned no LUKS UUID; refusing to build a boot image.
+        quiet: true
+
+    - name: Pin the UUID for the profiles
+      ansible.builtin.set_fact:
+        measured_boot_luks_uuid: "{{ measured_boot_luks_raw.stdout }}"
+
+    - name: Describe the profiles, one per type 1 entry
+      ansible.builtin.template:
+        src: uki.json.j2
+        dest: "{{ measured_boot_config }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install the UKI builder
+      ansible.builtin.copy:
+        src: hyperlab-uki-build.py
+        dest: "{{ measured_boot_tool }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Rebuild the UKI after every initramfs
+      ansible.builtin.template:
+        src: hyperlab-uki.hook.j2
+        dest: "{{ measured_boot_hook }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Build and sign the UKI now
+      when: not ansible_check_mode
+      ansible.builtin.command:
+        argv: ["{{ measured_boot_tool }}"]
+      changed_when: true
+
+- name: Remove the UKI rebuild hook while the UKI is off
+  when: not measured_boot_enabled
+  ansible.builtin.file:
+    path: "{{ measured_boot_hook }}"
+    state: absent
+
+- name: Record that the measured_boot brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: measured_boot

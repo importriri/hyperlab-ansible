@@ -1,0 +1,14 @@
+---
+# A signed, measured, multi-profile UKI beside the type 1 entries (ADR 0044).
+# Off unless measured_boot_enabled is true; never changes the default entry,
+# the LUKS key slots or the firmware.
+- name: Build the measured boot image
+  hosts: hypervisor
+  become: true
+  gather_facts: true
+  roles:
+    - hardware_probe
+    - role: brick_guard
+      vars:
+        brick_guard_brick: measured_boot
+    - measured_boot

@@ -1,0 +1,10 @@
+---
+# Signed, measured, multi-profile unified kernel image (ADR 0044). Off until
+# the lab host has booted every profile from it; on Nitro the operator turns
+# it on, boots it once, then decides the default.
+measured_boot_enabled: false
+measured_boot_config: /etc/hyperlab/uki.json
+measured_boot_key_dir: /etc/hyperlab/uki
+measured_boot_tool: /usr/local/sbin/hyperlab-uki-build
+measured_boot_hook: /etc/initcpio/post/hyperlab-uki
+measured_boot_esp: /boot
