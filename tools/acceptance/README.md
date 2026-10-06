@@ -5,7 +5,8 @@ hardware. Each one runs the group's checks, keeps the evidence under
 `~/hyperlab-evidence/<date>/<group>-<time>/` (report, logs, backups,
 screenshots) and prints PASS or FAIL per check. It asks for the sudo
 password at most once; a destructive step stops and runs only if the
-operator types the word it shows. `tests/acceptance_scripts_contract.py`
+operator types the word it shows. A step previewed by a check mode is
+offered only after that check mode passed. `tests/acceptance_scripts_contract.py`
 holds them to these rules; `lib.sh` has the helpers.
 
 | Order | Script | About | Approves |

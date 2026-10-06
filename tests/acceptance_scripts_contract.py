@@ -18,7 +18,12 @@
      (problems/acceptance-report-without-host.md);
   6. a failed playbook leaves in the report, not only in its own log, the
      name of each failed task and its message, redacted, and the report
-     names the full log (problems/acceptance-check-log-only-recap.md).
+     names the full log (problems/acceptance-check-log-only-recap.md);
+  7. fail closed: a check mode run is the condition of the step it
+     previews. Every `check … --check` is an `if check`, every confirm
+     after it sits inside that block, and its else says the step was not
+     offered; run for real, group 11 offers the block after a clean check
+     mode and only then (problems/acceptance-step-offered-after-failed-check.md).
 """
 
 from __future__ import annotations
@@ -205,12 +210,77 @@ echo "evidence=$EVIDENCE"
         require("FAILED TASK: host_usbguard : Refuse" in check_log, "the check's own log has only the recap")
 
 
+CHECK_MODE = re.compile(r"^(\s*)(if\s+)?check\s.*--check\b")
+
+
+def check_fail_closed() -> None:
+    for path in sorted(DIR.glob("*.sh")):
+        if path.name == "lib.sh":
+            continue
+        lines = path.read_text().splitlines()
+        for number, line in enumerate(lines):
+            match = CHECK_MODE.match(line)
+            if match is None:
+                continue
+            require(match.group(2) is not None,
+                    f"{path.name}:{number + 1} runs a check mode whose result guards nothing: {line.strip()}")
+            indent = match.group(1)
+            end = next((i for i in range(number + 1, len(lines))
+                        if lines[i] in (f"{indent}else", f"{indent}fi")), None)
+            require(end is not None and lines[end] == f"{indent}else",
+                    f"{path.name}:{number + 1} has no else saying the step was not offered")
+            require("NOT OFFERED" in lines[end + 1],
+                    f"{path.name}:{end + 2} does not report that the step was not offered")
+            for later in range(end, len(lines)):
+                require(not lines[later].lstrip().startswith("if confirm "),
+                        f"{path.name}:{later + 1} offers a step outside the check mode that previews it")
+
+
+FAKE_CHECK_PLAYBOOK = r"""#!/bin/sh
+case " $* " in
+*" --check "*) exit "${FAKE_CHECK_RC:-0}" ;;
+esac
+exit 0
+"""
+
+
+def run_group_11(check_rc: int) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        fake = Path(td) / "bin"
+        fake.mkdir()
+        (fake / "ansible-playbook").write_text(FAKE_CHECK_PLAYBOOK)
+        (fake / "sudo").write_text("#!/bin/sh\nexit 0\n")
+        for tool in fake.iterdir():
+            tool.chmod(0o755)
+        env = dict(os.environ, HYPERLAB_EVIDENCE_ROOT=td, PATH=f"{fake}:{os.environ['PATH']}",
+                   FAKE_CHECK_RC=str(check_rc))
+        # A new session has no terminal: confirm cannot wait for an answer.
+        subprocess.run(["bash", str(DIR / "11-usbguard.sh")], capture_output=True, text=True, check=False,
+                       env=env, stdin=subprocess.DEVNULL, start_new_session=True, timeout=120)
+        reports = list(Path(td).glob("*/11-usbguard-*/report.txt"))
+        require(len(reports) == 1, f"group 11 left {len(reports)} reports")
+        return reports[0].read_text()
+
+
+def check_fail_closed_runs() -> None:
+    failed = run_group_11(2)
+    require("FAIL  usbguard check mode" in failed and "BLOCK NOT OFFERED" in failed,
+            f"a failed check mode did not stop the block: {failed}")
+    require("STOP " not in failed, f"the block was offered after a failed check mode: {failed}")
+    passed = run_group_11(0)
+    require("PASS  usbguard check mode" in passed and "STOP  turn on USBGuard" in passed,
+            f"a clean check mode did not offer the block: {passed}")
+    require("BLOCK NOT OFFERED" not in passed, f"the block was refused after a clean check mode: {passed}")
+
+
 def main() -> int:
     check_no_hostname_command()
     check_scripts()
     check_library()
     check_library_runs()
     check_failed_playbook_report()
+    check_fail_closed()
+    check_fail_closed_runs()
     print("Acceptance scripts contract: OK")
     return 0
 

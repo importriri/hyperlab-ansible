@@ -70,6 +70,7 @@ slug() {
 }
 
 # check NAME COMMAND...: run it, keep its redacted output, PASS on exit 0.
+# Returns 1 on FAIL, so a destructive step can stand behind its check.
 check() {
     local name=$1 log
     shift
@@ -77,10 +78,11 @@ check() {
     if "$@" 2>&1 | redact >"$log"; then
         PASSES=$((PASSES + 1))
         report "PASS  $name"
-    else
-        FAILS=$((FAILS + 1))
-        report "FAIL  $name  (evidence: $log)"
+        return 0
     fi
+    FAILS=$((FAILS + 1))
+    report "FAIL  $name  (evidence: $log)"
+    return 1
 }
 
 # expect NAME REGEX COMMAND...: PASS when the output matches REGEX.

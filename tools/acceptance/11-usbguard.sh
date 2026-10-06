@@ -19,15 +19,19 @@ usb_list() {
 backup "USB devices before" usb_list
 rollback "sudo systemctl disable --now usbguard   (stops the block)"
 rollback "echo 1 | sudo tee /sys/bus/usb/devices/<port>/authorized   (one blocked device, now)"
-check "usbguard check mode" playbook "usbguard check" -i inventory.ini playbooks/host-usbguard.yml --check --diff
-report "Plug any USB mouse or keyboard you use BEFORE the next step, so it enters the policy."
-if confirm block "turn on USBGuard: every USB device not attached now stays blocked"; then
-    check "usbguard applied" playbook "usbguard apply" -i inventory.ini playbooks/host-usbguard.yml
-    expect "attached devices allowed" '^[0-9]+: allow' as_root "list USB devices" usbguard list-devices
-    ask "internal keyboard" "Type a few letters on the internal keyboard: do they appear?"
-    ask "internal touchpad" "Move the pointer with the touchpad: does it move?"
-    ask "a new stick is blocked" "Plug a USB stick: is it NOT mounted? (the shell's USB devices view lists it blocked)"
-    screenshot "usb devices view"
-    backup "USB devices after" usb_list
+# Fail closed: the block is offered only after a clean dry run.
+if check "usbguard check mode" playbook "usbguard check" -i inventory.ini playbooks/host-usbguard.yml --check --diff; then
+    report "Plug any USB mouse or keyboard you use BEFORE the next step, so it enters the policy."
+    if confirm block "turn on USBGuard: every USB device not attached now stays blocked"; then
+        check "usbguard applied" playbook "usbguard apply" -i inventory.ini playbooks/host-usbguard.yml
+        expect "attached devices allowed" '^[0-9]+: allow' as_root "list USB devices" usbguard list-devices
+        ask "internal keyboard" "Type a few letters on the internal keyboard: do they appear?"
+        ask "internal touchpad" "Move the pointer with the touchpad: does it move?"
+        ask "a new stick is blocked" "Plug a USB stick: is it NOT mounted? (the shell's USB devices view lists it blocked)"
+        screenshot "usb devices view"
+        backup "USB devices after" usb_list
+    fi
+else
+    report "BLOCK NOT OFFERED: the check mode failed (the failed task is above); nothing was changed."
 fi
 acceptance_end

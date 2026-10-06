@@ -282,5 +282,8 @@ proof.
   this index missed five notes and listed one twice.
 - [`acceptance-check-log-only-recap.md`](acceptance-check-log-only-recap.md):
   a failed check mode left only the play recap in the log the report named.
+- [`acceptance-step-offered-after-failed-check.md`](acceptance-step-offered-after-failed-check.md):
+  a destructive step was offered after the check mode that previews it had
+  failed.
 
 Author: [importriri](https://github.com/importriri).
