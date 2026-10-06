@@ -1,0 +1,16 @@
+---
+# The host side of the security plane (ADR 0040): audit records and file
+# integrity of HyperLab's trust points. Detection only; the evidence counts
+# once it has left the host.
+- name: Record what changes HyperLab's trust points
+  hosts: hypervisor
+  become: true
+  roles:
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_audit
+    - host_audit
+    - role: brick_guard
+      vars:
+        brick_guard_brick: host_integrity
+    - host_integrity

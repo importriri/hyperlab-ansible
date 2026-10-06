@@ -1,0 +1,26 @@
+---
+# File integrity of HyperLab's trust points (ADR 0040, host option A). Arch
+# ships no AIDE, so a small reviewable checker records them and a timer
+# compares every hour. Detection only; a report counts once it left the host.
+host_integrity_tool: /usr/local/bin/hyperlab-integrity
+host_integrity_config: /etc/hyperlab/integrity.json
+host_integrity_state: /var/lib/hyperlab-integrity
+host_integrity_interval: hourly
+host_integrity_paths:
+  - /etc/hyperlabctl
+  - /etc/gpu-handoff
+  - /etc/libvirt/hooks
+  - /etc/libvirt/qemu.conf
+  - /etc/sudoers
+  - /etc/sudoers.d
+  - /etc/polkit-1/rules.d
+  - /etc/nftables.conf
+  - /etc/nftables.d
+  - /etc/usbguard
+  - /etc/apparmor.d/hyperlab-qemu
+  - /etc/audit/rules.d
+  - /boot/loader
+  - /etc/kernel
+  - /etc/mkinitcpio.conf
+  - /usr/local/bin
+  - "{{ hyperlab_root }}/state/layout.yml"

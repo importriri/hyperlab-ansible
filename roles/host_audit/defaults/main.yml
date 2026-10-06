@@ -1,0 +1,27 @@
+---
+# auditd on the host (ADR 0040, host option A). Writes and attribute changes
+# to HyperLab's trust points are recorded with a hyperlab-* key. This is
+# detection, not prevention: root can stop auditd and erase its log, so the
+# records count once they have left the host (ADR 0040, off-host logs).
+host_audit_rules_path: /etc/audit/rules.d/50-hyperlab.rules
+host_audit_watches:
+  - {path: /etc/hyperlabctl, key: hyperlab-checkout}
+  - {path: /etc/hyperlab, key: hyperlab-config}
+  - {path: /etc/gpu-handoff, key: hyperlab-gpu-policy}
+  - {path: /etc/libvirt, key: hyperlab-libvirt}
+  - {path: /etc/sudoers, key: hyperlab-privilege}
+  - {path: /etc/sudoers.d, key: hyperlab-privilege}
+  - {path: /etc/polkit-1/rules.d, key: hyperlab-privilege}
+  - {path: /etc/nftables.conf, key: hyperlab-firewall}
+  - {path: /etc/nftables.d, key: hyperlab-firewall}
+  - {path: /etc/usbguard, key: hyperlab-usb}
+  - {path: /etc/apparmor.d, key: hyperlab-mac}
+  - {path: /boot/loader, key: hyperlab-boot}
+  - {path: /etc/kernel, key: hyperlab-boot}
+  - {path: /etc/mkinitcpio.conf, key: hyperlab-boot}
+  - {path: /etc/passwd, key: hyperlab-identity}
+  - {path: /etc/group, key: hyperlab-identity}
+  - {path: /etc/shadow, key: hyperlab-identity}
+  - {path: /usr/local/bin, key: hyperlab-tools}
+  - {path: "{{ hyperlab_root }}/state", key: hyperlab-store-state}
+  - {path: "{{ hyperlab_root }}/bases", key: hyperlab-bases}

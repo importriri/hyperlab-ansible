@@ -1,0 +1,10 @@
+# Managed by hyperlab-ansible (roles/host_integrity). ADR 0040.
+[Unit]
+Description=Compare HyperLab's trust points with their integrity baseline regularly
+
+[Timer]
+OnCalendar={{ host_integrity_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

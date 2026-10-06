@@ -1,0 +1,14 @@
+# Managed by hyperlab-ansible (roles/host_integrity). ADR 0040.
+# A difference from the baseline fails this unit and is written to the
+# journal, which is what leaves the host.
+[Unit]
+Description=Compare HyperLab's trust points with their integrity baseline
+
+[Service]
+Type=oneshot
+ExecStart={{ host_integrity_tool }} check
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ host_integrity_state }}
+PrivateTmp=true
+NoNewPrivileges=true

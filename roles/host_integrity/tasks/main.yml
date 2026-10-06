@@ -1,0 +1,60 @@
+---
+- name: Create the integrity configuration and state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/hyperlab, mode: "0755"}
+    - {path: "{{ host_integrity_state }}", mode: "0700"}
+
+- name: Install the integrity checker
+  ansible.builtin.copy:
+    src: hyperlab-integrity.py
+    dest: "{{ host_integrity_tool }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Name the trust points it checks
+  ansible.builtin.copy:
+    content: "{{ {'paths': host_integrity_paths} | to_nice_json }}\n"
+    dest: "{{ host_integrity_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# The first baseline is the state the reviewed playbooks left. Later changes
+# are accepted by the operator after review (hyperlab-integrity accept),
+# never by this role.
+- name: Record the first baseline
+  ansible.builtin.command:
+    argv: ["{{ host_integrity_tool }}", baseline]
+    creates: "{{ host_integrity_state }}/baseline.json"
+
+- name: Install the integrity check unit and its timer
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - hyperlab-integrity.service
+    - hyperlab-integrity.timer
+
+- name: Check integrity every hour
+  ansible.builtin.systemd_service:
+    name: hyperlab-integrity.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Record that the host_integrity brick landed
+  ansible.builtin.include_role:
+    name: brick_guard
+    tasks_from: stamp
+  vars:
+    brick_guard_brick: host_integrity

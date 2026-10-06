@@ -1,7 +1,9 @@
 # ADR 0040 - The security plane: host and network evidence, no command plane
 
 Status: accepted (2026-10-05, host A and network A), extended with
-off-host, append-only log shipping below. Nothing is built.
+off-host, append-only log shipping below. The host's audit rules and file
+integrity checker are built; the network part, the shipping and the
+Security Plane view are not.
 
 ## Context
 
@@ -91,6 +93,37 @@ Host A, network A and off-host logs A with forward-secure sealing, with the
 Security Plane as above. Before any of them is enabled, its overhead is
 measured on Nitro with `dev-01` under load, and a crafted event per rule
 proves the evidence reaches Diagnostics and the receiver.
+
+## Implementation
+
+**Finding (2026-10-06).** Arch's repositories carry `audit` (core) but
+neither AIDE nor Suricata (nor Zeek): they are only in the AUR, which
+HyperLab does not install on the host. So:
+
+- *File integrity*: a small reviewable checker replaces AIDE
+  (`roles/host_integrity`, `/usr/local/bin/hyperlab-integrity`). It records
+  the SHA-256, owner, group and mode of every file and link target under
+  HyperLab's trust points, compares every hour from a hardened oneshot unit,
+  and fails the unit and writes each difference to the journal. The first
+  baseline is recorded once; later changes are accepted by the operator
+  after review, never by the role.
+- *Audit*: `roles/host_audit` installs `audit`, watches writes and attribute
+  changes to the trust points under `hyperlab-*` keys (only paths that
+  exist, since a missing one stops auditd loading later rules), sends the
+  records to the journal through the syslog plugin, and checks the loaded
+  rules. `playbooks/host-security-plane.yml` applies both;
+  `tests/host_security_plane_contract.py` runs the checker on a temporary
+  tree.
+- *Network* (not built): with no Suricata package for the host, the IDS
+  moves into a Machine. The host mirrors each guest bridge with `tc mirred`
+  into one tap given to a minimal Debian Machine running Suricata, with no
+  route and no address on that tap, so stopping it never stops a packet and
+  it cannot send on the mirror. Its alerts reach the host only as files the
+  host reads over the pinned SSH channel. This keeps option A's property
+  and the host small.
+- *Forward-secure sealing* is the operator's step: `journalctl
+  --setup-keys` prints the verification key once, to be written down off
+  the host.
 
 ## Hardware test
 

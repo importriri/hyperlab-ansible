@@ -1,0 +1,9 @@
+## Managed by hyperlab-ansible (roles/host_audit). ADR 0040, host option A.
+##
+## Writes and attribute changes to HyperLab's trust points. Detection only:
+## root can stop auditd and erase its log, so the records count once they
+## have left the host. Only paths that existed when this file was written
+## are listed: a watch on a missing path stops auditd loading later rules.
+{% for watch in host_audit_present %}
+-w {{ watch.path }} -p wa -k {{ watch.key }}
+{% endfor %}

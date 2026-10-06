@@ -512,9 +512,13 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 Decided: [ADR 0040](adr/0040-security-plane.md) (accepted: auditd and AIDE,
 Suricata on bridge mirrors, logs shipped off the host).
 
+- [x] host evidence without a command plane: auditd on HyperLab's trust
+      points and an hourly file integrity check (`roles/host_audit`,
+      `roles/host_integrity`; Arch has no AIDE; software-verified)
 - [ ] endpoint HIDS with measured overhead and no hypervisor remote-command
       plane
-- [ ] passive NIDS that is never an inline routing dependency
+- [ ] passive NIDS that is never an inline routing dependency (Suricata in a
+      Machine on a bridge mirror: Arch has no Suricata package)
 - [ ] HyperLab Security Plane correlating endpoint and network evidence, shown
       in Diagnostics
 - [ ] host logs shipped as they are written to an append-only receiver off
