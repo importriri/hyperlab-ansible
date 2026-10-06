@@ -116,6 +116,8 @@
       {{ guest_plan.qemu_identity if hyperlab_qemu_identity_mode == 'per-machine' else guest_qemu_user }}
     guest_files_group: >-
       {{ guest_plan.qemu_identity if hyperlab_qemu_identity_mode == 'per-machine' else guest_qemu_group }}
+    guest_base_group: >-
+      {{ hyperlab_base_reader_group if hyperlab_qemu_identity_mode == 'per-machine' else guest_qemu_group }}
     guest_disk_mode: "{{ '0600' if hyperlab_qemu_identity_mode == 'per-machine' else '0640' }}"
     guest_seed_mode: "{{ '0400' if hyperlab_qemu_identity_mode == 'per-machine' else '0440' }}"
     guest_spice_socket: >-

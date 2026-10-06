@@ -25,6 +25,12 @@
       required artefacts are present, transient staging files may remain, or
       an orphan NVRAM file exists. Refusing to overwrite or infer ownership.
 
+- name: Move an existing Machine to its own QEMU identity
+  when:
+    - guest_transaction_complete
+    - hyperlab_qemu_identity_mode == 'per-machine'
+  ansible.builtin.include_tasks: identity-migrate.yml
+
 - name: Validate an already-created guest instead of recreating it
   when: guest_transaction_complete
   ansible.builtin.include_tasks: validate.yml
@@ -143,74 +149,12 @@
         - "{{ guest_runtime_xml_root }}"
         - "{{ guest_runtime_lock_root }}"
 
-    - name: Refuse a disposable Machine with its own identity for now
-      when: hyperlab_qemu_identity_mode == 'per-machine'
-      ansible.builtin.assert:
-        that:
-          - guest_plan.lifecycle == 'permanent'
-        fail_msg: >-
-          A disposable Machine's QEMU reads its sealed base, which only the
-          shared QEMU group can read; per-machine identities cover permanent
-          Machines until the bases get their own reader group (ADR 0037 part 2b).
-        quiet: true
-
-    # ADR 0037 part 2. The identity exists before any file it will own; it
-    # has no home, no shell and no password, and joins only the Looking
-    # Glass memory group when the Machine has the GPU with Looking Glass. An
-    # account of that name made for anything else is refused before it is
-    # touched.
+    # ADR 0037 part 2: the identity exists before any file it will own.
     - name: Create the Machine's own QEMU identity
       when:
         - hyperlab_qemu_identity_mode == 'per-machine'
         - not ansible_check_mode
-      block:
-        - name: Look for an account with the identity's name
-          ansible.builtin.getent:
-            database: passwd
-            key: "{{ guest_plan.qemu_identity }}"
-            fail_key: false
-
-        - name: Refuse an identity that names another Machine
-          ansible.builtin.assert:
-            that:
-              - >-
-                (ansible_facts.getent_passwd | default({})).get(guest_plan.qemu_identity) is none
-                or ansible_facts.getent_passwd[guest_plan.qemu_identity][3]
-                == 'HyperLab QEMU for ' ~ guest_plan.name
-            fail_msg: >-
-              {{ guest_plan.qemu_identity }} exists for another purpose; refusing
-              to change it or give it {{ guest_plan.name }}'s files.
-            quiet: true
-
-        - name: Create the Machine identity's group
-          ansible.builtin.group:
-            name: "{{ guest_plan.qemu_identity }}"
-            system: true
-
-        - name: Create the Machine identity's user
-          ansible.builtin.user:
-            name: "{{ guest_plan.qemu_identity }}"
-            group: "{{ guest_plan.qemu_identity }}"
-            groups: >-
-              {{ [hyperlab_kvmfr_group]
-                 if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass else [] }}
-            append: false
-            system: true
-            create_home: false
-            home: /nonexistent
-            shell: /usr/bin/nologin
-            password: "!"
-            comment: "HyperLab QEMU for {{ guest_plan.name }}"
-
-        - name: Read the Machine identity's numeric ids
-          ansible.builtin.getent:
-            database: passwd
-            key: "{{ guest_plan.qemu_identity }}"
-
-        - name: Publish the Machine identity's numeric ids for its DAC label
-          ansible.builtin.set_fact:
-            guest_machine_uid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][1] }}"
-            guest_machine_gid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][2] }}"
+      ansible.builtin.include_tasks: identity.yml
 
     - name: Build, verify and commit the guest artefacts
       when: not ansible_check_mode

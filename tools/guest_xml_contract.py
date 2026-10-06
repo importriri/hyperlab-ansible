@@ -144,6 +144,7 @@ def contract_value_matches(
     allow_legacy_missing_dac_relabel: bool,
     allow_legacy_missing_spice_sound: bool = False,
     allow_legacy_duplex_codec: bool = False,
+    allow_legacy_shared_identity: bool = False,
 ) -> bool:
     if key == "machine":
         return machine_matches(expected[key], actual[key])
@@ -178,6 +179,11 @@ def contract_value_matches(
             "sound_audio_id": "1",
         }
         return expected[key] == legacy_expected[key] and actual[key] is None
+    if allow_legacy_shared_identity and key == "domain_seclabels":
+        # A Machine defined before its own QEMU identity (ADR 0037 part 2b)
+        # has no domain label; any other label is never a legacy one.
+        return (len(expected[key]) == 1 and expected[key][0][:2] == ("static", "dac")
+                and actual[key] in ([], expected[key]))
     if allow_legacy_duplex_codec and key == "sound_codec":
         # A domain defined before playback-only audio still carries a capture
         # side; it is recognised, never mistaken for the current contract.
@@ -314,6 +320,7 @@ def main() -> int:
     parser.add_argument("--allow-legacy-missing-dac-relabel", action="store_true")
     parser.add_argument("--allow-legacy-missing-spice-sound", action="store_true")
     parser.add_argument("--allow-legacy-duplex-codec", action="store_true")
+    parser.add_argument("--allow-legacy-shared-identity", action="store_true")
     args = parser.parse_args()
     try:
         expected = signature(Path(args.expected))
@@ -341,6 +348,7 @@ def main() -> int:
             args.allow_legacy_missing_dac_relabel,
             args.allow_legacy_missing_spice_sound,
             args.allow_legacy_duplex_codec,
+            args.allow_legacy_shared_identity,
         )
     ]
     if errors:

@@ -302,6 +302,30 @@
       failed_when: false
       check_mode: false
 
+    - name: Recognize only a Machine defined before its own QEMU identity
+      when:
+        - guest_xml_contract_strict.rc != 0
+        - hyperlab_qemu_identity_mode == 'per-machine'
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - "{{ guest_xml_contract_tool }}"
+          - --expected
+          - "{{ guest_xml_workspace.path }}/desired.xml"
+          - --actual
+          - "{{ guest_xml_workspace.path }}/actual.xml"
+          - --allow-legacy-shared-identity
+      register: guest_xml_contract_legacy_identity
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Classify the move to the Machine's own QEMU identity
+      ansible.builtin.set_fact:
+        guest_needs_identity_label_migration: >-
+          {{ guest_xml_contract_strict.rc != 0 and
+             guest_xml_contract_legacy_identity.rc | default(1) == 0 }}
+
     - name: Classify the legacy duplex codec
       ansible.builtin.set_fact:
         guest_has_legacy_duplex_codec: >-
@@ -326,6 +350,9 @@
              guest_xml_contract_legacy_spice_sound.rc | default(1) == 0 }}
         guest_needs_domain_xml_migration: >-
           {{ guest_needs_dac_relabel_migration | default(false) or
+             (guest_needs_identity_label_migration and
+              guest_operation == 'create' and
+              guest_domain_state == 'shut off') or
              (guest_xml_contract_strict.rc != 0 and
               guest_xml_contract_legacy_spice_sound.rc | default(1) == 0) or
              (guest_has_legacy_duplex_codec and
@@ -343,7 +370,10 @@
             (guest_needs_spice_sound_migration and
              guest_operation in ['create', 'resize', 'reconfigure'] and
              guest_domain_state == 'shut off') or
-            guest_has_legacy_duplex_codec
+            guest_has_legacy_duplex_codec or
+            (guest_needs_identity_label_migration and
+             guest_operation == 'create' and
+             guest_domain_state == 'shut off')
         fail_msg: >-
           The inactive domain differs from the managed contract. Automatic
           migrations are limited to an otherwise exact, shut-off domain that

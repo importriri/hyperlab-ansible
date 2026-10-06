@@ -181,7 +181,7 @@
               ansible.builtin.file:
                 path: "{{ image_factory_plan.base_new_path }}"
                 owner: root
-                group: "{{ image_factory_qemu_group }}"
+                group: "{{ image_factory_base_group }}"
                 mode: "0440"
 
             - name: Commit the verified base atomically

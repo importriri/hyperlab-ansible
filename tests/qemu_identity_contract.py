@@ -71,7 +71,9 @@ def check_names() -> None:
     require(qemu_identity_name("dev-01") == "hlq-dev-01", "a short name is not kept readable")
 
 
-def render(mode: str, socket: str | None = None) -> str:
+def render_pair() -> tuple[str, str, str]:
+    """The same VFIO Machine rendered in shared and per-machine mode, so a
+    comparison between them differs only where the mode does."""
     env = guest_contract.template_env()
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -79,16 +81,16 @@ def render(mode: str, socket: str | None = None) -> str:
         plan = guest_contract.build_plan(root, spec, store)
         result = guest_contract.build_vfio_plan(plan, report, profiles, trust)
         require(result.returncode == 0, result.stderr)
-        variables = {
+        base = {
             "guest_plan": plan, "guest_resolved_memory_mb": 6144,
             "guest_vfio": json.loads(result.stdout),
             "hyperlab_looking_glass_spice_socket_dir": SPICE_ROOT,
-            "hyperlab_qemu_identity_mode": mode,
         }
-        if mode == "per-machine":
-            variables.update(guest_machine_uid="972", guest_machine_gid="971",
-                             guest_spice_socket=socket or f"{SPICE_ROOT}/{plan['name']}/{plan['name']}.sock")
-        return env.get_template("domain.xml.j2").render(**variables), plan["name"]
+        shared = env.get_template("domain.xml.j2").render(**base, hyperlab_qemu_identity_mode="shared")
+        per_machine = env.get_template("domain.xml.j2").render(
+            **base, hyperlab_qemu_identity_mode="per-machine", guest_machine_uid="972", guest_machine_gid="971",
+            guest_spice_socket=f"{SPICE_ROOT}/{plan['name']}/{plan['name']}.sock")
+        return shared, per_machine, plan["name"]
 
 
 def guard(expected: str, actual: str) -> subprocess.CompletedProcess:
@@ -100,8 +102,7 @@ def guard(expected: str, actual: str) -> subprocess.CompletedProcess:
 
 
 def check_domain() -> None:
-    shared, name = render("shared")
-    per_machine, _ = render("per-machine")
+    shared, per_machine, name = render_pair()
     shared_root, machine_root = ET.fromstring(shared), ET.fromstring(per_machine)
     require(shared_root.find("./seclabel") is None, "shared mode gained a domain label")
     require(shared_root.find("./devices/graphics/listen[@type='socket']").get("socket") == f"{SPICE_ROOT}/{name}.sock",
@@ -132,24 +133,24 @@ def check_domain() -> None:
 
 
 def check_role() -> None:
-    tasks = (ROOT / "roles/guest/tasks/create.yml").read_text()
+    create = (ROOT / "roles/guest/tasks/create.yml").read_text()
+    identity = (ROOT / "roles/guest/tasks/identity.yml").read_text()
+    migrate = (ROOT / "roles/guest/tasks/identity-migrate.yml").read_text()
     main = (ROOT / "roles/guest/tasks/main.yml").read_text()
     validate = (ROOT / "roles/guest/tasks/validate.yml").read_text()
-    identity = tasks.index("- name: Create the Machine's own QEMU identity")
-    require(identity < tasks.index("- name: Build, verify and commit the guest artefacts"),
+    require(create.index("- name: Create the Machine's own QEMU identity")
+            < create.index("- name: Build, verify and commit the guest artefacts"),
             "the identity is made after the files it owns")
-    require(tasks.index("Refuse a disposable Machine with its own identity for now") < identity,
-            "a disposable Machine could get an identity it cannot use")
-    require(tasks.index("- name: Refuse an identity that names another Machine")
-            < tasks.index("- name: Create the Machine identity's user"),
+    require(identity.index("- name: Refuse an identity that names another Machine")
+            < identity.index("- name: Create the Machine identity's user"),
             "an account made for something else is changed before it is refused")
     for needle in ("system: true", "create_home: false", "shell: /usr/bin/nologin", 'password: "!"',
                    "append: false", "comment: \"HyperLab QEMU for {{ guest_plan.name }}\"",
                    "if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass else []",
-                   "Refuse an identity that names another Machine"):
-        require(needle in tasks, f"the identity is not made as reviewed: {needle}")
+                   "[hyperlab_base_reader_group] if guest_plan.lifecycle == 'disposable' else []"):
+        require(needle in identity, f"the identity is not made as reviewed: {needle}")
     for needle in ('owner: "{{ guest_files_user }}"', 'mode: "{{ guest_disk_mode }}"', 'mode: "{{ guest_seed_mode }}"'):
-        require(needle in tasks, f"a Machine file is not given to its identity: {needle}")
+        require(needle in create, f"a Machine file is not given to its identity: {needle}")
     require("guest_disk_stat.stat.pw_name == guest_files_user" in validate
             and "guest_seed_image_stat.stat.pw_name == guest_files_user" in validate,
             "the files are not checked against the Machine's identity")
@@ -157,8 +158,56 @@ def check_role() -> None:
             and "'0400' if hyperlab_qemu_identity_mode == 'per-machine' else '0440'" in main,
             "the per-machine file modes are not private")
     require("Refuse a per-machine Machine without its identity" in main, "a Machine may run without its identity")
+    # Moving an existing Machine (part 2b).
+    require(create.index("include_tasks: identity-migrate.yml") < create.index("include_tasks: validate.yml"),
+            "an existing Machine is validated against its identity before it is moved")
+    require("guest_identity_disk.stat.pw_name in [guest_qemu_user, guest_plan.qemu_identity]" in migrate,
+            "a disk owned by a third account could be moved")
+    require(migrate.index("Refuse to move a Machine that is not shut off")
+            < migrate.index("Move the Machine's files to its own identity"),
+            "a running Machine's files could be moved")
+    require("--allow-legacy-shared-identity" in validate
+            and "(guest_needs_identity_label_migration and\n             guest_operation == 'create' and\n             guest_domain_state == 'shut off')" in validate,
+            "the identity label may be added outside a shut-off create")
+    # Sealed bases (part 2b).
+    factory = (ROOT / "roles/image_factory/tasks/main.yml").read_text()
+    require("hyperlab_base_reader_group if hyperlab_qemu_identity_mode == 'per-machine'" in factory,
+            "image prepare does not group bases for their readers")
+    require('group: "{{ image_factory_base_group }}"' in (ROOT / "roles/image_factory/tasks/prepare.yml").read_text()
+            and "image_factory_base_stat.stat.gr_name == image_factory_base_group"
+            in (ROOT / "roles/image_factory/tasks/validate.yml").read_text()
+            and "guest_base_stat.stat.gr_name == guest_base_group"
+            in (ROOT / "roles/guest/tasks/verify-base.yml").read_text(),
+            "the base group is not the same in prepare, validate and use")
+    store = (ROOT / "roles/image_store/tasks/main.yml").read_text()
+    require(store.index("Refuse a base that is not a root-owned read-only file")
+            < store.index("Regroup each sealed base for its readers")
+            and "item.mode == '0440'" in store and "item.pw_name == 'root'" in store,
+            "a file that is not a sealed base could be regrouped")
+    require("Keep the shared QEMU user reading bases" in store and "append: true" in store,
+            "Machines not yet moved would lose their bases")
     switch = yaml.safe_load((ROOT / "group_vars/all/guest.yml").read_text())
     require(switch["hyperlab_qemu_identity_mode"] == "shared", "the switch ships on before the lab proved it")
+
+
+def check_legacy_flag() -> None:
+    shared, per_machine, name = render_pair()
+    # A Machine defined before its identity: the per-machine domain without
+    # its label (the socket path is not part of the compared signature).
+    unlabelled = re.sub(r"\s*<!-- ADR 0037 part 2: this Machine's QEMU runs as its own identity. -->"
+                        r"\s*<seclabel type=\"static\".*?</seclabel>", "", per_machine, flags=re.S)
+    require(unlabelled != per_machine and "<seclabel type=\"static\"" not in unlabelled,
+            "the fixture could not remove the identity label")
+    with tempfile.TemporaryDirectory() as td:
+        (Path(td) / "e.xml").write_text(per_machine)
+        for actual, flag_ok in ((unlabelled, True), (per_machine.replace("+972:+971", "+973:+971"), False)):
+            (Path(td) / "a.xml").write_text(actual)
+            result = subprocess.run([sys.executable, str(XML_GUARD), "--expected", f"{td}/e.xml",
+                                     "--actual", f"{td}/a.xml", "--allow-legacy-shared-identity"],
+                                    capture_output=True, text=True, check=False)
+            require((result.returncode == 0) == flag_ok,
+                    "the legacy identity flag accepted another label" if not flag_ok
+                    else f"the legacy identity flag refused a Machine without a label: {result.stderr}")
 
 
 def render_template(path: str, mode: str) -> str:
@@ -229,7 +278,7 @@ def check_hook() -> None:
 
 def check_store() -> None:
     defaults = yaml.safe_load((ROOT / "roles/image_store/defaults/main.yml").read_text())
-    require(defaults["image_store_qemu_traverse_paths"] == ["permanent", "cloud-init", "nvram"],
+    require(defaults["image_store_qemu_traverse_paths"] == ["disposable", "permanent", "cloud-init", "nvram"],
             "the store's traverse directories changed")
     require("'0751' if hyperlab_qemu_identity_mode == 'per-machine' else '0750'"
             in defaults["image_store_qemu_traverse_mode"], "the traverse mode is not tied to the switch")
@@ -239,6 +288,7 @@ def main() -> int:
     check_names()
     check_domain()
     check_role()
+    check_legacy_flag()
     check_looking_glass()
     check_hook()
     check_store()

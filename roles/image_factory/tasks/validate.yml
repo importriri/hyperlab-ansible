@@ -23,7 +23,7 @@
       - image_factory_base_stat.stat.isreg
       - not image_factory_base_stat.stat.islnk
       - image_factory_base_stat.stat.pw_name == 'root'
-      - image_factory_base_stat.stat.gr_name == image_factory_qemu_group
+      - image_factory_base_stat.stat.gr_name == image_factory_base_group
       - image_factory_base_stat.stat.mode == '0440'
       - image_factory_receipt_stat.stat.isreg
       - not image_factory_receipt_stat.stat.islnk

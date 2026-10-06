@@ -15,7 +15,7 @@ image_store_group: root
 # must reach its own files in these directories without being in the shared
 # QEMU group, so others get traverse (x) but never list (r).
 image_store_qemu_traverse_mode: "{{ '0751' if hyperlab_qemu_identity_mode == 'per-machine' else '0750' }}"
-image_store_qemu_traverse_paths: [permanent, cloud-init, nvram]
+image_store_qemu_traverse_paths: [disposable, permanent, cloud-init, nvram]
 
 image_store_layout:
   - path: ""

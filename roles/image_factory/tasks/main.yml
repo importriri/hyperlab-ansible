@@ -45,6 +45,11 @@
   ansible.builtin.set_fact:
     image_factory_qemu_user: "{{ image_factory_layout.qemu_identity.split(':', 1)[0] }}"
     image_factory_qemu_group: "{{ image_factory_layout.qemu_identity.split(':', 1)[1] }}"
+    # Sealed bases are read by QEMU: through the shared QEMU group, or with
+    # per-Machine identities through their own reader group (ADR 0037 2b).
+    image_factory_base_group: >-
+      {{ hyperlab_base_reader_group if hyperlab_qemu_identity_mode == 'per-machine'
+         else image_factory_layout.qemu_identity.split(':', 1)[1] }}
 
 - name: Validate every checked-in image and VM contract before selection
   ansible.builtin.command:

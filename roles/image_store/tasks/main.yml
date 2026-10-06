@@ -271,6 +271,55 @@
     mode: "0644"
   when: not ansible_check_mode
 
+# ADR 0037 part 2b. With per-Machine QEMU identities, sealed bases are read
+# through their own group. The shared QEMU user joins it, so Machines not yet
+# moved keep reading their bases. Only the group of each base changes: its
+# owner, mode and bytes, which the receipts pin, stay as they are.
+- name: Give sealed bases their own reader group
+  when: hyperlab_qemu_identity_mode == 'per-machine'
+  block:
+    - name: Create the base reader group
+      ansible.builtin.group:
+        name: "{{ hyperlab_base_reader_group }}"
+        system: true
+
+    - name: Keep the shared QEMU user reading bases
+      ansible.builtin.user:
+        name: "{{ image_store_qemu_user }}"
+        groups: ["{{ hyperlab_base_reader_group }}"]
+        append: true
+
+    - name: Find the sealed bases
+      ansible.builtin.find:
+        paths:
+          - "{{ (hyperlab_root, 'bases/linux') | path_join }}"
+          - "{{ (hyperlab_root, 'bases/windows') | path_join }}"
+        file_type: any
+        recurse: false
+      register: image_store_bases
+
+    - name: Refuse a base that is not a root-owned read-only file
+      ansible.builtin.assert:
+        that:
+          - item.isreg
+          - not item.islnk
+          - item.pw_name == 'root'
+          - item.mode == '0440'
+        fail_msg: "{{ item.path }} is not a sealed base; refusing to regroup it."
+        quiet: true
+      loop: "{{ image_store_bases.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Regroup each sealed base for its readers
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        group: "{{ hyperlab_base_reader_group }}"
+        follow: false
+      loop: "{{ image_store_bases.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
 - name: Record that the image_store brick landed
   ansible.builtin.include_role:
     name: brick_guard

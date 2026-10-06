@@ -1,0 +1,55 @@
+---
+# ADR 0037 part 2. A Machine's own QEMU identity: a system user and group
+# with no home, no shell and no password. It joins the Looking Glass memory
+# group only when the Machine has the GPU with Looking Glass, and the base
+# reader group only when it is disposable and reads its base. An account of
+# that name made for anything else is refused before it is touched.
+
+- name: Look for an account with the identity's name
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ guest_plan.qemu_identity }}"
+    fail_key: false
+
+- name: Refuse an identity that names another Machine
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.getent_passwd | default({})).get(guest_plan.qemu_identity) is none
+        or ansible_facts.getent_passwd[guest_plan.qemu_identity][3]
+        == 'HyperLab QEMU for ' ~ guest_plan.name
+    fail_msg: >-
+      {{ guest_plan.qemu_identity }} exists for another purpose; refusing
+      to change it or give it {{ guest_plan.name }}'s files.
+    quiet: true
+
+- name: Create the Machine identity's group
+  ansible.builtin.group:
+    name: "{{ guest_plan.qemu_identity }}"
+    system: true
+
+- name: Create the Machine identity's user
+  ansible.builtin.user:
+    name: "{{ guest_plan.qemu_identity }}"
+    group: "{{ guest_plan.qemu_identity }}"
+    groups: >-
+      {{ ([hyperlab_kvmfr_group]
+          if guest_plan.device_profile == 'vfio' and guest_plan.looking_glass else [])
+         + ([hyperlab_base_reader_group] if guest_plan.lifecycle == 'disposable' else []) }}
+    append: false
+    system: true
+    create_home: false
+    home: /nonexistent
+    shell: /usr/bin/nologin
+    password: "!"
+    comment: "HyperLab QEMU for {{ guest_plan.name }}"
+
+- name: Read the Machine identity's numeric ids
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ guest_plan.qemu_identity }}"
+
+- name: Publish the Machine identity's numeric ids for its DAC label
+  ansible.builtin.set_fact:
+    guest_machine_uid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][1] }}"
+    guest_machine_gid: "{{ ansible_facts.getent_passwd[guest_plan.qemu_identity][2] }}"

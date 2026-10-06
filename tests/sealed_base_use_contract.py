@@ -71,7 +71,9 @@ def check_base_checks() -> None:
     for needle, why in (
         ("guest_base_stat.stat.mode == '0440'", "the base must be read-only"),
         ("guest_base_stat.stat.pw_name == 'root'", "the base must be owned by root"),
-        ("guest_base_stat.stat.gr_name == guest_qemu_group", "QEMU reads the base through its group"),
+        # The shared QEMU group, or the base reader group with per-Machine
+        # identities (ADR 0037 part 2b); guest/tasks/main.yml chooses.
+        ("guest_base_stat.stat.gr_name == guest_base_group", "QEMU reads the base through its group"),
         ("guest_base_stat.stat.checksum == guest_plan.image_sha256", "the digest is not compared"),
         ("checksum_algorithm: sha256", "the digest is not SHA-256"),
         ("guest_base_stat.stat.dev == guest_store_root_stat.stat.dev", "the base may live outside the store"),

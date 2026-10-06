@@ -1,0 +1,88 @@
+---
+# ADR 0037 part 2b. An existing Machine moves to its own QEMU identity only
+# while shut off: its disk and seed become the identity's files, then
+# validate.yml redefines the domain with the identity's DAC label (the only
+# drift it accepts for this move). A Machine already moved is left alone.
+
+- name: Read who owns the Machine's disk now
+  ansible.builtin.stat:
+    path: "{{ guest_plan.disk_path }}"
+    follow: false
+  register: guest_identity_disk
+
+- name: Decide whether the Machine still runs as the shared QEMU user
+  ansible.builtin.set_fact:
+    guest_identity_needs_move: "{{ guest_identity_disk.stat.pw_name == guest_qemu_user }}"
+
+- name: Refuse a disk owned by neither identity
+  ansible.builtin.assert:
+    that:
+      - guest_identity_disk.stat.isreg
+      - not guest_identity_disk.stat.islnk
+      - guest_identity_disk.stat.pw_name in [guest_qemu_user, guest_plan.qemu_identity]
+    fail_msg: >-
+      {{ guest_plan.disk_path }} belongs to {{ guest_identity_disk.stat.pw_name }},
+      neither the shared QEMU user nor {{ guest_plan.qemu_identity }}; refusing to move it.
+    quiet: true
+
+- name: Refuse to move a Machine that is not shut off
+  when: guest_identity_needs_move
+  ansible.builtin.assert:
+    that:
+      - guest_domain_state == 'shut off'
+    fail_msg: >-
+      {{ guest_plan.name }} is {{ guest_domain_state }}. Shut it off, then run
+      playbooks/vm-create.yml on its spec again to move it to its own QEMU
+      identity.
+    quiet: true
+
+- name: Predict the move to the Machine's own identity
+  when:
+    - guest_identity_needs_move
+    - ansible_check_mode
+  ansible.builtin.debug:
+    msg: >-
+      CHECK MODE: would create {{ guest_plan.qemu_identity }}, give it
+      {{ guest_plan.name }}'s disk (0600) and seed (0400), and redefine the
+      shut-off domain with its DAC label.
+  changed_when: true
+
+- name: Move the Machine's files to its own identity
+  when:
+    - guest_identity_needs_move
+    - not ansible_check_mode
+  block:
+    - name: Create the Machine's own QEMU identity
+      ansible.builtin.include_tasks: identity.yml
+
+    - name: Give the Machine's disk to its identity
+      ansible.builtin.file:
+        path: "{{ guest_plan.disk_path }}"
+        owner: "{{ guest_plan.qemu_identity }}"
+        group: "{{ guest_plan.qemu_identity }}"
+        mode: "0600"
+        follow: false
+
+    - name: Give the Machine's seed directory to its identity's group
+      when: guest_plan.cloud_init
+      ansible.builtin.file:
+        path: "{{ guest_plan.seed_dir }}"
+        owner: root
+        group: "{{ guest_plan.qemu_identity }}"
+        mode: "0750"
+        follow: false
+
+    - name: Give the Machine's seed to its identity
+      when: guest_plan.cloud_init
+      ansible.builtin.file:
+        path: "{{ guest_plan.seed_image }}"
+        owner: "{{ guest_plan.qemu_identity }}"
+        group: "{{ guest_plan.qemu_identity }}"
+        mode: "0400"
+        follow: false
+
+- name: Read the moved Machine's identity for its DAC label
+  when:
+    - not guest_identity_needs_move
+    - guest_machine_uid is not defined
+  ansible.builtin.include_tasks: identity.yml

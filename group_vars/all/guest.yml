@@ -57,3 +57,7 @@ hyperlab_qemu_identity_mode: shared
 # The group that may open the Looking Glass shared memory in per-machine
 # mode; only VFIO Machines with Looking Glass join it.
 hyperlab_kvmfr_group: hyperlab-kvmfr
+# The group that may read sealed bases in per-machine mode (ADR 0037 part
+# 2b): disposable Machines' identities read their backing base through it,
+# and the shared QEMU user stays in it for Machines not yet moved.
+hyperlab_base_reader_group: hyperlab-bases

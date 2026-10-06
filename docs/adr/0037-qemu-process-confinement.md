@@ -1,9 +1,9 @@
 # ADR 0037 - Confining each QEMU process to its own Machine
 
 Status: accepted (2026-10-06, option A2, chosen on the operator's
-delegation). Part 1, the QEMU profile, is built; part 2a, per-Machine
-identities for permanent Machines, is built behind a switch that is off;
-part 2b is next. Nothing is proved on hardware yet.
+delegation). Part 1, the QEMU profile, and part 2, per-Machine identities
+(behind a switch that is off), are built. Nothing is proved in the lab host
+or on hardware yet.
 
 ## Context
 
@@ -100,10 +100,19 @@ write, so none can rename another's directory or plant a socket. The kvmfr
 node belongs to a group only VFIO Looking Glass Machines join. The domain
 XML guard refuses a domain whose label drifted.
 
-**Part 2b** (next): sealed bases readable through their own group, so
-disposable Machines (refused in per-machine mode until then) can read their
-backing base; and the move of existing Machines, when shut off, through the
-guest role's reconcile path.
+**Part 2b, bases and existing Machines.** In per-machine mode sealed bases
+are read through their own group, `hyperlab-bases`: image prepare gives new
+bases that group, the store regroups the existing ones (only after checking
+each is a root-owned `0440` file; owner, mode and bytes, which the receipts
+pin, do not change), and the shared QEMU user joins the group so Machines
+not yet moved keep their bases. A disposable Machine's identity joins it;
+`disposable` gives traverse without listing like the other three
+directories. An existing Machine moves on the create operation, only while
+shut off: its disk and seed become its identity's files (a disk owned by a
+third account is refused), and the domain is redefined with the label,
+which is the only drift the domain XML guard accepts for this move. A
+Machine already moved is left alone. Moving back to shared mode is not
+automated.
 
 **What the lab host must show before the switch is turned on**: a permanent
 Machine created and started in per-machine mode with its QEMU running as its
