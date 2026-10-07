@@ -187,6 +187,24 @@ def main() -> int:
     assert "guest_looking_glass_linux_runtime_patch_sha256" in tasks
     assert "runtime_patch_sha256:" in tasks
     assert "compat_patch_sha256:" in tasks
+    # The stamp names the binary the build installed, and a stamp without
+    # that digest, or with another binary in place, rebuilds the sender.
+    assert (
+        "binary_sha256: {{ guest_looking_glass_linux_built_binary.stat.checksum"
+        in tasks
+    )
+    assert (
+        "guest_looking_glass_linux_stamp_data.binary_sha256 | default('') !=\n"
+        "         guest_looking_glass_linux_existing_binary.stat.checksum"
+        in tasks
+    )
+    assert tasks.count("checksum_algorithm: sha256") >= 4
+    sender_playbook = (ROOT / "playbooks/guest-looking-glass-linux.yml").read_text()
+    assert "Refuse a running kernel without its build tree" in sender_playbook
+    assert "/usr/lib/modules/{{ ansible_facts['kernel'] }}/build" in sender_playbook
+    assert "guest_looking_glass_linux" in sender_playbook
+    for whole_profile_role in ("workstation_kernel", "guest_gpu_nvidia", "guest_desktop_hyprland"):
+        assert whole_profile_role not in sender_playbook, whole_profile_role
     assert "--check" in tasks
     assert (
         "Build with the reviewed Linux sender patches\n"

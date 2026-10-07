@@ -232,6 +232,7 @@
   ansible.builtin.stat:
     path: "{{ guest_looking_glass_linux_binary }}"
     follow: false
+    checksum_algorithm: sha256
   register: guest_looking_glass_linux_existing_binary
 
 - name: Read the experimental sender build stamp
@@ -258,6 +259,8 @@
          guest_looking_glass_linux_compat_patch_sha256 or
          guest_looking_glass_linux_stamp_data.runtime_patch_sha256 | default('') !=
          guest_looking_glass_linux_runtime_patch_sha256 or
+         guest_looking_glass_linux_stamp_data.binary_sha256 | default('') !=
+         guest_looking_glass_linux_existing_binary.stat.checksum | default('none') or
          not (guest_looking_glass_linux_existing_binary.stat.exists | default(false)) or
          not (guest_looking_glass_linux_existing_binary.stat.isreg | default(false)) or
          (guest_looking_glass_linux_existing_binary.stat.islnk | default(false)) or
@@ -460,6 +463,15 @@
             path: "{{ guest_looking_glass_linux_runtime_patch_remote }}"
             state: absent
 
+    # The stamp names the binary this build installed, so a test can tell
+    # the running sender is this build and not an older one.
+    - name: Read the digest of the sender this build installed
+      ansible.builtin.stat:
+        path: "{{ guest_looking_glass_linux_binary }}"
+        follow: false
+        checksum_algorithm: sha256
+      register: guest_looking_glass_linux_built_binary
+
     - name: Create the experimental sender stamp directory
       ansible.builtin.file:
         path: "{{ guest_looking_glass_linux_stamp | dirname }}"
@@ -475,6 +487,7 @@
           build: {{ guest_looking_glass_linux_build }}
           compat_patch_sha256: {{ guest_looking_glass_linux_compat_patch_sha256 }}
           runtime_patch_sha256: {{ guest_looking_glass_linux_runtime_patch_sha256 }}
+          binary_sha256: {{ guest_looking_glass_linux_built_binary.stat.checksum | default('none') }}
           capture: pipewire
           runtime_enabled: false
         dest: "{{ guest_looking_glass_linux_stamp }}"

@@ -235,7 +235,9 @@ identity is unambiguous.
 - `guest-gaming-telemetry.yml` installs MangoHud, the vkmark Vulkan workload
   and the HyperLab percentile parser without changing performance policy.
 - `guest-looking-glass-linux.yml` builds the pinned experimental PipeWire sender
-  but never starts or enables it.
+  but never starts or enables it. It applies nothing else (no package upgrade,
+  no kernel change), records the built binary's digest in the sender's stamp,
+  and refuses a Machine whose running kernel has no build tree.
 - `guest-arch-dev-vfio.yml` assembles the full accelerated development guest,
   but refuses to install the driver until an NVIDIA PCI function is visible.
   Its boundary and remaining hardware gates are documented in

@@ -27,14 +27,27 @@
   8. the report names the commit the run came from, marked +dirty when
      tracked files differ from it, staged or not, with the redacted
      `git diff --stat` and any untracked file in the evidence
-     (problems/acceptance-report-hid-a-dirty-tree.md).
+     (problems/acceptance-report-hid-a-dirty-tree.md);
+  9. a playbook applied to a Machine (its runtime inventory, or a guest-*
+     or vm-* playbook) stops at a confirmation first, and no script applies
+     a whole workstation profile;
+ 10. group 16 passes nothing on an exit code alone: health only on the word
+     "ok", the sender only when it is this build (its stamp's digests are
+     the repository's, its running executable is the stamped binary, its log
+     starts after the step began); it asks the operator nothing after a
+     failed or skipped step, run for real in a terminal against fakes
+     (problems/looking-glass-acceptance-passed-on-a-stale-sender.md).
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import pty
 import re
+import select
 import stat
+import time
 import subprocess
 import sys
 import tempfile
@@ -331,6 +344,155 @@ def check_dirty_header() -> None:
                 "the untracked file is not listed in the evidence")
 
 
+MACHINE_PLAYBOOK = re.compile(r"(ansible-playbook|\bplaybook\b).*(XDG_RUNTIME_DIR|inventory\[@\]|playbooks/(guest|vm)-)")
+
+
+def check_machine_playbooks() -> None:
+    for path in sorted(DIR.glob("*.sh")):
+        if path.name == "lib.sh":
+            continue
+        text = path.read_text()
+        require("guest-arch-" not in text, f"{path.name} applies a whole workstation profile")
+        stack: list[str] = []
+        for number, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            indent = line[:len(line) - len(line.lstrip())]
+            if stripped.startswith("if confirm "):
+                stack.append(indent)
+                continue
+            if stripped == "fi" and stack and stack[-1] == indent:
+                stack.pop()
+                continue
+            if stripped.startswith(("#", "report ", "rollback ")):
+                continue
+            if MACHINE_PLAYBOOK.search(line):
+                require(stack, f"{path.name}:{number} applies a playbook to a Machine without a confirmation: {stripped}")
+
+
+def load_identity():
+    spec = importlib.util.spec_from_file_location("sender_identity", DIR / "sender_identity.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def good_probe(identity, binary="b" * 64, exe=None, pid="918", started="2026-10-06T22:30:39+02:00", stalls="0"):
+    want = identity.expected()
+    lines = [f"pid={pid}", f"exe_sha256={exe or binary}"]
+    lines += [f"stamp.{key}={value}" for key, value in want.items()]
+    if binary:
+        lines.append(f"stamp.binary_sha256={binary}")
+    lines += ["stamp.runtime_enabled=false", f"started={started}", f"no_usable_frame={stalls}"]
+    return "dev-01 | CHANGED | rc=0 >>\n" + "\n".join(lines) + "\n"
+
+
+def check_sender_identity() -> None:
+    identity = load_identity()
+    since = time.mktime(time.strptime("2026-10-06 22:30:00", "%Y-%m-%d %H:%M:%S"))
+    want = identity.expected()
+
+    def verdict(text, **kwargs):
+        return all(ok for ok, _ in identity.judge(identity.parse(text), want, since, **kwargs))
+
+    require(verdict(good_probe(identity), not_pid="809", no_stall=True), "a sender of this build was refused")
+    require(verdict(good_probe(identity), pid="918"), "the same sender was refused")
+    bad = {
+        "an old runtime patch": good_probe(identity).replace(want["runtime_patch_sha256"], "1b8bf54e" + "0" * 56),
+        "no binary digest": good_probe(identity, binary=""),
+        "a running executable that is not the stamped binary": good_probe(identity, exe="c" * 64),
+        "a log started before the step": good_probe(identity, started="2026-10-06T17:00:00+02:00"),
+        "no start line": good_probe(identity).replace("started=", "x="),
+        "no sender": good_probe(identity, pid="none"),
+    }
+    for label, text in bad.items():
+        require(not verdict(text), f"the identity check accepted {label}")
+    require(not verdict(good_probe(identity), not_pid="918"), "the identity check accepted the old process")
+    require(not verdict(good_probe(identity), pid="999"), "the identity check accepted another process")
+    require(not verdict(good_probe(identity, stalls="2"), no_stall=True), "the identity check accepted a stall")
+    require(not verdict(good_probe(identity, stalls=""), no_stall=True), "an unread stall count passed")
+    probe = identity.PROBE
+    require("/proc/$pid/exe" in probe and "\necho\n" in probe, "the probe does not read the running binary or "
+            "end the stamp's last line")
+
+    script = (DIR / "16-looking-glass-sender.sh").read_text()
+    for line in script.splitlines():
+        if re.match(r'\s*(check|expect)\s+"[^"]*health', line):
+            require("health_ok" in line, f"16 judges health without the word: {line.strip()}")
+        if re.match(r'\s*(if\s+)?(check|expect)\s', line) and "looking-glass health" in line:
+            raise AssertionError(f"16 passes the health command on its exit code: {line.strip()}")
+    require('grep -q \'"health":"ok"\'' in script, "health_ok does not look for the word ok")
+
+
+FAKE_ANSIBLE = r"""#!/bin/sh
+cat "$FAKE_PROBE"
+"""
+FAKE_HYPERLABCTL = r"""#!/bin/sh
+case "$*" in
+*restart-capture*) exit 0 ;;
+*health*) echo '{"health":"idle"}' ;;
+esac
+"""
+
+
+def run_16(playbook_rc: int, probe: str, answers: dict[str, str]) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        fake = Path(td) / "bin"
+        fake.mkdir()
+        (fake / "ansible").write_text(FAKE_ANSIBLE)
+        (fake / "ansible-playbook").write_text(f"#!/bin/sh\nexit {playbook_rc}\n")
+        (fake / "hyperlabctl").write_text(FAKE_HYPERLABCTL)
+        for tool in fake.iterdir():
+            tool.chmod(0o755)
+        (Path(td) / "probe.txt").write_text(probe)
+        env = dict(os.environ, HYPERLAB_EVIDENCE_ROOT=td, PATH=f"{fake}:{os.environ['PATH']}",
+                   HYPERLABCTL=str(fake / "hyperlabctl"), FAKE_PROBE=str(Path(td) / "probe.txt"),
+                   XDG_RUNTIME_DIR=td)
+        child, master = pty.fork()
+        if child == 0:
+            os.execve("/bin/bash", ["bash", str(DIR / "16-looking-glass-sender.sh")], env)
+        seen, deadline, finished = b"", time.monotonic() + 60, False
+        answered = dict.fromkeys(answers, 0)
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master], [], [], 0.5)
+            if ready:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError:
+                    finished = True
+                    break
+                if not chunk:
+                    finished = True
+                    break
+                seen += chunk
+                # Every time a question appears, it is answered once.
+                for prompt, answer in answers.items():
+                    while seen.count(prompt.encode()) > answered[prompt]:
+                        answered[prompt] += 1
+                        os.write(master, answer.encode() + b"\n")
+        if not finished:
+            os.kill(child, 9)
+        os.waitpid(child, 0)
+        os.close(master)
+        require(finished, f"group 16 did not finish within a minute: {seen.decode(errors='replace')[-500:]}")
+        reports = list(Path(td).glob("*/16-looking-glass-sender-*/report.txt"))
+        require(len(reports) == 1, f"group 16 left {len(reports)} reports: {seen.decode(errors='replace')[-500:]}")
+        return reports[0].read_text()
+
+
+def check_16_runs() -> None:
+    identity = load_identity()
+    stale = good_probe(identity, binary="")
+    answers = {"Type 'rebuild'": "rebuild", "Type 'restart'": "restart", "[y/n]": "y"}
+    failed = run_16(2, stale, answers)
+    require("FAIL  sender playbook" in failed and "STOPPED" in failed, f"a failed playbook did not stop 16: {failed}")
+    require("(operator)" not in failed and "STOP  restart" not in failed,
+            f"16 went on after a failed playbook: {failed}")
+    wrong = run_16(0, stale, answers)
+    require("PASS  sender playbook" in wrong and "FAIL  the running sender is this build" in wrong,
+            f"16 accepted a sender that is not this build: {wrong}")
+    require("(operator)" not in wrong and "STOPPED" in wrong, f"16 asked the operator after a wrong sender: {wrong}")
+
+
 def main() -> int:
     check_no_hostname_command()
     check_scripts()
@@ -340,6 +502,9 @@ def main() -> int:
     check_fail_closed()
     check_fail_closed_runs()
     check_dirty_header()
+    check_machine_playbooks()
+    check_sender_identity()
+    check_16_runs()
     print("Acceptance scripts contract: OK")
     return 0
 

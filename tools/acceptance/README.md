@@ -16,7 +16,7 @@ holds them to these rules; `lib.sh` has the helpers.
 | 3 | `11-usbguard.sh` | 10 min | the host USB policy (ADR 0038) |
 | 4 | `10-apparmor-boot.sh prepare`, then after the reboot `verify` | 20 min | the AppArmor boot entry (ADR 0037) |
 | 5 | `12-fullscreen-ring.sh` | 5 min | the fullscreen ring (ADR 0039) |
-| 6 | `16-looking-glass-sender.sh` | 20 min | the sender fix, stream health and the SUPER key (A5, ADR 0045) |
+| 6 | `16-looking-glass-sender.sh` | 20 min | the sender fix, stream health and the SUPER key (A5, ADR 0045); rebuilds only the sender, after a confirmation, and stops before any question when a step fails |
 
 Run from the repository root, in the graphical session (screenshots use
 `grim`): `tools/acceptance/07-network-isolation.sh`.

@@ -290,5 +290,8 @@ proof.
   USBGuard.
 - [`acceptance-report-hid-a-dirty-tree.md`](acceptance-report-hid-a-dirty-tree.md):
   the acceptance report named a commit while the checkout differed from it.
+- [`looking-glass-acceptance-passed-on-a-stale-sender.md`](looking-glass-acceptance-passed-on-a-stale-sender.md):
+  group 16 passed checks against a sender it had not rebuilt and asked the
+  operator in front of the waiting logo.
 
 Author: [importriri](https://github.com/importriri).

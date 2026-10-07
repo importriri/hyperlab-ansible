@@ -117,10 +117,11 @@ expect() {
     if grep -Eq -- "$pattern" "$log"; then
         PASSES=$((PASSES + 1))
         report "PASS  $name"
-    else
-        FAILS=$((FAILS + 1))
-        report "FAIL  $name  (expected /$pattern/; evidence: $log)"
+        return 0
     fi
+    FAILS=$((FAILS + 1))
+    report "FAIL  $name  (expected /$pattern/; evidence: $log)"
+    return 1
 }
 
 _become_mode() {

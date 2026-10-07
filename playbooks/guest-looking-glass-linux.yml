@@ -1,7 +1,24 @@
 ---
+# Only the sender: no package upgrade and no kernel change. It refuses a
+# Machine whose running kernel has no build tree (an upgraded kernel not yet
+# booted), because the pinned kvmfr module is built for the running kernel.
 - name: Build the experimental Looking Glass Linux sender without starting it
   hosts: workstations
   become: true
+  pre_tasks:
+    - name: Inspect the running kernel's build tree
+      ansible.builtin.stat:
+        path: "/usr/lib/modules/{{ ansible_facts['kernel'] }}/build"
+      register: guest_looking_glass_linux_kernel_build
+
+    - name: Refuse a running kernel without its build tree
+      ansible.builtin.assert:
+        that:
+          - guest_looking_glass_linux_kernel_build.stat.exists | default(false)
+        fail_msg: >-
+          The running kernel {{ ansible_facts['kernel'] }} has no build tree:
+          reboot the Machine into its installed kernel first. This playbook
+          never upgrades packages or the kernel.
   roles:
     - role: brick_guard
       vars:

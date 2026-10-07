@@ -29,10 +29,12 @@ verify)
     expect "AppArmor is in the running LSM list" 'apparmor' cat /sys/kernel/security/lsm
     expect "the kernel line names AppArmor" 'lsm=[^ ]*apparmor' cat /proc/cmdline
     expect "AppArmor reports itself enabled" '^Y' cat /sys/module/apparmor/parameters/enabled
-    check "srv-tz-01 starts" playbook "start srv-tz-01" -i inventory.ini playbooks/vm-start.yml \
-        -e guest_spec=vm-specs/.generated/srv-tz-01.yml
-    check "srv-tz-01 answers over SSH" ansible srv-tz-01 -i inventory.ini \
-        -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" -m ping
+    if confirm start "start srv-tz-01 (not an hl-lab-* Machine) with playbooks/vm-start.yml under AppArmor"; then
+        check "srv-tz-01 starts" playbook "start srv-tz-01" -i inventory.ini playbooks/vm-start.yml \
+            -e guest_spec=vm-specs/.generated/srv-tz-01.yml
+        check "srv-tz-01 answers over SSH" ansible srv-tz-01 -i inventory.ini \
+            -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" -m ping
+    fi
     report "Start dev-01 and open Looking Glass (hyperlabctl open looking-glass dev-01), then answer."
     ask "Looking Glass shows dev-01" "Does Looking Glass show dev-01's desktop and take input?"
     screenshot "looking glass under AppArmor"
