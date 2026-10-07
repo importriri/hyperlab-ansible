@@ -19,14 +19,6 @@
          | map('lower') | unique | sort | list }}
     hardware_probe_matches: []
 
-- name: Match known laptop profiles
-  ansible.builtin.set_fact:
-    hardware_probe_matches: "{{ hardware_probe_matches + [item.key] }}"
-  loop: "{{ host_profiles | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: item.value.vfio_ids | difference(hardware_probe_detected_ids) | length == 0
-
 - name: Create the local pipeline report directory
   ansible.builtin.file:
     path: "{{ hardware_probe_host_profile_report_dir }}"
@@ -35,27 +27,17 @@
     group: root
     mode: "0755"
 
-- name: Resolve automatic host profile
-  when: host_profile == 'auto'
+- name: Select the host profile
   block:
-    - name: Require one unambiguous automatic profile match
-      ansible.builtin.assert:
-        that:
-          - hardware_probe_matches | length == 1
-        fail_msg: >-
-          Automatic host selection needs exactly one complete match, but found
-          {{ hardware_probe_matches | join(', ') | default('none', true) }}.
-          Detected PCI IDs: {{ hardware_probe_detected_ids | join(', ') }}.
-
-    - name: Select the automatically matched host profile
-      ansible.builtin.set_fact:
-        hardware_probe_selected_host_profile: "{{ hardware_probe_matches[0] }}"
+    - name: Select the host profile from the detected PCI IDs
+      ansible.builtin.include_tasks: select.yml
   rescue:
     - name: Leave the evidence needed to add an unknown machine
+      when: host_profile == 'auto'
       ansible.builtin.copy:
         content: |-
           requested_host_profile: {{ host_profile | to_json }}
-          complete_matches: {{ hardware_probe_matches | to_json }}
+          complete_matches: {{ hardware_probe_matches | default([]) | to_json }}
           detected_pci_ids: {{ hardware_probe_detected_ids | to_json }}
           lspci_numeric: |
             {{ hardware_probe_lspci.stdout | indent(12) }}
@@ -64,31 +46,23 @@
         group: root
         mode: "0644"
 
-    - name: Refuse an unknown or ambiguous automatic match
+    - name: Refuse an unknown, ambiguous or absent host profile
       ansible.builtin.fail:
         msg: >-
-          Automatic host selection found {{ hardware_probe_matches | length }} complete matches.
-          Evidence: {{ hardware_probe_unknown_report_path }}.
+          Host profile selection failed for host_profile={{ host_profile }}:
+          {{ ansible_failed_result.msg | default('see the task above') }}
+          {{ ('Evidence: ' ~ hardware_probe_unknown_report_path) if host_profile == 'auto' else '' }}
 
-- name: Validate an explicit host profile name
-  ansible.builtin.assert:
-    that:
-      - host_profile in host_profiles
-    fail_msg: "Unknown host_profile={{ host_profile }}"
-  when: host_profile != 'auto'
-
-- name: Select the explicit host profile
-  ansible.builtin.set_fact:
-    hardware_probe_selected_host_profile: "{{ host_profile }}"
-  when: host_profile != 'auto'
-
-- name: Refuse a selected profile whose devices are absent
-  ansible.builtin.assert:
-    that:
-      - host_profiles[hardware_probe_selected_host_profile].vfio_ids
-        | difference(hardware_probe_detected_ids) | length == 0
+- name: Say that this host passes no GPU through
+  when: not hardware_probe_gpu_passthrough | bool
+  ansible.builtin.debug:
+    msg: >-
+      Host profile {{ hardware_probe_selected_host_profile }} passes no GPU
+      through (ADR 0052): vfio_boot and gpu_handoff are skipped, and a VFIO
+      Machine is refused.
 
 - name: Resolve the PCI address of every reviewed VFIO component
+  when: hardware_probe_gpu_passthrough | bool
   ansible.builtin.command:
     argv: [lspci, -Dn, -d, "{{ item }}"]
   loop: "{{ host_profiles[hardware_probe_selected_host_profile].vfio_ids }}"
@@ -97,12 +71,14 @@
   check_mode: false
 
 - name: Require one address for every reviewed VFIO component
+  when: hardware_probe_gpu_passthrough | bool
   ansible.builtin.assert:
     that:
       - item.stdout_lines | length == 1
   loop: "{{ hardware_probe_vfio_lspci.results }}"
 
 - name: Build the reviewed VFIO device record
+  when: hardware_probe_gpu_passthrough | bool
   ansible.builtin.set_fact:
     hardware_probe_vfio_devices: >-
       {{ (hardware_probe_vfio_devices | default([])) +
@@ -113,8 +89,8 @@
   ansible.builtin.set_fact:
     hardware_probe_vfio_ids_csv: >-
       {{ host_profiles[hardware_probe_selected_host_profile].vfio_ids | join(',') }}
-    hardware_probe_gpu_pci: "{{ hardware_probe_vfio_devices[0].pci }}"
-    hardware_probe_gpu_audio_pci: "{{ hardware_probe_vfio_devices[1].pci }}"
+    hardware_probe_gpu_pci: "{{ hardware_probe_vfio_devices[0].pci if hardware_probe_gpu_passthrough | bool else none }}"
+    hardware_probe_gpu_audio_pci: "{{ hardware_probe_vfio_devices[1].pci if hardware_probe_gpu_passthrough | bool else none }}"
     hardware_probe_cpu_threads: "{{ ansible_facts['processor_vcpus'] | int }}"
 
 - name: Record the selected host profile without serial numbers
@@ -123,7 +99,8 @@
       host_profile: {{ hardware_probe_selected_host_profile }}
       label: {{ host_profiles[hardware_probe_selected_host_profile].label | to_json }}
       vfio_ids: {{ host_profiles[hardware_probe_selected_host_profile].vfio_ids | to_json }}
-      vfio_devices: {{ hardware_probe_vfio_devices | to_json }}
+      gpu_passthrough: {{ hardware_probe_gpu_passthrough | bool | to_json }}
+      vfio_devices: {{ hardware_probe_vfio_devices | default([]) | to_json }}
       gpu_pci: {{ hardware_probe_gpu_pci | to_json }}
       gpu_audio_pci: {{ hardware_probe_gpu_audio_pci | to_json }}
       cpu_threads: {{ hardware_probe_cpu_threads }}

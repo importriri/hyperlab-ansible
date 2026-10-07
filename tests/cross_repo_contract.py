@@ -60,6 +60,9 @@ def main() -> int:
     systems = load(sibling / SIBLING_FILE).get("systems", {})
     errors: list[str] = []
 
+    # ADR 0052: a profile without GPU passthrough names no computer; the
+    # compatibility record lists computers.
+    profiles = {name: profile for name, profile in profiles.items() if profile.get("gpu_passthrough") is not False}
     for name, profile in sorted(profiles.items()):
         if "status" in profile:
             errors.append("%s: status belongs to arch-hypervisor-lab (ADR 0006), "

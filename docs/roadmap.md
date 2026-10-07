@@ -400,6 +400,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       touching only `hl-lab-*` resources, with its own network in the flow
       matrix ([ADR 0046](adr/0046-nested-lab-host.md), proposed;
       `tools/lab/hl_lab.py`, `tests/hl_lab_contract.py`; software-verified)
+- [x] a host profile without GPU passthrough, chosen only by name, so the
+      lab host can run the host roles; `auto` still selects `nitro-3060` on
+      the Nitro's IDs and refuses an unknown computer
+      ([ADR 0052](adr/0052-host-without-gpu-passthrough.md), proposed;
+      `roles/hardware_probe/tasks/select.yml`, `tests/render.yml`,
+      software-verified)
 - [ ] the lab host started on Nitro once the guest isolation with the
       fail-closed catch-all is loaded, installed with `arch-bootstrap`, and
       the host playbooks applied inside

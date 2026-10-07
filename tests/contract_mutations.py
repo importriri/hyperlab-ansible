@@ -94,9 +94,18 @@ class ContractMutationTests(unittest.TestCase):
     def test_unknown_hardware_rescue_must_stay_narrow(self) -> None:
         def mutation(root: Path) -> None:
             path = root / "roles/hardware_probe/tasks/main.yml"
-            path.write_text(path.read_text().replace("  when: host_profile == 'auto'\n  block:", "  block:", 1))
+            path.write_text(path.read_text().replace(
+                "- name: Leave the evidence needed to add an unknown machine\n      when: host_profile == 'auto'\n",
+                "- name: Leave the evidence needed to add an unknown machine\n", 1))
 
         self.assert_mutation_fails(mutation, "unknown-machine rescue must be limited to automatic selection")
+
+    def test_auto_never_considers_a_profile_without_gpu(self) -> None:
+        def mutation(root: Path) -> None:
+            path = root / "roles/hardware_probe/tasks/select.yml"
+            path.write_text(path.read_text().replace("         | rejectattr('value.gpu_passthrough', 'defined')\n", "", 1))
+
+        self.assert_mutation_fails(mutation, "automatic selection must never consider a profile without GPU passthrough")
 
     def test_memory_ratio_is_part_of_host_data(self) -> None:
         self.assert_mutation_fails(

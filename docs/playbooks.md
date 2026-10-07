@@ -39,6 +39,12 @@ ansible-playbook -K playbooks/foundation.yml
 ansible-playbook -K playbooks/foundation.yml
 ```
 
+On a host that passes no GPU through (the nested lab host), the profile is
+named, never guessed (ADR 0052): `-e host_profile=no-gpu-passthrough`. The
+VFIO boot entries and the GPU handoff policy are then skipped, and a VFIO
+Machine is refused. Without it, an unknown computer stops at
+"0 complete matches".
+
 Use this target for a blind host, storage validation or early recovery.
 
 ### `playbooks/lab.yml`

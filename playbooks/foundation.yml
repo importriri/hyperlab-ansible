@@ -9,10 +9,14 @@
     - base
     - hardware_probe
     - kvm_host
-    - vfio_boot
+    # ADR 0052: skipped, visibly and without a brick stamp, on a host
+    # profile that passes no GPU through.
+    - role: vfio_boot
+      when: hardware_probe_gpu_passthrough | bool
     - network_domains
     - lab_isolation
-    - gpu_handoff
+    - role: gpu_handoff
+      when: hardware_probe_gpu_passthrough | bool
     - role: brick_guard
       vars:
         brick_guard_brick: bootstrap_storage

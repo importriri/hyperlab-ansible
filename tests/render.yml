@@ -18,6 +18,108 @@
     repo_root: "{{ playbook_dir }}/.."
   tasks:
 
+
+    # --- roles/hardware_probe: profile selection (ADR 0052) -----------------
+    - name: "Select a host profile: nitro_auto"
+      block:
+        - name: "Run the selection: nitro_auto"
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/hardware_probe/tasks/select.yml"
+          vars:
+            host_profile: auto
+            hardware_probe_detected_ids: "{{ ['10de:2520', '10de:228e', '8086:9bc4', '8086:1901'] }}"
+            host_profiles: "{{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}"
+        - name: "Record the selection: nitro_auto"
+          ansible.builtin.set_fact:
+            render_select_nitro_auto: >-
+              {{ {'ok': true, 'profile': hardware_probe_selected_host_profile,
+                  'gpu': hardware_probe_gpu_passthrough | bool} }}
+      rescue:
+        - name: "Record the refusal: nitro_auto"
+          ansible.builtin.set_fact:
+            render_select_nitro_auto: "{{ {'ok': false} }}"
+    - name: "Select a host profile: nogpu_auto"
+      block:
+        - name: "Run the selection: nogpu_auto"
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/hardware_probe/tasks/select.yml"
+          vars:
+            host_profile: auto
+            hardware_probe_detected_ids: "{{ ['8086:9bc4', '8086:1901', '1af4:1041'] }}"
+            host_profiles: "{{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}"
+        - name: "Record the selection: nogpu_auto"
+          ansible.builtin.set_fact:
+            render_select_nogpu_auto: >-
+              {{ {'ok': true, 'profile': hardware_probe_selected_host_profile,
+                  'gpu': hardware_probe_gpu_passthrough | bool} }}
+      rescue:
+        - name: "Record the refusal: nogpu_auto"
+          ansible.builtin.set_fact:
+            render_select_nogpu_auto: "{{ {'ok': false} }}"
+    - name: "Select a host profile: nogpu_named"
+      block:
+        - name: "Run the selection: nogpu_named"
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/hardware_probe/tasks/select.yml"
+          vars:
+            host_profile: no-gpu-passthrough
+            hardware_probe_detected_ids: "{{ ['8086:9bc4', '1af4:1041'] }}"
+            host_profiles: "{{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}"
+        - name: "Record the selection: nogpu_named"
+          ansible.builtin.set_fact:
+            render_select_nogpu_named: >-
+              {{ {'ok': true, 'profile': hardware_probe_selected_host_profile,
+                  'gpu': hardware_probe_gpu_passthrough | bool} }}
+      rescue:
+        - name: "Record the refusal: nogpu_named"
+          ansible.builtin.set_fact:
+            render_select_nogpu_named: "{{ {'ok': false} }}"
+    - name: "Select a host profile: nitro_named_absent"
+      block:
+        - name: "Run the selection: nitro_named_absent"
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/hardware_probe/tasks/select.yml"
+          vars:
+            host_profile: nitro-3060
+            hardware_probe_detected_ids: "{{ ['8086:9bc4', '1af4:1041'] }}"
+            host_profiles: "{{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}"
+        - name: "Record the selection: nitro_named_absent"
+          ansible.builtin.set_fact:
+            render_select_nitro_named_absent: >-
+              {{ {'ok': true, 'profile': hardware_probe_selected_host_profile,
+                  'gpu': hardware_probe_gpu_passthrough | bool} }}
+      rescue:
+        - name: "Record the refusal: nitro_named_absent"
+          ansible.builtin.set_fact:
+            render_select_nitro_named_absent: "{{ {'ok': false} }}"
+    - name: "Select a host profile: nogpu_named_on_nitro"
+      block:
+        - name: "Run the selection: nogpu_named_on_nitro"
+          ansible.builtin.include_tasks: "{{ repo_root }}/roles/hardware_probe/tasks/select.yml"
+          vars:
+            host_profile: no-gpu-passthrough
+            hardware_probe_detected_ids: "{{ ['10de:2520', '10de:228e', '8086:9bc4'] }}"
+            host_profiles: "{{ (lookup('file', repo_root ~ '/group_vars/all/hardware.yml') | from_yaml).host_profiles }}"
+        - name: "Record the selection: nogpu_named_on_nitro"
+          ansible.builtin.set_fact:
+            render_select_nogpu_named_on_nitro: >-
+              {{ {'ok': true, 'profile': hardware_probe_selected_host_profile,
+                  'gpu': hardware_probe_gpu_passthrough | bool} }}
+      rescue:
+        - name: "Record the refusal: nogpu_named_on_nitro"
+          ansible.builtin.set_fact:
+            render_select_nogpu_named_on_nitro: "{{ {'ok': false} }}"
+    - name: Profile selection invariants (ADR 0052)
+      ansible.builtin.assert:
+        that:
+          - render_select_nitro_auto.ok and render_select_nitro_auto.profile == 'nitro-3060'
+          - render_select_nitro_auto.gpu
+          - not render_select_nogpu_auto.ok
+          - render_select_nogpu_named.ok and render_select_nogpu_named.profile == 'no-gpu-passthrough'
+          - not render_select_nogpu_named.gpu
+          - not render_select_nitro_named_absent.ok
+          - render_select_nogpu_named_on_nitro.ok and not render_select_nogpu_named_on_nitro.gpu
+        fail_msg: >-
+          auto must keep choosing nitro-3060 on the Nitro and refuse a host no
+          GPU profile names; no-gpu-passthrough must be chosen by name only.
+        quiet: true
+
     # --- roles/base -----------------------------------------------------------
     - name: Sudoers drop-in must pass visudo (the file itself, in CI, forever)
       ansible.builtin.command: visudo -cf {{ repo_root }}/roles/base/files/10-wheel

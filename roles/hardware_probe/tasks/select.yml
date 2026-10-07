@@ -1,0 +1,64 @@
+---
+# Profile selection from facts alone (hardware_probe_detected_ids,
+# host_profiles, host_profile), so tests/render.yml can run it without root
+# or hardware. ADR 0052: `auto` considers only profiles that pass a GPU
+# through; a profile without VFIO IDs must say gpu_passthrough: false, or
+# it would match every computer.
+- name: Refuse a profile without VFIO IDs that claims GPU passthrough
+  ansible.builtin.assert:
+    that:
+      - >-
+        host_profiles | dict2items
+        | selectattr('value.vfio_ids', 'equalto', [])
+        | rejectattr('value.gpu_passthrough', 'defined') | list | length == 0
+      - >-
+        host_profiles | dict2items
+        | selectattr('value.gpu_passthrough', 'defined')
+        | selectattr('value.gpu_passthrough', 'equalto', false)
+        | rejectattr('value.vfio_ids', 'equalto', []) | list | length == 0
+    fail_msg: >-
+      Every host profile names its VFIO IDs, or says gpu_passthrough: false
+      and names none.
+
+- name: Match the profiles that pass a GPU through
+  ansible.builtin.set_fact:
+    hardware_probe_matches: >-
+      {{ host_profiles | dict2items
+         | rejectattr('value.gpu_passthrough', 'defined')
+         | selectattr('value.vfio_ids', 'subset', hardware_probe_detected_ids)
+         | map(attribute='key') | list }}
+
+- name: Require one unambiguous automatic profile match
+  when: host_profile == 'auto'
+  ansible.builtin.assert:
+    that:
+      - hardware_probe_matches | length == 1
+    fail_msg: >-
+      Automatic host selection needs exactly one complete match, but found
+      {{ hardware_probe_matches | join(', ') | default('none', true) }}.
+      Detected PCI IDs: {{ hardware_probe_detected_ids | join(', ') }}.
+
+- name: Validate an explicit host profile name
+  when: host_profile != 'auto'
+  ansible.builtin.assert:
+    that:
+      - host_profile in host_profiles
+    fail_msg: "Unknown host_profile={{ host_profile }}"
+
+- name: Select the host profile
+  ansible.builtin.set_fact:
+    hardware_probe_selected_host_profile: >-
+      {{ hardware_probe_matches[0] if host_profile == 'auto' else host_profile }}
+    hardware_probe_gpu_passthrough: >-
+      {{ host_profiles[hardware_probe_matches[0] if host_profile == 'auto' else host_profile]
+         .gpu_passthrough | default(true) | bool }}
+
+- name: Refuse a selected profile whose devices are absent
+  ansible.builtin.assert:
+    that:
+      - >-
+        host_profiles[hardware_probe_selected_host_profile].vfio_ids
+        | difference(hardware_probe_detected_ids) | length == 0
+    fail_msg: >-
+      Host profile {{ hardware_probe_selected_host_profile }} names PCI IDs
+      this computer does not have.

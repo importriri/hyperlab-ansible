@@ -68,10 +68,17 @@ def collect_errors(root: Path = ROOT) -> list[str]:
     check("hardware_profile" not in hardware_path.read_text(), "legacy hardware_profile key must not return")
 
     profiles = hardware.get("host_profiles", {})
-    check(set(profiles) == {"nitro-3060", "predator-3070"}, "both reviewed laptop profiles must exist")
+    laptops = {name for name, profile in profiles.items() if profile.get("gpu_passthrough", True) is not False}
+    check(laptops == {"nitro-3060", "predator-3070"}, "both reviewed laptop profiles must exist")
+    # ADR 0052: the one profile without GPU passthrough names no VFIO IDs.
+    without_gpu = set(profiles) - laptops
+    check(without_gpu == {"no-gpu-passthrough"}, "only no-gpu-passthrough may pass no GPU through")
+    for name in without_gpu:
+        check(profiles[name].get("vfio_ids") == [] and profiles[name].get("gpu_passthrough") is False,
+              f"{name} must say gpu_passthrough: false and name no VFIO IDs")
     for name, profile in profiles.items():
         vfio_ids = profile.get("vfio_ids", [])
-        check(len(vfio_ids) == 2, f"{name} must bind GPU and HDMI audio")
+        check(len(vfio_ids) == 2 or name in without_gpu, f"{name} must bind GPU and HDMI audio")
         check(all(re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{4}", str(x)) for x in vfio_ids), f"bad PCI ID in {name}")
         check("desktop" in profile, f"{name} must declare per-machine input")
         memory = profile.get("memory", {})
@@ -210,9 +217,14 @@ def collect_errors(root: Path = ROOT) -> list[str]:
           "only the VFIO boot profile and its AppArmor twin may request VFIO binding")
     check("default Arch-Linux-Hardened-Vfio.conf" in vfio_tasks, "the managed loader default must be VFIO")
 
-    hardware_tasks = (ROOT / "roles/hardware_probe/tasks/main.yml").read_text()
+    hardware_main = (ROOT / "roles/hardware_probe/tasks/main.yml").read_text()
+    hardware_tasks = hardware_main + (ROOT / "roles/hardware_probe/tasks/select.yml").read_text()
     check("lspci" in hardware_tasks and "-Dn" in hardware_tasks, "hardware probe must use numeric PCI discovery")
-    check("when: host_profile == 'auto'" in hardware_tasks, "unknown-machine rescue must be limited to automatic selection")
+    check("- name: Leave the evidence needed to add an unknown machine\n      when: host_profile == 'auto'\n"
+          in hardware_main, "unknown-machine rescue must be limited to automatic selection")
+    check("hardware_probe_matches: >-\n      {{ host_profiles | dict2items\n"
+          "         | rejectattr('value.gpu_passthrough', 'defined')\n" in hardware_tasks,
+          "automatic selection must never consider a profile without GPU passthrough")
     check("Unknown host_profile={{ host_profile }}" in hardware_tasks, "explicit unknown host profile must keep its own error")
     check("requested_host_profile:" in hardware_tasks, "unknown report must name the requested host profile")
     check("gpu_pci:" in hardware_tasks and "gpu_audio_pci:" in hardware_tasks and "cpu_threads:" in hardware_tasks, "preflight report must collect PCI addresses and CPU threads")
