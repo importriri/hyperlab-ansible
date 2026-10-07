@@ -11,18 +11,49 @@ source "$(dirname "$0")/lib.sh"
 acceptance_start
 become_once
 
-entry=arch-linux-hardened-vfio-apparmor.conf
+# The entry ids exactly as roles/vfio_boot writes them; bootctl matches ids
+# with their case.
+entry=Arch-Linux-Hardened-Vfio-AppArmor.conf
+default_entry=Arch-Linux-Hardened-Vfio.conf
+
+# boot_entries: one line per entry, "id default", from bootctl's JSON.
+boot_entries() {
+    bootctl list --json=short --no-pager \
+        | python3 -c 'import json, sys
+for e in json.load(sys.stdin):
+    print(e.get("id"), "default" if e.get("isDefault") else "-")'
+}
+
+entry_exists() {
+    boot_entries
+    boot_entries | grep -q "^$1 "
+}
+
+# default_is ID: the one entry bootctl marks as the default is ID.
+default_is() {
+    local defaults
+    defaults=$(boot_entries | awk '$2 == "default" {print $1}')
+    printf 'default entries: %s\n' "${defaults:-none}"
+    [[ $defaults == "$1" ]]
+}
+
 case ${1:-} in
 prepare)
     backup "boot entries" bootctl list --no-pager
     backup "lsm before" cat /sys/kernel/security/lsm
-    expect "the AppArmor entry exists" "$entry" bootctl list --no-pager
-    expect "the default is still the Vfio entry" 'arch-linux-hardened-vfio\.conf' \
-        as_root "read the default entry" bootctl status --no-pager
+    present=0
+    default_ok=0
+    check "the AppArmor entry exists" entry_exists "$entry" && present=1
+    check "the default is still the Vfio entry" default_is "$default_entry" && default_ok=1
     rollback "reboot again: the one-shot applies once and the default entry boots next"
-    if confirm reboot "boot once into the AppArmor entry and reboot the host now"; then
-        as_root "one-time boot into the AppArmor entry" bootctl set-oneshot "$entry"
-        as_root "reboot" systemctl reboot
+    # Fail closed: the one-shot reboot is offered only when both hold.
+    if (( present && default_ok )); then
+        if confirm reboot "boot once into the AppArmor entry and reboot the host now"; then
+            as_root "one-time boot into the AppArmor entry" bootctl set-oneshot "$entry"
+            as_root "reboot" systemctl reboot
+        fi
+    else
+        report "REBOOT NOT OFFERED: the AppArmor entry or the default entry is not as expected."
     fi
     ;;
 verify)

@@ -38,6 +38,9 @@
      it running, judged on the tool's own state line;
  13. group 11 passes "every attached device allowed" only when the allowed
      rows match the USB devices the kernel reports, with none blocked;
+ 14. group 10 names the boot entries exactly as roles/vfio_boot writes them,
+     reads the default from bootctl's JSON (never a pattern on its status
+     text), and offers the one-shot reboot only when both checks hold;
  10. group 16 passes nothing on an exit code alone: health only on the word
      "ok", the sender only when it is this build (its stamp's digests are
      the repository's, its running executable is the stamped binary, its log
@@ -49,6 +52,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import io
 import os
 import pty
@@ -444,7 +448,7 @@ esac
 
 
 def run_in_terminal(script: str, fakes: dict[str, str], files: dict[str, str], answers: dict[str, str],
-                    extra_env: dict[str, str] | None = None) -> str:
+                    extra_env: dict[str, str] | None = None, args: tuple[str, ...] = ()) -> str:
     """Run an acceptance script in a pseudo-terminal against fake tools.
 
     Every time a question appears it is answered once; a script that does
@@ -462,7 +466,7 @@ def run_in_terminal(script: str, fakes: dict[str, str], files: dict[str, str], a
                    XDG_RUNTIME_DIR=td, FAKE_DIR=td, **(extra_env or {}))
         child, master = pty.fork()
         if child == 0:
-            os.execve("/bin/bash", ["bash", str(DIR / script)], env)
+            os.execve("/bin/bash", ["bash", str(DIR / script), *args], env)
         seen, deadline, finished = b"", time.monotonic() + 60, False
         answered = dict.fromkeys(answers, 0)
         while time.monotonic() < deadline:
@@ -637,6 +641,39 @@ def check_11_allowed_count() -> None:
     require("FAIL  every attached device allowed, none blocked" in blocked, f"a blocked device passed: {blocked}")
 
 
+def check_10_entries() -> None:
+    script = (DIR / "10-apparmor-boot.sh").read_text()
+    defaults = (ROOT / "roles/vfio_boot/defaults/main.yml").read_text()
+    tasks = (ROOT / "roles/vfio_boot/tasks/main.yml").read_text()
+    entry_match = re.search(r"^entry=(\S+)$", script, re.M)
+    default_match = re.search(r"^default_entry=(\S+)$", script, re.M)
+    require(entry_match is not None and default_match is not None,
+            "group 10 does not name both the AppArmor entry and the default entry")
+    entry, default_entry = entry_match.group(1), default_match.group(1)
+    require(f"- file: {entry}" in defaults and "AppArmor" in entry, f"group 10's AppArmor entry {entry} is not the role's")
+    require(f"line: default {default_entry}" in tasks, f"group 10's default entry {default_entry} is not the role's")
+    require("bootctl status" not in script, "group 10 reads the default from bootctl's status text")
+
+    def boot_json(default: str, present: bool = True) -> str:
+        ids = ["Arch-Linux-Hardened.conf", default_entry] + ([entry] if present else [])
+        return json.dumps([{"id": i, "isDefault": i == default} for i in ids])
+
+    fakes = {"sudo": "#!/bin/sh\nexit 0\n", "bootctl": "#!/bin/sh\nprintf '%s' \"$BOOT_JSON\"\n"}
+    answers = {"Type 'reboot'": "no"}
+    good = run_in_terminal("10-apparmor-boot.sh", fakes, {}, answers, {"BOOT_JSON": boot_json(default_entry)},
+                           ("prepare",))
+    require("PASS  the AppArmor entry exists" in good and "PASS  the default is still the Vfio entry" in good
+            and "STOP  boot once into the AppArmor entry" in good, f"group 10 refused the reviewed entries: {good}")
+    wrong = run_in_terminal("10-apparmor-boot.sh", fakes, {}, answers, {"BOOT_JSON": boot_json(entry)},
+                            ("prepare",))
+    require("FAIL  the default is still the Vfio entry" in wrong and "REBOOT NOT OFFERED" in wrong
+            and "STOP " not in wrong, f"group 10 went on with the AppArmor entry as default: {wrong}")
+    missing = run_in_terminal("10-apparmor-boot.sh", fakes, {}, answers,
+                              {"BOOT_JSON": boot_json(default_entry, present=False)}, ("prepare",))
+    require("FAIL  the AppArmor entry exists" in missing and "REBOOT NOT OFFERED" in missing,
+            f"group 10 offered a reboot into a missing entry: {missing}")
+
+
 def check_16_runs() -> None:
     identity = load_identity()
     stale = good_probe(identity, binary="")
@@ -667,6 +704,7 @@ def main() -> int:
     check_07_runs()
     check_00_status()
     check_11_allowed_count()
+    check_10_entries()
     print("Acceptance scripts contract: OK")
     return 0
 

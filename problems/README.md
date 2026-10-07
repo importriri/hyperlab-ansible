@@ -299,5 +299,7 @@ proof.
   group 0's "lab host status" passed whatever the lab host's state was.
 - [`usbguard-allowed-check-passed-on-one-device.md`](usbguard-allowed-check-passed-on-one-device.md):
   group 11's "attached devices allowed" passed when any one device was allowed.
+- [`apparmor-boot-check-used-wrong-entry-names.md`](apparmor-boot-check-used-wrong-entry-names.md):
+  group 10 named the boot entries in the wrong case and grepped the default.
 
 Author: [importriri](https://github.com/importriri).
