@@ -297,5 +297,7 @@ proof.
   group 7's "cannot reach" checks passed on any error, without a control.
 - [`lab-host-status-passed-on-exit-code.md`](lab-host-status-passed-on-exit-code.md):
   group 0's "lab host status" passed whatever the lab host's state was.
+- [`usbguard-allowed-check-passed-on-one-device.md`](usbguard-allowed-check-passed-on-one-device.md):
+  group 11's "attached devices allowed" passed when any one device was allowed.
 
 Author: [importriri](https://github.com/importriri).

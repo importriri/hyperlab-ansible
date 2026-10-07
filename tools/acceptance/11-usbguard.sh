@@ -8,12 +8,27 @@ source "$(dirname "$0")/lib.sh"
 acceptance_start
 become_once
 
+USB_SYSFS=${HYPERLAB_USB_SYSFS:-/sys/bus/usb/devices}
+
 usb_list() {
     local d
-    for d in /sys/bus/usb/devices/*; do
+    for d in "$USB_SYSFS"/*; do
         [[ -e $d/idVendor ]] || continue
         printf '%s %s:%s authorized=%s\n' "${d##*/}" "$(<"$d/idVendor")" "$(<"$d/idProduct")" "$(<"$d/authorized")"
     done
+}
+
+# attached_all_allowed: as many "allow" rows as USB devices the kernel
+# reports, and no blocked one, before anything new is plugged in.
+attached_all_allowed() {
+    local listing allowed blocked attached
+    listing=$(as_root "list USB devices" usbguard list-devices) || return 1
+    allowed=$(grep -cE '^[0-9]+: allow' <<<"$listing")
+    blocked=$(grep -cE '^[0-9]+: (block|reject)' <<<"$listing")
+    attached=$(usb_list | wc -l)
+    printf '%s\n' "$listing"
+    printf 'allowed=%s blocked=%s attached=%s\n' "$allowed" "$blocked" "$attached"
+    (( attached > 0 && allowed == attached && blocked == 0 ))
 }
 
 backup "USB devices before" usb_list
@@ -24,7 +39,7 @@ if check "usbguard check mode" playbook "usbguard check" -i inventory.ini playbo
     report "Plug any USB mouse or keyboard you use BEFORE the next step, so it enters the policy."
     if confirm block "turn on USBGuard: every USB device not attached now stays blocked"; then
         check "usbguard applied" playbook "usbguard apply" -i inventory.ini playbooks/host-usbguard.yml
-        expect "attached devices allowed" '^[0-9]+: allow' as_root "list USB devices" usbguard list-devices
+        check "every attached device allowed, none blocked" attached_all_allowed
         ask "internal keyboard" "Type a few letters on the internal keyboard: do they appear?"
         ask "internal touchpad" "Move the pointer with the touchpad: does it move?"
         ask "a new stick is blocked" "Plug a USB stick: is it NOT mounted? (the shell's USB devices view lists it blocked)"

@@ -36,6 +36,8 @@
      next to a control that the same probe reaches from the same guest;
  12. group 0 passes the lab host's status only when the lab tool reports
      it running, judged on the tool's own state line;
+ 13. group 11 passes "every attached device allowed" only when the allowed
+     rows match the USB devices the kernel reports, with none blocked;
  10. group 16 passes nothing on an exit code alone: health only on the word
      "ok", the sender only when it is this build (its stamp's digests are
      the repository's, its running executable is the stamped binary, its log
@@ -601,6 +603,40 @@ def check_00_status() -> None:
         hl_lab.virsh = saved
 
 
+FAKE_SUDO_USBGUARD = r"""#!/bin/sh
+case "$*" in
+*"usbguard list-devices"*) printf '%b' "$LIST_DEVICES" ;;
+esac
+exit 0
+"""
+
+
+def run_11_listing(listing: str) -> str:
+    with tempfile.TemporaryDirectory() as sysfs:
+        for number in range(3):
+            device = Path(sysfs) / f"1-{number}"
+            device.mkdir()
+            for name, value in (("idVendor", "1d6b"), ("idProduct", f"000{number}"), ("authorized", "1")):
+                (device / name).write_text(value + "\n")
+        return run_in_terminal(
+            "11-usbguard.sh",
+            {"ansible-playbook": "#!/bin/sh\nexit 0\n", "sudo": FAKE_SUDO_USBGUARD},
+            {}, {"Type 'block'": "block", "[y/n]": "y"},
+            {"HYPERLAB_USB_SYSFS": sysfs, "LIST_DEVICES": listing})
+
+
+def check_11_allowed_count() -> None:
+    script = (DIR / "11-usbguard.sh").read_text()
+    require("'^[0-9]+: allow' as_root" not in script, "group 11 passes on one allowed device")
+    allow = "".join(f"{n}: allow id 1d6b:000{n} via-port \"1-{n}\"\\n" for n in range(3))
+    good = run_11_listing(allow)
+    require("PASS  every attached device allowed, none blocked" in good, f"three of three allowed failed: {good}")
+    one = run_11_listing("1: allow id 1d6b:0000\\n")
+    require("FAIL  every attached device allowed, none blocked" in one, f"one of three allowed passed: {one}")
+    blocked = run_11_listing(allow + "4: block id 090c:1000 via-port \"1-1\"\\n")
+    require("FAIL  every attached device allowed, none blocked" in blocked, f"a blocked device passed: {blocked}")
+
+
 def check_16_runs() -> None:
     identity = load_identity()
     stale = good_probe(identity, binary="")
@@ -630,6 +666,7 @@ def main() -> int:
     check_tcp_probe()
     check_07_runs()
     check_00_status()
+    check_11_allowed_count()
     print("Acceptance scripts contract: OK")
     return 0
 
