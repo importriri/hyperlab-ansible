@@ -135,6 +135,9 @@ entered the pipeline.
 51. [`0051-disposable-viewer-and-safe-documents.md`](0051-disposable-viewer-and-safe-documents.md)
     — proposed: documents open in a disposable viewer without a network, and
     a PDF is rebuilt from its pixels only.
+52. [`0052-host-without-gpu-passthrough.md`](0052-host-without-gpu-passthrough.md)
+    — proposed: a host profile without GPU passthrough, chosen only by name,
+    never by `auto`.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

@@ -98,6 +98,7 @@ there.
 | [0048](adr/0048-key-vault.md) | a key vault: SSH keys in a Machine without a network |
 | [0050](adr/0050-hardware-readiness-and-profile.md) | hardware readiness and a host profile proposal before install |
 | [0051](adr/0051-disposable-viewer-and-safe-documents.md) | a disposable viewer and PDFs rebuilt from pixels |
+| [0052](adr/0052-host-without-gpu-passthrough.md) | a host profile without GPU passthrough, chosen by name |
 
 ## 5. Questions the maintainer wants answered
 
