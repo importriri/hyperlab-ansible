@@ -34,6 +34,8 @@
  11. group 7 proves a refusal only with a probe that says what stopped it
      (a drop, a reset, no route), never a probe that did not run, and only
      next to a control that the same probe reaches from the same guest;
+ 12. group 0 passes the lab host's status only when the lab tool reports
+     it running, judged on the tool's own state line;
  10. group 16 passes nothing on an exit code alone: health only on the word
      "ok", the sender only when it is this build (its stamp's digests are
      the repository's, its running executable is the stamped binary, its log
@@ -45,6 +47,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import os
 import pty
 import re
@@ -54,6 +57,7 @@ import time
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -571,6 +575,32 @@ def check_07_runs() -> None:
             f"refusals passed without a control: {blind}")
 
 
+def check_00_status() -> None:
+    script = (DIR / "00-lab-host.sh").read_text()
+    require('check "lab host status"' not in script, "group 0 passes the lab host's status on an exit code")
+    match = re.search(r"expect \"lab host status is running\" '([^']+)'", script)
+    require(match is not None, "group 0 does not judge the lab host's state")
+    pattern = re.compile(match.group(1), re.M)
+    spec = importlib.util.spec_from_file_location("hl_lab", ROOT / "tools/lab/hl_lab.py")
+    hl_lab = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hl_lab)
+    saved = hl_lab.virsh
+    try:
+        for state, should_pass in (("running", True), ("shut off", False), ("paused", False), ("", False)):
+            def fake(*args, check=True, _state=state):
+                listing = {"net-list": hl_lab.NETWORK, "pool-list": hl_lab.POOL, "list": hl_lab.DOMAIN}
+                out = listing.get(args[0], _state if args[0] == "domstate" else "")
+                return subprocess.CompletedProcess(args, 0, out + "\n", "")
+            hl_lab.virsh = fake
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                hl_lab.status()
+            require(bool(pattern.search(buffer.getvalue())) == should_pass,
+                    f"group 0 reads the state {state!r} wrongly: {buffer.getvalue()}")
+    finally:
+        hl_lab.virsh = saved
+
+
 def check_16_runs() -> None:
     identity = load_identity()
     stale = good_probe(identity, binary="")
@@ -599,6 +629,7 @@ def main() -> int:
     check_16_runs()
     check_tcp_probe()
     check_07_runs()
+    check_00_status()
     print("Acceptance scripts contract: OK")
     return 0
 

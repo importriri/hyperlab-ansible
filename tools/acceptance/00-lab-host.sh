@@ -18,7 +18,8 @@ if grep -Eq 'iifname "virbr-hl-lab" counter packets [0-9]+ bytes [0-9]+ drop' "$
     rollback "python3 tools/lab/hl_lab.py stop   (or: destroy --yes-remove-hl-lab, only hl-lab-* resources)"
     if confirm start "start hl-lab-testbed and hl-lab-host with the rules above"; then
         check "lab host started" python3 "$ACCEPTANCE_REPO/tools/lab/hl_lab.py" start --isolation-checked
-        check "lab host status" python3 "$ACCEPTANCE_REPO/tools/lab/hl_lab.py" status
+        expect "lab host status is running" '^hl-lab-host state: running$' \
+            python3 "$ACCEPTANCE_REPO/tools/lab/hl_lab.py" status
     fi
 else
     FAILS=$((FAILS + 1))

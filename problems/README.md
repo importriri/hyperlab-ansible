@@ -295,5 +295,7 @@ proof.
   operator in front of the waiting logo.
 - [`acceptance-refusal-checks-proved-nothing.md`](acceptance-refusal-checks-proved-nothing.md):
   group 7's "cannot reach" checks passed on any error, without a control.
+- [`lab-host-status-passed-on-exit-code.md`](lab-host-status-passed-on-exit-code.md):
+  group 0's "lab host status" passed whatever the lab host's state was.
 
 Author: [importriri](https://github.com/importriri).

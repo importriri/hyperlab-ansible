@@ -262,7 +262,8 @@ def status() -> None:
     for kind, name in (("net", NETWORK), ("pool", POOL), ("dom", DOMAIN)):
         print(f"{name}: {'defined' if name in names(kind) else 'absent'}")
     if DOMAIN in names("dom"):
-        print(virsh("domstate", DOMAIN).stdout.strip())
+        # One line a test can match: "hl-lab-host state: running".
+        print(f"{DOMAIN} state: {virsh('domstate', DOMAIN).stdout.strip() or 'unknown'}")
 
 
 def stop() -> None:
