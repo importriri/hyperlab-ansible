@@ -31,6 +31,9 @@
   9. a playbook applied to a Machine (its runtime inventory, or a guest-*
      or vm-* playbook) stops at a confirmation first, and no script applies
      a whole workstation profile;
+ 11. group 7 proves a refusal only with a probe that says what stopped it
+     (a drop, a reset, no route), never a probe that did not run, and only
+     next to a control that the same probe reaches from the same guest;
  10. group 16 passes nothing on an exit code alone: health only on the word
      "ok", the sender only when it is this build (its stamp's digests are
      the repository's, its running executable is the stamped binary, its log
@@ -424,7 +427,7 @@ def check_sender_identity() -> None:
 
 
 FAKE_ANSIBLE = r"""#!/bin/sh
-cat "$FAKE_PROBE"
+cat "$FAKE_DIR/$FAKE_PROBE_NAME"
 """
 FAKE_HYPERLABCTL = r"""#!/bin/sh
 case "$*" in
@@ -434,22 +437,26 @@ esac
 """
 
 
-def run_16(playbook_rc: int, probe: str, answers: dict[str, str]) -> str:
+def run_in_terminal(script: str, fakes: dict[str, str], files: dict[str, str], answers: dict[str, str],
+                    extra_env: dict[str, str] | None = None) -> str:
+    """Run an acceptance script in a pseudo-terminal against fake tools.
+
+    Every time a question appears it is answered once; a script that does
+    not finish within a minute is killed and fails the contract.
+    """
     with tempfile.TemporaryDirectory() as td:
         fake = Path(td) / "bin"
         fake.mkdir()
-        (fake / "ansible").write_text(FAKE_ANSIBLE)
-        (fake / "ansible-playbook").write_text(f"#!/bin/sh\nexit {playbook_rc}\n")
-        (fake / "hyperlabctl").write_text(FAKE_HYPERLABCTL)
-        for tool in fake.iterdir():
-            tool.chmod(0o755)
-        (Path(td) / "probe.txt").write_text(probe)
+        for name, body in fakes.items():
+            (fake / name).write_text(body)
+            (fake / name).chmod(0o755)
+        for name, body in files.items():
+            (Path(td) / name).write_text(body)
         env = dict(os.environ, HYPERLAB_EVIDENCE_ROOT=td, PATH=f"{fake}:{os.environ['PATH']}",
-                   HYPERLABCTL=str(fake / "hyperlabctl"), FAKE_PROBE=str(Path(td) / "probe.txt"),
-                   XDG_RUNTIME_DIR=td)
+                   XDG_RUNTIME_DIR=td, FAKE_DIR=td, **(extra_env or {}))
         child, master = pty.fork()
         if child == 0:
-            os.execve("/bin/bash", ["bash", str(DIR / "16-looking-glass-sender.sh")], env)
+            os.execve("/bin/bash", ["bash", str(DIR / script)], env)
         seen, deadline, finished = b"", time.monotonic() + 60, False
         answered = dict.fromkeys(answers, 0)
         while time.monotonic() < deadline:
@@ -464,7 +471,6 @@ def run_16(playbook_rc: int, probe: str, answers: dict[str, str]) -> str:
                     finished = True
                     break
                 seen += chunk
-                # Every time a question appears, it is answered once.
                 for prompt, answer in answers.items():
                     while seen.count(prompt.encode()) > answered[prompt]:
                         answered[prompt] += 1
@@ -473,10 +479,96 @@ def run_16(playbook_rc: int, probe: str, answers: dict[str, str]) -> str:
             os.kill(child, 9)
         os.waitpid(child, 0)
         os.close(master)
-        require(finished, f"group 16 did not finish within a minute: {seen.decode(errors='replace')[-500:]}")
-        reports = list(Path(td).glob("*/16-looking-glass-sender-*/report.txt"))
-        require(len(reports) == 1, f"group 16 left {len(reports)} reports: {seen.decode(errors='replace')[-500:]}")
+        require(finished, f"{script} did not finish within a minute: {seen.decode(errors='replace')[-500:]}")
+        group = script.rsplit(".", 1)[0]
+        reports = list(Path(td).glob(f"*/{group}-*/report.txt"))
+        require(len(reports) == 1, f"{script} left {len(reports)} reports: {seen.decode(errors='replace')[-500:]}")
         return reports[0].read_text()
+
+
+def run_16(playbook_rc: int, probe: str, answers: dict[str, str]) -> str:
+    return run_in_terminal(
+        "16-looking-glass-sender.sh",
+        {"ansible": FAKE_ANSIBLE, "ansible-playbook": f"#!/bin/sh\nexit {playbook_rc}\n",
+         "hyperlabctl": FAKE_HYPERLABCTL},
+        {"probe.txt": probe}, answers, {"HYPERLABCTL": "hyperlabctl", "FAKE_PROBE_NAME": "probe.txt"})
+
+
+TCP_PROBE = DIR / "probes/tcp-probe"
+
+
+def check_tcp_probe() -> None:
+    import socket
+
+    def probe(port: int, path: str | None = None) -> str:
+        env = dict(os.environ, PATH=path) if path is not None else None
+        result = subprocess.run(["/bin/sh", str(TCP_PROBE), "127.0.0.1", str(port)], capture_output=True,
+                                text=True, check=False, env=env, timeout=20)
+        return result.stdout.strip()
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        require(probe(listener.getsockname()[1]) == "result=reached", "the probe did not reach a listening port")
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        port = closed.getsockname()[1]
+    require(probe(port) == "result=refused", "the probe did not report a refusal")
+    require(probe(port, path="/nonexistent") == "result=cannot-run", "a probe without bash ran anyway")
+    with tempfile.TemporaryDirectory() as td:
+        for name, body in (("timeout-124", "exit 124"), ("timeout-unreach", "echo 'Network is unreachable' >&2; exit 1"),
+                           ("timeout-7", "echo weird >&2; exit 7")):
+            directory = Path(td) / name
+            directory.mkdir()
+            (directory / "timeout").write_text(f"#!/bin/sh\n{body}\n")
+            (directory / "timeout").chmod(0o755)
+        bash_dir = str(Path(subprocess.run(["sh", "-c", "command -v bash"], capture_output=True, text=True,
+                                           check=True).stdout.strip()).parent)
+        for name, expected_word in (("timeout-124", "result=timeout"), ("timeout-unreach", "result=unreachable"),
+                                    ("timeout-7", "result=other:7")):
+            got = probe(port, path=f"{Path(td) / name}:{bash_dir}")
+            require(got == expected_word, f"the probe read {name} as {got}")
+
+    script = (DIR / "07-network-isolation.sh").read_text()
+    require("! timeout" not in script and '-a "!' not in script,
+            "group 7 still proves a refusal by negating a command that may not have run")
+    control = script.index('if expect "srv-tz-01 reaches its own gateway\'s DNS over TCP (control)" \'^result=reached$\'')
+    otherwise = script.index("NOT JUDGED", control)
+    for name in ("srv-tz-01 cannot reach the dev resolver", "srv-tz-01 cannot reach the host's LLMNR"):
+        at = script.index(name)
+        require(control < at < otherwise, f"{name!r} is judged outside its control")
+        require("'^result=(timeout|refused|unreachable)$'" in script[at:at + 200],
+                f"{name!r} accepts something other than a refusal")
+
+
+FAKE_ANSIBLE_07 = r"""#!/bin/sh
+case "$*" in
+*"tcp-probe 10.10.5.1 53") word=$CONTROL ;;
+*tcp-probe*) word=$REFUSAL ;;
+*) echo "srv-tz-01 | SUCCESS"; exit 0 ;;
+esac
+printf 'srv-tz-01 | CHANGED => {\n    "stdout_lines": [\n        "result=%s"\n    ]\n}\n' "$word"
+"""
+
+
+def run_07(control: str, refusal: str) -> str:
+    return run_in_terminal(
+        "07-network-isolation.sh",
+        {"ansible": FAKE_ANSIBLE_07, "ansible-playbook": "#!/bin/sh\nexit 0\n", "sudo": "#!/bin/sh\nexit 0\n",
+         "virsh": "#!/bin/sh\nexit 0\n"},
+        {}, {"Type 'apply'": "apply"}, {"CONTROL": control, "REFUSAL": refusal})
+
+
+def check_07_runs() -> None:
+    good = run_07("reached", "timeout")
+    require("PASS  srv-tz-01 reaches its own gateway's DNS over TCP (control)" in good
+            and "PASS  srv-tz-01 cannot reach the dev resolver" in good
+            and "PASS  srv-tz-01 cannot reach the host's LLMNR" in good, f"group 7 did not judge a drop: {good}")
+    norun = run_07("reached", "cannot-run")
+    require("FAIL  srv-tz-01 cannot reach the dev resolver" in norun, f"a probe that never ran passed: {norun}")
+    blind = run_07("cannot-run", "timeout")
+    require("NOT JUDGED" in blind and "PASS  srv-tz-01 cannot reach" not in blind,
+            f"refusals passed without a control: {blind}")
 
 
 def check_16_runs() -> None:
@@ -505,6 +597,8 @@ def main() -> int:
     check_machine_playbooks()
     check_sender_identity()
     check_16_runs()
+    check_tcp_probe()
+    check_07_runs()
     print("Acceptance scripts contract: OK")
     return 0
 

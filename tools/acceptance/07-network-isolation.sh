@@ -10,6 +10,13 @@ acceptance_start
 # Asked here, once: every check below runs in a subshell and inherits it.
 become_once
 
+# tcp_probe HOST PORT: one TCP attempt from srv-tz-01, as one word.
+tcp_probe() {
+    (cd "$ACCEPTANCE_REPO" && ansible srv-tz-01 -i inventory.ini -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" \
+        -m script -a "tools/acceptance/probes/tcp-probe $1 $2") \
+        | sed -n 's/^[[:space:]]*"\(result=[a-z:0-9-]*\)"[[:space:]]*$/\1/p'
+}
+
 backup_root "nft ruleset before" nft list ruleset
 backup_root "lab-isolation.nft before" cat /etc/nftables.d/lab-isolation.nft
 backup "dev leases before" virsh --connect qemu:///system net-dhcp-leases dev
@@ -33,10 +40,17 @@ if check "foundation check mode" playbook "foundation check" -i inventory.ini pl
         check "SSH to srv-tz-01" ansible srv-tz-01 -i inventory.ini -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" -m ping
         check "DNS inside srv-tz-01" ansible srv-tz-01 -i inventory.ini -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" \
             -m command -a "getent hosts archlinux.org"
-        check "srv-tz-01 cannot reach the dev resolver" ansible srv-tz-01 -i inventory.ini \
-            -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" -m shell -a "! timeout 3 bash -c '</dev/tcp/10.10.3.1/53'"
-        check "srv-tz-01 cannot reach the host's LLMNR" ansible srv-tz-01 -i inventory.ini \
-            -i "${XDG_RUNTIME_DIR}/srv-tz-01.ini" -m shell -a "! timeout 3 bash -c '</dev/tcp/10.10.5.1/5355'"
+        # A refusal proves something only next to a control that the same
+        # probe, from the same guest, does reach: its own gateway's DNS.
+        if expect "srv-tz-01 reaches its own gateway's DNS over TCP (control)" '^result=reached$' \
+            tcp_probe 10.10.5.1 53; then
+            expect "srv-tz-01 cannot reach the dev resolver" '^result=(timeout|refused|unreachable)$' \
+                tcp_probe 10.10.3.1 53
+            expect "srv-tz-01 cannot reach the host's LLMNR" '^result=(timeout|refused|unreachable)$' \
+                tcp_probe 10.10.5.1 5355
+        else
+            report "NOT JUDGED: the control did not reach an allowed destination, so no refusal can be read."
+        fi
         backup "dev leases after" virsh --connect qemu:///system net-dhcp-leases dev
     fi
 else

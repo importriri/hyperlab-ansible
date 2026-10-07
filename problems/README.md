@@ -293,5 +293,7 @@ proof.
 - [`looking-glass-acceptance-passed-on-a-stale-sender.md`](looking-glass-acceptance-passed-on-a-stale-sender.md):
   group 16 passed checks against a sender it had not rebuilt and asked the
   operator in front of the waiting logo.
+- [`acceptance-refusal-checks-proved-nothing.md`](acceptance-refusal-checks-proved-nothing.md):
+  group 7's "cannot reach" checks passed on any error, without a control.
 
 Author: [importriri](https://github.com/importriri).

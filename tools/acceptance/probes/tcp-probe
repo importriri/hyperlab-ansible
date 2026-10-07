@@ -1,0 +1,29 @@
+#!/bin/sh
+# tcp-probe HOST PORT: one TCP connection attempt from inside a Machine,
+# reported as one word, so a test can tell "the network stopped it" from
+# "the probe never ran":
+#   result=reached      the connection opened
+#   result=timeout      no answer in 3 seconds (a drop rule)
+#   result=refused      the destination answered with a reset
+#   result=unreachable  the kernel or a router reported no route
+#   result=cannot-run   bash or timeout is missing: nothing was tried
+#   result=other:CODE   anything else, with its exit code
+host=$1
+port=$2
+if ! command -v bash >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+    echo "result=cannot-run"
+    exit 0
+fi
+err=$(timeout 3 bash -c "exec 3<>/dev/tcp/$host/$port" 2>&1)
+rc=$?
+case $rc in
+0) echo "result=reached" ;;
+124) echo "result=timeout" ;;
+*)
+    case $err in
+    *refused*) echo "result=refused" ;;
+    *nreachable*) echo "result=unreachable" ;;
+    *) echo "result=other:$rc" ;;
+    esac
+    ;;
+esac
