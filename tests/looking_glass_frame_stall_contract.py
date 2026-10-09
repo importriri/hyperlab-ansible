@@ -72,6 +72,11 @@ static void pw_thread_loop_signal(struct pw_thread_loop *l, bool wait)
   (void)l; (void)wait;
   ++delivered;
 }
+// the patched callback hands its frame over through the accept handshake
+static void hlSignalAndWait(void)
+{
+  ++delivered;
+}
 
 struct pipewire {
   bool stop, hasFormat;

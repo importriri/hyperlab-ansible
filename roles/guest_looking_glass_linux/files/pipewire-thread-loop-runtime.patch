@@ -1,8 +1,8 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
-index de0211de..1e67bb96 100644
+index de0211de..6c3008e3 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -1,281 +1,340 @@
+@@ -1,493 +1,654 @@
  /**
   * Looking Glass
   * Copyright © 2017-2026 The Looking Glass Authors
@@ -64,6 +64,10 @@ index de0211de..1e67bb96 100644
 +  uint64_t      lastFrameUs;
 +  unsigned int  callbacks, emptyBuffers;
 +  bool          stallWarned;
++
++  // A PipeWire callback waits in pw_thread_loop_signal(..., true) for the
++  // capture to accept its frame or format. Guarded by the thread loop lock.
++  bool          awaitingAccept;
  };
  
  static struct pipewire * this = NULL;
@@ -95,6 +99,35 @@ index de0211de..1e67bb96 100644
 +  return HL_STALL_NONE;
 +}
 +// HyperLab frame watchdog (end)
++
++// HyperLab accept handshake (begin)
++// A restart stops the capture without reading the frame a callback is
++// handing over, so that callback would wait forever and deinit, which joins
++// the PipeWire thread, with it. Every handover and accept goes through here,
++// and stop and deinit release a callback still waiting. Loop lock held.
++static void hlSignalAndWait(void)
++{
++  // After stop nothing accepts any more, and deinit is about to join this
++  // thread: never wait then.
++  if (this->stop)
++    return;
++
++  this->awaitingAccept = true;
++  pw_thread_loop_signal(this->threadLoop, true);
++}
++
++static void hlAccept(void)
++{
++  this->awaitingAccept = false;
++  pw_thread_loop_accept(this->threadLoop);
++}
++
++static void hlReleaseWaiter(void)
++{
++  if (this->awaitingAccept)
++    hlAccept();
++}
++// HyperLab accept handshake (end)
 +
  // forwards
  
@@ -187,21 +220,22 @@ index de0211de..1e67bb96 100644
 +    pw_stream_queue_buffer(stream, pwBuffer);
      return;
 +  }
-+
+ 
+-  this->frameData = buffer->datas[0].data;
 +  const uint64_t nowUs = microtime();
 +  if (this->stallWarned)
 +    DEBUG_INFO("Frames resumed after %llu s without a usable frame",
 +        (unsigned long long)((nowUs - this->lastFrameUs) / 1000000ULL));
  
--  this->frameData = buffer->datas[0].data;
+-  pw_thread_loop_signal(this->threadLoop, true);
+-  pw_stream_queue_buffer(this->stream, pwBuffer);
 +  this->frameData    = buffer->datas[0].data;
 +  this->lastFrameUs  = nowUs;
 +  this->callbacks    = 0;
 +  this->emptyBuffers = 0;
 +  this->stallWarned  = false;
- 
-   pw_thread_loop_signal(this->threadLoop, true);
--  pw_stream_queue_buffer(this->stream, pwBuffer);
++
++  hlSignalAndWait();
 +
 +  if (this->stop || this->stream != stream)
 +    return;
@@ -283,7 +317,8 @@ index de0211de..1e67bb96 100644
    pw_stream_update_params(this->stream, &param, 1);
  
    this->hasFormat = true;
-   pw_thread_loop_signal(this->threadLoop, true);
+-  pw_thread_loop_signal(this->threadLoop, true);
++  hlSignalAndWait();
  }
  
  static void streamStateChangedCallback(void * opaque,
@@ -352,7 +387,21 @@ index de0211de..1e67bb96 100644
    if (!this->threadLoop)
    {
      DEBUG_ERROR("Failed to create pipewire thread loop");
-@@ -297,197 +356,259 @@ static bool pipewire_init(void * ivshmemBase, unsigned * alignSize)
+     close(pipewireFd);
+     goto fail;
+   }
+ 
+   this->context = pw_context_new(pw_thread_loop_get_loop(this->threadLoop), NULL, 0);
+   if (!this->context)
+   {
+     DEBUG_ERROR("Failed to create pipewire context");
+     close(pipewireFd);
+     goto fail;
+   }
+ 
+   if (pw_thread_loop_start(this->threadLoop) < 0)
+   {
+     DEBUG_ERROR("Failed to start pipewire thread loop");
      close(pipewireFd);
      goto fail;
    }
@@ -401,14 +450,16 @@ index de0211de..1e67bb96 100644
    if (this->format < 0)
    {
      DEBUG_ERROR("Unknown frame format");
-     pw_thread_loop_accept(this->threadLoop);
+-    pw_thread_loop_accept(this->threadLoop);
++    hlAccept();
 +    pw_thread_loop_unlock(this->threadLoop);
      goto fail;
    }
  
    DEBUG_INFO("Frame size       : %dx%d", this->width, this->height);
  
-   pw_thread_loop_accept(this->threadLoop);
+-  pw_thread_loop_accept(this->threadLoop);
++  hlAccept();
 +  pw_thread_loop_unlock(this->threadLoop);
  
    return true;
@@ -430,6 +481,7 @@ index de0211de..1e67bb96 100644
 -  pw_stream_disconnect(this->stream);
 +  this->hasFormat = false;
 +  this->frameData = NULL;
++  hlReleaseWaiter();
    pw_thread_loop_signal(this->threadLoop, false);
 +
 +  pw_thread_loop_unlock(this->threadLoop);
@@ -439,10 +491,16 @@ index de0211de..1e67bb96 100644
  {
 +  /*
 +   * First stop/join the PipeWire thread. After this point no PipeWire event
-+   * callback can race stream/core/context destruction.
++   * callback can race stream/core/context destruction. A callback still
++   * waiting for an accept would never return: release it first.
 +   */
 +  if (this->threadLoop)
++  {
++    pw_thread_loop_lock(this->threadLoop);
++    hlReleaseWaiter();
++    pw_thread_loop_unlock(this->threadLoop);
 +    pw_thread_loop_stop(this->threadLoop);
++  }
 +
    if (this->stream)
    {
@@ -544,7 +602,8 @@ index de0211de..1e67bb96 100644
    {
      ++this->formatVer;
      this->formatChanged = false;
-     pw_thread_loop_accept(this->threadLoop);
+-    pw_thread_loop_accept(this->threadLoop);
++    hlAccept();
      goto restart;
    }
  
@@ -590,7 +649,7 @@ index de0211de..1e67bb96 100644
  {
    if (this->stop || !this->frameData)
 +  {
-+    pw_thread_loop_accept(this->threadLoop);
++    hlAccept();
 +    pw_thread_loop_unlock(this->threadLoop);
      return CAPTURE_RESULT_REINIT;
 +  }
@@ -598,7 +657,8 @@ index de0211de..1e67bb96 100644
    framebuffer_write(frame, this->frameData,
        this->dataHeight * this->pitch);
  
-   pw_thread_loop_accept(this->threadLoop);
+-  pw_thread_loop_accept(this->threadLoop);
++  hlAccept();
 +  pw_thread_loop_unlock(this->threadLoop);
    return CAPTURE_RESULT_OK;
  }

@@ -301,5 +301,8 @@ proof.
   group 11's "attached devices allowed" passed when any one device was allowed.
 - [`apparmor-boot-check-used-wrong-entry-names.md`](apparmor-boot-check-used-wrong-entry-names.md):
   group 10 named the boot entries in the wrong case and grepped the default.
+- [`looking-glass-sender-hung-after-capture-stop.md`](looking-glass-sender-hung-after-capture-stop.md):
+  the Linux sender's first real capture restart logged "Capture Stop" and
+  hung for 28 hours.
 
 Author: [importriri](https://github.com/importriri).

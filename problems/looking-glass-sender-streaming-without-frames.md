@@ -62,8 +62,11 @@ In `pipewire-thread-loop-runtime.patch`:
   10 s, with the process callbacks and empty buffers seen since the last
   usable frame (none means the producer stopped; some means it sent empty
   buffers), and after 30 s logs the same and returns
-  `CAPTURE_RESULT_REINIT`. The sender then stops the capture and, while the
-  client is still subscribed, starts it again with a new portal session.
+  `CAPTURE_RESULT_REINIT`. The sender was meant to stop the capture and,
+  while the client is still subscribed, start it again with a new portal
+  session. That restart was never seen working: on 2026-10-07 the first
+  real one logged "Capture Stop" and hung for good
+  ([`looking-glass-sender-hung-after-capture-stop.md`](looking-glass-sender-hung-after-capture-stop.md)).
   The watchdog runs only while the capture runs, which is only while a
   client is subscribed.
 
