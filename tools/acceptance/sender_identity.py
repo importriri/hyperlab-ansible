@@ -12,7 +12,9 @@ it against the repository, never against what the Machine claims:
   * the running executable (/proc/PID/exe) has that binary digest;
   * its log starts with "HyperLab: sender started <time>" at or after
     --since, so the log read belongs to this sender;
-  * with --no-stall, that log holds no "No usable frame".
+  * with --no-restart, that log holds no capture restart ("restarting the
+    capture"). "No usable frame" warnings are counted, not judged: a still
+    desktop probably sends no frame (problems/looking-glass-sender-hung-after-capture-stop.md).
 
 Prints one line per finding and exits 0 only when every one holds.
 """
@@ -40,6 +42,7 @@ echo
 log="$HOME/.local/state/hyperlab/looking-glass-host.log"
 head -n 1 "$log" 2>/dev/null | sed -n 's/^HyperLab: sender started \([^ ]*\).*/started=\1/p'
 echo "no_usable_frame=$(grep -c 'No usable frame' "$log" 2>/dev/null || true)"
+echo "capture_restarts=$(grep -c 'restarting the capture' "$log" 2>/dev/null || true)"
 """
 
 
@@ -66,7 +69,7 @@ def expected() -> dict[str, str]:
 
 
 def judge(probe: dict[str, str], want: dict[str, str], since: float, not_pid: str | None = None,
-          pid: str | None = None, no_stall: bool = False) -> list[tuple[bool, str]]:
+          pid: str | None = None, no_restart: bool = False) -> list[tuple[bool, str]]:
     findings = []
     running = probe.get("pid", "none")
     findings.append((running.isdigit(), f"a sender is running (pid {running})"))
@@ -91,9 +94,9 @@ def judge(probe: dict[str, str], want: dict[str, str], since: float, not_pid: st
         findings.append((False, f"the log does not start with this sender's start line ({started or 'absent'})"))
     else:
         findings.append((when >= since, f"the log's sender started at {started}, after the test began"))
-    if no_stall:
-        stalls = probe.get("no_usable_frame", "")
-        findings.append((stalls == "0", f"no 'No usable frame' in this sender's log ({stalls or 'unread'})"))
+    if no_restart:
+        restarts = probe.get("capture_restarts", "")
+        findings.append((restarts == "0", f"no capture restart in this sender's log ({restarts or 'unread'})"))
     return findings
 
 
@@ -102,7 +105,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--since", type=float, required=True, help="epoch seconds the test step began")
     parser.add_argument("--not-pid")
     parser.add_argument("--pid")
-    parser.add_argument("--no-stall", action="store_true")
+    parser.add_argument("--no-restart", action="store_true")
     parser.add_argument("--input", help="the probe's output; standard input when absent")
     parser.add_argument("--print-probe", action="store_true", help="print the probe to run in the Machine")
     if "--print-probe" in argv:
@@ -110,9 +113,13 @@ def main(argv: list[str]) -> int:
         return 0
     args = parser.parse_args(argv)
     text = Path(args.input).read_text() if args.input else sys.stdin.read()
-    findings = judge(parse(text), expected(), args.since, args.not_pid, args.pid, args.no_stall)
+    probe = parse(text)
+    findings = judge(probe, expected(), args.since, args.not_pid, args.pid, args.no_restart)
     for ok, text in findings:
         print(("ok    " if ok else "WRONG ") + text)
+    if args.no_restart:
+        print("note  'No usable frame' warnings in this sender's log: %s (counted, allowed on a still desktop)"
+              % (probe.get("no_usable_frame") or "unread"))
     return 0 if all(ok for ok, _ in findings) else 1
 
 

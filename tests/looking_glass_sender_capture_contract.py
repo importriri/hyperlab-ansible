@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""The Linux sender's capture restart cannot hang after "Capture Stop".
+"""The Linux sender's capture: frames flow, it restarts only on a failure,
+and a restart ends.
 
 problems/looking-glass-sender-hung-after-capture-stop.md: on dev-01 the
-sender logged "Capture Stop" and then nothing for 28 hours, alive and
-sleeping. A PipeWire callback that delivers a frame or a format waits in
+sender restarted a capture that had been silent for 30 s, logged "Capture
+Stop" and then nothing for 28 hours, alive and sleeping. A PipeWire
+callback that delivers a frame or a format waits in
 pw_thread_loop_signal(..., true) until the capture accepts it. When the
 capture restarts instead, nothing accepted it, and deinit joined the
 PipeWire thread that was still waiting: a deadlock.
@@ -21,7 +23,11 @@ the portal and the stream's buffers replaced by small fakes:
      buffer goes back to the stream;
   4. missed wake-up: a frame handed over while the capture is not waiting
      (problems/looking-glass-sender-frame-handed-over-to-nobody.md) is still
-     taken by the next capture, instead of every capture timing out.
+     taken by the next capture, instead of every capture timing out;
+  5. silence: 61 s without a frame while streaming is not a failure (a
+     still desktop probably sends none); the capture times out and never restarts;
+  6. failures: a stream in ERROR, a stream that lost its node
+     (UNCONNECTED) and a core error each restart the capture.
 """
 
 from __future__ import annotations
@@ -399,8 +405,77 @@ static int flow(void)
   return 0;
 }
 
+// Sixty seconds of silence while streaming: the capture keeps timing out,
+// logs the silence once, and never asks for a restart.
+static int silence(void)
+{
+  streaming();
+  const uint64_t start = hlTestClockOffsetUs;
+  for (int seconds = 11; seconds <= 61; seconds += 25)
+  {
+    hlTestClockOffsetUs = start + seconds * 1000000ULL;
+    const CaptureResult captured = pipewire_capture(0, NULL);
+    if (captured != CAPTURE_RESULT_TIMEOUT)
+    {
+      printf("after %d s of silence the capture returned %s\n", seconds,
+          captured == CAPTURE_RESULT_REINIT ? "a restart" : "something else");
+      return 1;
+    }
+  }
+  pipewire_stop();
+  pipewire_deinit();
+  printf("silent for 61 s without a restart\n");
+  return 0;
+}
+
+static int runFailure(struct spa_loop * loop, bool async, uint32_t seq,
+    const void * data, size_t size, void * user)
+{
+  switch (*(const int *)data)
+  {
+    case 0:
+      streamStateChangedCallback(NULL, PW_STREAM_STATE_STREAMING, PW_STREAM_STATE_ERROR, "test");
+      break;
+    case 1:
+      streamStateChangedCallback(NULL, PW_STREAM_STATE_STREAMING, PW_STREAM_STATE_UNCONNECTED, NULL);
+      break;
+    default:
+      coreErrorCallback(NULL, 0, 0, -EPIPE, "test");
+      break;
+  }
+  return 0;
+}
+
+// Each failure the stream or the core reports, from the PipeWire thread,
+// restarts the capture.
+static int failures(void)
+{
+  static const char * names[] = { "a stream in ERROR", "an UNCONNECTED stream", "a core error" };
+  for (int kind = 0; kind < 3; ++kind)
+  {
+    streaming();
+    pw_loop_invoke(pw_thread_loop_get_loop(this->threadLoop), runFailure, 0,
+        &kind, sizeof(kind), true, NULL);
+    const CaptureResult captured = pipewire_capture(0, NULL);
+    if (captured != CAPTURE_RESULT_REINIT)
+    {
+      printf("%s did not restart the capture\n", names[kind]);
+      return 1;
+    }
+    pipewire_stop();
+    pipewire_deinit();
+    pipewire_free();
+  }
+  printf("every failure restarts the capture\n");
+  return 0;
+}
+
 int main(int argc, char ** argv)
 {
+  if (argc == 2 && !strcmp(argv[1], "silence"))
+    return silence();
+  if (argc == 2 && !strcmp(argv[1], "failures"))
+    return failures();
   if (argc == 2 && !strcmp(argv[1], "teardown"))
     return teardown();
   if (argc == 2 && !strcmp(argv[1], "late-format"))
@@ -444,7 +519,7 @@ def main() -> int:
     require(shutil.which("gcc") is not None, "gcc is needed to build the sender's capture")
     require(shutil.which("pkg-config") is not None, "pkg-config is needed to find libpipewire")
     source = patched_source(PATCH.read_text())
-    with tempfile.TemporaryDirectory(prefix="hyperlab-lg-teardown-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="hyperlab-lg-capture-") as temporary:
         directory = Path(temporary)
         for name, text in STUBS.items():
             (directory / name).parent.mkdir(parents=True, exist_ok=True)
@@ -462,7 +537,9 @@ def main() -> int:
         for scenario, expected in (("teardown", "teardown finished"),
                                    ("late-format", "a late format does not wait"),
                                    ("flow", "flowing 3"),
-                                   ("missed-wakeup", "a frame handed over between captures is taken")):
+                                   ("missed-wakeup", "a frame handed over between captures is taken"),
+                                   ("silence", "silent for 61 s without a restart"),
+                                   ("failures", "every failure restarts the capture")):
             try:
                 run = subprocess.run([str(binary), scenario], capture_output=True, text=True,
                                      timeout=60, check=False)
@@ -471,7 +548,7 @@ def main() -> int:
             lines = run.stdout.strip().splitlines()
             require(run.returncode == 0 and lines and lines[-1] == expected,
                     f"{scenario}: {run.stdout.strip()!r} (exit {run.returncode})\n{run.stderr[-2000:]}")
-    print("Looking Glass sender teardown contract: OK")
+    print("Looking Glass sender capture contract: OK")
     return 0
 
 

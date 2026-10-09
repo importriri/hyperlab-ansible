@@ -4,10 +4,15 @@ its capture without restarting the Machine (ADR 0045).
 `health` answers three things, each from its own authority: whether the
 guest agent answers (from the host, `guest-ping`), whether the sender runs,
 and what the sender last said about its stream, read from its own log over
-the pinned SSH channel. The sender logs a capture that stops receiving
-frames and restarts it itself after 30 s
-(problems/looking-glass-sender-streaming-without-frames.md); `stalled`
-covers the time before that, or a sender that cannot recover.
+the pinned SSH channel. The sender logs once when 10 s pass without a
+frame (problems/looking-glass-sender-streaming-without-frames.md). That
+silence is information, not a failure: a still desktop probably sends no frame, and
+restarting on silence hung the sender
+(problems/looking-glass-sender-hung-after-capture-stop.md). `health`
+reports how long the stream has been silent, from the sender's start time,
+the log line and the guest's own clock. The sender restarts its capture
+only when the stream or the core fails; `stalled` names a restart that did
+not end with a new capture.
 
 `restart-capture` stops the sender, restarts the guest's screen-cast
 portals and starts the sender again through the same path `open
@@ -46,8 +51,10 @@ else
     echo "sender=absent"
 fi
 if [[ -f "$log" ]]; then
+    echo "now=$(date +%%s)"
     echo "log_age=$(( $(date +%%s) - $(stat -c %%Y "$log") ))"
-    grep -E 'Capture Start|Capture Stop|stream state change|No usable frame|Frames resumed|^HyperLab: ' \
+    sed -n '1s/^HyperLab: sender started \([^ ]*\) .*/started=\1/p' "$log"
+    grep -E 'Capture Start|Capture Stop|stream state change|No usable frame|Frames resumed|restarting the capture|^HyperLab: ' \
         "$log" | tail -n %(lines)d | sed 's/^/line=/'
 else
     echo "log=absent"
@@ -75,6 +82,8 @@ systemctl --user restart xdg-desktop-portal-hyprland.service xdg-desktop-portal.
 """ % {"pattern": SENDER_PATTERN}
 
 _STATE_RE = re.compile(r"stream state change: \S+ -> (\S+)")
+_ELAPSED_RE = re.compile(r"^(\d+):(\d{2}):(\d{2})\.(\d{3}) ")
+_SILENCE_RE = re.compile(r"No usable frame for (\d+) s while streaming")
 
 
 def stream_state(lines):
@@ -87,8 +96,11 @@ def stream_state(lines):
             state = "idle"
         elif "Frames resumed" in line:
             state = "streaming"
+        elif "restarting the capture" in line:
+            state = "restarting"
         elif "No usable frame" in line:
-            state = "restarting" if "restarting the capture" in line else "stalled"
+            # A silent stream is still streaming (silent_since says since when).
+            continue
         elif line.startswith("HyperLab: ") and ("exited" in line or "is gone" in line):
             state = "stopped"
         else:
@@ -98,14 +110,50 @@ def stream_state(lines):
     return state
 
 
+def silent_since(lines):
+    """Seconds after the sender's start when its stream last went silent, or
+    None when a frame, a new capture or a restart came after that."""
+    since = None
+    for line in lines:
+        silence = _SILENCE_RE.search(line)
+        elapsed = _ELAPSED_RE.match(line)
+        if silence is not None and elapsed is not None:
+            hours, minutes, secs, millis = (int(part) for part in elapsed.groups())
+            since = hours * 3600 + minutes * 60 + secs + millis / 1000 - int(silence.group(1))
+        elif any(word in line for word in ("Frames resumed", "Capture Start", "Capture Stop",
+                                           "restarting the capture")):
+            since = None
+    return since
+
+
+def no_frame_seconds(lines, started, now):
+    """How long a streaming sender has had no new frame, on the guest's clock;
+    None when it is not silent or the times are not known."""
+    since = silent_since(lines)
+    if since is None or started is None or now is None or stream_state(lines) != "streaming":
+        return None
+    return max(0, int(now - (started + since)))
+
+
+def _epoch(value):
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        return None
+
+
 def parse_probe(text):
-    sender, age, lines, log = None, None, [], True
+    sender, age, lines, log, started, now = None, None, [], True, None, None
     for raw in text.splitlines():
         key, _, value = raw.partition("=")
         if key == "sender" and value in ("running", "absent"):
             sender = value
         elif key == "log_age" and re.fullmatch(r"-?[0-9]+", value):
             age = max(0, int(value))
+        elif key == "now" and re.fullmatch(r"[0-9]+", value):
+            now = int(value)
+        elif key == "started":
+            started = _epoch(value)
         elif key == "log" and value == "absent":
             log = False
         elif key == "line":
@@ -113,7 +161,8 @@ def parse_probe(text):
     if sender is None:
         raise Unavailable("the guest did not report its sender")
     return {"sender": sender, "log_age_seconds": age, "log": log,
-            "stream": stream_state(lines) if log else "unknown"}
+            "stream": stream_state(lines) if log else "unknown",
+            "no_frame_seconds": no_frame_seconds(lines, started, now) if log else None}
 
 
 def verdict(agent, sender, stream):
@@ -176,6 +225,7 @@ def health(ctx, domain, run=subprocess.run):
         "sender": probe["sender"],
         "stream": probe["stream"],
         "log_age_seconds": probe["log_age_seconds"],
+        "no_frame_seconds": probe["no_frame_seconds"],
         "health": verdict(agent, probe["sender"], probe["stream"]),
         "observed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
@@ -214,7 +264,9 @@ class LookingGlassCommand(Command):
         if args.json:
             print(json.dumps(report, separators=(",", ":")))
         elif args.looking_glass_action == "health":
-            print("%(machine)s: %(health)s (agent %(agent)s, sender %(sender)s, stream %(stream)s)" % report)
+            silence = report["no_frame_seconds"]
+            print("%(machine)s: %(health)s (agent %(agent)s, sender %(sender)s, stream %(stream)s" % report
+                  + (", no new frame for %d s)" % silence if silence is not None else ")"))
         else:
             print("%s: capture restarted" % args.domain)
         return 0

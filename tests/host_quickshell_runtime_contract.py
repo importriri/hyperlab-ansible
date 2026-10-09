@@ -2469,11 +2469,12 @@ STREAM_HEALTH = """
             check(sharedMachineActions.streamChecks.length === 0,
                   "stream health was asked for a machine that cannot restart its capture");
 
-            function report(machine, health, agent, sender, stream) {
+            function report(machine, health, agent, sender, stream, silence) {
                 return { phase: "stream-health", machine: machine,
                          health: { machine: machine, health: health, agent: agent,
                                    sender: sender, stream: stream,
                                    log_age_seconds: 4,
+                                   no_frame_seconds: silence === undefined ? null : silence,
                                    observed_at: "2026-10-05T19:00:00+00:00" } };
             }
 
@@ -2522,6 +2523,22 @@ STREAM_HEALTH = """
             check(healthRow !== null && healthRow.title === "Frames arriving"
                   && healthRow.tone === "neutral",
                   "a healthy stream is not shown as healthy");
+
+            // A still desktop probably sends no frame: the silence is said, as
+            // information, never as an alarm.
+            sharedMachineActions.streamAnswer =
+                report("fixture-001", "ok", "yes", "running", "streaming", 125);
+            sharedMachineActions.checkStream("fixture-001");
+            check(healthRow !== null && healthRow.title === "Streaming"
+                  && healthRow.tone === "neutral"
+                  && healthRow.hint.indexOf("no new frame for 125 s") >= 0,
+                  "a silent stream is not shown as information: "
+                  + (healthRow ? healthRow.title + "/" + healthRow.tone + "/" + healthRow.hint : "none"));
+            sharedMachineActions.streamAnswer =
+                report("fixture-001", "ok", "yes", "running", "streaming", -5);
+            sharedMachineActions.checkStream("fixture-001");
+            check(sharedState.streamHealth.state === "unavailable",
+                  "a negative silence was adopted");
 
             // An unresponsive guest is named, not called a stream problem.
             sharedMachineActions.streamAnswer =

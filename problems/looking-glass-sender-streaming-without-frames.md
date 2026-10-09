@@ -69,6 +69,11 @@ In `pipewire-thread-loop-runtime.patch`:
   ([`looking-glass-sender-hung-after-capture-stop.md`](looking-glass-sender-hung-after-capture-stop.md)).
   The watchdog runs only while the capture runs, which is only while a
   client is subscribed.
+- Since 2026-10-09 the watchdog only logs: silence is not a failure (on
+  dev-01 fifteen pauses of 10 to 26 s with no process callback ended by
+  themselves), and `hyperlabctl looking-glass health` reports it as "no new
+  frame for N s". The capture restarts only when the stream reports ERROR,
+  loses its node (UNCONNECTED) or the core reports an error.
 
 The patch applies on the pinned source together with the GCC compatibility
 patch, and the patched sender builds (checked on Nitro's host with the same
@@ -80,16 +85,19 @@ patch, and the patched sender builds (checked on Nitro's host with the same
 before and after the patch from the patch's own hunk and runs both against
 the fake stream: before, the producer runs out of buffers; after, all 1000
 frames are produced and the 900 usable ones delivered. It also runs the
-watchdog policy (warn at 10 s, once; restart at 30 s; a frame resets it)
-and checks the capture timeout uses it.
+watchdog policy (warn at 10 s, once; a frame resets it; silence never
+restarts the capture) and checks the capture timeout uses it.
+`tests/looking_glass_sender_capture_contract.py` runs the patched capture
+on the real PipeWire thread loop: 61 s of silence give timeouts only, and a
+stream error, a lost node or a core error each restart the capture.
 
 ## Still to prove on Nitro
 
 - The rebuilt sender streams for hours without freezing.
-- A desktop left still for two minutes with the client connected logs no
-  `No usable frame` line. If `xdph` sends frames only on damage, the
-  watchdog would restart a healthy capture every 30 s; the thresholds then
-  change before this is accepted.
+- A desktop left still logs `No usable frame` once and keeps the same
+  sender and capture; the health says "no new frame for N s", not an alarm.
+  On dev-01 the 30 s restart did fire on such a pause; whether `xdph` sends
+  nothing while nothing changes is the operator's screen-change test.
 
 Related: [`looking-glass-splash-after-guest-reload.md`](looking-glass-splash-after-guest-reload.md),
 a different symptom (the splash screen after `hyprctl reload`) whose cause

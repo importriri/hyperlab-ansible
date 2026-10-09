@@ -389,13 +389,15 @@ def load_identity():
     return module
 
 
-def good_probe(identity, binary="b" * 64, exe=None, pid="918", started="2026-10-06T22:30:39+02:00", stalls="0"):
+def good_probe(identity, binary="b" * 64, exe=None, pid="918", started="2026-10-06T22:30:39+02:00", stalls="0",
+               restarts="0"):
     want = identity.expected()
     lines = [f"pid={pid}", f"exe_sha256={exe or binary}"]
     lines += [f"stamp.{key}={value}" for key, value in want.items()]
     if binary:
         lines.append(f"stamp.binary_sha256={binary}")
-    lines += ["stamp.runtime_enabled=false", f"started={started}", f"no_usable_frame={stalls}"]
+    lines += ["stamp.runtime_enabled=false", f"started={started}", f"no_usable_frame={stalls}",
+              f"capture_restarts={restarts}"]
     return "dev-01 | CHANGED | rc=0 >>\n" + "\n".join(lines) + "\n"
 
 
@@ -407,7 +409,9 @@ def check_sender_identity() -> None:
     def verdict(text, **kwargs):
         return all(ok for ok, _ in identity.judge(identity.parse(text), want, since, **kwargs))
 
-    require(verdict(good_probe(identity), not_pid="809", no_stall=True), "a sender of this build was refused")
+    require(verdict(good_probe(identity), not_pid="809", no_restart=True), "a sender of this build was refused")
+    # A still desktop probably sends no frame: its warnings are counted, not a failure.
+    require(verdict(good_probe(identity, stalls="2"), no_restart=True), "silence warnings failed the step")
     require(verdict(good_probe(identity), pid="918"), "the same sender was refused")
     bad = {
         "an old runtime patch": good_probe(identity).replace(want["runtime_patch_sha256"], "1b8bf54e" + "0" * 56),
@@ -421,8 +425,9 @@ def check_sender_identity() -> None:
         require(not verdict(text), f"the identity check accepted {label}")
     require(not verdict(good_probe(identity), not_pid="918"), "the identity check accepted the old process")
     require(not verdict(good_probe(identity), pid="999"), "the identity check accepted another process")
-    require(not verdict(good_probe(identity, stalls="2"), no_stall=True), "the identity check accepted a stall")
-    require(not verdict(good_probe(identity, stalls=""), no_stall=True), "an unread stall count passed")
+    require(not verdict(good_probe(identity, restarts="1"), no_restart=True),
+            "the identity check accepted a capture restart")
+    require(not verdict(good_probe(identity, restarts=""), no_restart=True), "an unread restart count passed")
     probe = identity.PROBE
     require("/proc/$pid/exe" in probe and "\necho\n" in probe, "the probe does not read the running binary or "
             "end the stamp's last line")

@@ -3,7 +3,7 @@
 Author: [importriri](https://github.com/importriri).
 
 Status: corrected in the reviewed sender patch and covered by
-`tests/looking_glass_sender_teardown_contract.py`; not yet proven on Nitro.
+`tests/looking_glass_sender_capture_contract.py`; not yet proven on Nitro.
 
 ## Symptom
 
@@ -33,7 +33,7 @@ handshake records a callback already waiting: it takes that frame at once.
 
 ## Regression proof
 
-`tests/looking_glass_sender_teardown_contract.py`, scenario "missed
+`tests/looking_glass_sender_capture_contract.py`, scenario "missed
 wake-up": two frames are each handed over while the capture is not
 waiting. Before the fix the capture returns `a timeout` for the first;
 after it, both are taken and their buffers go back to the stream.

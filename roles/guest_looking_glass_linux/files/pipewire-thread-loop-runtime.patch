@@ -1,8 +1,8 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
-index de0211de..bf35ee72 100644
+index de0211de..550ef31d 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -1,493 +1,657 @@
+@@ -1,493 +1,678 @@
  /**
   * Looking Glass
   * Copyright © 2017-2026 The Looking Glass Authors
@@ -65,6 +65,9 @@ index de0211de..bf35ee72 100644
 +  unsigned int  callbacks, emptyBuffers;
 +  bool          stallWarned;
 +
++  // The stream or the core reported a failure: the capture restarts.
++  bool          streamFailed;
++
 +  // A PipeWire callback waits in pw_thread_loop_signal(..., true) for the
 +  // capture to accept its frame or format. Guarded by the thread loop lock.
 +  bool          awaitingAccept;
@@ -73,27 +76,26 @@ index de0211de..bf35ee72 100644
  static struct pipewire * this = NULL;
  
 +// HyperLab frame watchdog (begin)
-+// A stream can stay "streaming" while no usable frame arrives, and a capture
-+// timeout is not logged, so the sender went silent for good. Warn once after
-+// HL_STALL_WARN_US without a usable frame, and restart the capture (a new
-+// portal session) after HL_STALL_RESTART_US. lastFrameUs is the start of the
-+// capture or the last usable frame.
++// A capture timeout is not logged, so a stream that delivers nothing looks
++// like one that works. Log once after HL_STALL_WARN_US without a usable
++// frame, so the silence and its start are on record. Silence alone is not a
++// failure: the compositor probably sends no frame while nothing changes,
++// and a capture restart on silence hung the sender for good
++// (problems/looking-glass-sender-hung-after-capture-stop.md). The capture
++// restarts only when the stream or the core reports a failure. lastFrameUs
++// is the start of the capture or the last usable frame.
 +#define HL_STALL_WARN_US    (10ULL * 1000000ULL)
-+#define HL_STALL_RESTART_US (30ULL * 1000000ULL)
 +
 +enum HLStallAction
 +{
 +  HL_STALL_NONE,
-+  HL_STALL_WARN,
-+  HL_STALL_RESTART
++  HL_STALL_WARN
 +};
 +
 +static enum HLStallAction hlStallAction(uint64_t nowUs, uint64_t lastFrameUs,
 +    bool warned)
 +{
 +  const uint64_t idleUs = nowUs > lastFrameUs ? nowUs - lastFrameUs : 0;
-+  if (idleUs >= HL_STALL_RESTART_US)
-+    return HL_STALL_RESTART;
 +  if (idleUs >= HL_STALL_WARN_US && !warned)
 +    return HL_STALL_WARN;
 +  return HL_STALL_NONE;
@@ -156,6 +158,15 @@ index de0211de..bf35ee72 100644
  {
    DEBUG_ERROR("pipewire error: id %" PRIu32 ", seq: %d, res: %d (%s): %s",
      id, seq, res, strerror(res), message);
++
++  // An error on the core itself is fatal to the connection: restart the
++  // capture. Errors on other objects are logged only; a stream that fails
++  // reports it through its own state.
++  if (id == PW_ID_CORE)
++  {
++    this->streamFailed = true;
++    pw_thread_loop_signal(this->threadLoop, false);
++  }
  }
  
  static const struct pw_core_events coreEvents = {
@@ -330,6 +341,16 @@ index de0211de..bf35ee72 100644
  
    if (newState == PW_STREAM_STATE_ERROR)
      DEBUG_ERROR("PipeWire stream error: %s", error);
++
++  // A stream that failed or lost its node does not come back by itself:
++  // restart the capture. Our own teardown also ends in UNCONNECTED: after a
++  // stop it does not count, and the next init clears the flag.
++  if (newState == PW_STREAM_STATE_ERROR ||
++      (newState == PW_STREAM_STATE_UNCONNECTED && !this->stop))
++  {
++    this->streamFailed = true;
++    pw_thread_loop_signal(this->threadLoop, false);
++  }
  }
  
  static const struct pw_stream_events streamEvents = {
@@ -343,6 +364,7 @@ index de0211de..bf35ee72 100644
  {
    DEBUG_ASSERT(this);
    this->stop = false;
++  this->streamFailed = false;
 +  this->lastFrameUs  = microtime();
 +  this->callbacks    = 0;
 +  this->emptyBuffers = 0;
@@ -570,6 +592,13 @@ index de0211de..bf35ee72 100644
    if (this->stop)
 +  {
 +    pw_thread_loop_unlock(this->threadLoop);
++    return CAPTURE_RESULT_REINIT;
++  }
++
++  if (this->streamFailed)
++  {
++    DEBUG_WARN("The PipeWire stream failed: restarting the capture");
++    pw_thread_loop_unlock(this->threadLoop);
      return CAPTURE_RESULT_REINIT;
 +  }
  
@@ -585,14 +614,6 @@ index de0211de..bf35ee72 100644
 +            (unsigned long long)((nowUs - this->lastFrameUs) / 1000000ULL),
 +            this->callbacks, this->emptyBuffers);
 +        break;
-+
-+      case HL_STALL_RESTART:
-+        DEBUG_WARN("No usable frame for %llu s: restarting the capture "
-+            "(%u process callbacks, %u empty buffers)",
-+            (unsigned long long)((nowUs - this->lastFrameUs) / 1000000ULL),
-+            this->callbacks, this->emptyBuffers);
-+        pw_thread_loop_unlock(this->threadLoop);
-+        return CAPTURE_RESULT_REINIT;
 +
 +      case HL_STALL_NONE:
 +        break;

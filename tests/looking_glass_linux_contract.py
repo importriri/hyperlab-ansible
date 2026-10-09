@@ -181,7 +181,7 @@ def main() -> int:
         == runtime_patch_sha256
     )
     assert runtime_patch_sha256 == (
-        "66b2af4e25ed91a456499dc462f62795c0df5a17d39925564eab9353bb9874a2"
+        "e8e7566763c3933f42ae6d2abbb85c069fc914a8449ae74d3501052b60195fb2"
     )
     assert "guest_looking_glass_linux_compat_patch_sha256" in tasks
     assert "guest_looking_glass_linux_runtime_patch_sha256" in tasks

@@ -34,10 +34,14 @@ def test_the_old_sender_log_could_not_show_the_freeze():
     equals("frozen_log_reads_streaming", lg.stream_state(FROZEN), "streaming")
 
 
-def test_a_logged_stall_is_stalled_until_frames_resume_or_the_capture_restarts():
-    equals("warned", lg.stream_state(FROZEN + [WARN]), "stalled")
+def test_silence_is_not_a_stream_state_but_a_restart_is():
+    # A still desktop probably sends no frame: the warning does not change the state
+    # (problems/looking-glass-sender-hung-after-capture-stop.md).
+    equals("warned", lg.stream_state(FROZEN + [WARN]), "streaming")
     equals("resumed", lg.stream_state(FROZEN + [WARN, RESUMED]), "streaming")
-    equals("restarting", lg.stream_state(FROZEN + [WARN, RESTART]), "restarting")
+    equals("old_sender_restarting", lg.stream_state(FROZEN + [WARN, RESTART]), "restarting")
+    failed = "01:00:23.000 [W] pipewire.c:562 | pipewire_capture | The PipeWire stream failed: restarting the capture"
+    equals("failed_stream_restarting", lg.stream_state(FROZEN + [failed]), "restarting")
     stop = "01:00:22.001 [I] app.c:461 | captureStop | ==== [ Capture Stop ] ===="
     start = "01:00:22.300 [I] app.c:451 | captureStart | ==== [ Capture Start ] ===="
     flowing = "01:00:22.310 [I] pipewire.c:231 | x | PipeWire stream state change: paused -> streaming"
@@ -60,9 +64,28 @@ def test_the_verdict_never_blames_the_stream_for_a_dead_guest():
     equals("agent_unknown", lg.verdict(None, "running", "streaming"), "guest-unresponsive")
 
 
+def test_the_silence_is_measured_on_the_guest_clock_from_the_warning():
+    # The warning at 01:00:02 elapsed says 10 s without a frame: silent since
+    # 00:59:52 after the start, so 1 h 10 min after the start it is 608 s.
+    started = "2026-10-07T14:02:17+02:00"
+    now = int(lg._epoch(started)) + 3600 + 600
+    probe = "sender=running\nnow=%d\nlog_age=1\nstarted=%s\n" % (now, started)
+    parsed = lg.parse_probe(probe + "".join("line=%s\n" % line for line in FROZEN + [WARN]))
+    equals("silent_stream", (parsed["stream"], parsed["no_frame_seconds"]), ("streaming", 608))
+    equals("silent_stream_is_ok", lg.verdict(True, parsed["sender"], parsed["stream"]), "ok")
+    resumed = lg.parse_probe(probe + "".join("line=%s\n" % line for line in FROZEN + [WARN, RESUMED]))
+    equals("frames_resumed", resumed["no_frame_seconds"], None)
+    no_clock = lg.parse_probe("sender=running\n" + "".join("line=%s\n" % line for line in FROZEN + [WARN]))
+    equals("no_guest_clock_no_number", no_clock["no_frame_seconds"], None)
+    restarted = lg.parse_probe(probe + "".join("line=%s\n" % line for line in FROZEN + [WARN, RESTART]))
+    equals("restarting_is_not_silence", (restarted["stream"], restarted["no_frame_seconds"]),
+           ("restarting", None))
+
+
 def test_the_probe_answer_is_parsed_strictly():
     parsed = lg.parse_probe("sender=running\nlog_age=12\n" + "".join("line=%s\n" % line for line in FROZEN + [WARN]))
-    equals("probe", parsed, {"sender": "running", "log_age_seconds": 12, "log": True, "stream": "stalled"})
+    equals("probe", parsed, {"sender": "running", "log_age_seconds": 12, "log": True, "stream": "streaming",
+                             "no_frame_seconds": None})
     equals("no_log", lg.parse_probe("sender=absent\nlog=absent\n")["stream"], "unknown")
     try:
         lg.parse_probe("sender=maybe\n")
@@ -153,7 +176,9 @@ def test_restart_is_refused_without_an_answering_agent_or_on_a_failed_stop():
 
 
 def test_health_reports_each_fact_from_its_own_authority():
-    probe = "sender=running\nlog_age=3\n" + "".join("line=%s\n" % line for line in FROZEN + [WARN])
+    started = "2026-10-07T14:02:17+02:00"
+    probe = ("sender=running\nnow=%d\nlog_age=3\nstarted=%s\n" % (int(lg._epoch(started)) + 3725, started)
+             + "".join("line=%s\n" % line for line in FROZEN + [WARN]))
     fakes = _Fakes(agent=True, probe=probe)
     saved = _patched(fakes)
     try:
@@ -162,8 +187,10 @@ def test_health_reports_each_fact_from_its_own_authority():
             "dev-01", run=lambda *a, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired("virsh", 10)))
     finally:
         _restore(saved)
-    equals("health", {key: report[key] for key in ("machine", "agent", "sender", "stream", "health")},
-           {"machine": "dev-01", "agent": "yes", "sender": "running", "stream": "stalled", "health": "stalled"})
+    equals("health", {key: report[key] for key in ("machine", "agent", "sender", "stream", "health",
+                                                   "no_frame_seconds")},
+           {"machine": "dev-01", "agent": "yes", "sender": "running", "stream": "streaming", "health": "ok",
+            "no_frame_seconds": 133})
     check("agent_asked_from_the_host",
           any(call[:1] == ["virsh"] and "guest-ping" in call[5] for call in fakes.calls if len(call) > 5))
     check("timeout_is_a_no", timed_out is False)

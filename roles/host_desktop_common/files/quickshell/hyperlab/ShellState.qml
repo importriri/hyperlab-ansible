@@ -1075,6 +1075,7 @@ Scope {
         "agent": "",
         "sender": "",
         "stream": "",
+        "noFrameSeconds": -1,
         "detail": "",
         "observedAt": 0
     })
@@ -1093,6 +1094,7 @@ Scope {
                 "agent": "",
                 "sender": "",
                 "stream": "",
+                "noFrameSeconds": -1,
                 "detail": "",
                 "observedAt": 0
             };
@@ -1123,11 +1125,25 @@ Scope {
         )
             return null;
 
+        // How long a streaming sender has had no new frame: information,
+        // not a failure (a still desktop probably sends none). Absent or null when
+        // the stream is not silent; anything else is a malformed answer.
+        const silence = report.no_frame_seconds;
+
+        if (
+            silence !== undefined
+            && silence !== null
+            && !(Number.isInteger(silence) && silence >= 0)
+        )
+            return null;
+
         return {
             "health": report.health,
             "agent": report.agent,
             "sender": report.sender,
-            "stream": report.stream
+            "stream": report.stream,
+            "noFrameSeconds":
+                silence === undefined || silence === null ? -1 : silence
         };
     }
 
@@ -1150,6 +1166,7 @@ Scope {
                 "agent": "",
                 "sender": "",
                 "stream": "",
+                "noFrameSeconds": -1,
                 "detail":
                     String(detail).length > 0
                     ? String(detail)
@@ -1166,6 +1183,7 @@ Scope {
             "agent": answer.agent,
             "sender": answer.sender,
             "stream": answer.stream,
+            "noFrameSeconds": answer.noFrameSeconds,
             "detail": "",
             "observedAt": Date.now()
         };

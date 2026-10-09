@@ -90,7 +90,7 @@ if (( go )); then
     ask "two still minutes passed with dev-01's desktop shown" \
         "Have two minutes passed with dev-01's desktop (not the waiting logo) shown and still?"
     if check "health is ok" health_ok \
-        && identity "same sender, no stall on a still desktop" --since "$started" --pid "${tested:-none}" --no-stall; then
+        && identity "same sender, no capture restart on a still desktop" --since "$started" --pid "${tested:-none}" --no-restart; then
         go=1
     fi
 fi

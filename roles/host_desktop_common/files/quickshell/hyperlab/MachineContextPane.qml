@@ -90,6 +90,13 @@ Item {
 
         switch (health.health) {
         case "ok":
+            // A still desktop probably sends no frame: said, never an alarm.
+            if (health.noFrameSeconds >= 0)
+                return {
+                    "word": "Streaming",
+                    "detail": "no new frame for " + health.noFrameSeconds + " s · " + agent,
+                    "alarm": false
+                };
             return { "word": "Frames arriving", "detail": agent, "alarm": false };
         case "stalled":
             return { "word": "Stalled", "detail": "no frames while the guest is alive · " + agent, "alarm": true };

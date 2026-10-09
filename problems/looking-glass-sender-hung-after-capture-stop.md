@@ -3,7 +3,7 @@
 Author: [importriri](https://github.com/importriri).
 
 Status: one of the three possible hangs corrected in the reviewed sender
-patch and covered by `tests/looking_glass_sender_teardown_contract.py`; not
+patch and covered by `tests/looking_glass_sender_capture_contract.py`; not
 yet proven on Nitro.
 
 ## Symptom
@@ -71,13 +71,18 @@ goes through one handshake that records whether a callback is waiting.
 release a callback that is still waiting; the callback then sees the stop
 and returns. After the stop a callback never waits.
 
+Since 2026-10-09 the capture no longer restarts on silence, only on a
+stream or core failure
+([`looking-glass-sender-streaming-without-frames.md`](looking-glass-sender-streaming-without-frames.md)):
+the restart that hung here is no longer triggered by a still desktop.
+
 The patch now carries the whole of `pipewire.c` in one hunk, so the
 contracts can rebuild the patched file. The patched sender builds with the
 role's `cmake` options (checked on Nitro's host, no warnings).
 
 ## Regression proof
 
-`tests/looking_glass_sender_teardown_contract.py` compiles the patched
+`tests/looking_glass_sender_capture_contract.py` compiles the patched
 `pipewire.c` against the real PipeWire thread loop (`libpipewire-0.3`),
 with the Looking Glass framework, the portal and the stream's buffers
 replaced by fakes:

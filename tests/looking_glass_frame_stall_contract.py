@@ -14,9 +14,10 @@ fake stream with a pool of four buffers and one empty frame in ten:
 
   1. before the patch the producer runs out of buffers (the reproduction);
   2. after it every frame is produced and every usable one delivered;
-  3. the watchdog warns once after 10 s without a usable frame and asks
-     for a capture restart after 30 s, and a frame resets it;
-  4. the capture timeout path uses the watchdog and restarts the capture.
+  3. the watchdog warns once after 10 s without a usable frame, a frame
+     resets it, and silence alone never restarts the capture (a still
+     desktop probably sends no frame; problems/looking-glass-sender-hung-after-capture-stop.md);
+  4. the capture timeout path uses the watchdog and returns a timeout.
 """
 
 from __future__ import annotations
@@ -136,8 +137,9 @@ int main(void)
   EXPECT(5 * S, 0, false, HL_STALL_NONE);
   EXPECT(10 * S, 0, false, HL_STALL_WARN);
   EXPECT(12 * S, 0, true, HL_STALL_NONE);
-  EXPECT(30 * S, 0, true, HL_STALL_RESTART);
-  EXPECT(30 * S, 0, false, HL_STALL_RESTART);
+  EXPECT(30 * S, 0, true, HL_STALL_NONE);
+  EXPECT(61 * S, 0, true, HL_STALL_NONE);
+  EXPECT(30 * S, 0, false, HL_STALL_WARN);
   EXPECT(31 * S, 29 * S, false, HL_STALL_NONE);
   EXPECT(1 * S, 2 * S, false, HL_STALL_NONE);
   return failed;
@@ -208,8 +210,9 @@ def main() -> int:
     capture = patch[patch.index("pipewire_capture("):]
     timeout = capture[capture.index("if (result == ETIMEDOUT)"):]
     timeout = timeout[:timeout.index("return CAPTURE_RESULT_TIMEOUT;")]
-    require("hlStallAction(" in timeout and "return CAPTURE_RESULT_REINIT;" in timeout,
-            "a capture timeout does not consult the watchdog or restart the capture")
+    require("hlStallAction(" in timeout, "a capture timeout does not consult the watchdog")
+    require("return CAPTURE_RESULT_REINIT;" not in timeout and "HL_STALL_RESTART" not in patch,
+            "silence alone restarts the capture")
     require("No usable frame for" in timeout, "a stall is not logged")
     require("Frames resumed after" in function(after, CALLBACK),
             "frames that come back after a stall warning are not logged")

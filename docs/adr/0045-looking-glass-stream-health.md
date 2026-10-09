@@ -56,6 +56,27 @@ one action when it did not.
 - The overview's Machine cards: the state is shown in the selected
   Machine's pane, not on every card.
 
+## Amendment (2026-10-09): silence is information, not a failure
+
+On dev-01 the sender's 30 s restart fired on a pause that, like fifteen
+before it, carried no process callback at all, and the restart hung for 28
+hours ([`../../problems/looking-glass-sender-hung-after-capture-stop.md`](../../problems/looking-glass-sender-hung-after-capture-stop.md)).
+A still desktop probably sends no frame, so silence cannot tell a healthy stream
+from a stuck one, and restarting on it put every still desktop through
+the riskiest path. Decided by the operator:
+
+- the sender restarts its capture only when the stream reports ERROR,
+  loses its node (UNCONNECTED), or the core reports an error;
+- silence stays visible as information: the sender still logs once after
+  10 s, and `health` adds `no_frame_seconds`, measured on the guest's clock
+  from that log line and the sender's start; the pane shows "Streaming, no
+  new frame for N s", never an alarm, and the verdict stays `ok`;
+- `stalled` now names only a restart that did not end with a new capture.
+
+Option C's remark that the watchdog restarts a stalled capture no longer
+holds; the operator's "Restart capture" is the recovery for a stream that
+is silent and should not be.
+
 ## Hardware test
 
 On Nitro, with the rebuilt sender (the operator's test plan has the
@@ -72,3 +93,6 @@ commands):
    the action brings it back.
 5. With the guest agent stopped in the guest: `Guest not answering`, and
    the action is refused.
+6. A still desktop for two minutes with the client open: the same sender
+   pid, no capture restart, and the pane shows "Streaming" with "no new
+   frame for N s", not an alarm.
