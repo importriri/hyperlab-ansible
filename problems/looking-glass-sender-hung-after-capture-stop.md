@@ -49,7 +49,7 @@ process without recording its threads:
    because a frame arrived between the capture's last timeout and
    `pipewire_stop`, or long before: a frame that arrives while the capture
    is not waiting finds no waiter, and its callback waits from then on
-   (the next correction). A format that arrives after `pipewire_stop`,
+   ([`looking-glass-sender-frame-handed-over-to-nobody.md`](looking-glass-sender-frame-handed-over-to-nobody.md)). A format that arrives after `pipewire_stop`,
    before the thread stops, would wait the same way.
 2. **The portal's waits** (`portal.c`): after each portal request the
    sender waits for the portal's Response with no deadline. A portal that

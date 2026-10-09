@@ -367,7 +367,7 @@ def main() -> int:
         "/dev/kvmfr0",
         "0.0.12",
         "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2",
-        "dccb5d5a0806de02bc7d387272e8db67ff81626e4894e24cf98148d9f2628fc5",
+        "66b2af4e25ed91a456499dc462f62795c0df5a17d39925564eab9353bb9874a2",
     )
     assert guest_module.load_expected_portal(ROOT) == (
         "HEADLESS-0",

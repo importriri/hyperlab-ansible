@@ -1,8 +1,8 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform/Linux/capture/pipewire/src/pipewire.c
-index de0211de..6c3008e3 100644
+index de0211de..bf35ee72 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -1,493 +1,654 @@
+@@ -1,493 +1,657 @@
  /**
   * Looking Glass
   * Copyright © 2017-2026 The Looking Glass Authors
@@ -561,7 +561,11 @@ index de0211de..6c3008e3 100644
 +  pw_thread_loop_lock(this->threadLoop);
 +
  restart:
-   result = pw_thread_loop_timed_wait(this->threadLoop, 1);
+-  result = pw_thread_loop_timed_wait(this->threadLoop, 1);
++  // A callback that handed over a frame while the capture was not waiting
++  // signalled nobody, and waits for its accept from then on: take its frame
++  // now instead of waiting for a signal that already went by.
++  result = this->awaitingAccept ? 0 : pw_thread_loop_timed_wait(this->threadLoop, 1);
  
    if (this->stop)
 +  {

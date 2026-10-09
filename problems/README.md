@@ -304,5 +304,8 @@ proof.
 - [`looking-glass-sender-hung-after-capture-stop.md`](looking-glass-sender-hung-after-capture-stop.md):
   the Linux sender's first real capture restart logged "Capture Stop" and
   hung for 28 hours.
+- [`looking-glass-sender-frame-handed-over-to-nobody.md`](looking-glass-sender-frame-handed-over-to-nobody.md):
+  a frame handed over between two captures signalled nobody and froze the
+  Linux sender's stream.
 
 Author: [importriri](https://github.com/importriri).

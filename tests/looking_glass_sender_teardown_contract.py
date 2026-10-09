@@ -18,7 +18,10 @@ the portal and the stream's buffers replaced by small fakes:
   2. late format: a format that arrives after the stop, while deinit is
      about to join the PipeWire thread, must not wait for an accept;
   3. flow: frames still reach the capture one after another, and every
-     buffer goes back to the stream.
+     buffer goes back to the stream;
+  4. missed wake-up: a frame handed over while the capture is not waiting
+     (problems/looking-glass-sender-frame-handed-over-to-nobody.md) is still
+     taken by the next capture, instead of every capture timing out.
 """
 
 from __future__ import annotations
@@ -317,6 +320,50 @@ static int lateFormat(void)
   return 0;
 }
 
+// A frame handed over while the capture is not waiting, between two
+// captures: its signal reaches nobody and its callback waits for an accept.
+// The next capture must take it, and the one after it must see the next.
+static int missedWakeup(void)
+{
+  streaming();
+  for (int frame = 1; frame <= 2; ++frame)
+  {
+    deliverFrame();
+    bool waiting = false;
+    for (int i = 0; i < 500 && !waiting; ++i)
+    {
+      pw_thread_loop_lock(this->threadLoop);
+      waiting = this->frameData != NULL && atomic_load(&ready) == 0;
+      pw_thread_loop_unlock(this->threadLoop);
+      if (!waiting)
+        usleep(10 * 1000);
+    }
+    const CaptureResult captured = pipewire_capture(0, NULL);
+    if (captured != CAPTURE_RESULT_OK)
+    {
+      printf("frame %d, handed over between captures: the capture returned %s\n", frame,
+          captured == CAPTURE_RESULT_TIMEOUT ? "a timeout" : "something else");
+      fflush(stdout);
+      _exit(1);
+    }
+    pipewire_getFrame(0, NULL, 1 << 20);
+    for (int i = 0; i < 500 && atomic_load(&queuedBack) < frame; ++i)
+      usleep(10 * 1000);
+    if (atomic_load(&queuedBack) != frame)
+    {
+      printf("frame %d: %d buffers went back to the stream\n", frame, atomic_load(&queuedBack));
+      return 1;
+    }
+    pw_thread_loop_lock(this->threadLoop);
+    this->frameData = NULL;
+    pw_thread_loop_unlock(this->threadLoop);
+  }
+  pipewire_stop();
+  pipewire_deinit();
+  printf("a frame handed over between captures is taken\n");
+  return 0;
+}
+
 // Frames keep flowing: each one reaches the capture, is read, and its
 // buffer goes back to the stream.
 static int flow(void)
@@ -360,6 +407,8 @@ int main(int argc, char ** argv)
     return lateFormat();
   if (argc == 2 && !strcmp(argv[1], "flow"))
     return flow();
+  if (argc == 2 && !strcmp(argv[1], "missed-wakeup"))
+    return missedWakeup();
   return 2;
 }
 """
@@ -412,7 +461,8 @@ def main() -> int:
         require(built.returncode == 0, f"the patched pipewire.c did not build:\n{built.stderr}")
         for scenario, expected in (("teardown", "teardown finished"),
                                    ("late-format", "a late format does not wait"),
-                                   ("flow", "flowing 3")):
+                                   ("flow", "flowing 3"),
+                                   ("missed-wakeup", "a frame handed over between captures is taken")):
             try:
                 run = subprocess.run([str(binary), scenario], capture_output=True, text=True,
                                      timeout=60, check=False)
