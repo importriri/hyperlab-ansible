@@ -2,9 +2,9 @@
 
 Author: [importriri](https://github.com/importriri).
 
-Status: one of the three possible hangs corrected in the reviewed sender
-patch and covered by `tests/looking_glass_sender_capture_contract.py`; not
-yet proven on Nitro.
+Status: two of the three possible hangs corrected in the reviewed sender
+patches, covered by `tests/looking_glass_sender_capture_contract.py` and
+`tests/looking_glass_sender_portal_contract.py`; not yet proven on Nitro.
 
 ## Symptom
 
@@ -51,9 +51,9 @@ process without recording its threads:
    is not waiting finds no waiter, and its callback waits from then on
    ([`looking-glass-sender-frame-handed-over-to-nobody.md`](looking-glass-sender-frame-handed-over-to-nobody.md)). A format that arrives after `pipewire_stop`,
    before the thread stops, would wait the same way.
-2. **The portal's waits** (`portal.c`): after each portal request the
-   sender waits for the portal's Response with no deadline. A portal that
-   never answers holds it for good.
+2. **The portal's waits** (`portal.c`, corrected here): after each portal
+   request the sender waits for the portal's Response with no deadline. A
+   portal that never answers holds it for good.
 3. **No client subscribed**: the sender idles until one subscribes. This is
    expected, and silent.
 
@@ -80,6 +80,19 @@ The patch now carries the whole of `pipewire.c` in one hunk, so the
 contracts can rebuild the patched file. The patched sender builds with the
 role's `cmake` options (checked on Nitro's host, no warnings).
 
+The portal patch (`portal-compat-runtime.patch`, which also carries the
+GCC 16 fix) bounds each wait for a Response (CreateSession, SelectSources,
+Start) to 30 s. Past it the request fails and the sender logs `The
+screen-cast portal did not answer <request> within 30 s`; the capture does
+not start, so `app.c` ends the sender with status 64
+(`LG_HOST_EXIT_FAILED`). Nothing restarts it by itself: its supervisor
+(from `open looking-glass`) logs `HyperLab: sender exited with status 64`
+and ends. `hyperlabctl looking-glass health` then reports `sender-down`,
+and the Machine pane shows "Sender stopped" as an alarm, with "Restart
+capture", which restarts the portals and starts the sender again; opening
+Looking Glass again also starts it. That replaces a silent hang with a
+stopped sender the operator sees.
+
 ## Regression proof
 
 `tests/looking_glass_sender_capture_contract.py` compiles the patched
@@ -96,6 +109,13 @@ replaced by fakes:
   after it, it returns;
 - flow: three frames in a row still reach the capture, and every buffer
   goes back to the stream.
+
+`tests/looking_glass_sender_portal_contract.py` compiles the patched
+`portal.c` against the real GLib main loop with only the D-Bus calls
+faked (no bus) and a 0.3 s deadline: a portal that never answers made
+CreateSession wait forever before the fix (`CreateSession waited without a
+deadline`); after it, CreateSession, SelectSources and Start each fail at
+the deadline and log it, and an answer that comes in time still completes.
 
 ## Still to prove on Nitro
 

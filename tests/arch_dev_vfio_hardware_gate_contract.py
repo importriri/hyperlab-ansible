@@ -366,7 +366,7 @@ def main() -> int:
     assert guest_module.load_expected_transport(ROOT) == (
         "/dev/kvmfr0",
         "0.0.12",
-        "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2",
+        "552a74a137cc307f0cb3a2f4e394f0a61d835fd01553dafc9a5e8768585a3c85",
         "e8e7566763c3933f42ae6d2abbb85c069fc914a8449ae74d3501052b60195fb2",
     )
     assert guest_module.load_expected_portal(ROOT) == (

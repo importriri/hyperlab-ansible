@@ -7,9 +7,9 @@ guest_looking_glass_linux_source: /usr/local/src/looking-glass-linux-host
 guest_looking_glass_linux_build_dir: /usr/local/src/looking-glass-linux-host/host/build
 guest_looking_glass_linux_stamp: /usr/local/share/looking-glass-linux-host/built-from.yml
 guest_looking_glass_linux_binary: /usr/local/bin/looking-glass-host
-guest_looking_glass_linux_compat_patch: portal-gcc16-autoptr.patch
-guest_looking_glass_linux_compat_patch_sha256: "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2"
-guest_looking_glass_linux_compat_patch_remote: /run/privatestack-looking-glass-portal-gcc16.patch
+guest_looking_glass_linux_compat_patch: portal-compat-runtime.patch
+guest_looking_glass_linux_compat_patch_sha256: "552a74a137cc307f0cb3a2f4e394f0a61d835fd01553dafc9a5e8768585a3c85"
+guest_looking_glass_linux_compat_patch_remote: /run/privatestack-looking-glass-portal.patch
 guest_looking_glass_linux_compat_patch_target: host/platform/Linux/capture/pipewire/src/portal.c
 guest_looking_glass_linux_runtime_patch: pipewire-thread-loop-runtime.patch
 guest_looking_glass_linux_runtime_patch_sha256: "e8e7566763c3933f42ae6d2abbb85c069fc914a8449ae74d3501052b60195fb2"

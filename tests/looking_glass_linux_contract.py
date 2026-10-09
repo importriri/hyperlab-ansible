@@ -133,7 +133,7 @@ def main() -> int:
     tasks = (ROOT / "roles/guest_looking_glass_linux/tasks/main.yml").read_text()
     patch_path = (
         ROOT
-        / "roles/guest_looking_glass_linux/files/portal-gcc16-autoptr.patch"
+        / "roles/guest_looking_glass_linux/files/portal-compat-runtime.patch"
     )
     patch_sha256 = hashlib.sha256(patch_path.read_bytes()).hexdigest()
     runtime_patch_path = (
@@ -167,11 +167,11 @@ def main() -> int:
         "libpipewire",
     ]
     assert defaults["guest_looking_glass_linux_compat_patch"] == (
-        "portal-gcc16-autoptr.patch"
+        "portal-compat-runtime.patch"
     )
     assert defaults["guest_looking_glass_linux_compat_patch_sha256"] == patch_sha256
     assert patch_sha256 == (
-        "868d7e1dc49ae9c583bed300f2a7f73221c84310fe16a5463fa79f8725a1c7e2"
+        "552a74a137cc307f0cb3a2f4e394f0a61d835fd01553dafc9a5e8768585a3c85"
     )
     assert defaults["guest_looking_glass_linux_runtime_patch"] == (
         "pipewire-thread-loop-runtime.patch"
