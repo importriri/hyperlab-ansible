@@ -158,6 +158,48 @@ def test_restart_stops_the_sender_and_portals_before_starting_it_again():
     check("prepare_after_stop", order == [("prepare", len(fakes.calls))])
 
 
+def test_restart_records_the_sender_threads_before_stopping_it():
+    # A sender that hung (problems/looking-glass-sender-hung-after-capture-stop.md)
+    # can only be told apart while it still runs: the stop script appends
+    # where each of its threads waits to its log, then stops it. Run here
+    # with a real process standing in for the sender and fake pgrep, pkill
+    # and systemctl.
+    import os
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory(prefix="hyperlabctl-stop-") as tmp:
+        home = Path(tmp) / "home"
+        (home / ".local/state/hyperlab").mkdir(parents=True)
+        log = home / ".local/state/hyperlab/looking-glass-host.log"
+        log.write_text("HyperLab: sender started 2026-10-07T14:02:17+02:00 for Hyprland x\n")
+        sender = subprocess.Popen(["sleep", "60"])
+        fakes = Path(tmp) / "bin"
+        fakes.mkdir()
+        for name, body in (
+                # A killed child stays a zombie until this test reaps it: not running.
+                ("pgrep", 'grep -qv "^[0-9]* ([^)]*) Z" /proc/%d/stat 2>/dev/null || exit 1\necho %d\n'
+                 % (sender.pid, sender.pid)),
+                ("pkill", 'kill %d 2>/dev/null\nexit 0\n' % sender.pid),
+                ("systemctl", "exit 0\n")):
+            (fakes / name).write_text("#!/bin/bash\n" + body)
+            (fakes / name).chmod(0o755)
+        try:
+            env = dict(os.environ, HOME=str(home), PATH="%s:%s" % (fakes, os.environ["PATH"]))
+            done = subprocess.run(["bash", "-s"], input=lg.STOP, text=True, capture_output=True,
+                                  env=env, timeout=30, check=False)
+        finally:
+            sender.kill()
+            sender.wait()
+        text = log.read_text()
+    equals("stop_script_exit", done.returncode, 0)
+    check("threads_header_logged", "HyperLab: threads of sender %d before restart-capture at " % sender.pid in text)
+    check("thread_line_logged",
+          re.search(r"^HyperLab: thread %d sleep state=[SR] wchan=\S+ syscall=\S+$" % sender.pid, text, re.M)
+          is not None)
+    check("log_start_kept", text.startswith("HyperLab: sender started "))
+
+
 def test_restart_is_refused_without_an_answering_agent_or_on_a_failed_stop():
     for label, fakes, transport in (("agent_down", _Fakes(agent=False), "linux-experimental"),
                                     ("stop_failed", _Fakes(stop_rc=1), "linux-experimental"),

@@ -77,6 +77,10 @@ Option C's remark that the watchdog restarts a stalled capture no longer
 holds; the operator's "Restart capture" is the recovery for a stream that
 is silent and should not be.
 
+"Restart capture" first appends where each sender thread waits to the
+sender's log, so a sender that hung can be diagnosed after it was
+restarted.
+
 ## Hardware test
 
 On Nitro, with the rebuilt sender (the operator's test plan has the

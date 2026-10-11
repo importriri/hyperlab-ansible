@@ -16,7 +16,11 @@ not end with a new capture.
 
 `restart-capture` stops the sender, restarts the guest's screen-cast
 portals and starts the sender again through the same path `open
-looking-glass` uses. The client on the host reconnects by itself.
+looking-glass` uses. The client on the host reconnects by itself. Before it
+stops the sender it appends the state of every sender thread to the
+sender's log (kept as .1 when the sender starts again): a sender that hung
+can then be told apart afterwards
+(problems/looking-glass-sender-hung-after-capture-stop.md).
 """
 
 import json
@@ -66,6 +70,26 @@ uid="$(id -u)"
 export XDG_RUNTIME_DIR="/run/user/$uid"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 pattern='%(pattern)s'
+log="%(log)s"
+# Where each thread waits, before the sender is gone: in wchan a futex (a
+# join or a lock), a poll (the portal) or a sleep (no client) tell a hang
+# apart. The system call needs ptrace rights and usually reads "?".
+for pid in $(pgrep -u "$uid" -f "$pattern"); do
+    {
+        printf 'HyperLab: threads of sender %%s before restart-capture at %%s\n' \
+            "$pid" "$(date --iso-8601=seconds)"
+        for task in /proc/"$pid"/task/*; do
+            [[ -d "$task" ]] || continue
+            state="$(sed 's/.*) //' "$task/stat" 2>/dev/null | cut -d' ' -f1)"
+            printf 'HyperLab: thread %%s %%s state=%%s wchan=%%s syscall=%%s\n' \
+                "${task##*/}" \
+                "$(cat "$task/comm" 2>/dev/null || echo '?')" \
+                "${state:-?}" \
+                "$(cat "$task/wchan" 2>/dev/null || echo '?')" \
+                "$(cut -d' ' -f1 "$task/syscall" 2>/dev/null || echo '?')"
+        done
+    } >>"$log" 2>/dev/null || true
+done
 pkill -TERM -u "$uid" -f "$pattern" || true
 for _ in $(seq 1 50); do
     pgrep -u "$uid" -f "$pattern" >/dev/null 2>&1 || break
@@ -79,7 +103,7 @@ systemctl --user restart xdg-desktop-portal-hyprland.service xdg-desktop-portal.
     echo "REFUSAL: the screen-cast portals did not restart" >&2
     exit 1
 }
-""" % {"pattern": SENDER_PATTERN}
+""" % {"pattern": SENDER_PATTERN, "log": LOG}
 
 _STATE_RE = re.compile(r"stream state change: \S+ -> (\S+)")
 _ELAPSED_RE = re.compile(r"^(\d+):(\d{2}):(\d{2})\.(\d{3}) ")

@@ -120,7 +120,14 @@ the deadline and log it, and an answer that comes in time still completes.
 ## Still to prove on Nitro
 
 - Group 16 with the rebuilt sender: no hang after a capture restart.
-- Which wait held pid 390233 is not known.
+- Which wait held pid 390233 is not known. Since 2026-10-11 "Restart
+  capture" appends, before it stops the sender, one line per sender thread
+  to its log (kept as `looking-glass-host.log.1` once the sender starts
+  again): name, state and `wchan`, plus the system call where ptrace rights
+  allow it (usually not: it then reads `?`). In `wchan` a join or a lock
+  waits in a futex, the portal in a poll, an idle sender in a sleep, so a
+  next hang can be told apart. Tested in `tools/hyperlabctl/tests` with a
+  real process standing in for the sender.
 
 ## Not corrected here (already in the pinned sender, not seen to fail)
 
