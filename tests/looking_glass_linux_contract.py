@@ -171,7 +171,7 @@ def main() -> int:
     )
     assert defaults["guest_looking_glass_linux_compat_patch_sha256"] == patch_sha256
     assert patch_sha256 == (
-        "552a74a137cc307f0cb3a2f4e394f0a61d835fd01553dafc9a5e8768585a3c85"
+        "39b1c54d437fbb8729b19ded778477b57bd005da679fdce07b59c9a37e923ec2"
     )
     assert defaults["guest_looking_glass_linux_runtime_patch"] == (
         "pipewire-thread-loop-runtime.patch"

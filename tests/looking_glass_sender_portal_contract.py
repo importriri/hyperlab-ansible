@@ -14,7 +14,11 @@ after 50 ms. With the deadline set to 0.3 s for the test:
 
   1. silent: CreateSession, SelectSources and Start each fail by
      themselves, near the deadline, and say so;
-  2. answered: a Response that comes in time still completes CreateSession.
+  2. answered: a Response that comes in time still completes CreateSession;
+  3. destroy: closing a session clears the caller's handle. The pinned
+     sender cleared only its own copy, so after every capture restart
+     pipewire.c kept a freed handle; a re-init that failed before a new
+     session (the portal could not be reached) then used it again.
 """
 
 from __future__ import annotations
@@ -126,6 +130,16 @@ GVariant * g_dbus_proxy_call_sync(GDBusProxy * proxy, const gchar * method_name,
   return g_variant_ref_sink(g_variant_new("(o)", "/request"));
 }
 
+static int closed;
+GVariant * g_dbus_connection_call_sync(GDBusConnection * connection, const gchar * bus_name,
+    const gchar * object_path, const gchar * interface_name, const gchar * method_name,
+    GVariant * parameters, const GVariantType * reply_type, GDBusCallFlags flags,
+    gint timeout_msec, GCancellable * cancellable, GError ** error)
+{
+  ++closed;
+  return NULL;
+}
+
 GVariant * g_dbus_proxy_get_cached_property(GDBusProxy * proxy, const gchar * property_name)
 {
   return g_variant_ref_sink(g_variant_new_uint32(2));
@@ -174,6 +188,27 @@ int main(int argc, char ** argv)
       return 1;
     }
     printf("every unanswered request failed at its deadline\n");
+    return 0;
+  }
+
+  if (argc == 2 && !strcmp(argv[1], "destroy"))
+  {
+    // pipewire_deinit closes this->sessionHandle on every capture restart,
+    // and again when a re-init fails before it creates a new session.
+    char * handle = g_strdup("/org/freedesktop/portal/desktop/session/1_1/lg0");
+    portal_destroySession(&portal, &handle);
+    if (handle != NULL)
+    {
+      printf("closing the session left the freed handle in place\n");
+      return 1;
+    }
+    portal_destroySession(&portal, &handle);
+    if (closed != 1)
+    {
+      printf("a closed session was closed %d times\n", closed);
+      return 1;
+    }
+    printf("a closed session's handle is cleared\n");
     return 0;
   }
 
@@ -240,7 +275,8 @@ def main() -> int:
             capture_output=True, text=True, check=False)
         require(built.returncode == 0, f"the patched portal.c did not build:\n{built.stderr}")
         for scenario, expected in (("silent", "every unanswered request failed at its deadline"),
-                                   ("answered", "an answered request completes")):
+                                   ("answered", "an answered request completes"),
+                                   ("destroy", "a closed session's handle is cleared")):
             try:
                 run = subprocess.run([str(binary), scenario], capture_output=True, text=True,
                                      timeout=60, check=False)

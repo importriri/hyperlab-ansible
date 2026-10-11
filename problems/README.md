@@ -307,5 +307,8 @@ proof.
 - [`looking-glass-sender-frame-handed-over-to-nobody.md`](looking-glass-sender-frame-handed-over-to-nobody.md):
   a frame handed over between two captures signalled nobody and froze the
   Linux sender's stream.
+- [`looking-glass-sender-kept-a-freed-session-handle.md`](looking-glass-sender-kept-a-freed-session-handle.md):
+  after each capture restart the Linux sender kept a freed portal session
+  handle that a failed re-init would use again.
 
 Author: [importriri](https://github.com/importriri).

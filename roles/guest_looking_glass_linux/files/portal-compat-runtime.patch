@@ -1,5 +1,5 @@
 diff --git a/host/platform/Linux/capture/pipewire/src/portal.c b/host/platform/Linux/capture/pipewire/src/portal.c
-index 38e9b1ff..0fb985cc 100644
+index 38e9b1ff..f98ec7e6 100644
 --- a/host/platform/Linux/capture/pipewire/src/portal.c
 +++ b/host/platform/Linux/capture/pipewire/src/portal.c
 @@ -1,428 +1,472 @@
@@ -279,7 +279,8 @@ index 38e9b1ff..0fb985cc 100644
      *sessionHandle, "org.freedesktop.portal.Session", "Close", NULL, NULL,
      G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL);
    g_free(*sessionHandle);
-   sessionHandle = NULL;
+-  sessionHandle = NULL;
++  *sessionHandle = NULL;
  }
  
  static void selectSourceCallback(GDBusConnection * conn, const char * senderName,
