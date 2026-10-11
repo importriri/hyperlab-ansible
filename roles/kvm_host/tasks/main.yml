@@ -17,7 +17,31 @@
     name: "{{ kvm_host_packages }}"
     state: present
 
+# A check mode run on a host without libvirt cannot preview its sockets or
+# its group: the packages are only "would be installed", so the units and
+# the libvirt group do not exist yet. It says so instead of failing, and
+# skips only what needs the packages. A run that changes the host always
+# has them by now.
+- name: Look for the libvirt socket unit
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/libvirtd.socket
+  register: kvm_host_libvirt_unit
+
+- name: Decide whether this run can only describe the libvirt services
+  ansible.builtin.set_fact:
+    kvm_host_describe_only: "{{ ansible_check_mode and not kvm_host_libvirt_unit.stat.exists }}"
+
+- name: Say what a check mode run on a host without libvirt cannot preview
+  when: kvm_host_describe_only | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: libvirt is not installed yet, so its sockets and its group
+      cannot be previewed. When applied, the role installs the stack, enables
+      and starts libvirtd.socket and virtlogd.socket, and adds
+      {{ admin_user }} to the libvirt group.
+
 - name: Enable socket activation
+  when: not kvm_host_describe_only | bool
   ansible.builtin.systemd_service:
     name: "{{ item }}"
     enabled: true
@@ -27,6 +51,7 @@
     - virtlogd.socket
 
 - name: Let the admin drive virsh
+  when: not kvm_host_describe_only | bool
   ansible.builtin.user:
     name: "{{ admin_user }}"
     groups: libvirt

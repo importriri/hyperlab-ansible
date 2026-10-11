@@ -310,5 +310,8 @@ proof.
 - [`looking-glass-sender-kept-a-freed-session-handle.md`](looking-glass-sender-kept-a-freed-session-handle.md):
   after each capture restart the Linux sender kept a freed portal session
   handle that a failed re-init would use again.
+- [`kvm-host-check-mode-failed-without-libvirt.md`](kvm-host-check-mode-failed-without-libvirt.md):
+  `foundation.yml --check` stopped at kvm_host on a host that never had
+  libvirt.
 
 Author: [importriri](https://github.com/importriri).
