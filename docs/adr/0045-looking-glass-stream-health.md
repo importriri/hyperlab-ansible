@@ -97,6 +97,12 @@ commands):
    the action brings it back.
 5. With the guest agent stopped in the guest: `Guest not answering`, and
    the action is refused.
-6. A still desktop for two minutes with the client open: the same sender
-   pid, no capture restart, and the pane shows "Streaming" with "no new
-   frame for N s", not an alarm.
+6. The operator's criterion (2026-10-11), run by group 16 and judged from
+   the sender's log on dev-01's clock (`tools/acceptance/sender_phases.py`):
+   one sender of this build with the same pid through both phases; no
+   "restarting the capture" since it started and no "Capture Stop" since
+   the still phase began; health `ok`. Still phase, timed by the script for
+   5 minutes: "No usable frame" warnings allowed and counted. Changing
+   phase (30 s of notifications in dev-01 that close by themselves): no
+   warning and, if a warning was active, "Frames resumed" within 2 s of the
+   first change.

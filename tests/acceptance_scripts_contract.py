@@ -679,6 +679,143 @@ def check_10_entries() -> None:
             f"group 10 offered a reboot into a missing entry: {missing}")
 
 
+def load_phases():
+    spec = importlib.util.spec_from_file_location("sender_phases", DIR / "sender_phases.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def phase_files(resumed: str = "00:06:42.500", extra: tuple[str, ...] = (), after_pid: str = "918",
+                still_end: str = "400.5", change: dict[str, str] | None = None) -> dict[str, str]:
+    """dev-01's answers for a healthy run: still from 100 s to 400.5 s after the
+    sender started, notifications from 401 s to 431.5 s."""
+    fields = {"pid": "918", "focused": "yes", "opened": "30 Hyprland notifications showing dev-01's time",
+              "change_from": "401.000", "change_to": "431.500", "notify_failures": "0",
+              "dismissed_rc": "0", "closed_at": "432.000", **(change or {})}
+    lines = ["00:00:00.056 [I] app.c:451 | captureStart | ==== [ Capture Start ] ====",
+             "00:00:00.063 [I] app.c:461 | captureStop | ==== [ Capture Stop ] ====",
+             "00:01:52.000 [I] app.c:451 | captureStart | ==== [ Capture Start ] ====",
+             "00:02:10.000 [W] pipewire.c:577 | pipewire_capture | No usable frame for 10 s while streaming: "
+             "0 process callbacks, 0 empty buffers since the last frame"]
+    if resumed:
+        lines.append(f"{resumed} [I] pipewire.c:211 | streamProcessCallback | Frames resumed after 282 s "
+                     "without a usable frame")
+    lines += list(extra)
+    return {
+        "mark-1.txt": "dev-01 | CHANGED | rc=0 >>\npid=918\nelapsed=100.000\n",
+        "mark-2.txt": f"dev-01 | CHANGED | rc=0 >>\npid=918\nelapsed={still_end}\n",
+        "change.txt": "dev-01 | CHANGED | rc=0 >>\n" + "".join(f"{k}={v}\n" for k, v in fields.items()),
+        "log.txt": f"dev-01 | CHANGED | rc=0 >>\npid={after_pid}\n" + "".join(f"line={x}\n" for x in sorted(lines)),
+    }
+
+
+def check_sender_phases() -> None:
+    phases = load_phases()
+
+    def verdict(files: dict[str, str]) -> tuple[bool, list[str]]:
+        f = phases.fields
+        findings, notes = phases.judge(f(files["mark-1.txt"]), f(files["mark-2.txt"]), f(files["change.txt"]),
+                                       f(files["log.txt"]), phases.events(files["log.txt"]))
+        return all(ok for ok, _ in findings), [text for ok, text in findings if not ok] + notes
+
+    ok, said = verdict(phase_files())
+    require(ok, f"a healthy run was refused: {said}")
+    require(any("warnings in the still phase: 1" in text for text in said), f"the warnings are not counted: {said}")
+    require(any(text.startswith("opened in dev-01: 30 Hyprland") and "closed at 432.000" in text for text in said),
+            f"what was opened and its closing are not said: {said}")
+    # 10 s after the last still frame (393 s), the warning lands just after
+    # the change began: it is the still phase's, and the resume still counts.
+    boundary = phase_files(resumed="00:06:42.500", extra=(
+        "00:06:41.200 [W] pipewire.c:577 | pipewire_capture | No usable frame for 10 s while streaming",
+        "00:06:33.000 [I] pipewire.c:211 | streamProcessCallback | Frames resumed after 20 s"))
+    ok, said = verdict(boundary)
+    require(ok, f"a warning about a silence from before the change failed the changing phase: {said}")
+    flowing = phase_files(resumed="00:03:00.000")
+    ok, said = verdict(flowing)
+    require(ok and any("already arriving" in text for text in said),
+            f"frames that resumed before the change were not accepted as flowing: {said}")
+    bad = {
+        "frames resumed after 2.5 s": phase_files(resumed="00:06:43.500"),
+        "no frames resumed": phase_files(resumed=""),
+        "a warning while the screen changed": phase_files(extra=(
+            "00:07:00.000 [W] pipewire.c:577 | pipewire_capture | No usable frame for 10 s while streaming",)),
+        "a Capture Stop in the still phase": phase_files(extra=(
+            "00:03:20.000 [I] app.c:461 | captureStop | ==== [ Capture Stop ] ====",)),
+        "a capture restart": phase_files(extra=(
+            "00:03:20.000 [W] pipewire.c:570 | pipewire_capture | The PipeWire stream failed: "
+            "restarting the capture",)),
+        "another sender at the end": phase_files(after_pid="919"),
+        "a still phase of 250 s": phase_files(still_end="350.0"),
+        "a notification not shown": phase_files(change={"notify_failures": "1"}),
+        "an unfocused captured output": phase_files(change={"focused": "no"}),
+        "notifications never closed": phase_files(change={"closed_at": ""}),
+    }
+    for label, files in bad.items():
+        ok, said = verdict(files)
+        require(not ok, f"the phase judge accepted {label}: {said}")
+
+    script = (DIR / "16-looking-glass-sender.sh").read_text()
+    require("STILL_SECONDS=${ACCEPTANCE_STILL_SECONDS:-300}" in script, "16 does not time a 5-minute still phase")
+    order = [script.index(step) for step in ('in_dev01 mark "$EVIDENCE/phase-still-start.txt"',
+                                             'sleep "$STILL_SECONDS"',
+                                             'in_dev01 mark "$EVIDENCE/phase-still-end.txt"',
+                                             'in_dev01 change', 'in_dev01 log', '"$PHASES" judge')]
+    require(order == sorted(order), "16 runs the phases out of order")
+    change = phases.CHANGE
+    require(change.count("timeout 5 hyprctl") == change.count("hyprctl"),
+            "a hyprctl call in dev-01 has no time limit")
+    require("trap close_all EXIT" in change and "dismissnotify" in change and "while [ \"$i\" -lt 30 ]" in change,
+            "the change in dev-01 is not bounded or not closed on exit")
+    require(not re.search(r"\b(pacman|install|cp|mv|tee|>\s*/)", change.split("echo \"opened=")[1].split("done")[0]),
+            "the change in dev-01 installs or writes something")
+
+
+FAKE_ANSIBLE_PHASES = r"""#!/bin/sh
+case "$*" in
+*"sender_phases: mark"*)
+    n=$(( $(cat "$FAKE_DIR/marks" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE_DIR/marks"
+    cat "$FAKE_DIR/mark-$n.txt" ;;
+*"sender_phases: change"*) cat "$FAKE_DIR/change.txt" ;;
+*"sender_phases: log"*) cat "$FAKE_DIR/log.txt" ;;
+*)
+    n=$(( $(cat "$FAKE_DIR/probes" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE_DIR/probes"
+    if [ "$n" -le 2 ]; then cat "$FAKE_DIR/probe-old.txt"; else cat "$FAKE_DIR/probe.txt"; fi ;;
+esac
+"""
+FAKE_HYPERLABCTL_OK = r"""#!/bin/sh
+case "$*" in
+*restart-capture*) exit 0 ;;
+*health*) echo '{"health":"ok"}' ;;
+esac
+"""
+
+
+def run_16_phases(files: dict[str, str]) -> str:
+    identity = load_identity()
+    later = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.time() + 120))
+    later = later[:-2] + ":" + later[-2:]
+    probes = {"probe-old.txt": good_probe(identity, pid="809"), "probe.txt": good_probe(identity, started=later)}
+    answers = {"Type 'rebuild'": "rebuild", "Type 'restart'": "restart", "[y/n]": "y", "Type 'pane'": "no"}
+    return run_in_terminal(
+        "16-looking-glass-sender.sh",
+        {"ansible": FAKE_ANSIBLE_PHASES, "ansible-playbook": "#!/bin/sh\nexit 0\n",
+         "hyperlabctl": FAKE_HYPERLABCTL_OK, "grim": "#!/bin/sh\nexit 1\n"},
+        {**probes, **files}, answers, {"HYPERLABCTL": "hyperlabctl", "ACCEPTANCE_STILL_SECONDS": "0"})
+
+
+def check_16_phases_run() -> None:
+    passed = run_16_phases(phase_files())
+    require("PASS  still and changing phases" in passed and "PASS  health is ok after the changing phase" in passed,
+            f"16 did not pass a healthy still and changing run: {passed}")
+    require("opened in dev-01: 30 Hyprland notifications" in passed and "closed at 432.000" in passed,
+            f"16's report does not say what it opened in dev-01 and that it closed: {passed}")
+    failed = run_16_phases(phase_files(change={"notify_failures": "1"}))
+    require("FAIL  still and changing phases" in failed and "STOPPED" in failed
+            and "8;10u" not in failed, f"16 went on after a failed phase: {failed}")
+    require("closed at 432.000" in failed, f"a failed run does not say the notifications closed: {failed}")
+
+
 def check_16_runs() -> None:
     identity = load_identity()
     stale = good_probe(identity, binary="")
@@ -694,6 +831,8 @@ def check_16_runs() -> None:
 
 
 def main() -> int:
+    check_sender_phases()
+    check_16_phases_run()
     check_no_hostname_command()
     check_scripts()
     check_library()

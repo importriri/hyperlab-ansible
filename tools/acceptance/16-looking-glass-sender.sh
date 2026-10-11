@@ -12,6 +12,10 @@ acceptance_start
 
 HYPERLABCTL=${HYPERLABCTL:-$ACCEPTANCE_REPO/tools/hyperlabctl/bin/hyperlabctl}
 IDENTITY="$ACCEPTANCE_REPO/tools/acceptance/sender_identity.py"
+PHASES="$ACCEPTANCE_REPO/tools/acceptance/sender_phases.py"
+# The still phase is timed here; the judge refuses one shorter than 5
+# minutes measured inside dev-01, so a shorter wait only fails.
+STILL_SECONDS=${ACCEPTANCE_STILL_SECONDS:-300}
 inventory=(-i inventory.ini -i "${XDG_RUNTIME_DIR}/dev-01.ini")
 
 # probe: what the sender running in dev-01 is, read without changing it.
@@ -27,6 +31,12 @@ identity() {
     read="$EVIDENCE/probe-$(slug "$name").txt"
     probe >"$read" 2>&1
     check "$name" python3 "$IDENTITY" --input "$read" "$@"
+}
+
+# in_dev01 SCRIPT FILE: run one of sender_phases.py's scripts in dev-01.
+in_dev01() {
+    (cd "$ACCEPTANCE_REPO" && ansible dev-01 "${inventory[@]}" -m shell \
+        -a "$(python3 "$PHASES" "$1")") >"$2" 2>&1
 }
 
 # pid_now: the running sender's pid, or nothing.
@@ -83,15 +93,34 @@ if (( go )); then
     fi
 fi
 
+# The operator's criterion (2026-10-11): one sender of this build for both
+# phases, no "restarting the capture" since it started and no "Capture Stop"
+# since the still phase began; still for 5 minutes, warnings allowed and
+# counted; then the screen changes, with no warning and, if a warning was
+# active, "Frames resumed" within 2 s. tools/acceptance/sender_phases.py
+# judges it from the sender's log, on dev-01's clock.
 if (( go )); then
     go=0
-    tested=$(pid_now)
-    report "Open Looking Glass on dev-01 and leave the desktop still for two minutes."
-    ask "two still minutes passed with dev-01's desktop shown" \
-        "Have two minutes passed with dev-01's desktop (not the waiting logo) shown and still?"
-    if check "health is ok" health_ok \
-        && identity "same sender, no capture restart on a still desktop" --since "$started" --pid "${tested:-none}" --no-restart; then
-        go=1
+    report "Open Looking Glass on dev-01 and show its desktop. From the next answer on, touch neither dev-01 nor its window until this script says so."
+    ask "Looking Glass shows dev-01's desktop" "Does Looking Glass show dev-01's desktop (not the waiting logo)?"
+    if check "health is ok before the still phase" health_ok; then
+        tested=$(pid_now)
+        in_dev01 mark "$EVIDENCE/phase-still-start.txt"
+        report "Still phase: $STILL_SECONDS s, timed by this script. Do not touch dev-01 or its window."
+        sleep "$STILL_SECONDS"
+        in_dev01 mark "$EVIDENCE/phase-still-end.txt"
+        report "Changing phase: dev-01 now shows a notification with its time every second for 30 s; each closes by itself."
+        in_dev01 change "$EVIDENCE/phase-change.txt"
+        in_dev01 log "$EVIDENCE/phase-log.txt"
+        if check "still and changing phases" python3 "$PHASES" judge --start "$EVIDENCE/phase-still-start.txt" \
+                --end "$EVIDENCE/phase-still-end.txt" --change "$EVIDENCE/phase-change.txt" \
+                --log "$EVIDENCE/phase-log.txt" \
+            && check "health is ok after the changing phase" health_ok \
+            && identity "the same sender of this build, no capture restart since it started" \
+                --since "$started" --pid "${tested:-none}" --no-restart; then
+            go=1
+        fi
+        grep -E '^note  opened' "$EVIDENCE/still-and-changing-phases.log" | sed 's/^note  /      /' | tee -a "$REPORT" >&2
     fi
 fi
 
