@@ -74,7 +74,47 @@
   loop_control:
     label: "{{ item.database }}:{{ item.key }}"
 
+- name: List the identities this host does not have
+  ansible.builtin.set_fact:
+    image_store_unknown_identities: >-
+      {{ image_store_identity_lookup.results
+         | rejectattr('ansible_facts', 'defined')
+         | map(attribute='item.key') | unique | list }}
+
+# A check mode run on a host that never had libvirt cannot find the QEMU and
+# swtpm identities: they come with the packages kvm_host installs, which are
+# only "would be installed". When those are the only missing identities and
+# libvirt is not installed, the run says so and skips what needs them. A
+# run that changes the host has them by now, and any other missing identity
+# is still refused.
+- name: Look for the libvirt socket unit
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/libvirtd.socket
+  register: image_store_libvirt_unit
+
+- name: Decide whether this run can only describe the runtime identities
+  ansible.builtin.set_fact:
+    image_store_describe_only: >-
+      {{ ansible_check_mode
+         and not image_store_libvirt_unit.stat.exists
+         and image_store_unknown_identities | length > 0
+         and image_store_unknown_identities
+             | difference([image_store_qemu_user, image_store_qemu_group,
+                           image_store_swtpm_user, image_store_swtpm_group])
+             | length == 0 }}
+
+- name: Say what a check mode run on a host without libvirt cannot preview
+  when: image_store_describe_only | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: {{ image_store_unknown_identities | join(', ') }} do not exist
+      yet; libvirt, QEMU and swtpm create them when kvm_host installs them.
+      The directories owned by the administrator are previewed; those of the
+      QEMU and swtpm groups are not. When applied, the role checks every
+      identity, then creates the whole store layout.
+
 - name: Refuse an identity this host does not have
+  when: not image_store_describe_only | bool
   ansible.builtin.assert:
     that:
       - image_store_unknown_identities | length == 0
@@ -86,11 +126,6 @@
       Store administered by {{ image_store_owner }}:{{ image_store_group }},
       QEMU {{ image_store_qemu_user }}:{{ image_store_qemu_group }}, swtpm
       {{ image_store_swtpm_user }}:{{ image_store_swtpm_group }}.
-  vars:
-    image_store_unknown_identities: >-
-      {{ image_store_identity_lookup.results
-         | rejectattr('ansible_facts', 'defined')
-         | map(attribute='item.key') | unique | list }}
 
 - name: Map layout access classes to their verified groups
   ansible.builtin.set_fact:

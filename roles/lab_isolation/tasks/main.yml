@@ -31,22 +31,49 @@
     validate: nft -c -f %s
   notify: Reload nftables
 
+# A check mode run on a host without nftables cannot enable, ask or reload
+# it: the package is only "would be installed", so neither nft nor its unit
+# exists yet. It shows the rendered ruleset above, says what it could not
+# preview, and skips only what needs the package; the reload handler too.
+# A run that changes the host has nftables by now.
+- name: Look for the nftables unit
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/nftables.service
+  register: lab_isolation_unit
+
+- name: Decide whether this run can only describe the firewall
+  ansible.builtin.set_fact:
+    lab_isolation_describe_only: "{{ ansible_check_mode and not lab_isolation_unit.stat.exists }}"
+
+- name: Say what a check mode run on a host without nftables cannot preview
+  when: lab_isolation_describe_only | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: nftables is not installed yet, so it cannot be enabled or
+      asked whether {{ lab_isolation_table }} is loaded. When applied, the role
+      installs it, enables nftables at boot, and loads the ruleset rendered
+      above unless the kernel already has that table.
+
 - name: Enable nftables at boot
+  when: not lab_isolation_describe_only | bool
   ansible.builtin.systemd_service:
     name: nftables
     enabled: true
 
 - name: Ask the kernel - not systemd - whether the isolation table is live
+  when: not lab_isolation_describe_only | bool
   ansible.builtin.command: nft list table {{ lab_isolation_table }}
   register: lab_isolation_live
   changed_when: false
   failed_when: false
 
 - name: Load the ruleset only when the kernel is missing it (never restart)
+  when:
+    - not lab_isolation_describe_only | bool
+    - lab_isolation_live.rc != 0
   ansible.builtin.systemd_service:
     name: nftables
     state: reloaded
-  when: lab_isolation_live.rc != 0
 
 - name: Record that the lab_isolation brick landed
   ansible.builtin.include_role:

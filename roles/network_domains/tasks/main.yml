@@ -49,13 +49,47 @@
   loop_control:
     label: "{{ item.name }}"
 
+# A check mode run on a host without libvirt cannot list, compare or define
+# its networks: virsh and the libvirt Python binding are only "would be
+# installed", and libvirtd is not there to ask. It shows the rendered
+# definitions above, says what it could not preview, and skips only what
+# needs libvirt. A run that changes the host has them by now.
+- name: Look for virsh
+  ansible.builtin.stat:
+    path: /usr/bin/virsh
+  register: network_domains_virsh
+
+- name: Look for the libvirt Python binding
+  ansible.builtin.command:
+    argv: ["{{ ansible_python.executable }}", -c, import libvirt]
+  register: network_domains_binding
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether this run can only describe the networks
+  ansible.builtin.set_fact:
+    network_domains_describe_only: >-
+      {{ ansible_check_mode and not (network_domains_virsh.stat.exists and network_domains_binding.rc == 0) }}
+
+- name: Say what a check mode run on a host without libvirt cannot preview
+  when: network_domains_describe_only | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: libvirt is not installed yet, so the defined networks cannot
+      be listed or compared. When applied, the role defines, starts and
+      autostarts {{ network_domains | map(attribute='name') | join(', ') }}
+      from the definitions rendered above.
+
 - name: List all defined libvirt networks
+  when: not network_domains_describe_only | bool
   ansible.builtin.command: virsh net-list --all --name
   register: network_domains_known
   changed_when: false
   check_mode: false
 
 - name: Read current persistent XML when the network exists
+  when: not network_domains_describe_only | bool
   ansible.builtin.command: "virsh net-dumpxml --inactive {{ item.name }}"
   loop: "{{ network_domains }}"
   loop_control:
@@ -66,6 +100,7 @@
   check_mode: false
 
 - name: Create the private runtime definition directory
+  when: not network_domains_describe_only | bool
   ansible.builtin.file:
     path: "{{ network_domains_runtime_dir }}"
     state: directory
@@ -75,6 +110,7 @@
   check_mode: false
 
 - name: Prepare definitions with the existing libvirt identity
+  when: not network_domains_describe_only | bool
   ansible.builtin.command:
     argv:
       - "{{ network_domains_prepare_tool }}"
@@ -89,6 +125,9 @@
   check_mode: false
 
 - name: Compare current and desired network semantics
+  when:
+    - not network_domains_describe_only | bool
+    - item.rc == 0
   ansible.builtin.command:
     cmd: >-
       {{ network_domains_compare_tool }}
@@ -100,10 +139,12 @@
   register: network_domains_comparison
   changed_when: false
   failed_when: false
-  when: item.rc == 0
   check_mode: false
 
 - name: Refuse comparator execution or XML parse failures
+  when:
+    - not network_domains_describe_only | bool
+    - item.skipped is not defined
   ansible.builtin.assert:
     that:
       - item.rc in [0, 1]
@@ -112,9 +153,9 @@
   loop: "{{ network_domains_comparison.results | default([]) }}"
   loop_control:
     label: "{{ item.item.item.name | default('skipped') }}"
-  when: item.skipped is not defined
 
 - name: Build the network reconciliation set
+  when: not network_domains_describe_only | bool
   ansible.builtin.set_fact:
     network_domains_reconcile: >-
       {{ network_domains
@@ -126,12 +167,16 @@
                  | map(attribute='item.item.name') | list) }}
 
 - name: List active libvirt networks
+  when: not network_domains_describe_only | bool
   ansible.builtin.command: virsh net-list --name
   register: network_domains_active_raw
   changed_when: false
   check_mode: false
 
 - name: Refuse disruptive live reconciliation without an explicit opt-in
+  when:
+    - not network_domains_describe_only | bool
+    - network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) | length > 0
   ansible.builtin.assert:
     that:
       - network_domains_restart_changed | bool
@@ -142,18 +187,20 @@
   loop: "{{ network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) }}"
   loop_control:
     label: "{{ item }}"
-  when: network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) | length > 0
 
 - name: Stop changed active networks for immediate reconciliation
+  when:
+    - not network_domains_describe_only | bool
+    - network_domains_restart_changed | bool
   community.libvirt.virt_net:
     name: "{{ item }}"
     state: inactive
   loop: "{{ network_domains_reconcile | intersect(network_domains_active_raw.stdout_lines) }}"
   loop_control:
     label: "{{ item }}"
-  when: network_domains_restart_changed | bool
 
 - name: Define missing or changed persistent networks
+  when: not network_domains_describe_only | bool
   ansible.builtin.command:
     argv:
       - virsh
@@ -165,6 +212,7 @@
   changed_when: true
 
 - name: Activate every network domain
+  when: not network_domains_describe_only | bool
   community.libvirt.virt_net:
     name: "{{ item.name }}"
     state: active
@@ -173,6 +221,7 @@
     label: "{{ item.name }}"
 
 - name: Autostart every network domain
+  when: not network_domains_describe_only | bool
   community.libvirt.virt_net:
     name: "{{ item.name }}"
     autostart: true

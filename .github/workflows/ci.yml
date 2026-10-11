@@ -25,7 +25,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             shellcheck bats nftables lua5.4 poppler-utils \
-            pkg-config libpipewire-0.3-dev libglib2.0-dev \
+            pkg-config libpipewire-0.3-dev libglib2.0-dev pciutils \
             qmlscene-qt6 \
             qml6-module-qtquick \
             qml6-module-qtquick-window \

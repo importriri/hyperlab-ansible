@@ -116,6 +116,7 @@
       < (image_store_capacity_plan_gib | int) * 1024 * 1024 * 1024
 
 - name: Create each store directory individually
+  when: not image_store_describe_only | bool or item.access == 'admin'
   ansible.builtin.file:
     path: "{{ (hyperlab_root, item.path) | path_join }}"
     state: directory
@@ -276,7 +277,9 @@
 # moved keep reading their bases. Only the group of each base changes: its
 # owner, mode and bytes, which the receipts pin, stay as they are.
 - name: Give sealed bases their own reader group
-  when: hyperlab_qemu_identity_mode == 'per-machine'
+  when:
+    - hyperlab_qemu_identity_mode == 'per-machine'
+    - not image_store_describe_only | bool
   block:
     - name: Create the base reader group
       ansible.builtin.group:

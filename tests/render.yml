@@ -374,7 +374,7 @@
           - "'state: restarted' not in render_nft_tasks"
           - "'state: started' not in render_nft_tasks"
           - "'nft list table' in render_nft_tasks"
-          - "'when: lab_isolation_live.rc != 0' in render_nft_tasks"
+          - "'- lab_isolation_live.rc != 0' in render_nft_tasks"
         quiet: true
       vars:
         render_nft_matrix: "{{ render_nft.results[0].content | b64decode }}"

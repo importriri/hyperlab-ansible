@@ -313,5 +313,8 @@ proof.
 - [`kvm-host-check-mode-failed-without-libvirt.md`](kvm-host-check-mode-failed-without-libvirt.md):
   `foundation.yml --check` stopped at kvm_host on a host that never had
   libvirt.
+- [`foundation-check-mode-used-what-it-had-not-installed.md`](foundation-check-mode-used-what-it-had-not-installed.md):
+  the other roles of `foundation.yml --check` used commands, units and users
+  the same run had not installed yet.
 
 Author: [importriri](https://github.com/importriri).

@@ -4,12 +4,52 @@
     name: pciutils
     state: present
 
+# A check mode run on a host without pciutils cannot run lspci: the package
+# is only "would be installed". It reads the same numeric identities from
+# sysfs, where lspci reads them, in lspci -Dn's address and vendor:device
+# form, and says so. A run that changes the host has lspci by now.
+- name: Look for lspci
+  ansible.builtin.stat:
+    path: /usr/bin/lspci
+  register: hardware_probe_lspci_command
+
+- name: Decide whether this run reads PCI identities from sysfs
+  ansible.builtin.set_fact:
+    hardware_probe_from_sysfs: "{{ ansible_check_mode and not hardware_probe_lspci_command.stat.exists }}"
+
+- name: Say that a check mode run without pciutils reads sysfs
+  when: hardware_probe_from_sysfs | bool
+  ansible.builtin.debug:
+    msg: >-
+      Check mode: pciutils is not installed yet, so lspci cannot run. The PCI
+      identities are read from /sys/bus/pci/devices, where lspci reads them.
+      When applied, the role installs pciutils and uses lspci -Dn.
+
 - name: Read numeric PCI identities
+  when: not hardware_probe_from_sysfs | bool
   ansible.builtin.command:
     argv: [lspci, -Dn]
-  register: hardware_probe_lspci
+  register: hardware_probe_lspci_tool
   changed_when: false
   check_mode: false
+
+- name: Read numeric PCI identities from sysfs
+  when: hardware_probe_from_sysfs | bool
+  ansible.builtin.shell: |
+    set -o pipefail
+    for device in /sys/bus/pci/devices/*; do
+      printf '%s %s:%s\n' "${device##*/}" "$(cut -c3- "$device/vendor")" "$(cut -c3- "$device/device")"
+    done
+  args:
+    executable: /bin/bash
+  register: hardware_probe_lspci_sysfs
+  changed_when: false
+  check_mode: false
+
+- name: Keep the PCI identities read
+  ansible.builtin.set_fact:
+    hardware_probe_lspci: >-
+      {{ hardware_probe_lspci_sysfs if hardware_probe_from_sysfs | bool else hardware_probe_lspci_tool }}
 
 - name: Normalize detected PCI IDs
   ansible.builtin.set_fact:
@@ -64,10 +104,14 @@
 - name: Resolve the PCI address of every reviewed VFIO component
   when: hardware_probe_gpu_passthrough | bool
   ansible.builtin.command:
-    argv: [lspci, -Dn, -d, "{{ item }}"]
+    argv: >-
+      {{ ['grep', '-i', ' ' ~ item ~ '$'] if hardware_probe_from_sysfs | bool
+         else ['lspci', '-Dn', '-d', item] }}
+    stdin: "{{ hardware_probe_lspci.stdout if hardware_probe_from_sysfs | bool else omit }}"
   loop: "{{ host_profiles[hardware_probe_selected_host_profile].vfio_ids }}"
   register: hardware_probe_vfio_lspci
   changed_when: false
+  failed_when: hardware_probe_vfio_lspci.rc not in [0, 1]
   check_mode: false
 
 - name: Require one address for every reviewed VFIO component
