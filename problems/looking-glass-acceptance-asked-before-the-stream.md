@@ -47,6 +47,12 @@ client's SPICE display, not the stream.
   healthy`;
 - the operator answers no: FAIL, and the still phase does not run.
 
+Reviewed and left as they are (2026-10-12): the 60 s start as soon as the
+script asks to open Looking Glass, so an operator who needs longer runs the
+group again (the message states the 60 s); a health other than `idle`, such
+as `sender-down`, gets no explanation line beyond the health answer in the
+evidence.
+
 ## Still open
 
 Why the client did not connect to the new sender is not known: after a

@@ -5,12 +5,15 @@ Shell application. Every target remains a fixed argv element; user-controlled
 domain names never enter a shell program.
 """
 
+import fcntl
 import json
 import os
+import re
 import shlex
 import shutil
 import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -28,6 +31,9 @@ _LOOKING_GLASS_CLIENT = "/usr/local/bin/looking-glass-client"
 # may name the same binary through a symlinked directory (/usr/sbin on Arch),
 # which surface provenance registration correctly refuses.
 _VIRT_VIEWER = "/usr/bin/virt-viewer"
+# One log per Machine, named after it: a name that could leave the directory
+# or hide the file is refused.
+_CLIENT_LOG_DOMAIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _FOOT = "/usr/bin/foot"
 _SECTIONS = (
     "overview",
@@ -597,6 +603,46 @@ def _stop_owned_process(process):
         process.wait(timeout=3)
 
 
+def _redirect_looking_glass_output(domain):
+    """Send this process's output, and so the Looking Glass client's after the
+    exec, to a private file replaced at each start
+    (problems/looking-glass-client-output-was-lost.md).
+
+    The client writes versions, paths, the guest's name, CPU and OS, frame
+    formats and errors; never clipboard data or keystrokes. Its caller is
+    told where the file is, so a client that fails at once still points at
+    it.
+    """
+    if not _CLIENT_LOG_DOMAIN.fullmatch(domain):
+        raise Unavailable("refusing a Looking Glass client log for this Machine name")
+    state_home = os.environ.get("XDG_STATE_HOME", "")
+    base = Path(state_home) if state_home.startswith("/") else Path.home() / ".local" / "state"
+    directory = base / "hyperlab"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = directory / ("looking-glass-client-%s.log" % domain)
+    try:
+        # O_NONBLOCK: a FIFO left in its place fails here instead of waiting.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, 0o600)
+    except OSError as exc:
+        raise Unavailable("cannot open the Looking Glass client log %s: %s" % (path, exc.strerror)) from exc
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise Unavailable("the Looking Glass client log %s is not this user's regular file" % path)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) & ~os.O_NONBLOCK)
+        os.ftruncate(fd, 0)
+        os.fchmod(fd, 0o600)
+        os.write(fd, ("HyperLab: looking-glass-client for %s started %s\n"
+                      % (domain, time.strftime("%Y-%m-%dT%H:%M:%S%z"))).encode())
+        print("HyperLab: Looking Glass client output: %s" % path, file=sys.stderr, flush=True)
+        sys.stdout.flush()
+        os.dup2(fd, 1)
+        os.dup2(fd, 2)
+    finally:
+        os.close(fd)
+    return path
+
+
 def _wait_for_linux_looking_glass_login(ctx, domain):
     ssh_argv = _ssh_argv(ctx, domain)
     _wait_for_ssh_ready(ssh_argv, domain)
@@ -869,6 +915,9 @@ class OpenCommand(Command):
                 managed_surface_kind,
                 executable,
             )
+
+        if managed_surface_kind == "looking-glass":
+            _redirect_looking_glass_output(managed_surface_domain)
 
         os.execv(executable, [executable, *argv[1:]])
         raise AssertionError("os.execv unexpectedly returned")

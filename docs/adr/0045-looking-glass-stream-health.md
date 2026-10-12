@@ -81,6 +81,19 @@ is silent and should not be.
 sender's log, so a sender that hung can be diagnosed after it was
 restarted.
 
+## Amendment (2026-10-12): the client's own log
+
+In group 16 on 2026-10-12 the restarted sender never had a client: it
+logged Capture Stop at start-up and waited, while the window showed dev-01
+through the client's SPICE display
+([`../../problems/looking-glass-acceptance-asked-before-the-stream.md`](../../problems/looking-glass-acceptance-asked-before-the-stream.md)).
+"The host client reconnects by itself" was not seen there. `open
+looking-glass` now keeps the client's output in
+`~/.local/state/hyperlab/looking-glass-client-<Machine>.log`, 0600,
+replaced at each start
+([`../../problems/looking-glass-client-output-was-lost.md`](../../problems/looking-glass-client-output-was-lost.md)),
+so the next run shows whether and why the client did not reconnect.
+
 ## Hardware test
 
 On Nitro, with the rebuilt sender (the operator's test plan has the

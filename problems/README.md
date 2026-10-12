@@ -319,5 +319,8 @@ proof.
 - [`looking-glass-acceptance-asked-before-the-stream.md`](looking-glass-acceptance-asked-before-the-stream.md):
   group 16 asked whether the desktop showed while no client was connected
   to the sender, and the window showed dev-01 through SPICE.
+- [`looking-glass-client-output-was-lost.md`](looking-glass-client-output-was-lost.md):
+  the Looking Glass client's output reached only its caller, so a client
+  that did not reconnect left no trace.
 
 Author: [importriri](https://github.com/importriri).
