@@ -791,29 +791,78 @@ esac
 """
 
 
-def run_16_phases(files: dict[str, str]) -> str:
+# Every health answer is counted; sleep returns at once and records what it was asked.
+FAKE_HYPERLABCTL_IDLE = r"""#!/bin/sh
+case "$*" in
+*restart-capture*) exit 0 ;;
+*health*) echo x >> "$FAKE_DIR/health-calls"
+    echo '{"machine":"dev-01","agent":"yes","sender":"running","stream":"idle","health":"idle"}' ;;
+esac
+"""
+FAKE_SLEEP = "#!/bin/sh\necho \"$1\" >> \"$FAKE_DIR/slept\"\n"
+
+
+def run_16_phases(files: dict[str, str], hyperlabctl: str = FAKE_HYPERLABCTL_OK,
+                  answers: dict[str, str] | None = None) -> tuple[str, tuple[int, list[str]]]:
+    """The report of a run that reaches the phases, with how many times it
+    asked for the health and what it asked sleep for."""
     identity = load_identity()
     later = time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.time() + 120))
     later = later[:-2] + ":" + later[-2:]
     probes = {"probe-old.txt": good_probe(identity, pid="809"), "probe.txt": good_probe(identity, started=later)}
-    answers = {"Type 'rebuild'": "rebuild", "Type 'restart'": "restart", "[y/n]": "y", "Type 'pane'": "no"}
-    return run_in_terminal(
-        "16-looking-glass-sender.sh",
-        {"ansible": FAKE_ANSIBLE_PHASES, "ansible-playbook": "#!/bin/sh\nexit 0\n",
-         "hyperlabctl": FAKE_HYPERLABCTL_OK, "grim": "#!/bin/sh\nexit 1\n"},
-        {**probes, **files}, answers, {"HYPERLABCTL": "hyperlabctl", "ACCEPTANCE_STILL_SECONDS": "0"})
+    answers = answers or {"Type 'rebuild'": "rebuild", "Type 'restart'": "restart", "[y/n]": "y",
+                          "Type 'pane'": "no"}
+    calls = Path(tempfile.mkdtemp())
+    fake_health = hyperlabctl.replace('"$FAKE_DIR/health-calls"', f'"{calls}/health-calls"')
+    try:
+        report = run_in_terminal(
+            "16-looking-glass-sender.sh",
+            {"ansible": FAKE_ANSIBLE_PHASES, "ansible-playbook": "#!/bin/sh\nexit 0\n",
+             "hyperlabctl": fake_health, "grim": "#!/bin/sh\nexit 1\n",
+             "sleep": FAKE_SLEEP.replace('"$FAKE_DIR/slept"', f'"{calls}/slept"')},
+            {**probes, **files}, answers, {"HYPERLABCTL": "hyperlabctl", "ACCEPTANCE_STILL_SECONDS": "0"})
+        health = (calls / "health-calls").read_text().count("x") if (calls / "health-calls").exists() else 0
+        slept = (calls / "slept").read_text().split() if (calls / "slept").exists() else []
+    finally:
+        for leftover in calls.iterdir():
+            leftover.unlink()
+        calls.rmdir()
+    return report, (health, slept)
 
 
 def check_16_phases_run() -> None:
-    passed = run_16_phases(phase_files())
+    passed, _ = run_16_phases(phase_files())
+    stream = passed.find("PASS  health is ok before the still phase")
+    shown = passed.find("PASS  Looking Glass shows dev-01's desktop (operator)")
+    require(0 <= stream < shown, f"16 asks whether the desktop shows before the stream is healthy: {passed}")
     require("PASS  still and changing phases" in passed and "PASS  health is ok after the changing phase" in passed,
             f"16 did not pass a healthy still and changing run: {passed}")
     require("opened in dev-01: 30 Hyprland notifications" in passed and "closed at 432.000" in passed,
             f"16's report does not say what it opened in dev-01 and that it closed: {passed}")
-    failed = run_16_phases(phase_files(change={"notify_failures": "1"}))
+    failed, _ = run_16_phases(phase_files(change={"notify_failures": "1"}))
     require("FAIL  still and changing phases" in failed and "STOPPED" in failed
             and "8;10u" not in failed, f"16 went on after a failed phase: {failed}")
     require("closed at 432.000" in failed, f"a failed run does not say the notifications closed: {failed}")
+
+    # problems/looking-glass-acceptance-asked-before-the-stream.md: a window
+    # showing dev-01 through SPICE looked like the stream while no client was
+    # connected to the sender. The script waits up to 60 s for health ok
+    # before asking, and says why it failed.
+    idle, (calls, slept) = run_16_phases(phase_files(), hyperlabctl=FAKE_HYPERLABCTL_IDLE)
+    require("FAIL  health is ok before the still phase" in idle and "STOPPED" in idle,
+            f"16 went on with an idle stream: {idle}")
+    require("(operator)" not in idle.split("Open Looking Glass on dev-01")[1],
+            f"16 asked the operator before the stream was healthy: {idle}")
+    require("no Looking Glass client is connected to dev-01's sender" in idle and "SPICE display" in idle,
+            f"16's failure does not say that no client is connected: {idle}")
+    require(calls == 13 and sum(int(s) for s in slept) == 60,
+            f"16 did not wait 60 s for health ok before the still phase ({calls} answers, slept {slept})")
+    declined, _ = run_16_phases(phase_files(), answers={
+        "Type 'rebuild'": "rebuild", "Type 'restart'": "restart",
+        "Does Looking Glass show dev-01's desktop": "n"})
+    require("FAIL  Looking Glass shows dev-01's desktop (operator)" in declined
+            and "still and changing phases" not in declined and "STOPPED" in declined,
+            f"16 ran the still phase after the operator said the desktop is not shown: {declined}")
 
 
 def check_16_runs() -> None:

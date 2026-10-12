@@ -44,20 +44,29 @@ pid_now() {
     probe 2>/dev/null | sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' | head -n 1
 }
 
-# health_ok: PASS only on the word "ok", within 30 seconds.
+# health_ok [SECONDS]: PASS only on the word "ok", within SECONDS (30 by
+# default). "idle" means no Looking Glass client is subscribed to the sender,
+# which then logs Capture Stop and waits; the client meanwhile shows dev-01's
+# SPICE display, which looks like the stream. A failure says so.
 health_ok() {
-    local answer
-    for _ in 1 2 3 4 5 6; do
+    local answer limit=${1:-30} waited=0
+    while :; do
         answer=$("$HYPERLABCTL" --json looking-glass health dev-01 2>&1)
         if grep -q '"health":"ok"' <<<"$answer"; then
             printf '%s\n' "$answer"
             return 0
         fi
+        (( waited >= limit )) && break
         sleep 5
+        waited=$((waited + 5))
     done
     printf '%s\n' "$answer"
+    if grep -q '"health":"idle"' <<<"$answer"; then
+        printf '%s\n' "$NO_CLIENT"
+    fi
     return 1
 }
+NO_CLIENT="no Looking Glass client is connected to dev-01's sender (health idle: its log ends with Capture Stop); a window showing dev-01 is the client's SPICE display, not the stream"
 backup "sender before" probe
 rollback "the role keys the build on the patch digests: rebuild from the previous commit with the same playbook"
 started=$(date +%s)
@@ -101,9 +110,14 @@ fi
 # judges it from the sender's log, on dev-01's clock.
 if (( go )); then
     go=0
-    report "Open Looking Glass on dev-01 and show its desktop. From the next answer on, touch neither dev-01 nor its window until this script says so."
-    ask "Looking Glass shows dev-01's desktop" "Does Looking Glass show dev-01's desktop (not the waiting logo)?"
-    if check "health is ok before the still phase" health_ok; then
+    report "Open Looking Glass on dev-01 and show its desktop. This script waits up to 60 s for dev-01's sender to stream to it; from then on, touch neither dev-01 nor its window until this script says so."
+    # The stream first, then the operator: a window can show dev-01 through
+    # SPICE with no client connected to the sender.
+    if ! check "health is ok before the still phase" health_ok 60; then
+        grep -Fx "$NO_CLIENT" "$EVIDENCE/health-is-ok-before-the-still-phase.log" | sed 's/^/      /' \
+            | tee -a "$REPORT" >&2
+    elif before=$FAILS && ask "Looking Glass shows dev-01's desktop" \
+            "Does Looking Glass show dev-01's desktop (not the waiting logo)?" && (( FAILS == before )); then
         tested=$(pid_now)
         in_dev01 mark "$EVIDENCE/phase-still-start.txt"
         report "Still phase: $STILL_SECONDS s, timed by this script. Do not touch dev-01 or its window."

@@ -316,5 +316,8 @@ proof.
 - [`foundation-check-mode-used-what-it-had-not-installed.md`](foundation-check-mode-used-what-it-had-not-installed.md):
   the other roles of `foundation.yml --check` used commands, units and users
   the same run had not installed yet.
+- [`looking-glass-acceptance-asked-before-the-stream.md`](looking-glass-acceptance-asked-before-the-stream.md):
+  group 16 asked whether the desktop showed while no client was connected
+  to the sender, and the window showed dev-01 through SPICE.
 
 Author: [importriri](https://github.com/importriri).
