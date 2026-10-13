@@ -26,8 +26,11 @@ NOT_COMPOSITOR = {"Right CTRL"}
 FOLDED = {
     "SUPER+1 … 9": {"SUPER+<n>"},
     "SUPER+SHIFT+1 … 9": {"SUPER+SHIFT+<n>"},
-    "SUPER+H J K L": {"SUPER+H", "SUPER+J", "SUPER+K", "SUPER+L"},
-    "SUPER+SHIFT+H J K L": {"SUPER+SHIFT+H", "SUPER+SHIFT+J", "SUPER+SHIFT+K", "SUPER+SHIFT+L"},
+    "SUPER+H J K L or arrows": {"SUPER+H", "SUPER+J", "SUPER+K", "SUPER+L",
+                                "SUPER+left", "SUPER+down", "SUPER+up", "SUPER+right"},
+    "SUPER+SHIFT+H J K L or arrows": {"SUPER+SHIFT+H", "SUPER+SHIFT+J", "SUPER+SHIFT+K", "SUPER+SHIFT+L",
+                                      "SUPER+SHIFT+left", "SUPER+SHIFT+down", "SUPER+SHIFT+up",
+                                      "SUPER+SHIFT+right"},
     "SUPER+drag": {"SUPER+mouse:272", "SUPER+mouse:273"},
 }
 
@@ -96,6 +99,23 @@ def check_parity() -> None:
         fail("the host sheet lists guest keys")
 
 
+def check_directions() -> None:
+    # problems/host-arrow-keys-were-never-bound.md: the host bound focus and
+    # move to H J K L only, so SUPER+arrows did nothing on the host.
+    source = HYPRLAND.read_text(encoding="utf-8")
+    bound = {
+        (shift, key): (call, direction)
+        for shift, key, call, direction in re.findall(
+            r'hl\.bind\(\s*main_mod \.\. " \+ (SHIFT \+ )?(\w+)",\s*'
+            r'hl\.dsp\.(focus|window\.move)\(\{ direction = "(\w+)" \}\)', source)
+    }
+    for keys in ("HJKL", ("left", "down", "up", "right")):
+        for key, direction in zip(keys, ("left", "down", "up", "right")):
+            for shift, call in (("", "focus"), ("SHIFT + ", "window.move")):
+                if bound.get((shift, key)) != (call, direction):
+                    fail(f"SUPER+{shift.replace(' + ', '+')}{key} is not bound to {call} {direction}")
+
+
 SCENARIO = """
             sharedSurfaces.openLauncher("", "keys");
             check(launcher.open && launcher.keysMode, "SUPER + F1 did not open the key sheet");
@@ -116,6 +136,7 @@ SCENARIO = """
 
 def main() -> int:
     check_parity()
+    check_directions()
     runner = shutil.which("qmlscene", path="/usr/lib/qt6/bin") or shutil.which("qmlscene6")
     if not runner:
         if os.environ.get("HYPERLAB_REQUIRE_QML_RUNTIME") == "1":

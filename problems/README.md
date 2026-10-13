@@ -325,5 +325,8 @@ proof.
 - [`looking-glass-acceptance-failed-on-a-missing-pane-button.md`](looking-glass-acceptance-failed-on-a-missing-pane-button.md):
   group 16 failed and stopped when an older installed shell had no Restart
   capture in the pane.
+- [`host-arrow-keys-were-never-bound.md`](host-arrow-keys-were-never-bound.md):
+  the host bound focus and moves to H J K L only, so SUPER with an arrow
+  did nothing.
 
 Author: [importriri](https://github.com/importriri).
