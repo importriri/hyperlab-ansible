@@ -144,7 +144,14 @@ if (( go )); then
     ask "no 8;10u in the terminal" "Is there NO '8;10u' at the prompt?"
     screenshot "dev-01 terminal after SUPER+SHIFT+L"
     before=$(pid_now)
-    if confirm pane "use Restart capture once from the Machine pane now: dev-01's stream stops for a few seconds"; then
+    # The button comes with ADR 0045's shell; a host whose installed shell
+    # is older has no button, and that is not the sender's failure.
+    offered "Restart capture from the pane" "Does dev-01's Machine pane offer Restart capture?" \
+        "the Machine pane does not offer it; the installed shell may predate ADR 0045 (check that the host desktop playbook ran from this commit)"
+    pane_offered=$?
+    if (( pane_offered == 1 )); then
+        go=1
+    elif (( pane_offered == 0 )) && confirm pane "use Restart capture once from the Machine pane now: dev-01's stream stops for a few seconds"; then
         report "Use Restart capture on dev-01's Machine pane, then come back here."
         pane=$(date +%s)
         ask "Restart capture used once from the pane" "Did you use Restart capture once on dev-01's pane?"

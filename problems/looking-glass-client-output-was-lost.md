@@ -73,5 +73,9 @@ window opens (fail-closed).
 
 ## Still open
 
-Why the client did not reconnect to the restarted sender on 2026-10-12:
-the next group 16 run leaves the client's log next to the sender's.
+Why the client did not reconnect to the restarted sender on 2026-10-12
+at 17:12 is not known: that run had no client log. In the next run
+(`16-looking-glass-sender-224919`) the log shows the client reconnecting
+when the sender restarted: "Waiting for the host to restart..." at
+00:05:01.629, the SPICE display meanwhile, and the stream's first format
+line at 00:05:01.766.

@@ -864,6 +864,29 @@ def check_16_phases_run() -> None:
             and "still and changing phases" not in declined and "STOPPED" in declined,
             f"16 ran the still phase after the operator said the desktop is not shown: {declined}")
 
+    # 2026-10-12 on the Nitro: the installed shell predated ADR 0045 and the
+    # pane had no Restart capture; the step failed twice and stopped the
+    # group. A pane without the button is reported N/A, counted apart, and
+    # the group ends without a failure.
+    absent, _ = run_16_phases(phase_files(), answers={
+        "Type 'rebuild'": "rebuild", "Type 'restart'": "restart",
+        "Does Looking Glass show dev-01's desktop": "y", "Is there NO '8;10u'": "y",
+        "Does dev-01's Machine pane offer Restart capture": "n", "Type 'pane'": "no"})
+    require("N/A   Restart capture from the pane: the Machine pane does not offer it; "
+            "the installed shell may predate ADR 0045" in absent,
+            f"16 does not say the pane has no Restart capture: {absent}")
+    require("FAIL" not in absent and "STOP  use Restart capture" not in absent and "STOPPED" not in absent,
+            f"a pane without Restart capture failed or stopped 16: {absent}")
+    require(absent.rstrip().endswith("0 failed, 0 skipped, 1 not available"),
+            f"16's summary does not count the missing button apart: {absent}")
+    unclear, _ = run_16_phases(phase_files(), answers={
+        "Type 'rebuild'": "rebuild", "Type 'restart'": "restart",
+        "Does Looking Glass show dev-01's desktop": "y", "Is there NO '8;10u'": "y",
+        "Does dev-01's Machine pane offer Restart capture": "", "Type 'pane'": "no"})
+    require("FAIL  Restart capture from the pane (operator: neither y nor n)" in unclear
+            and "N/A" not in unclear and "STOP  use Restart capture" not in unclear and "STOPPED" in unclear,
+            f"an answer other than n was taken as a pane without Restart capture: {unclear}")
+
 
 def check_16_runs() -> None:
     identity = load_identity()

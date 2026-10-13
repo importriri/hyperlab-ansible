@@ -322,5 +322,8 @@ proof.
 - [`looking-glass-client-output-was-lost.md`](looking-glass-client-output-was-lost.md):
   the Looking Glass client's output reached only its caller, so a client
   that did not reconnect left no trace.
+- [`looking-glass-acceptance-failed-on-a-missing-pane-button.md`](looking-glass-acceptance-failed-on-a-missing-pane-button.md):
+  group 16 failed and stopped when an older installed shell had no Restart
+  capture in the pane.
 
 Author: [importriri](https://github.com/importriri).

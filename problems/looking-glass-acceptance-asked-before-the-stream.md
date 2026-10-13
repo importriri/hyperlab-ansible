@@ -57,6 +57,8 @@ evidence.
 
 Why the client did not connect to the new sender is not known: after a
 sender restart it should reconnect by itself (`client/src/main.c:1789-1810`),
-and its output went to `/dev/null`. Another running VM sharing
+and its output was not kept (Quickshell held it in memory and dropped it;
+[`looking-glass-client-output-was-lost.md`](looking-glass-client-output-was-lost.md)).
+Another running VM sharing
 `/dev/kvmfr0` is ruled out: the operator checked by hand that only dev-01
 and arch-dev-vfio (shut off) declare it.

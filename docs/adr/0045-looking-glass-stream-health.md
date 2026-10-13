@@ -94,6 +94,17 @@ replaced at each start
 ([`../../problems/looking-glass-client-output-was-lost.md`](../../problems/looking-glass-client-output-was-lost.md)),
 so the next run shows whether and why the client did not reconnect.
 
+## Amendment (2026-10-13): the first full run on Nitro
+
+Group 16 on 2026-10-12 (`16-looking-glass-sender-224919`) passed the still
+and changing phases, health `ok` before and after, and one sender of this
+build throughout; the client log shows the stream back 0.14 s after the
+client saw the sender restart. The pane's Restart capture could not be
+tried: the shell installed on Nitro predates this ADR. Group 16 now reports
+it N/A when the pane does not offer it
+([`../../problems/looking-glass-acceptance-failed-on-a-missing-pane-button.md`](../../problems/looking-glass-acceptance-failed-on-a-missing-pane-button.md));
+items 2 to 5 below wait for the host desktop playbook.
+
 ## Hardware test
 
 On Nitro, with the rebuilt sender (the operator's test plan has the

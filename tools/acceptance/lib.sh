@@ -27,6 +27,7 @@ REPORT="$EVIDENCE/report.txt"
 PASSES=0
 FAILS=0
 SKIPS=0
+UNAVAILABLE=0
 _become=""
 _nopasswd=0
 _runtime=""
@@ -286,7 +287,29 @@ ask() {
     fi
 }
 
+# offered NAME QUESTION REASON: whether the operator sees what a step needs.
+# Returns 0 on "y". Only "n" is N/A: neither PASS nor FAIL, reported with
+# its reason and counted apart, returning 1 so the caller goes on without
+# the step. Any other answer, or none, is a FAIL and returns 2.
+offered() {
+    local name=$1 question=$2 reason=$3 answer=""
+    IFS= read -rp "$question [y/n] " answer </dev/tty
+    case $answer in
+        y) return 0 ;;
+        n)
+            UNAVAILABLE=$((UNAVAILABLE + 1))
+            report "N/A   $name: $reason"
+            return 1
+            ;;
+    esac
+    FAILS=$((FAILS + 1))
+    report "FAIL  $name (operator: neither y nor n)"
+    return 2
+}
+
 acceptance_end() {
-    report "group $ACCEPTANCE_GROUP: $PASSES passed, $FAILS failed, $SKIPS skipped"
+    local unavailable=""
+    (( UNAVAILABLE )) && unavailable=", $UNAVAILABLE not available"
+    report "group $ACCEPTANCE_GROUP: $PASSES passed, $FAILS failed, $SKIPS skipped$unavailable"
     (( FAILS == 0 ))
 }
