@@ -52,3 +52,12 @@ window's output, ignoring other surfaces' exclusive zones, with no input
 region; its width is the design token `fullscreenRing` (4 px).
 `tests/host_quickshell_runtime_contract.py` (scenario `fullscreen-frame`)
 and `tests/host_hyprland_adapter_contract.py` cover it.
+
+## Acceptance
+
+`tools/acceptance/12-fullscreen-ring.sh` on Nitro, with the shell that
+carries `FullscreenFrame.qml` installed: the ring in dev-01's colour around
+a fullscreen Looking Glass window, clicks at its edges reaching the guest,
+no ring around a fullscreen host terminal, and the ring around dev-01's
+fullscreen SPICE console. `tests/acceptance_scripts_contract.py` holds the
+script to those steps in that order.

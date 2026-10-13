@@ -14,5 +14,12 @@ ask "clicks reach the guest at the edges" "Do clicks at the screen edges reach t
 report "Now make a host terminal (foot) fullscreen."
 ask "no ring for the host" "Is there NO ring around the fullscreen host terminal?"
 screenshot "fullscreen host terminal"
+# ADR 0039 asks for the ring over a fullscreen SPICE console as well: the
+# host names that window from virt-viewer's registered surface, not from
+# Looking Glass.
+report "Leave fullscreen, close Looking Glass (the console and the client use dev-01's one SPICE server), then open dev-01's console (hyperlabctl open console dev-01) and press SUPER+F on it."
+ask "ring around the fullscreen SPICE console" "Is there a 4 px ring in dev's colour around the fullscreen console?"
+screenshot "fullscreen SPICE console with ring"
+report "Leave fullscreen and close the console."
 rollback "systemctl --user restart hyperlab-quickshell.service   (if the ring covers or flickers)"
 acceptance_end

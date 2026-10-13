@@ -888,6 +888,23 @@ def check_16_phases_run() -> None:
             f"an answer other than n was taken as a pane without Restart capture: {unclear}")
 
 
+def check_12_run() -> None:
+    # ADR 0039: the ring over a fullscreen Looking Glass window and over a
+    # fullscreen SPICE console, never over a fullscreen host window.
+    report = run_in_terminal("12-fullscreen-ring.sh", {"grim": "#!/bin/sh\nexit 1\n"}, {}, {"[y/n]": "y"})
+    steps = ["PASS  ring around the fullscreen guest (operator)",
+             "PASS  no ring for the host (operator)",
+             "hyperlabctl open console dev-01",
+             "PASS  ring around the fullscreen SPICE console (operator)",
+             "group 12-fullscreen-ring: 4 passed, 0 failed, 0 skipped"]
+    found = [report.find(step) for step in steps]
+    require(found[3] >= 0, f"12 does not check the ring over a fullscreen SPICE console: {report}")
+    require(all(f >= 0 for f in found) and found == sorted(found),
+            f"12's steps are missing or out of order: {report}")
+    require("close Looking Glass" in report[found[1]:found[2]],
+            f"12 opens the console without closing Looking Glass first: {report}")
+
+
 def check_16_runs() -> None:
     identity = load_identity()
     stale = good_probe(identity, binary="")
@@ -905,6 +922,7 @@ def check_16_runs() -> None:
 def main() -> int:
     check_sender_phases()
     check_16_phases_run()
+    check_12_run()
     check_no_hostname_command()
     check_scripts()
     check_library()
