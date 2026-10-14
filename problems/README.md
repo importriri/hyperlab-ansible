@@ -331,5 +331,7 @@ proof.
 - [`fullscreen-ring-acceptance-asked-without-the-stream.md`](fullscreen-ring-acceptance-asked-without-the-stream.md):
   group 12 asked about the ring without checking that dev-01's stream was
   live.
+- [`host-pc-speaker-beeped.md`](host-pc-speaker-beeped.md): the host's
+  internal PC speaker driver loaded at every boot and beeped.
 
 Author: [importriri](https://github.com/importriri).

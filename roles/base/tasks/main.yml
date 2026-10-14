@@ -52,6 +52,51 @@
     mode: "0644"
   notify: Reload sysctl
 
+# Blacklisting stops the next boot from loading the PC speaker drivers; the
+# loaded ones are removed now, so the beep stops without a reboot.
+- name: Blacklist the PC speaker drivers
+  ansible.builtin.copy:
+    src: hyperlab-pc-speaker.conf
+    dest: /etc/modprobe.d/hyperlab-pc-speaker.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# Only a loaded loadable module has /sys/module/NAME/initstate. rmmod needs
+# nothing else: modprobe and the modprobe module read the running kernel's
+# module tree, which Arch removes on a kernel upgrade until the next boot.
+- name: Read which PC speaker drivers are loaded
+  ansible.builtin.stat:
+    path: "/sys/module/{{ item }}/initstate"
+  loop:
+    - pcspkr
+    - snd_pcsp
+  register: base_pc_speaker_loaded
+
+# A driver still in use stays loaded until the next boot, which the
+# blacklist then covers; that is reported, not a failure.
+- name: Unload the loaded PC speaker drivers
+  ansible.builtin.command:
+    argv: [rmmod, "{{ item.item }}"]
+  loop: "{{ base_pc_speaker_loaded.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists
+  register: base_pc_speaker_unloaded
+  changed_when: base_pc_speaker_unloaded.rc == 0
+  failed_when: false
+
+- name: Report a PC speaker driver left loaded until the next boot
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.item }} could not be unloaded now
+      ({{ item.stderr | default('') | trim }}); the blacklist keeps it out
+      from the next boot.
+  loop: "{{ base_pc_speaker_unloaded.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  when: item.rc is defined and item.rc != 0
+
 - name: Enable pacman color output
   ansible.builtin.lineinfile:
     path: /etc/pacman.conf
