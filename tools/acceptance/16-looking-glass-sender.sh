@@ -10,7 +10,6 @@ export ACCEPTANCE_GROUP=16-looking-glass-sender
 source "$(dirname "$0")/lib.sh"
 acceptance_start
 
-HYPERLABCTL=${HYPERLABCTL:-$ACCEPTANCE_REPO/tools/hyperlabctl/bin/hyperlabctl}
 IDENTITY="$ACCEPTANCE_REPO/tools/acceptance/sender_identity.py"
 PHASES="$ACCEPTANCE_REPO/tools/acceptance/sender_phases.py"
 # The still phase is timed here; the judge refuses one shorter than 5
@@ -44,29 +43,6 @@ pid_now() {
     probe 2>/dev/null | sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' | head -n 1
 }
 
-# health_ok [SECONDS]: PASS only on the word "ok", within SECONDS (30 by
-# default). "idle" means no Looking Glass client is subscribed to the sender,
-# which then logs Capture Stop and waits; the client meanwhile shows dev-01's
-# SPICE display, which looks like the stream. A failure says so.
-health_ok() {
-    local answer limit=${1:-30} waited=0
-    while :; do
-        answer=$("$HYPERLABCTL" --json looking-glass health dev-01 2>&1)
-        if grep -q '"health":"ok"' <<<"$answer"; then
-            printf '%s\n' "$answer"
-            return 0
-        fi
-        (( waited >= limit )) && break
-        sleep 5
-        waited=$((waited + 5))
-    done
-    printf '%s\n' "$answer"
-    if grep -q '"health":"idle"' <<<"$answer"; then
-        printf '%s\n' "$NO_CLIENT"
-    fi
-    return 1
-}
-NO_CLIENT="no Looking Glass client is connected to dev-01's sender (health idle: its log ends with Capture Stop); a window showing dev-01 is the client's SPICE display, not the stream"
 backup "sender before" probe
 rollback "the role keys the build on the patch digests: rebuild from the previous commit with the same playbook"
 started=$(date +%s)

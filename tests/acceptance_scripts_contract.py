@@ -432,13 +432,14 @@ def check_sender_identity() -> None:
     require("/proc/$pid/exe" in probe and "\necho\n" in probe, "the probe does not read the running binary or "
             "end the stamp's last line")
 
-    script = (DIR / "16-looking-glass-sender.sh").read_text()
-    for line in script.splitlines():
-        if re.match(r'\s*(check|expect)\s+"[^"]*health', line):
-            require("health_ok" in line, f"16 judges health without the word: {line.strip()}")
-        if re.match(r'\s*(if\s+)?(check|expect)\s', line) and "looking-glass health" in line:
-            raise AssertionError(f"16 passes the health command on its exit code: {line.strip()}")
-    require('grep -q \'"health":"ok"\'' in script, "health_ok does not look for the word ok")
+    for group in ("12-fullscreen-ring.sh", "16-looking-glass-sender.sh"):
+        script = (DIR / group).read_text()
+        for line in script.splitlines():
+            if re.match(r'\s*(if\s+!?\s*)?(check|expect)\s+"[^"]*health', line):
+                require("health_ok" in line, f"{group} judges health without the word: {line.strip()}")
+            if re.match(r'\s*(if\s+)?(check|expect)\s', line) and "looking-glass health" in line:
+                raise AssertionError(f"{group} passes the health command on its exit code: {line.strip()}")
+    require('grep -q \'"health":"ok"\'' in (DIR / "lib.sh").read_text(), "health_ok does not look for the word ok")
 
 
 FAKE_ANSIBLE = r"""#!/bin/sh
@@ -891,18 +892,50 @@ def check_16_phases_run() -> None:
 def check_12_run() -> None:
     # ADR 0039: the ring over a fullscreen Looking Glass window and over a
     # fullscreen SPICE console, never over a fullscreen host window.
-    report = run_in_terminal("12-fullscreen-ring.sh", {"grim": "#!/bin/sh\nexit 1\n"}, {}, {"[y/n]": "y"})
+    report = run_12(FAKE_HYPERLABCTL_OK)[0]
     steps = ["PASS  ring around the fullscreen guest (operator)",
              "PASS  no ring for the host (operator)",
              "hyperlabctl open console dev-01",
              "PASS  ring around the fullscreen SPICE console (operator)",
-             "group 12-fullscreen-ring: 4 passed, 0 failed, 0 skipped"]
+             "group 12-fullscreen-ring: 5 passed, 0 failed, 0 skipped"]
+    stream = report.find("PASS  health is ok before the ring checks")
+    require(0 <= stream < report.find("(operator)"),
+            f"12 asks about the ring before dev-01's stream is healthy: {report}")
     found = [report.find(step) for step in steps]
     require(found[3] >= 0, f"12 does not check the ring over a fullscreen SPICE console: {report}")
     require(all(f >= 0 for f in found) and found == sorted(found),
             f"12's steps are missing or out of order: {report}")
     require("close Looking Glass" in report[found[1]:found[2]],
             f"12 opens the console without closing Looking Glass first: {report}")
+
+    # As group 16 (problems/looking-glass-acceptance-asked-before-the-stream.md):
+    # with no client on the sender the window shows dev-01's SPICE display.
+    idle, (calls, slept) = run_12(FAKE_HYPERLABCTL_IDLE)
+    require("FAIL  health is ok before the ring checks" in idle and "(operator)" not in idle
+            and "STOPPED" in idle and "no Looking Glass client is connected to dev-01's sender" in idle,
+            f"12 asked the operator with dev-01's stream idle: {idle}")
+    require(calls == 13 and sum(int(s) for s in slept) == 60,
+            f"12 did not wait 60 s for health ok ({calls} answers, slept {slept})")
+
+
+def run_12(hyperlabctl: str) -> tuple[str, tuple[int, list[str]]]:
+    """Group 12 against fake tools, answering yes; with how many times it
+    asked for the health and what it asked sleep for."""
+    calls = Path(tempfile.mkdtemp())
+    try:
+        report = run_in_terminal(
+            "12-fullscreen-ring.sh",
+            {"grim": "#!/bin/sh\nexit 1\n",
+             "hyperlabctl": hyperlabctl.replace('"$FAKE_DIR/health-calls"', f'"{calls}/health-calls"'),
+             "sleep": FAKE_SLEEP.replace('"$FAKE_DIR/slept"', f'"{calls}/slept"')},
+            {}, {"[y/n]": "y"}, {"HYPERLABCTL": "hyperlabctl"})
+        health = (calls / "health-calls").read_text().count("x") if (calls / "health-calls").exists() else 0
+        slept = (calls / "slept").read_text().split() if (calls / "slept").exists() else []
+    finally:
+        for leftover in calls.iterdir():
+            leftover.unlink()
+        calls.rmdir()
+    return report, (health, slept)
 
 
 def check_16_runs() -> None:

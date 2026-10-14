@@ -328,5 +328,8 @@ proof.
 - [`host-arrow-keys-were-never-bound.md`](host-arrow-keys-were-never-bound.md):
   the host bound focus and moves to H J K L only, so SUPER with an arrow
   did nothing.
+- [`fullscreen-ring-acceptance-asked-without-the-stream.md`](fullscreen-ring-acceptance-asked-without-the-stream.md):
+  group 12 asked about the ring without checking that dev-01's stream was
+  live.
 
 Author: [importriri](https://github.com/importriri).

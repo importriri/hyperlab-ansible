@@ -28,6 +28,7 @@ PASSES=0
 FAILS=0
 SKIPS=0
 UNAVAILABLE=0
+HYPERLABCTL=${HYPERLABCTL:-$ACCEPTANCE_REPO/tools/hyperlabctl/bin/hyperlabctl}
 _become=""
 _nopasswd=0
 _runtime=""
@@ -306,6 +307,31 @@ offered() {
     report "FAIL  $name (operator: neither y nor n)"
     return 2
 }
+
+# health_ok [SECONDS]: dev-01's Looking Glass stream, for the groups that
+# look at dev-01 through it (12, 16). PASS only on the word "ok", within
+# SECONDS (30 by default). "idle" means no Looking Glass client is subscribed to the sender,
+# which then logs Capture Stop and waits; the client meanwhile shows dev-01's
+# SPICE display, which looks like the stream. A failure says so.
+health_ok() {
+    local answer limit=${1:-30} waited=0
+    while :; do
+        answer=$("$HYPERLABCTL" --json looking-glass health dev-01 2>&1)
+        if grep -q '"health":"ok"' <<<"$answer"; then
+            printf '%s\n' "$answer"
+            return 0
+        fi
+        (( waited >= limit )) && break
+        sleep 5
+        waited=$((waited + 5))
+    done
+    printf '%s\n' "$answer"
+    if grep -q '"health":"idle"' <<<"$answer"; then
+        printf '%s\n' "$NO_CLIENT"
+    fi
+    return 1
+}
+NO_CLIENT="no Looking Glass client is connected to dev-01's sender (health idle: its log ends with Capture Stop); a window showing dev-01 is the client's SPICE display, not the stream"
 
 acceptance_end() {
     local unavailable=""
