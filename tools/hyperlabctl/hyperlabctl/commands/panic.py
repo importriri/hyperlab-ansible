@@ -286,12 +286,16 @@ def restore(ctx, environ, confirm):
     for domain in sorted(record["domains"]):
         entry = record["domains"][domain]
         state = domain_state(ctx, domain)
-        if state not in ("running", "paused"):
-            # Gone, shut off or crashed: its live link state went with it and
+        if state in ("shut off", "crashed"):
+            # Shut off or crashed: its live link state went with it and
             # there is nothing to resume.
             notes.append("%s is %s now; nothing restored for it"
                          % (domain, state or "no longer defined"))
             del record["domains"][domain]
+            continue
+        if state not in ("running", "paused"):
+            failures.append("%s: its state is %s; keeping its emergency stop record for retry"
+                            % (domain, state or "unavailable"))
             continue
         for link in list(entry["links_down"]):
             result = _virsh(ctx, "domif-setlink", domain, link["mac"], "up")

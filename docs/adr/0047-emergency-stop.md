@@ -42,10 +42,13 @@ output then says Restore cannot undo that press
 `hyperlabctl panic restore --confirm` sets up the links the record set down,
 then resumes the domains the record paused, and removes the record; without
 `--confirm` it refuses. A Machine the operator had paused before the stop
-stays paused, and one that was shut off was never touched. A domain that is
-gone or shut off by restore time is skipped with a note: link changes are
-live only, so it comes back with the links its definition has. What could not
-be restored stays recorded, and restoring again retries only that.
+stays paused, and one that was shut off was never touched. A domain confirmed
+shut off or crashed by restore time is skipped with a note: link changes are
+live only, so it comes back with the links its definition has. A failed state
+query does not prove a domain is gone: unavailable, unknown and transitional
+states remain recorded, report failure and leave that domain untouched for
+retry. What could not be restored stays recorded, and restoring again retries
+only that.
 
 The host key is `SUPER+SHIFT+Escape` in the Hyprland session (proposed; the
 test plan also proposes `SUPER+SHIFT+Pause` if Nitro has the key). While a

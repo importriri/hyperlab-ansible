@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`emergency-restore-forgot-unreadable-domains.md`](emergency-restore-forgot-unreadable-domains.md):
+  Restore discarded a paused Machine's record after a failed state query;
+  unknown state now reports failure and remains recorded for retry.
 - [`vault-dialog-failure-granted-consent.md`](vault-dialog-failure-granted-consent.md):
   a failed vault dialog could turn an allow button on standard output into
   consent; the host now rejects every nonzero dialog exit status.

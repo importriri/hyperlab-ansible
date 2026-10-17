@@ -249,6 +249,55 @@ def test_panic_restore_keeps_what_it_could_not_restore():
     equals("panic_retry_disengaged", payload["engaged"], False)
 
 
+def test_panic_restore_keeps_a_domain_whose_state_cannot_be_read():
+    domains = _world()
+    runner = FakeVirsh(domains)
+    runtime = _runtime()
+    ctx = _ctx(runner, runtime)
+    _cli(ctx, "engage")
+    runner.fail = {("domstate", "dev-01")}
+    runner.calls.clear()
+
+    code, payload = _cli(ctx, "restore", "--confirm")
+    equals("panic_unknown_state_exit", code, 1)
+    if code != 1:
+        return
+    equals("panic_unknown_state_record", sorted(payload["record"]["domains"]), ["dev-01"])
+    check("panic_unknown_state_reported", any("dev-01" in failure and "state" in failure
+                                            for failure in payload["failures"]))
+    check("panic_unknown_state_untouched", all(call[1] != "dev-01" for call in _mutations(runner)))
+    equals("panic_unknown_state_stays_paused", domains["dev-01"]["state"], "paused")
+    check("panic_unknown_state_record_on_disk", panic.read_record(ctx.environ)["domains"]["dev-01"]["paused"])
+
+    runner.fail.clear()
+    code, payload = _cli(ctx, "restore", "--confirm")
+    equals("panic_unknown_state_retry_exit", code, 0)
+    equals("panic_unknown_state_retry_resumed", domains["dev-01"]["state"], "running")
+    check("panic_unknown_state_retry_reconnected", all(link[1] == "up"
+                                                      for link in domains["dev-01"]["links"].values()))
+    equals("panic_unknown_state_retry_disengaged", payload["engaged"], False)
+
+
+def test_panic_restore_keeps_unconfirmed_inactive_states():
+    for state in ("unknown", "in shutdown", "pmsuspended"):
+        domains = _world()
+        runner = FakeVirsh(domains)
+        ctx = _ctx(runner, _runtime())
+        _cli(ctx, "engage")
+        domains["dev-01"]["state"] = state
+        runner.calls.clear()
+
+        code, payload = _cli(ctx, "restore", "--confirm")
+        equals("panic_%s_state_exit" % state, code, 1)
+        if code != 1:
+            continue
+        equals("panic_%s_state_retained" % state, sorted(payload["record"]["domains"]), ["dev-01"])
+        check("panic_%s_state_untouched" % state, all(call[1] != "dev-01" for call in _mutations(runner)))
+        domains["dev-01"]["state"] = "paused"
+        code, payload = _cli(ctx, "restore", "--confirm")
+        equals("panic_%s_state_retry" % state, (code, payload["engaged"]), (0, False))
+
+
 def test_panic_restore_without_confirm_is_refused():
     domains = _world()
     runner = FakeVirsh(domains)
