@@ -37,6 +37,8 @@ def answer(argv: list[str], run=subprocess.run) -> str:
                      capture_output=True, text=True, check=False)
     except OSError:
         return "deny"
+    if result.returncode != 0:
+        return "deny"
     return BUTTONS.get(result.stdout.strip(), "deny")
 
 

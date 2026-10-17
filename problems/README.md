@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`vault-dialog-failure-granted-consent.md`](vault-dialog-failure-granted-consent.md):
+  a failed vault dialog could turn an allow button on standard output into
+  consent; the host now rejects every nonzero dialog exit status.
 - [`ansible-group-vars-outside-repo.md`](ansible-group-vars-outside-repo.md): a
   test playbook in `/tmp` lost repository `group_vars`.
 - [`hyprland-nvidia-headless-output.md`](hyprland-nvidia-headless-output.md):

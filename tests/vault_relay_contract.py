@@ -228,6 +228,14 @@ def main() -> int:
             "the comment reached the dialog as markup or with control characters")
     require(confirm_module.answer(["dev-01"], run=fake_dialog) == "deny", "a malformed call was not refused")
 
+    for code in (1, -15):
+        for button in ("Allow once", "Allow 5 minutes"):
+            def failed_dialog(argv, *, output=button, status=code, **_):
+                return SimpleNamespace(stdout=output + "\n", returncode=status)
+
+            require(confirm_module.answer(["dev-01", "SHA256:x", "c"], run=failed_dialog) == "deny",
+                    f"a failed dialog (exit {code}) authorized {button!r}")
+
     def missing_dialog(argv, **_):
         raise FileNotFoundError(argv[0])
 
