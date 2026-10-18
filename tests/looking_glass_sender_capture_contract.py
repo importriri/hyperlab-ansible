@@ -27,7 +27,9 @@ the portal and the stream's buffers replaced by small fakes:
   5. silence: 61 s without a frame while streaming is not a failure (a
      still desktop probably sends none); the capture times out and never restarts;
   6. failures: a stream in ERROR, a stream that lost its node
-     (UNCONNECTED) and a core error each restart the capture.
+     (UNCONNECTED) and a core error each restart the capture;
+  7. the same failures before the initial format end initialization instead
+     of leaving it waiting forever.
 """
 
 from __future__ import annotations
@@ -446,6 +448,59 @@ static int runFailure(struct spa_loop * loop, bool async, uint32_t seq,
   return 0;
 }
 
+// Execute the exact initialization tail from the shipped patch, with the
+// real loop already running and the portal/stream setup supplied by streaming().
+static bool initialWait(void)
+{
+@INITIAL_WAIT@
+
+static int initialFormat(void)
+{
+  streaming();
+  pw_thread_loop_lock(this->threadLoop);
+  this->hasFormat = false;
+  pthread_t producer;
+  pthread_create(&producer, NULL, deliverFormat, NULL);
+  const bool initialized = initialWait();
+  pthread_join(producer, NULL);
+  pipewire_stop();
+  pipewire_deinit();
+  pipewire_free();
+  if (!initialized)
+    return 1;
+  printf("initial format is accepted\n");
+  return 0;
+}
+
+static void * failBeforeFormat(void * opaque)
+{
+  usleep(100 * 1000);
+  pw_loop_invoke(pw_thread_loop_get_loop(this->threadLoop), runFailure, 0,
+      opaque, sizeof(int), true, NULL);
+  return NULL;
+}
+
+static int initialFailure(int kind)
+{
+  streaming();
+  pw_thread_loop_lock(this->threadLoop);
+  this->hasFormat = false;
+  pthread_t producer;
+  pthread_create(&producer, NULL, failBeforeFormat, &kind);
+  // Like pipewire_init, initialWait enters with the loop lock held and
+  // must release it on both outcomes. A failure must end initialization.
+  const bool initialized = initialWait();
+  pthread_join(producer, NULL);
+  if (initialized)
+  {
+    printf("initialization accepted a failure before the first format\n");
+    return 1;
+  }
+  pipewire_free();
+  printf("initial failure ends initialization\n");
+  return 0;
+}
+
 // Each failure the stream or the core reports, from the PipeWire thread,
 // restarts the capture.
 static int failures(void)
@@ -472,6 +527,10 @@ static int failures(void)
 
 int main(int argc, char ** argv)
 {
+  if (argc == 2 && !strcmp(argv[1], "initial-format"))
+    return initialFormat();
+  if (argc == 2 && !strncmp(argv[1], "initial-failure-", 16))
+    return initialFailure(atoi(argv[1] + 16));
   if (argc == 2 && !strcmp(argv[1], "silence"))
     return silence();
   if (argc == 2 && !strcmp(argv[1], "failures"))
@@ -525,7 +584,9 @@ def main() -> int:
             (directory / name).parent.mkdir(parents=True, exist_ok=True)
             (directory / name).write_text(text)
         (directory / "pipewire.c").write_text(source)
-        (directory / "harness.c").write_text(HARNESS)
+        initial_tail = source[source.index("  while (!this->hasFormat"):
+                              source.index("\nstatic void pipewire_stop")]
+        (directory / "harness.c").write_text(HARNESS.replace("@INITIAL_WAIT@", initial_tail))
         binary = directory / "harness"
         built = subprocess.run(
             ["gcc", "-std=gnu11", "-Wall", "-Werror", "-Wno-unused-function",
@@ -534,7 +595,11 @@ def main() -> int:
              *pkg_config("--libs"), "-lpthread"],
             capture_output=True, text=True, check=False)
         require(built.returncode == 0, f"the patched pipewire.c did not build:\n{built.stderr}")
-        for scenario, expected in (("teardown", "teardown finished"),
+        for scenario, expected in (("initial-format", "initial format is accepted"),
+                                   ("initial-failure-0", "initial failure ends initialization"),
+                                   ("initial-failure-1", "initial failure ends initialization"),
+                                   ("initial-failure-2", "initial failure ends initialization"),
+                                   ("teardown", "teardown finished"),
                                    ("late-format", "a late format does not wait"),
                                    ("flow", "flowing 3"),
                                    ("missed-wakeup", "a frame handed over between captures is taken"),
@@ -542,7 +607,8 @@ def main() -> int:
                                    ("failures", "every failure restarts the capture")):
             try:
                 run = subprocess.run([str(binary), scenario], capture_output=True, text=True,
-                                     timeout=60, check=False)
+                                     timeout=5 if scenario.startswith("initial-failure-") else 60,
+                                     check=False)
             except subprocess.TimeoutExpired:
                 raise AssertionError(f"{scenario}: the harness itself hung") from None
             lines = run.stdout.strip().splitlines()

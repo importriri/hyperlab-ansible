@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`looking-glass-initial-format-failure-hung.md`](looking-glass-initial-format-failure-hung.md):
+  a stream or core failure before the first format left sender initialization
+  waiting forever; initialization now returns failure through cleanup.
 - [`emergency-restore-forgot-unreadable-domains.md`](emergency-restore-forgot-unreadable-domains.md):
   Restore discarded a paused Machine's record after a failed state query;
   unknown state now reports failure and remains recorded for retry.

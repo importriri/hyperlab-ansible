@@ -2,7 +2,7 @@ diff --git a/host/platform/Linux/capture/pipewire/src/pipewire.c b/host/platform
 index de0211de..550ef31d 100644
 --- a/host/platform/Linux/capture/pipewire/src/pipewire.c
 +++ b/host/platform/Linux/capture/pipewire/src/pipewire.c
-@@ -1,493 +1,678 @@
+@@ -1,493 +1,685 @@
  /**
   * Looking Glass
   * Copyright © 2017-2026 The Looking Glass Authors
@@ -466,9 +466,17 @@ index de0211de..550ef31d 100644
  
 -  pw_thread_loop_unlock(this->threadLoop);
 -
-   while (!this->hasFormat)
+-  while (!this->hasFormat)
++  while (!this->hasFormat && !this->streamFailed && !this->stop)
      pw_thread_loop_wait(this->threadLoop);
  
++  if (this->streamFailed || this->stop)
++  {
++    DEBUG_ERROR("The PipeWire capture failed before its initial format");
++    pw_thread_loop_unlock(this->threadLoop);
++    goto fail;
++  }
++
    if (this->format < 0)
    {
      DEBUG_ERROR("Unknown frame format");

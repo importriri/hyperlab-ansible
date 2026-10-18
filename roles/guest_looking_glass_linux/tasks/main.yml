@@ -341,7 +341,7 @@
                 guest_looking_glass_linux_runtime_patch_sha256
             fail_msg: >-
               The staged PipeWire runtime patch differs from the bytes
-              validated by the Nitro runtime stress campaign.
+              pinned by this repository. Hardware acceptance is separate.
 
         - name: Require the compatibility patch to match the pinned source
           ansible.builtin.command:

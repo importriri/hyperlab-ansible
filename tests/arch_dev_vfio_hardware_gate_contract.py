@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import subprocess
 import sys
@@ -367,7 +368,9 @@ def main() -> int:
         "/dev/kvmfr0",
         "0.0.12",
         "39b1c54d437fbb8729b19ded778477b57bd005da679fdce07b59c9a37e923ec2",
-        "e8e7566763c3933f42ae6d2abbb85c069fc914a8449ae74d3501052b60195fb2",
+        hashlib.sha256(
+            (ROOT / "roles/guest_looking_glass_linux/files/pipewire-thread-loop-runtime.patch").read_bytes()
+        ).hexdigest(),
     )
     assert guest_module.load_expected_portal(ROOT) == (
         "HEADLESS-0",
