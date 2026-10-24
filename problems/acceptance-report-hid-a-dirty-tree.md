@@ -1,10 +1,10 @@
 # The acceptance report named a commit while the checkout differed from it
 
 Seen on 2026-10-06 in group 7 (`07-network-isolation-172348`): the report
-said `repository 223473b`, while the operator's prompt showed
-`main [+⇡]`, staged changes in the checkout the run came from. The exact
-tree that ran is not known; that run's evidence is the loaded ruleset and
-the kernel's counters.
+said `repository 223473b` (the commit published as `02ff09e`), while
+the operator's prompt showed `main [+⇡]`, staged changes in the checkout
+the run came from. The exact tree that ran is not known; that run's
+evidence is the loaded ruleset and the kernel's counters.
 
 ## Cause
 

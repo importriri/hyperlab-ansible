@@ -8,7 +8,7 @@ Shut down, Reboot guest and Force stop, and no Restart capture.
 
 ## What happened
 
-- The pane's Restart capture came with ADR 0045 (commit 7257327,
+- The pane's Restart capture came with ADR 0045 (commit 21a1f9b,
   2026-10-05). On Nitro the installed shell is older:
   `/etc/xdg/quickshell/hyperlab` dates from 2026-10-04 and
   `/usr/local/bin/privatestack-machine-actions` from 2026-09-27, and
