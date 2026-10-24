@@ -46,7 +46,7 @@
 # cannot change it, so a fixed 0644 is a change on every run
 # (problems/vfio-boot-modes-on-vfat-esp.md). Ask for the mode the files will
 # read; the tool refuses a mount it cannot decide or one that lets a user
-# other than root write a boot entry.
+# other than root write a boot entry or create one in a boot directory.
 - name: Read the mount of every directory the boot files go into
   ansible.builtin.command:
     argv:
@@ -78,6 +78,15 @@
 - name: Pin the boot files' mode
   ansible.builtin.set_fact:
     vfio_boot_loader_file_mode: "{{ vfio_boot_esp_mode.stdout }}"
+
+- name: Refuse a boot file mode that is not a 0NNN string
+  ansible.builtin.assert:
+    that:
+      - vfio_boot_loader_file_mode is string
+      - vfio_boot_loader_file_mode is match('^0[0-7]{3}$')
+    fail_msg: >-
+      tools/esp_file_mode.py answered {{ vfio_boot_loader_file_mode }}, not a
+      mode such as 0755. Refusing to write under /boot.
 
 - name: Install the boot profiles
   ansible.builtin.template:

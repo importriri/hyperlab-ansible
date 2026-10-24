@@ -679,6 +679,14 @@ real resize.
   its files read".
 - Break: drop the group-or-others write refusal in `decide()`.
   Red: "the tool accepted fmask=0000, which lets everyone write a boot entry".
+- Break: drop the dmask refusal in `vfat_mode()`.
+  Red: "the tool accepted dmask=0000, which lets everyone create or replace
+  a boot entry".
+- Break: take dmask as 0022 when the vfat mount does not show one.
+  Red: "the tool accepted a vfat mount without dmask".
+- Break: remove `vfio_boot_loader_file_mode is string` from the role's
+  shape assertion.
+  Red: "vfio_boot does not refuse a decided mode that is not a 0NNN string".
 - Break: accept any `uid`/`gid` in `vfat_mode()`.
   Red: "the tool accepted a vfat mount whose files belong to uid 1000, not root".
 - Break: remove `/boot/loader` from the findmnt loop.

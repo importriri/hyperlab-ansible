@@ -9,7 +9,8 @@ Nitro, whose ESP gives 0755. The role now reads the mount of every /boot
 directory it writes into with findmnt, and tools/esp_file_mode.py decides
 the mode: the one vfat gives, or the role's 0644 on a filesystem that keeps
 modes. Anything it cannot decide, or a mount that lets anyone but root
-write a boot entry, is a refusal.
+write a boot entry or create one in a boot directory (dmask), is a
+refusal.
 
 This contract runs the tool on findmnt documents (the first is the Nitro's
 real one) and reads the role's tasks.
@@ -81,12 +82,20 @@ def check_tool() -> None:
     refused(json.dumps([findmnt("vfat", "rw,fmask=0002,dmask=0022")]), "fmask=0002 (others write)")
     refused(json.dumps([findmnt("vfat", "rw,fmask=0020,dmask=0022")]), "fmask=0020 (group writes)")
     refused(json.dumps([findmnt("vfat", "rw,relatime,dmask=0022")]), "a vfat mount without fmask")
-    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,fmask=0133")]), "a duplicated fmask")
-    refused(json.dumps([findmnt("vfat", "rw,fmask=0x22")]), "a fmask that is not octal")
-    refused(json.dumps([findmnt("vfat", "rw,fmask=01022")]), "a fmask beyond the permission bits")
-    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,uid=1000")]),
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,fmask=0133,dmask=0022")]), "a duplicated fmask")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0x22,dmask=0022")]), "a fmask that is not octal")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=01022,dmask=0022")]), "a fmask beyond the permission bits")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0000")]),
+            "dmask=0000, which lets everyone create or replace a boot entry")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0002")]), "dmask=0002 (others write)")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0020")]), "dmask=0020 (group writes)")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022")]), "a vfat mount without dmask")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0022,dmask=0077")]), "a duplicated dmask")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0x22")]), "a dmask that is not octal")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=01022")]), "a dmask beyond the permission bits")
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0022,uid=1000")]),
             "a vfat mount whose files belong to uid 1000, not root")
-    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,gid=100")]),
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0022,dmask=0022,gid=100")]),
             "a vfat mount whose files belong to gid 100, not root")
     for fstype in ("exfat", "ntfs3", "msdos", "nfs4", ""):
         refused(json.dumps([findmnt(fstype, "rw,fmask=0022")]), f"fstype {fstype!r}")
@@ -173,8 +182,13 @@ def check_role() -> None:
     require(len(publish) == 1 and tasks[publish[0]]["ansible.builtin.set_fact"]["vfio_boot_loader_file_mode"]
             == "{{ %s.stdout }}" % decide_task["register"],
             "vfio_boot_loader_file_mode is not the tool's answer")
+    shape = [i for i, task in enumerate(tasks)
+             if "ansible.builtin.assert" in task
+             and module_args(task).get("that") == ["vfio_boot_loader_file_mode is string",
+                                                    "vfio_boot_loader_file_mode is match('^0[0-7]{3}$')"]]
+    require(len(shape) == 1, "vfio_boot does not refuse a decided mode that is not a 0NNN string")
     first_write = min(index for index, _ in writers)
-    require(read[0] < decide[0] < publish[0] < first_write,
+    require(read[0] < decide[0] < publish[0] < shape[0] < first_write,
             "the mode is decided after '%s' writes under /boot" % names[first_write])
 
 

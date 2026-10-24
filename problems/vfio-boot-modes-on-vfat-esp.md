@@ -22,7 +22,11 @@ Acceptance group 7 on 2026-10-06 had also ended its foundation apply with
 arch-bootstrap mounts the ESP on `/boot` as vfat. FAT stores no Unix
 permissions: Linux gives every file the mode `0777` without the mount's
 `fmask` bits, and without the execute bits under `showexec`, and a chmod
-to another mode does not change it. Nitro's `findmnt -T /boot` shows
+to another mode does not change it. The one exception is the DOS read-only
+attribute: such a file reads without its write bits, and a chmod that gives
+back every write bit the mount allows clears the attribute (the kernel's
+`fat_sanitize_mode` and `fat_make_attrs`). A boot file carrying it changes
+once, on the first apply, and not after. Nitro's `findmnt -T /boot` shows
 `fmask=0022`, so every file reads `0755`, and the role asked for `0644`
 on every run.
 
@@ -41,9 +45,14 @@ boot files are written with:
   `vfio_boot_file_mode` (`0644`);
 - a refusal for anything else: another filesystem type, the two
   directories on different mounts or options, a vfat mount without one
-  `fmask`, files owned by a uid or gid other than root's, a mode that lets
-  group or others write a boot entry, or a findmnt answer that is not one
+  `fmask` and one `dmask`, a `dmask` that lets group or others write a
+  boot directory (and so create, remove or replace a boot entry), files
+  owned by a uid or gid other than root's, a mode that lets group or
+  others write a boot entry, or a findmnt answer that is not one
   filesystem.
+
+The role then asserts that the answer is a `0NNN` string before the first
+write under `/boot`, so no other value reaches a `mode:` argument.
 
 The mode is not loosened: on Nitro the files already read `0755`, and the
 role now only stops asking for what the mount cannot give. A mount that
@@ -54,10 +63,12 @@ role before it writes anything under `/boot`.
 
 `tests/vfio_boot_esp_mode_contract.py` runs the tool on findmnt documents,
 the first being Nitro's real one (`0755`), with the other vfat masks,
-`showexec`, the filesystems that keep modes and every refusal above. It
-requires every `vfio_boot` task that writes under `/boot` with a mode to
-use the decided one, findmnt on exactly the directories those tasks write
-into, both reads in check mode and before the first write. Against the
+`showexec`, the filesystems that keep modes and every refusal above,
+`dmask=0000`, `0002`, `0020` and a missing `dmask` among them. It requires
+every `vfio_boot` task that writes under `/boot` with a mode to use the
+decided one, findmnt on exactly the directories those tasks write into,
+both reads in check mode, and the reads and the shape assertion before the
+first write. Against the
 previous role: `the mode wanted where the filesystem keeps modes is not
 0644`, and with the defaults in place: `'Install the boot profiles' writes
 /boot/loader/entries/{{ item.file }} with a fixed mode '0644', not the one
