@@ -58,6 +58,7 @@ import os
 import pty
 import re
 import select
+import shlex
 import stat
 import time
 import subprocess
@@ -159,7 +160,10 @@ def check_library() -> None:
 
 def check_library_runs() -> None:
     secrets = ["password=hunter2", "-----BEGIN OPENSSH PRIVATE KEY-----", "b3BlbnNzaC1rZXk",
-               "-----END OPENSSH PRIVATE KEY-----", "$6$salt$hashhashhash", "BECOME password: hunter3"]
+               "-----END OPENSSH PRIVATE KEY-----", "$6$salt$hashhashhash", "BECOME password: hunter3",
+               'passphrase: "SYNTHETIC_FIRST SYNTHETIC_LAST"',
+               "password='SYNTHETIC_FIRST SYNTHETIC_LAST'",
+               r'api_key="SYNTHETIC_FIRST \" SYNTHETIC_LAST"']
     with tempfile.TemporaryDirectory() as td:
         script = f"""
 ACCEPTANCE_GROUP=contract
@@ -168,7 +172,7 @@ source {LIB}
 acceptance_start 2>/dev/null
 check "passes" true 2>/dev/null
 check "fails" false 2>/dev/null
-check "leaks" printf '%s\\n' {' '.join(repr(s) for s in secrets)} 2>/dev/null
+check "leaks" printf '%s\\n' {' '.join(shlex.quote(s) for s in secrets)} 2>/dev/null
 acceptance_end 2>/dev/null
 echo "rc=$?"
 echo "evidence=$EVIDENCE"
@@ -185,7 +189,7 @@ echo "evidence=$EVIDENCE"
         require(f"group contract on {host} at " in report, f"the report does not name the host: {report}")
         require("command not found" not in result.stderr, f"lib.sh ran a missing command: {result.stderr}")
         logged = (evidence / "leaks.log").read_text()
-        for secret in ("hunter2", "b3BlbnNzaC1rZXk", "hashhashhash", "hunter3"):
+        for secret in ("hunter2", "b3BlbnNzaC1rZXk", "hashhashhash", "hunter3", "SYNTHETIC_FIRST", "SYNTHETIC_LAST"):
             require(secret not in logged, f"the log kept {secret}: {logged}")
 
 
@@ -324,6 +328,17 @@ def check_dirty_header() -> None:
         repo = Path(td) / "repo"
         (repo / "tools/acceptance").mkdir(parents=True)
         (repo / "tools/acceptance/lib.sh").write_text(LIB.read_text())
+        # The synthetic checkout must include the helper's actual Python
+        # dependency too; exercise redaction instead of replacing it with a fake.
+        package = subprocess.run(
+            ["git", "ls-files", "-z", "--", "tools/hyperlabctl/hyperlabctl"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        )
+        for relative in package.stdout.split("\0"):
+            if relative.endswith(".py"):
+                target = repo / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
         (repo / "notes.txt").write_text("one\n")
         git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
         subprocess.run([*git, "init", "-q"], check=True)

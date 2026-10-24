@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`diagnostics-redaction-retained-secret-fragments.md`](diagnostics-redaction-retained-secret-fragments.md):
+  quoted secret suffixes and a PEM body survived redaction; complete inputs
+  are now redacted before truncation and acceptance shares the redactor.
 - [`looking-glass-initial-format-failure-hung.md`](looking-glass-initial-format-failure-hung.md):
   a stream or core failure before the first format left sender initialization
   waiting forever; initialization now returns failure through cleanup.

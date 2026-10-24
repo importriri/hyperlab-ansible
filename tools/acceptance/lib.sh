@@ -82,12 +82,14 @@ report() {
 }
 
 redact() {
-    # shellcheck disable=SC2016  # the $ in the hash pattern is literal
-    sed -E \
-        -e '/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/,/-----END [A-Z0-9 ]*PRIVATE KEY-----/c\[private key redacted]' \
-        -e 's/((password|passwd|passphrase|secret|token|api[_-]?key)["]?[[:space:]]*[:=][[:space:]]*["]?)[^[:space:]"]+/\1[redacted]/gI' \
-        -e 's/\$(1|2[abxy]|5|6|7|y|gy)\$[^[:space:]:"]+/[password hash redacted]/g' \
-        -e 's/(BECOME|SUDO) password:.*/\1 password: [redacted]/I'
+    # Use the archive's redactor too: PRIVATE KEY blocks, quoted password
+    # assignments and hashes must be removed completely, not word by word.
+    python3 -I -B -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from hyperlabctl.commands.diagnostics import redact
+sys.stdout.write(redact(sys.stdin.read())[0])
+' "$ACCEPTANCE_REPO/tools/hyperlabctl"
 }
 
 slug() {
