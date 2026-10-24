@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`vfio-boot-modes-on-vfat-esp.md`](vfio-boot-modes-on-vfat-esp.md):
+  vfio_boot asked for 0644 on the vfat ESP, whose mount gives 0755, so
+  every apply on Nitro changed the boot entries; the mount now decides.
 - [`diagnostics-redaction-retained-secret-fragments.md`](diagnostics-redaction-retained-secret-fragments.md):
   quoted secret suffixes and a PEM body survived redaction; complete inputs
   are now redacted before truncation and acceptance shares the redactor.

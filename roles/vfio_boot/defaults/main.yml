@@ -1,4 +1,13 @@
 ---
+# The mode of the boot entries and loader.conf where the filesystem keeps
+# modes. On the vfat ESP the mount decides it instead, through
+# tools/esp_file_mode.py (problems/vfio-boot-modes-on-vfat-esp.md).
+vfio_boot_file_mode: "0644"
+vfio_boot_repository_root: "{{ playbook_dir | dirname }}"
+vfio_boot_mode_tool: "{{ (vfio_boot_repository_root, 'tools/esp_file_mode.py') | path_join }}"
+vfio_boot_python_bin: /usr/bin/python
+vfio_boot_findmnt_bin: /usr/bin/findmnt
+
 # The four boot profiles, ONE options line per logical group.
 #
 # Option groups are verbatim from arch-hypervisor-lab/configs/boot (the

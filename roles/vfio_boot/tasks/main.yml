@@ -42,13 +42,50 @@
   ansible.builtin.set_fact:
     vfio_boot_luks_uuid: "{{ vfio_boot_luks_raw.stdout }}"
 
+# The ESP is vfat: a file's mode there comes from the mount and chmod
+# cannot change it, so a fixed 0644 is a change on every run
+# (problems/vfio-boot-modes-on-vfat-esp.md). Ask for the mode the files will
+# read; the tool refuses a mount it cannot decide or one that lets a user
+# other than root write a boot entry.
+- name: Read the mount of every directory the boot files go into
+  ansible.builtin.command:
+    argv:
+      - "{{ vfio_boot_findmnt_bin }}"
+      - -J
+      - -T
+      - "{{ item }}"
+      - -o
+      - TARGET,FSTYPE,OPTIONS
+  loop:
+    - /boot/loader
+    - /boot/loader/entries
+  register: vfio_boot_esp_mounts
+  changed_when: false
+  check_mode: false
+
+- name: Decide the file mode the ESP keeps
+  ansible.builtin.command:
+    argv:
+      - "{{ vfio_boot_python_bin }}"
+      - "{{ vfio_boot_mode_tool }}"
+      - --wanted
+      - "{{ vfio_boot_file_mode }}"
+    stdin: "{{ vfio_boot_esp_mounts.results | map(attribute='stdout') | list | to_json }}"
+  register: vfio_boot_esp_mode
+  changed_when: false
+  check_mode: false
+
+- name: Pin the boot files' mode
+  ansible.builtin.set_fact:
+    vfio_boot_loader_file_mode: "{{ vfio_boot_esp_mode.stdout }}"
+
 - name: Install the boot profiles
   ansible.builtin.template:
     src: entry.conf.j2
     dest: /boot/loader/entries/{{ item.file }}
     owner: root
     group: root
-    mode: "0644"
+    mode: "{{ vfio_boot_loader_file_mode }}"
   loop: "{{ vfio_boot_profiles }}"
   loop_control:
     label: "{{ item.file }}"
@@ -67,7 +104,7 @@
     path: /boot/loader/loader.conf
     regexp: '^default '
     line: default Arch-Linux-Hardened-Vfio.conf
-    mode: "0644"
+    mode: "{{ vfio_boot_loader_file_mode }}"
 
 - name: Retire the installer's unguarded bootstrap entry
   ansible.builtin.file:

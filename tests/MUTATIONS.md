@@ -663,3 +663,30 @@ real resize.
 - Red: `tests/performance_security_contract.py` rejects performance settings
   that lower the host security floor.
 - Restore: remove the injected token and rerun the contract.
+
+### vfio_boot asks for the mode the ESP keeps
+
+`problems/vfio-boot-modes-on-vfat-esp.md`. Each one turns
+`tests/vfio_boot_esp_mode_contract.py` red with the message shown.
+
+- Break: put `mode: "0644"` back on `Install the boot profiles` in
+  `roles/vfio_boot/tasks/main.yml`.
+  Red: "'Install the boot profiles' writes /boot/loader/entries/{{ item.file }}
+  with a fixed mode '0644', not the one the ESP keeps".
+- Break: in `tools/esp_file_mode.py`, answer `wanted` on vfat instead of
+  `vfat_mode(options)`.
+  Red: "the mode decided for the Nitro's ESP (fmask=0022) is not the 0755
+  its files read".
+- Break: drop the group-or-others write refusal in `decide()`.
+  Red: "the tool accepted fmask=0000, which lets everyone write a boot entry".
+- Break: accept any `uid`/`gid` in `vfat_mode()`.
+  Red: "the tool accepted a vfat mount whose files belong to uid 1000, not root".
+- Break: remove `/boot/loader` from the findmnt loop.
+  Red: "vfio_boot does not inspect /boot/loader, where it writes".
+- Break: remove `check_mode: false` from the findmnt task.
+  Red: "... only reads, but does not run in check mode, so --check --diff
+  cannot compare the mode".
+- Break: pass only the first findmnt document to the tool
+  (`| first` instead of `| list | to_json`).
+  Red: "the tool does not read every findmnt document the role collected".
+- Restore: `git checkout -- roles/vfio_boot/tasks/main.yml tools/esp_file_mode.py`.
