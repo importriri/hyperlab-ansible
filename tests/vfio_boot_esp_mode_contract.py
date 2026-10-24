@@ -77,7 +77,7 @@ def check_tool() -> None:
     require(decided([findmnt("ext4", "rw")], wanted="0600") == "0600",
             "the wanted mode is not the one asked for on a filesystem that keeps modes")
 
-    refused(json.dumps([findmnt("vfat", "rw,fmask=0000,dmask=0000")]),
+    refused(json.dumps([findmnt("vfat", "rw,fmask=0000,dmask=0022")]),
             "fmask=0000, which lets everyone write a boot entry")
     refused(json.dumps([findmnt("vfat", "rw,fmask=0002,dmask=0022")]), "fmask=0002 (others write)")
     refused(json.dumps([findmnt("vfat", "rw,fmask=0020,dmask=0022")]), "fmask=0020 (group writes)")
