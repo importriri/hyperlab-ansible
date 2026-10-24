@@ -37,6 +37,54 @@ def test_the_redactor_removes_every_kind_of_secret():
            ("dev-01 started on 10.10.3.105 at 12:00, sender streaming\n", 0))
 
 
+def test_quoted_assignments_remove_every_word_and_escaped_quote():
+    for source in (
+        'passphrase: "SYNTHETIC_FIRST SYNTHETIC_LAST"',
+        "password='SYNTHETIC_FIRST SYNTHETIC_LAST'",
+        r'api_key="SYNTHETIC_FIRST \" SYNTHETIC_LAST"',
+        "secret='SYNTHETIC_FIRST '' SYNTHETIC_LAST'",
+        '"token": "SYNTHETIC_FIRST SYNTHETIC_LAST"',
+    ):
+        clean, count = diag.redact(source)
+        check("quoted_assignment_first_removed", "SYNTHETIC_FIRST" not in clean)
+        check("quoted_assignment_last_removed", "SYNTHETIC_LAST" not in clean)
+        equals("quoted_assignment_count", count, 1)
+
+
+def test_archive_redacts_before_truncating_and_removes_quoted_values():
+    # All input is synthetic. Do not read host logs, operations or a guest.
+    saved = diag.host_sources, diag.operation_records
+    body = "SYNTHETIC_PRIVATE_BODY"
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n" + body + "\n-----END OPENSSH PRIVATE KEY-----\n"
+    text = pem + "x" * (diag.LIMIT + 12 - len(pem))
+    diag.host_sources = lambda name, run: {
+        "host/synthetic-key.txt": (text, ""),
+        "host/synthetic-quoted.txt": ('passphrase: "SYNTHETIC_FIRST SYNTHETIC_LAST"\n', ""),
+    }
+    diag.operation_records = lambda name: ("[]\n", "")
+    try:
+        with tempfile.TemporaryDirectory() as temporary:
+            path, manifest = diag.collect(None, "dev-01", output=Path(temporary), now=0, with_guest=False)
+            with tarfile.open(path) as archive:
+                contents = "\n".join(archive.extractfile(member).read().decode()
+                                     for member in archive.getmembers())
+        for secret in (body, "SYNTHETIC_FIRST", "SYNTHETIC_LAST"):
+            check("archive_synthetic_secret_removed", secret not in contents)
+        check("original_source_truncation_recorded", manifest["files"]["host/synthetic-key.txt"]["truncated"])
+        equals("complete_key_redaction_counted", manifest["files"]["host/synthetic-key.txt"]["redactions"], 1)
+    finally:
+        diag.host_sources, diag.operation_records = saved
+
+
+def test_incomplete_private_key_blocks_are_removed():
+    # Upstream tail/journal limits can already have cut a PEM block.
+    for text in ("-----BEGIN OPENSSH PRIVATE KEY-----\nSYNTHETIC_PRIVATE_BODY",
+                 "SYNTHETIC_PRIVATE_BODY\n-----END OPENSSH PRIVATE KEY-----"):
+        clean, count = diag.redact(text)
+        check("incomplete_key_body_removed", "SYNTHETIC_PRIVATE_BODY" not in clean)
+        equals("incomplete_key_count", count, 1)
+
+
 def _fake_run(calls):
     def run(argv, **kwargs):
         calls.append(argv)
@@ -51,9 +99,10 @@ def _fake_run(calls):
 
 def test_collect_writes_a_private_redacted_archive():
     calls = []
-    saved = (diag._ssh_argv, diag._wait_for_ssh_ready)
+    saved = (diag._ssh_argv, diag._wait_for_ssh_ready, diag.operation_records)
     diag._ssh_argv = lambda ctx, name: ["ssh", "-o", "BatchMode=yes", "sid@" + name]
     diag._wait_for_ssh_ready = lambda argv, name: None
+    diag.operation_records = lambda name: ("[]\n", "")
     try:
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / "diagnostics"
@@ -74,7 +123,7 @@ def test_collect_writes_a_private_redacted_archive():
             check("manifest_in_archive", json.loads(contents["manifest.json"])["machine"] == "dev-01")
             check("redactions_counted", manifest["files"]["guest/journal-user.txt"]["redactions"] >= 2)
     finally:
-        diag._ssh_argv, diag._wait_for_ssh_ready = saved
+        diag._ssh_argv, diag._wait_for_ssh_ready, diag.operation_records = saved
     flat = " ".join(" ".join(argv) for argv in calls)
     for forbidden in (".ssh/", "-access.yml", "cloud-init", "user-data", "seed.iso", "/run/user"):
         check("never_reads_%s" % forbidden, forbidden not in flat, flat)
@@ -89,7 +138,12 @@ def test_collect_refuses_a_bad_name_and_works_without_the_guest():
         except ContractError:
             check("refused_%r" % name, True)
     calls = []
-    with tempfile.TemporaryDirectory() as td:
-        _, manifest = diag.collect(None, "srv-01", run=_fake_run(calls), output=Path(td), now=0, with_guest=False)
+    saved_records = diag.operation_records
+    diag.operation_records = lambda name: ("[]\n", "")
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            _, manifest = diag.collect(None, "srv-01", run=_fake_run(calls), output=Path(td), now=0, with_guest=False)
+    finally:
+        diag.operation_records = saved_records
     check("host_only_has_no_guest", not any(path.startswith("guest/") for path in manifest["files"]))
     check("host_only_never_ssh", not any(argv[:1] == ["ssh"] for argv in calls))

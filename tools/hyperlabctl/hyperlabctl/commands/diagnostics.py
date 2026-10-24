@@ -30,12 +30,25 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
 OUTPUT = Path.home() / "hyperlab-evidence" / "diagnostics"
 LIMIT = 4 << 20  # bytes kept from one source
 
+
+def _redacted_assignment(match):
+    value = match.group(3)
+    quote = value[0] if value[0] in ('"', "'") else ""
+    return match.group(1) + match.group(2) + quote + "[redacted]" + quote
+
+
 REDACTIONS = (
-    (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----", re.S),
+    (re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S),
+     "[private key redacted]"),
+    # A source's own tail limit may have removed the opening marker already.
+    (re.compile(r"\A.*?-----END [A-Z0-9 ]*PRIVATE KEY-----", re.S),
      "[private key redacted]"),
     (re.compile(r"(?i)\b(authorization:\s*(?:bearer|basic)\s+)\S+"), r"\1[redacted]"),
+    (re.compile(r"(?im)\b((?:BECOME|SUDO) password:)[^\r\n]*"), r"\1 [redacted]"),
     (re.compile(r"(?i)\b(password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key)"
-                r"(\"?\s*[:=]\s*\"?)[^\s\"',;]+"), r"\1\2[redacted]"),
+                r"([\"']?\s*[:=]\s*)"
+                r"(\"(?:\\.|[^\"\\])*(?:\"|\Z)|'(?:\\.|''|[^'\\])*(?:'|\Z)|[^\s\"',;]+)"),
+     _redacted_assignment),
     (re.compile(r"\$(?:1|2[abxy]|5|6|7|y|gy)\$[^\s:'\"]+"), "[password hash redacted]"),
     (re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b"), "[token redacted]"),
     (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"), "[token redacted]"),
@@ -134,8 +147,10 @@ def collect(ctx, name, run=subprocess.run, output=OUTPUT, now=None, with_guest=T
             if text is None:
                 manifest["missing"][path] = redact(error)[0]
                 continue
-            clean, count = redact(text[-LIMIT:])
-            data = clean.encode()
+            # Cutting a source first can discard a PEM header or an assignment
+            # label while retaining its secret body. Redact complete input.
+            clean, count = redact(text)
+            data = clean[-LIMIT:].encode()
             info = tarfile.TarInfo("%s-%s/%s" % (name, stamp, path))
             info.size, info.mode, info.mtime = len(data), 0o600, int(time.time())
             archive.addfile(info, io.BytesIO(data))
