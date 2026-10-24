@@ -68,11 +68,11 @@ the first being Nitro's real one (`0755`), with the other vfat masks,
 every `vfio_boot` task that writes under `/boot` with a mode to use the
 decided one, findmnt on exactly the directories those tasks write into,
 both reads in check mode, and the reads and the shape assertion before the
-first write. Against the
-previous role: `the mode wanted where the filesystem keeps modes is not
-0644`, and with the defaults in place: `'Install the boot profiles' writes
-/boot/loader/entries/{{ item.file }} with a fixed mode '0644', not the one
-the ESP keeps`. The mutations are in `tests/MUTATIONS.md`.
+first write. Against the previous role: `the mode wanted where the
+filesystem keeps modes is not 0644`, and with the defaults in place:
+`'Install the boot profiles' writes /boot/loader/entries/{{ item.file }}
+with a fixed mode '0644', not the one the ESP keeps`. The mutations are in
+`tests/MUTATIONS.md`.
 
 ## Not covered
 
