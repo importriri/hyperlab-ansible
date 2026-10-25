@@ -713,3 +713,52 @@ real resize.
   Red: "TZ=<zone> is not in effect", for the first zone that is not the
   machine's own (observed: "TZ=UTC0 is not in effect: +0200, not +0000").
 - Restore: `git checkout -- tests/acceptance_scripts_contract.py`.
+
+### The showcase script keeps host values off the take
+
+`problems/showcase-demo-showed-host-values-on-camera.md` and
+`problems/showcase-name-pattern-checked-three-characters.md`. Each break
+goes into `tools/showcase/demo.sh` and turns `tests/showcase_contract.py`
+red with the message shown. The fixture's stubs and environment carry the
+sentinel `zq7x` and the address `203.0.113.77`.
+
+- Break: put the old block back after the generic checklist (host name
+  from `/proc/sys/kernel/hostname`, `id -un`, `${HOME}`, `ip -4 -o addr`),
+  or any one of its four prints alone.
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout" (for the
+  address print alone: "(203.0.113.77) reached stdout").
+- Break: print `${HOME}` or `$(id -un)` with `>&2`.
+  Red: "walkthrough: a private sentinel (zq7x) reached stderr".
+- Break: read the host name with the `read` builtin from
+  `/proc/sys/kernel/hostname` and print it. No stub can answer a builtin.
+  Red: "the showcase script reads a host file: /proc/" (the source check,
+  not the fixture).
+- Break: drop `2>&1` from `shell_ipc` or from the preflight `qs` call,
+  drop `2>/dev/null` from the inventory call, or drop `2>&1` from
+  `open looking-glass`.
+  Red: "walkthrough: a private sentinel (zq7x) reached stderr".
+- Break: drop `2>/dev/null` after the inventory parser.
+  Red: "unreadable inventory: stderr is not the one reason 'the Machine
+  inventory is not readable'" (the traceback carries no sentinel; the
+  one-line rule catches it).
+- Break: remove the `*[!a-z0-9-]*` refusal.
+  Red: "name ['x;id']: exit status 1, not 2".
+- Break: remove the 31-character limit.
+  Red: "name ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']: exit status 1, not 2".
+- Break: read an unreadable preflight inventory as absent
+  (`|| state=absent`).
+  Red: "failed inventory: the take went on".
+- Break: remove the `already exists` refusal.
+  Red: "duplicate Machine: exit status 0, not 1".
+- Break: remove the 900-second bound of `wait_running`.
+  Red: "Machine never running: stderr is not the one reason 'demo-01 is
+  not running after 15 minutes'" (the fixture's `sleep` gives up after
+  1000 seconds).
+- Break: add `sudo -n true` before shot 1.
+  Red: "walkthrough: the script ran a privileged or lifecycle tool:
+  [['sudo', '-n', 'true']]".
+- Break: add `hyperlabctl machine delete "${name}"` before the last
+  `shell_ipc`.
+  Red: "walkthrough: hyperlabctl was asked for ['machine', 'delete',
+  'demo-01']".
+- Restore: `git checkout -- tools/showcase/demo.sh`.

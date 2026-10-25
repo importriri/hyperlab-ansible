@@ -17,7 +17,8 @@ security properties of Qubes OS.
 | 6 | 10 | the host frame colour and Diagnostics | the host, never the guest, says which network a surface belongs to |
 
 Shot 4 waits for the GPU lease ([ADR 0019](adr/0019-gpu-lease.md)); until
-it exists the shot shows the badge only, or is cut.
+it exists the shot shows the badge only, or is cut, and the demo script
+says so at that shot.
 
 ## Running the take
 
@@ -25,22 +26,33 @@ it exists the shot shows the badge only, or is cut.
 tools/showcase/demo.sh demo-01
 ```
 
-The script never changes the host. It checks that the shell answers and
-that the Machine does not exist yet, prints what must not appear in the
-published film, then walks the shots: it opens each shell surface through
-its reviewed IPC target, says what to do, and waits until the inventory
-shows the Machine running before the shots that need it. The Machine is
-created by hand in the shell, as the film shows; the password is typed in
-the operation window, off camera. Afterwards the demo Machine is destroyed
-like any other.
+The script never changes the host. Before the first shot it checks that
+`hyperlabctl`, Quickshell and Python are installed, that the shell answers,
+and that the Machine inventory is readable and does not hold the name yet.
+The name is refused, before anything runs, unless it is 2 to 31 lowercase
+letters, digits and dashes starting with a letter. The script then prints a
+generic list of what must not appear in the published film, and walks the
+shots: it opens each shell surface through its reviewed IPC target, says
+what to do, and waits until the inventory shows the Machine running before
+the shots that need it, at most 15 minutes. The Machine is created by hand
+in the shell, as the film shows; the password is typed in the operation
+window, off camera. Afterwards the demo Machine is destroyed like any other.
+
+Its terminal may be on camera, so the script never reads the host name,
+the user name, the home path or an address, and never shows the output of
+the tools it calls: a failure prints one fixed reason, such as `demo: the
+HyperLab shell does not answer; start the session first`, and stops the take
+with a nonzero status. `tests/showcase_contract.py` runs the whole take and
+each failure with stub tools that answer with made-up host values, and
+fails if one of them reaches either output stream.
 
 ## Review before publishing
 
-Watch the whole take, then every frame where text is on screen, and refuse
-it if any of these appears:
+A clean script transcript proves nothing about the other windows, the
+notifications or the recorded frames. Watch the whole take, then every frame
+where text is on screen, and refuse it if any of these appears:
 
-- the host name, the user name or a home path (the script prints the ones
-  of this host before the take);
+- the host name, the user name or a home path;
 - an IP address, a MAC address, an SSH key fingerprint or a host key;
 - a path under `/run/user`, a token, or any file the operator keeps private;
 - a window that is not part of the storyboard, or a notification.

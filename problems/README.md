@@ -4,6 +4,12 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`showcase-demo-showed-host-values-on-camera.md`](showcase-demo-showed-host-values-on-camera.md):
+  the demo script printed this host's names, home path and addresses on the
+  terminal of the take; it now prints a generic checklist and fixed reasons.
+- [`showcase-name-pattern-checked-three-characters.md`](showcase-name-pattern-checked-three-characters.md):
+  the demo's `case` pattern checked only three characters of the Machine
+  name, so `ab;id` passed; every character is now checked before any tool runs.
 - [`acceptance-contract-depended-on-the-local-zone.md`](acceptance-contract-depended-on-the-local-zone.md):
   the sender-identity contract read its fixed start time in the local
   zone and failed on the UTC runner; it now carries an explicit offset.
