@@ -72,7 +72,10 @@ factory.
   anything but a regular file, an unreadable or non-UTF-8 file, malformed
   YAML, several documents or a repeated key (which `safe_load` silently
   accepts) is a refusal, and only a spec that parsed is compared with the
-  projection.
+  projection. A `vm-specs/.generated` that was a dangling link still
+  read as "no spec" (`generated_root()` looks only at a directory that
+  exists); any link there is now a refusal before a missing file may
+  mean absence.
 - `create`, `project` and `withdraw` hold the registry lock, so a record is
   never withdrawn while its spec is being written. `withdraw` remains for
   the manual path.

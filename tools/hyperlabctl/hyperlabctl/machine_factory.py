@@ -1444,9 +1444,28 @@ def read_generated_spec(
     """
 
     name = f"generated spec {machine_id}"
-    path = generated_root(
+    directory = generated_root(
         repo_root
-    ) / (
+    )
+
+    # generated_root() looks at the directory only when it exists, and a
+    # dangling link does not: a link here, to anything or to nothing, is
+    # a refusal before a missing file may mean "no spec".
+    try:
+        info = directory.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ContractError(
+            f"{name}: cannot inspect {directory.name}: {exc.strerror}"
+        ) from exc
+
+    if not stat.S_ISDIR(info.st_mode):
+        raise ContractError(
+            f"{name}: vm-specs/{directory.name} is not a real directory"
+        )
+
+    path = directory / (
         machine_id + ".yml"
     )
 

@@ -804,6 +804,19 @@ def check_withdraw_reads_the_spec(lab: Lab) -> None:
         generated.unlink()
         aside.rename(generated)
 
+    # Nor is a dangling one: a link to nothing is not "no spec".
+    generated.rename(aside)
+    generated.symlink_to("missing-generated")
+    try:
+        before = lab.snapshot()
+        result = lab.cli("machine", "withdraw", "srv-13", "--record-sha256", digest)
+        require(result.returncode != 0 and "is not a real directory" in result.stderr
+                and "srv-13" in lab.records() and lab.snapshot() == before,
+                f"withdraw went on through a dangling generated directory link: {result.stdout} {result.stderr}")
+    finally:
+        generated.unlink()
+        aside.rename(generated)
+
     # A spec that parses and differs from the projection is stale: it stays,
     # and the record, which never got past intent, is withdrawn.
     path.write_text("---\nname: srv-13\nstale: true\n")

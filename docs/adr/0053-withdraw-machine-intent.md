@@ -57,7 +57,8 @@ the SHA-256 of the record it stored, and `machine withdraw ID
   by anything else is not removed in its place;
 - no generated spec equal to its projection exists, and a spec that
   cannot be read as exactly one YAML mapping (a link, not a regular file,
-  unreadable, malformed, several documents, a repeated key) is a refusal,
+  unreadable, malformed, several documents, a repeated key), or a
+  generated directory that is a link, even a dangling one, is a refusal,
   never taken for an absent or a stale one;
 - the libvirt domain list, read at that moment, has no domain with its
   name, and the list could be read at all.

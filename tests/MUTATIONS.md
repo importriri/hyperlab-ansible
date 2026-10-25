@@ -1020,6 +1020,10 @@ turns the named contract red with the message shown.
   removed a record without the registry lock"; with
   `verify_library_creation_locked` run on its own, "create_machine()
   published while another process held the registry lock".
+- Break: in `read_generated_spec()` of `machine_factory.py`, replace
+  `if not stat.S_ISDIR(info.st_mode):` with `if False:`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on
+  through a dangling generated directory link".
 - Break: in `MachineCommand._create()`, replace
   `if digest != published.sha256:` with `if False:`.
   Red: `tests/c10_machine_create_plan_contract.py`, "['wrong-digest']: a
