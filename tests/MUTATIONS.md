@@ -811,4 +811,20 @@ they are red under dash as under Bash.
 - Break: in `client_pid()`, accept a file without its newline
   (`if not text:` for `if not text.endswith("\n"):`).
   Red: "... open-pid does not hold a PID: '12'".
+- Break: put the first parser back in `exited()`, which split the line at
+  its last `") "` and read the next word as the state.
+  Red: "exit predicate: '7) Z\n' was not refused".
+- Break: in `STAT_LINE`, accept any number of fields after the state
+  (`(?: -?[0-9]+)*` for `(?: -?[0-9]+){49,}`).
+  Red: "exit predicate: '7 (sh) Z\n' was not refused".
+- Break: in `STAT_LINE`, accept a line with fewer than 49 fields after the
+  state (`{1,}` for `{49,}`).
+  Red: "exit predicate: '7 (sh) Z 1 -20 0 ... 0\n' was not refused" (48
+  numbers).
+- Break: in `STAT_LINE`, make the opening parenthesis optional (`\(?` for
+  `\(`).
+  Red: "exit predicate: '7 sh) Z 1 -20 0 ... 0\n' was not refused".
+- Break: in `client_pid()`, read the file a second time for the result
+  (`return int(path.read_text())`).
+  Red: "client PID: '12\n' was read 2 times, not once".
 - Restore: `git checkout -- tests/showcase_contract.py`.

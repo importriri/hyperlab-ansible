@@ -30,6 +30,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,11 @@ SCRIPT = ROOT / "tools/showcase/demo.sh"
 DOC = ROOT / "docs/showcase.md"
 IPC = ROOT / "roles/host_desktop_common/files/quickshell/hyperlab/ShellIpc.qml"
 PROC = Path("/proc")
+# "PID (COMMAND) STATE" and fields 4 to 52, all numbers (Linux 3.5 and
+# later). The command may hold ") " itself; the state and the numbers that
+# must follow it decide where the command ends.
+STAT_LINE = re.compile(r"(?P<pid>[1-9][0-9]*) \((?P<command>.*)\) (?P<state>[A-Za-z])"
+                       r"(?: -?[0-9]+){49,}\n", re.S)
 
 NAME = "demo-01"
 MARK = "zq7x"
@@ -250,12 +256,10 @@ def exited(pid: int, proc: Path = PROC) -> bool:
     except (FileNotFoundError, ProcessLookupError):
         require((proc / "self" / "stat").is_file(), f"{proc} is not a proc filesystem")
         return True
-    # "PID (COMMAND) STATE ...": the command may hold ") " itself.
-    head, close, tail = stat.rpartition(") ")
-    fields = tail.split()
-    require(close != "" and head.partition(" (")[0] == str(pid) and len(fields) > 0
-            and len(fields[0]) == 1, f"{path} is not a process status line: {stat!r}")
-    return fields[0] == "Z"
+    line = STAT_LINE.fullmatch(stat)
+    require(line is not None and line["pid"] == str(pid), f"{path} is not a process status line: {stat!r}")
+    assert line is not None
+    return line["state"] == "Z"
 
 
 def client_pid(path: Path) -> int | None:
@@ -522,6 +526,22 @@ def check_storyboard() -> None:
             f"the storyboard runs {sum(seconds)} seconds, not 60 to 90")
 
 
+def stat_line(pid: str, command: str, state: str, numbers: int = 49) -> str:
+    """A made-up /proc/PID/stat line: Linux 3.5 and later print 49 numbers
+    after the state (fields 4 to 52)."""
+    return f"{pid} ({command}) {state} " + " ".join(["1", "-20", *["0"] * (numbers - 2)]) + "\n"
+
+
+class CountedPath(Path):
+    """A path that counts how often its text is read."""
+
+    reads = 0
+
+    def read_text(self, *args, **kwargs) -> str:
+        self.reads += 1
+        return super().read_text(*args, **kwargs)
+
+
 def check_exit_predicate() -> None:
     """The fixture tells a client that has ended from one still running."""
     child = subprocess.Popen([sys.executable, "-I", "-c", ""])
@@ -554,11 +574,16 @@ def check_exit_predicate() -> None:
         entry = proc / "7"
         entry.mkdir()
         # The command name is in parentheses and may hold ") " itself.
-        for stat, ended in (("7 (sh) S 1 7\n", False), ("7 (sh) Z 1 7\n", True),
-                            ("7 (a) Z (b) S 1 7\n", False), ("7 (a) S (b) Z 1 7\n", True)):
+        for stat, ended in ((stat_line("7", "sh", "S"), False), (stat_line("7", "sh", "Z"), True),
+                            (stat_line("7", "a) Z (b", "S"), False), (stat_line("7", "a) S (b", "Z"), True),
+                            (stat_line("7", "a\nb", "S"), False)):
             (entry / "stat").write_text(stat)
             require(exited(7, proc) is ended, f"exit predicate: {stat!r} read as exited={not ended}")
-        for stat in ("", "garbage\n", "8 (sh) Z 1 8\n", "7 (sh)\n", "7 sh Z 1\n", "7 (sh) ZZ 1\n"):
+        whole = stat_line("7", "sh", "Z")
+        for stat in ("", "garbage\n", "7) Z\n", "7 (sh) Z\n", "7 (sh)\n", "7 sh Z 1\n",
+                     stat_line("8", "sh", "Z"), stat_line("7", "sh", "ZZ"), stat_line("7", "sh", "Z", 48),
+                     whole.replace("(", "", 1), whole.replace(")", "", 1), whole[:-1],
+                     whole[:-2] + "x\n"):
             (entry / "stat").write_text(stat)
             require(refused(lambda: exited(7, proc)), f"exit predicate: {stat!r} was not refused")
         (entry / "stat").unlink()
@@ -572,6 +597,12 @@ def check_exit_predicate() -> None:
             require(client_pid(pid_file) is None, f"client PID: {text!r} is a PID before it is written")
         pid_file.write_text("12\n")
         require(client_pid(pid_file) == 12, "client PID: '12\\n' is not PID 12")
+        # One read per attempt: a second one could see other contents.
+        for text in ("12\n", "", "12", "x\n"):
+            pid_file.write_text(text)
+            counted = CountedPath(pid_file)
+            refused(partial(client_pid, counted))
+            require(counted.reads == 1, f"client PID: {text!r} was read {counted.reads} times, not once")
         for text in ("\n", "x\n", "0\n", "-3\n", "12 13\n", "12\n13\n"):
             pid_file.write_text(text)
             require(refused(lambda: client_pid(pid_file)), f"client PID: {text!r} was not refused")

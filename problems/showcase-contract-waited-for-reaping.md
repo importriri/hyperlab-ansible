@@ -28,11 +28,14 @@ it does under Bash.
 ## Fix
 
 The fixture's `exited()` reads `/proc/PID/stat`. A missing entry or state
-`Z` counts as exited, any other state as running. A status line it cannot
-read or parse, or a missing proc filesystem, is an error, never an exit.
-The PID file is read once per attempt; a missing, empty or unfinished file
-(no newline yet) means the stub has not written its PID yet, and anything
-else that is not a PID is an error. The script was not changed.
+`Z` counts as exited, any other state as running. The line must have the
+whole layout Linux 3.5 and later print: the PID, the command in
+parentheses, a one-letter state and 49 numbers. A line it cannot read or
+that lacks any of these, or a missing proc filesystem, is an error, never
+an exit. The PID file is read once per attempt; a missing, empty or
+unfinished file (no newline yet) means the stub has not written its PID
+yet, and anything else that is not a PID is an error. The script was not
+changed.
 
 ## Test
 
@@ -41,10 +44,12 @@ waits for it with `os.waitid(..., WEXITED | WNOWAIT)`, which returns once
 the child has exited and leaves it unreaped, and requires `exited()` to
 call it finished. It requires a child blocked on its open standard input
 not to be. Neither depends on timing. A made-up proc tree covers `S` and
-`Z`, a command name holding `) `, a missing PID, a missing proc filesystem,
-malformed lines and an unreadable one; the PID file reader has its own
-cases. With the previous existence check the contract fails on any shell:
-"exit predicate: an exited, unreaped child counts as running".
+`Z`, a command name holding `) ` or a newline, a missing PID, a missing
+proc filesystem, lines without the opening parenthesis, the closing one or
+the trailing fields, and an unreadable one. The PID file reader has its own
+cases, and a counting path requires it to read the file once. With the
+previous existence check the contract fails on any shell: "exit
+predicate: an exited, unreaped child counts as running".
 
 With `sh` resolved to the runner's dash the unchanged contract reproduced
 the CI failure and the corrected one passes. BusyBox runs its builtin
