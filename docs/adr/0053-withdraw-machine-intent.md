@@ -48,7 +48,10 @@ the SHA-256 of the record it stored, and `machine withdraw ID
 
 - its stored bytes still have that digest, so a record written or changed
   by anything else is not removed in its place;
-- no generated spec equal to its projection exists;
+- no generated spec equal to its projection exists, and a spec that
+  cannot be read as exactly one YAML mapping (a link, not a regular file,
+  unreadable, malformed, several documents, a repeated key) is a refusal,
+  never taken for an absent or a stale one;
 - the libvirt domain list, read at that moment, has no domain with its
   name, and the list could be read at all.
 

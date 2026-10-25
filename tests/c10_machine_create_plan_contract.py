@@ -40,6 +40,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools/hyperlabctl/bin/hyperlabctl"
 BRIDGE = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py"
@@ -132,7 +133,10 @@ class Lab:
                 continue
             for path in sorted(base.rglob("*")):
                 info = path.lstat()
-                content = path.read_bytes() if path.is_file() and not path.is_symlink() else None
+                content = None
+                if path.is_file() and not path.is_symlink():
+                    # A file made unreadable on purpose is held by its size.
+                    content = path.read_bytes() if info.st_mode & 0o400 else info.st_size
                 tree[str(path.relative_to(self.root))] = (info.st_mode, content)
         return tree
 
@@ -445,6 +449,75 @@ def check_withdraw(lab: Lab) -> None:
             and "srv-05" not in lab.records(), f"an unprojected record was not withdrawn: {answer}")
 
 
+def check_withdraw_reads_the_spec(lab: Lab) -> None:
+    """A spec withdraw cannot read as one YAML mapping is a refusal, never "no spec"."""
+    created = lab.ok("machine", "create", "server-fedora", "srv-13")
+    digest = created["record_sha256"]
+    generated = lab.repo / "vm-specs/.generated"
+    path = generated / "srv-13.yml"
+    other = lab.root / "other-spec.yml"
+    other.write_text("name: elsewhere\n")
+
+    def fifo(target: Path) -> None:
+        os.mkfifo(target, 0o600)
+
+    cases: list[tuple[str, Any, str]] = [
+        ("malformed", "name: [srv-13\n", "not one valid YAML document"),
+        ("two documents", "---\nname: srv-13\n---\nname: srv-13\n", "single document"),
+        ("duplicate key", "name: srv-13\nimage: server-fedora\nname: srv-13\n", "duplicate key 'name'"),
+        ("not UTF-8", b"name: \xff\xfe\n", "not one valid YAML document"),
+        ("not a mapping", "- srv-13\n", "not a YAML mapping"),
+        ("empty", "", "not a YAML mapping"),
+        ("too large", "name: srv-13\n" + "# padding\n" * 8000, "exceeds"),
+        ("symlink", lambda target: target.symlink_to(other), "cannot be read"),
+        ("directory", lambda target: target.mkdir(), "not a regular file"),
+        ("fifo", fifo, "not a regular file"),
+    ]
+    if os.geteuid() != 0:
+        # root reads a mode-000 file; the other cases hold for root too.
+        cases.append(("unreadable", lambda target: (target.write_text("name: srv-13\n"), target.chmod(0)), "cannot be read"))
+    for label, content, reason in cases:
+        if callable(content):
+            content(path)
+        elif isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content)
+        before = lab.snapshot()
+        result = lab.cli("machine", "withdraw", "srv-13", "--record-sha256", digest)
+        require(result.returncode != 0 and "generated spec srv-13" in result.stderr and reason in result.stderr,
+                f"withdraw went on with a {label} spec: {result.returncode} {result.stdout} {result.stderr}")
+        require(lab.snapshot() == before and "srv-13" in lab.records(),
+                f"a refused withdraw with a {label} spec changed the record or the spec")
+        if path.is_dir() and not path.is_symlink():
+            path.rmdir()
+        else:
+            path.chmod(0o600) if not path.is_symlink() else None
+            path.unlink()
+
+    # A generated directory that is a link elsewhere is no place to look.
+    aside = lab.repo / "vm-specs/.generated-real"
+    generated.rename(aside)
+    generated.symlink_to(aside.name)
+    try:
+        before = lab.snapshot()
+        result = lab.cli("machine", "withdraw", "srv-13", "--record-sha256", digest)
+        require(result.returncode != 0 and "srv-13" in lab.records() and lab.snapshot() == before,
+                f"withdraw went on through a linked generated directory: {result.stderr}")
+    finally:
+        generated.unlink()
+        aside.rename(generated)
+
+    # A spec that parses and differs from the projection is stale: it stays,
+    # and the record, which never got past intent, is withdrawn.
+    path.write_text("---\nname: srv-13\nstale: true\n")
+    answer = lab.ok("machine", "withdraw", "srv-13", "--record-sha256", digest)
+    require(answer == {"machine": "srv-13", "withdrawn": True} and "srv-13" not in lab.records()
+            and path.read_text() == "---\nname: srv-13\nstale: true\n",
+            f"a stale but well-formed spec stopped the withdrawal or was touched: {answer}")
+    path.unlink()
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hyperlab-create-plan-") as temporary:
         root = Path(temporary)
@@ -452,6 +525,7 @@ def main() -> int:
         check_key_refusals(lab)
         check_bridge(lab)
         check_withdraw(lab)
+        check_withdraw_reads_the_spec(lab)
         check_plan_matches_factory(lab)
     print("C10 Machine create-plan and intent contract: OK")
     return 0

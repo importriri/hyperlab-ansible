@@ -105,7 +105,11 @@ the SHA-256 of the record it stored; `machine withdraw ID --record-sha256
 DIGEST` removes that record only while its bytes still have that digest, no
 generated spec equal to its projection exists, and the libvirt domain list,
 read every time, has no domain with its name. An unreadable domain list is
-a refusal. The digest names a record; it is not an authorization, since
+a refusal, and so is a generated spec that cannot be read as exactly one
+YAML mapping: a link, anything but a regular file, an unreadable or
+non-UTF-8 file, malformed YAML, several documents or a repeated key. Only
+a spec that parsed is compared with the projection; a parsed spec that
+differs is stale and stays. The digest names a record; it is not an authorization, since
 anyone who can read the record can compute it. `create`, `project` and
 `withdraw` hold the registry lock (`.lock` in the registry directory), so a
 record is never withdrawn while its spec is being written; a lock held for

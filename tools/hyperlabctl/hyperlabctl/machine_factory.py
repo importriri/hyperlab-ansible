@@ -8,11 +8,15 @@ Observed runtime state remains owned by the existing runtime providers.
 
 from __future__ import annotations
 
+import os
 import re
+import stat
 from pathlib import Path
 from typing import Any
 
-from .composer import write_spec
+import yaml
+
+from .composer import generated_root, write_spec
 from .config import load_yaml
 from .errors import ContractError, Unavailable
 from .machine_registry import (
@@ -1405,6 +1409,121 @@ def project_vm_spec(
         ] = mode
 
     return spec
+
+
+MAX_SPEC_BYTES = 64 * 1024
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """safe_load, except that a key repeated in one mapping is refused."""
+
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+            seen = set()
+            for key_node, _value in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                if key in seen:
+                    raise yaml.constructor.ConstructorError(
+                        None, None, f"duplicate key {key!r}", key_node.start_mark
+                    )
+                seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def read_generated_spec(
+    repo_root: Path | str,
+    machine_id: str,
+) -> dict[str, Any] | None:
+    """The generated spec of one Machine as stored, or None when there is none.
+
+    Only absence is None. A link, anything but a regular file, an unreadable
+    file, text that is not UTF-8, several YAML documents, a repeated key or a
+    document that is not a mapping is a refusal: what cannot be read cannot
+    prove that the Machine was never projected.
+    """
+
+    name = f"generated spec {machine_id}"
+    path = generated_root(
+        repo_root
+    ) / (
+        machine_id + ".yml"
+    )
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | os.O_NOFOLLOW
+            | os.O_NONBLOCK
+            | os.O_CLOEXEC,
+        )
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ContractError(
+            f"{name} cannot be read: {exc.strerror}"
+        ) from exc
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if not stat.S_ISREG(info.st_mode):
+            raise ContractError(
+                f"{name} is not a regular file"
+            )
+
+        if info.st_size > MAX_SPEC_BYTES:
+            raise ContractError(
+                f"{name} exceeds {MAX_SPEC_BYTES} bytes"
+            )
+
+        with os.fdopen(
+            descriptor,
+            "rb",
+        ) as handle:
+            descriptor = -1
+            data = handle.read(
+                MAX_SPEC_BYTES + 1
+            )
+    except OSError as exc:
+        raise ContractError(
+            f"{name} cannot be read: {exc.strerror}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(
+                descriptor
+            )
+
+    if len(data) > MAX_SPEC_BYTES:
+        raise ContractError(
+            f"{name} exceeds {MAX_SPEC_BYTES} bytes"
+        )
+
+    try:
+        document = yaml.load(  # noqa: S506 - a SafeLoader subclass
+            data.decode(
+                "utf-8"
+            ),
+            Loader=_UniqueKeyLoader,
+        )
+    except (
+        UnicodeDecodeError,
+        yaml.YAMLError,
+    ) as exc:
+        raise ContractError(
+            f"{name} is not one valid YAML document: {exc}"
+        ) from exc
+
+    if not isinstance(document, dict):
+        raise ContractError(
+            f"{name} is not a YAML mapping"
+        )
+
+    return document
 
 
 def write_projected_vm_spec(

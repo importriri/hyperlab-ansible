@@ -43,6 +43,14 @@ factory.
   such a Machine got past intent and is not withdrawn. A first version
   looked only at the spec, which can be removed by hand while the domain
   stays ([ADR 0053](../docs/adr/0053-withdraw-machine-intent.md)).
+- `withdraw` first read the generated spec with `load_yaml` and took a
+  spec that did not parse for "not what project writes", so malformed YAML
+  or two YAML documents let it remove the record. It now reads the spec
+  through `read_generated_spec()`: only a missing file is "no spec"; a link,
+  anything but a regular file, an unreadable or non-UTF-8 file, malformed
+  YAML, several documents or a repeated key (which `safe_load` silently
+  accepts) is a refusal, and only a spec that parsed is compared with the
+  projection.
 - `create`, `project` and `withdraw` hold the registry lock, so a record is
   never withdrawn while its spec is being written. `withdraw` remains for
   the manual path.
@@ -64,3 +72,8 @@ with "a refused projection left a record on a fresh registry: ['.lock',
 'srv-01.yml']". The same contract creates a record at each custom
 limit and one unit below it; with the floor check removed from the factory
 it fails with "the factory accepted memory_mb=..., below the plan's limit".
+
+`check_withdraw_reads_the_spec` puts each unreadable spec in the way of a
+withdrawal through the real CLI and loader and requires a refusal with the
+record and the spec byte-identical. With the parse failure turned back into
+`None` it fails with "withdraw went on with a malformed spec: 0".

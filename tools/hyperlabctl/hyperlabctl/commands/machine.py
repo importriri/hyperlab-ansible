@@ -18,6 +18,7 @@ from ..machine_factory import (
     image_os_label,
     materialize_machine,
     project_vm_spec,
+    read_generated_spec,
     template_catalog,
     write_projected_vm_spec,
 )
@@ -843,40 +844,23 @@ class MachineCommand(Command):
                 args.machine_id
             )
 
-            spec = generated_root(
-                root
-            ) / (
-                record["id"] + ".yml"
+            # Only a spec that reads as one YAML mapping may be compared:
+            # one that cannot be read proves nothing, and is a refusal.
+            existing = read_generated_spec(
+                root,
+                record["id"],
             )
 
-            if spec.is_symlink() or (
-                spec.exists()
-                and not spec.is_file()
+            # A spec this record projects to means the Machine went past
+            # intent; one it does not is a stale file and stays.
+            if existing is not None and existing == project_vm_spec(
+                root,
+                record,
             ):
                 raise ContractError(
-                    f"generated spec {record['id']} "
-                    "is not a regular file"
+                    f"{record['id']} is projected; "
+                    "only an unprojected record is withdrawn"
                 )
-
-            if spec.exists():
-                try:
-                    existing = load_yaml(
-                        spec
-                    )
-                except ContractError:
-                    # Not YAML, so not what project writes.
-                    existing = None
-
-                # A spec this record projects to means the Machine went
-                # past intent; one it does not is a stale file and stays.
-                if existing == project_vm_spec(
-                    root,
-                    record,
-                ):
-                    raise ContractError(
-                        f"{record['id']} is projected; "
-                        "only an unprojected record is withdrawn"
-                    )
 
             # The spec alone does not prove there is no domain: it can be
             # removed or edited by hand. A domain with this name keeps its

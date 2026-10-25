@@ -960,4 +960,12 @@ turns the named contract red with the message shown.
   reported"; `tests/c10_machine_create_plan_contract.py`, "a valid guest
   key was not accepted". Both compute the expected fingerprint of their
   synthetic key themselves.
+- Break: in `MachineCommand._withdraw()`, catch `ContractError` from
+  `read_generated_spec()` and set `existing = None`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on with
+  a malformed spec: 0".
+- Break: in `read_generated_spec()` of `machine_factory.py`, load with
+  `yaml.SafeLoader` instead of `_UniqueKeyLoader`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on with
+  a duplicate key spec: 0".
 - Restore: copy the broken file back from the copy taken before the break.
