@@ -908,14 +908,42 @@ turns the named contract red with the message shown.
   left a record on a fresh registry: ['.lock', 'srv-01.yml']";
   `tests/host_machine_actions_bridge_contract.py`, "the bridge made another
   call".
-- Break: in `MachineCommand._create()`, replace the call to
-  `_remove_staged_spec()` with `left = None`.
-  Red: `tests/c10_machine_create_plan_contract.py`, "a failed publication
-  left its spec or record behind".
+- Break: in `_undo_creation()` of `commands/machine.py`, replace the call
+  to `_remove_staged_spec()` with `reason = None`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a creation
+  refused with no record left a record or spec behind".
+- Break: in `MachineCommand._create()`, pass `None` instead of `published`
+  to `_undo_creation()`, so the record the real `os.link` published is
+  not undone.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync']: a creation
+  refused with the record published left a record or spec behind".
+- Break: in `create_machine()` of `machine_registry.py`, replace the call
+  to `withdraw_published()` with `left = None`.
+  Red: `tests/c10_machine_registry_contract.py`, "a creation refused after
+  its publication left its record behind". (The create-plan contract stays
+  green: the CLI calls `publish_machine()`, not `create_machine()`.)
+- Break: in `_undo_creation()`, change `if left:` before "is kept, since
+  the record's withdrawal did not complete" to `if False:`, so the spec is
+  removed although the record stays.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'unlink-record']: the spec was removed".
+- Break: in `withdraw_published()`, replace the regular-file and inode
+  condition with `False`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'copy-record']: an unfinished undo was not reported as such".
+- Break: in `withdraw_published()`, append `and False` to the digest
+  comparison.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'rewrite-record']: an unfinished undo was not reported as such".
+- Break: in `_remove_staged_spec()`, append `and False` to
+  `_identify(path) != staged`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'replace-spec']: an unfinished undo was not reported as such".
 - Break: in `MachineCommand._create()`, replace
   `with registry_lock(create=True):` with `with contextlib.nullcontext():`.
-  Red: `tests/c10_machine_create_plan_contract.py`, "a staged creation did
-  not wait for the registry lock".
+  Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a removal
+  ran without the registry lock"; with `check_withdraw` run on its own,
+  "a staged creation did not wait for the registry lock".
 - Break: in the bridge's `create()`, drop the comparison of the answer's
   `spec` with `vm-specs/.generated/NAME.yml`.
   Red: `tests/host_machine_actions_bridge_contract.py`, "an unconfirmed

@@ -43,6 +43,19 @@ factory.
   such a Machine got past intent and is not withdrawn. A first version
   looked only at the spec, which can be removed by hand while the domain
   stays ([ADR 0053](../docs/adr/0053-withdraw-machine-intent.md)).
+- The staged step first treated `os.link` as the end of the publication.
+  `create_machine()` then inspected the record and synced its directory,
+  and `_create` read it back and took its digest; a failure at any of
+  those steps was reported as a refusal while the record stayed, and the
+  spec it projects was removed. A retry said "already exists" again, for a
+  record now without its spec. The publication now returns which file it
+  put in place (`PublishedRecord`: path, inode, digest), a failure after
+  it carries that (`RecordPublicationFailed`), and the creation undoes it
+  under the lock with `withdraw_published()`: the record first, only while
+  it is the same inode with the same bytes, then the spec, only once the
+  record's removal is synced and only while the spec is the file this
+  creation wrote. When either cannot be removed, the refusal says "cleanup
+  incomplete" and names what stays.
 - `withdraw` first read the generated spec with `load_yaml` and took a
   spec that did not parse for "not what project writes", so malformed YAML
   or two YAML documents let it remove the record. It now reads the spec
@@ -72,6 +85,17 @@ with "a refused projection left a record on a fresh registry: ['.lock',
 'srv-01.yml']". The same contract creates a record at each custom
 limit and one unit below it; with the floor check removed from the factory
 it fails with "the factory accepted memory_mb=..., below the plan's limit".
+
+`check_publication_faults` runs the real bridge over the real CLI, with
+faults installed in the CLI's own process: the directory sync after the
+real `os.link`, the read-back and the digest fail once, and the registry
+and the generated specs equal their snapshot, with nothing sent to the
+runner. The record's removal failing, the record or the spec replaced and
+the removal's own sync failing are reported as "cleanup incomplete", with
+the replaced bytes kept and the spec kept while the record stays. With the
+undo of the published record removed, the first case fails with "['fsync']:
+a creation refused with the record published left a record or spec
+behind". Every removal is checked to run while the registry lock is held.
 
 `check_withdraw_reads_the_spec` puts each unreadable spec in the way of a
 withdrawal through the real CLI and loader and requires a refusal with the

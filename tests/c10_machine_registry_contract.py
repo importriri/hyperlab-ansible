@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import os
 import stat
 import sys
@@ -16,6 +17,7 @@ sys.path.insert(
     str(ROOT / "tools/hyperlabctl"),
 )
 
+from hyperlabctl import machine_registry
 from hyperlabctl.errors import ContractError, Unavailable
 from hyperlabctl.machine_registry import (
     create_machine,
@@ -473,11 +475,173 @@ def verify_filename_identity() -> None:
         )
 
 
+def verify_publication_undo() -> None:
+    """A failure after the real os.link withdraws the record it published.
+
+    The directory sync after the publication fails once, in this process;
+    everything else is the registry's own code on a temporary state home.
+    """
+
+    real_fsync = machine_registry._fsync_directory
+    real_unlink = os.unlink
+
+    with tempfile.TemporaryDirectory(
+        prefix="hyperlab-c10-registry-undo-"
+    ) as temporary:
+        state = Path(
+            temporary
+        ) / "state"
+
+        create_machine(
+            machine(
+                "keeper-01"
+            ),
+            state_home=state,
+        )
+
+        directory = state / "hyperlab" / "machines"
+        record = directory / "undo-01.yml"
+        before = {
+            path.name: path.read_bytes()
+            for path in directory.iterdir()
+        }
+
+        def attempt(
+            *faults: str,
+        ) -> str:
+            fired: list[str] = []
+
+            def fsync(
+                path: Path,
+            ) -> None:
+                if record.is_file() and "fsync" not in fired:
+                    fired.append(
+                        "fsync"
+                    )
+
+                    if "replace" in faults:
+                        other = directory / ".replacement"
+                        other.write_bytes(
+                            b"replaced: true\n"
+                        )
+                        other.chmod(
+                            0o600
+                        )
+                        os.replace(
+                            other,
+                            record,
+                        )
+
+                    raise OSError(
+                        errno.EIO,
+                        "injected directory fsync failure",
+                    )
+
+                real_fsync(
+                    path
+                )
+
+            def unlink(
+                path,
+                *args,
+                **kwargs,
+            ) -> None:
+                if "unlink" in faults and Path(path) == record:
+                    raise OSError(
+                        errno.EACCES,
+                        "injected record unlink failure",
+                    )
+
+                real_unlink(
+                    path,
+                    *args,
+                    **kwargs,
+                )
+
+            machine_registry._fsync_directory = fsync
+            os.unlink = unlink
+
+            try:
+                create_machine(
+                    machine(
+                        "undo-01"
+                    ),
+                    state_home=state,
+                )
+            except Unavailable as exc:
+                require(
+                    fired == ["fsync"],
+                    "fixture: the sync after the "
+                    "publication did not fail",
+                )
+
+                return str(
+                    exc
+                )
+            finally:
+                machine_registry._fsync_directory = real_fsync
+                os.unlink = real_unlink
+
+            raise AssertionError(
+                "a creation whose directory sync "
+                "failed was accepted"
+            )
+
+        reason = attempt()
+
+        require(
+            "durability is uncertain" in reason
+            and "incomplete" not in reason,
+            f"the refusal does not name the failure: {reason}",
+        )
+
+        require(
+            {
+                path.name: path.read_bytes()
+                for path in directory.iterdir()
+            }
+            == before,
+            "a creation refused after its publication "
+            "left its record behind",
+        )
+
+        reason = attempt(
+            "unlink",
+        )
+
+        require(
+            "cleanup incomplete" in reason
+            and read_machine(
+                "undo-01",
+                state_home=state,
+            )["id"]
+            == "undo-01",
+            "a record that could not be withdrawn was not "
+            f"reported or is gone: {reason}",
+        )
+
+        record.unlink()
+
+        reason = attempt(
+            "replace",
+        )
+
+        require(
+            "cleanup incomplete" in reason
+            and "replaced" in reason
+            and record.read_bytes()
+            == b"replaced: true\n",
+            "a record this creation did not write was "
+            f"removed or not reported: {reason}",
+        )
+
+
 def main() -> int:
     verify_persistent_registry()
     verify_runtime_authority_refusal()
     verify_file_refusals()
     verify_filename_identity()
+    verify_publication_undo()
 
     print(
         "C10 persistent Machine registry contract: OK"

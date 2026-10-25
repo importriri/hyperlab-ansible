@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import datetime
 import getpass
+import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 from typing import Any
 
 from .. import document as doc
-from ..composer import generated_root
-from ..config import load_yaml
 from ..errors import ContractError, Unavailable
 from ..inventory import domain_names
 from ..machine_factory import (
@@ -27,50 +27,137 @@ from ..machine_provision import (
     provision_steps,
 )
 from ..machine_registry import (
-    create_machine,
+    PublishedRecord,
+    RecordPublicationFailed,
     list_machines,
+    publish_machine,
     read_machine,
     record_sha256,
     registry_lock,
     require_machine_absent,
     withdraw_machine,
+    withdraw_published,
 )
 from ..render import machine_cards
 from .base import Command
 
 
-def _remove_staged_spec(
-    root: Path,
-    record: dict[str, Any],
-) -> str | None:
-    """Remove the spec a staged creation wrote; say why it stays, if it does."""
+def _identify(
+    path: Path,
+) -> tuple[int, int, str]:
+    """Device, inode and SHA-256 of one regular file, never through a link."""
 
-    path = generated_root(
-        root
-    ) / (
-        record["id"] + ".yml"
+    descriptor = os.open(
+        path,
+        os.O_RDONLY
+        | os.O_NOFOLLOW
+        | os.O_NONBLOCK
+        | os.O_CLOEXEC,
     )
 
     try:
-        if path.is_symlink() or not path.is_file():
-            return "it is no longer a regular file"
+        info = os.fstat(
+            descriptor
+        )
 
-        # Only the bytes this creation wrote: anything else stays.
-        if load_yaml(
-            path
-        ) != project_vm_spec(
-            root,
-            record,
+        if not stat.S_ISREG(info.st_mode):
+            raise ContractError(
+                f"{path.name} is not a regular file"
+            )
+
+        digest = hashlib.sha256()
+
+        while chunk := os.read(
+            descriptor,
+            65536,
         ):
+            digest.update(
+                chunk
+            )
+    finally:
+        os.close(
+            descriptor
+        )
+
+    return info.st_dev, info.st_ino, digest.hexdigest()
+
+
+def _remove_staged_spec(
+    path: Path,
+    staged: tuple[int, int, str],
+) -> str | None:
+    """Remove the spec a staged creation wrote; say why it stays, if it does."""
+
+    try:
+        # Only the file this creation wrote, with its bytes: anything else
+        # stays.
+        if _identify(
+            path
+        ) != staged:
             return "it changed after it was written"
 
-        path.unlink()
-    except (OSError, ContractError, Unavailable) as exc:
+        os.unlink(
+            path
+        )
+    except FileNotFoundError:
+        return None
+    except (OSError, ContractError) as exc:
         return str(
             exc
         )
 
     return None
+
+
+def _undo_creation(
+    root: Path,
+    spec: str | None,
+    staged: tuple[int, int, str] | None,
+    published: PublishedRecord | None,
+) -> list[str]:
+    """Undo what one creation wrote, record first; name what stays.
+
+    The caller holds the registry lock. The spec goes only once the record
+    it projects is durably withdrawn, so a spec may outlive its record but
+    a record never outlives its spec.
+    """
+
+    left = []
+
+    if published is not None:
+        reason = withdraw_published(
+            published
+        )
+
+        if reason is not None:
+            left.append(
+                reason
+            )
+
+    if spec is None:
+        return left
+
+    if left:
+        left.append(
+            f"generated spec {spec} is kept, since the record's "
+            "withdrawal did not complete"
+        )
+    elif staged is None:
+        left.append(
+            f"generated spec {spec} is kept: it could not be identified"
+        )
+    else:
+        reason = _remove_staged_spec(
+            root / spec,
+            staged,
+        )
+
+        if reason is not None:
+            left.append(
+                f"generated spec {spec} is kept: {reason}"
+            )
+
+    return left
 
 
 def _repo_root(ctx) -> Path:
@@ -724,14 +811,15 @@ class MachineCommand(Command):
         )
 
         spec = None
+        staged = None
+        published = None
 
         with registry_lock(
             create=True,
         ):
             if args.project:
                 # Staged: the spec is written first and the record, which is
-                # the Machine's authority, is published last. A refusal at
-                # any step leaves no intent behind (ADR 0017).
+                # the Machine's authority, is published last (ADR 0053).
                 require_machine_absent(
                     record["id"]
                 )
@@ -741,37 +829,55 @@ class MachineCommand(Command):
                     record,
                 )
 
+            # Until the stored record is read back and its digest is the
+            # one published, a failure undoes this creation: no refusal
+            # leaves a record behind.
             try:
-                path = create_machine(
-                    record,
-                )
-            except BaseException as exc:
                 if spec is not None:
-                    left = _remove_staged_spec(
-                        root,
-                        record,
+                    staged = _identify(
+                        root / spec
                     )
 
-                    if left is not None:
-                        raise ContractError(
-                            f"{exc}; generated spec {spec} "
-                            f"was left in place: {left}"
-                        ) from exc
+                try:
+                    published = publish_machine(
+                        record,
+                    )
+                except RecordPublicationFailed as exc:
+                    published = exc.published
+                    raise
+
+                stored = read_machine(
+                    args.machine_id
+                )
+
+                # Names this record, and no other, to withdraw.
+                digest = record_sha256(
+                    args.machine_id
+                )
+
+                if digest != published.sha256:
+                    raise Unavailable(
+                        f"the stored record of {record['id']} is not "
+                        "the one this creation published"
+                    )
+            except BaseException as exc:
+                left = _undo_creation(
+                    root,
+                    spec,
+                    staged,
+                    published,
+                )
+
+                if left:
+                    raise Unavailable(
+                        f"{exc}; cleanup incomplete: " + "; ".join(left)
+                    ) from exc
 
                 raise
 
-            stored = read_machine(
-                args.machine_id
-            )
-
-            # Names this record, and no other, to withdraw.
-            digest = record_sha256(
-                args.machine_id
-            )
-
         payload = {
             "record_path": str(
-                path
+                published.path
             ),
             "machine": stored,
             "record_sha256": digest,

@@ -91,14 +91,31 @@ it to the host's).
 
 `machine create --project` records and projects a Machine as one staged
 step under the registry lock: it checks the name is free, writes the
-generated spec, and publishes the record last. If the record cannot be
-published, the spec it wrote is removed while it still holds exactly that
-projection. A refusal at any step therefore leaves neither record nor spec;
-the shell bridge creates Machines only this way, so a refused creation
-leaves no record behind ([ADR 0017](adr/0017-shell-machine-creation.md)).
-An interrupted creation can leave a spec without a record, never the
-reverse; the next request for that name is refused with "already exists"
-until `hyperlabctl compose delete NAME --confirm NAME` removes the spec.
+generated spec, and publishes the record last. The creation is not done
+until the stored record has been synced, read back and found to have the
+digest it was published with. A failure at any of those steps, after the
+record is in place, undoes it under the same lock: the record this creation
+published goes first, and only while it is the same file (inode) with the
+same bytes; then, once that removal is synced, the spec, again only while
+it is the file this creation wrote with its bytes. A refusal therefore
+leaves neither record nor spec; the shell bridge creates Machines only
+this way, so a refused creation leaves no record behind
+([ADR 0017](adr/0017-shell-machine-creation.md)). Plain `machine create`
+undoes its record the same way. When the undo cannot finish (a removal
+fails, a file was replaced, the removal cannot be synced), the refusal says
+"cleanup incomplete" and names what stays: bytes this creation did not
+write are never removed, and the spec stays whenever the record's
+withdrawal did not complete, so a record is never left without its spec by
+the undo.
+
+The undo is not atomic, and nothing here holds across process death or
+power loss. A creation killed before its record is published leaves a
+spec without a record: the next request for that name is refused with
+"already exists" until `hyperlabctl compose delete NAME --confirm NAME`
+removes the spec. One killed after the publication leaves both, as a
+completed creation would, with no provisioning started. The generated
+spec's directory is not synced, so after a power loss a published record
+may come back without its spec.
 
 A record can be withdrawn, and only by its digest. `machine create` reports
 the SHA-256 of the record it stored; `machine withdraw ID --record-sha256
@@ -109,8 +126,8 @@ a refusal, and so is a generated spec that cannot be read as exactly one
 YAML mapping: a link, anything but a regular file, an unreadable or
 non-UTF-8 file, malformed YAML, several documents or a repeated key. Only
 a spec that parsed is compared with the projection; a parsed spec that
-differs is stale and stays. The digest names a record; it is not an authorization, since
-anyone who can read the record can compute it. `create`, `project` and
+differs is stale and stays. The digest names a record; it is not an
+authorization, since anyone who can read the record can compute it. `create`, `project` and
 `withdraw` hold the registry lock (`.lock` in the registry directory), so a
 record is never withdrawn while its spec is being written; a lock held for
 more than five seconds is a refusal. `withdraw` is for the manual path, where

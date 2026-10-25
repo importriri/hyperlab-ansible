@@ -26,6 +26,7 @@ import stat
 import tempfile
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -690,11 +691,67 @@ def require_machine_absent(
     )
 
 
+@dataclass(frozen=True)
+class PublishedRecord:
+    """The one record a publication put in place, and how to know it again."""
+
+    path: Path
+    device: int
+    inode: int
+    sha256: str
+
+
+class RecordPublicationFailed(Unavailable):
+    """The record was published, then a step after the publication failed."""
+
+    def __init__(
+        self,
+        message: str,
+        published: PublishedRecord,
+    ) -> None:
+        super().__init__(
+            message
+        )
+        self.published = published
+
+
 def create_machine(
     record: dict[str, Any],
     *,
     state_home: Path | None = None,
 ) -> Path:
+    """Publish a new record; a failure after its publication withdraws it."""
+
+    try:
+        return publish_machine(
+            record,
+            state_home=state_home,
+        ).path
+    except RecordPublicationFailed as exc:
+        left = withdraw_published(
+            exc.published
+        )
+
+        if left is not None:
+            raise Unavailable(
+                f"{exc}; cleanup incomplete: {left}"
+            ) from exc
+
+        raise
+
+
+def publish_machine(
+    record: dict[str, Any],
+    *,
+    state_home: Path | None = None,
+) -> PublishedRecord:
+    """Publish a new record and say which file it is.
+
+    A failure after the record is in place raises RecordPublicationFailed,
+    which carries the publication: the caller withdraws it with
+    withdraw_published(), so a refused creation leaves no record.
+    """
+
     record = validate_machine_record(
         record,
     )
@@ -771,6 +828,9 @@ def create_machine(
             os.fsync(
                 handle.fileno()
             )
+            written = os.fstat(
+                handle.fileno()
+            )
 
         descriptor = -1
 
@@ -824,21 +884,111 @@ def create_machine(
             "Machine record publication failed"
         )
 
-    _inspect_record_file(
-        destination,
+    publication = PublishedRecord(
+        path=destination,
+        device=written.st_dev,
+        inode=written.st_ino,
+        sha256=hashlib.sha256(
+            encoded
+        ).hexdigest(),
     )
+
+    try:
+        _inspect_record_file(
+            destination,
+        )
+    except Unavailable as exc:
+        raise RecordPublicationFailed(
+            str(exc),
+            publication,
+        ) from exc
 
     try:
         _fsync_directory(
             directory,
         )
     except OSError as exc:
-        raise Unavailable(
+        raise RecordPublicationFailed(
             "Machine record directory "
-            "durability is uncertain"
+            "durability is uncertain",
+            publication,
         ) from exc
 
-    return destination
+    return publication
+
+
+def withdraw_published(
+    published: PublishedRecord,
+) -> str | None:
+    """Undo one publication; say why the record stays, if it does.
+
+    Only the file this publication put in place goes: the same inode, still
+    a regular file, still holding the bytes it wrote. The removal counts once
+    the directory is synced. The caller holds registry_lock(), and nothing
+    here is atomic against a writer that ignores the lock or across a crash.
+    """
+
+    path = published.path
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | os.O_NOFOLLOW
+            | os.O_NONBLOCK
+            | os.O_CLOEXEC,
+        )
+    except FileNotFoundError:
+        return f"Machine record {path.name} is no longer where it was published"
+    except OSError as exc:
+        return f"cannot open Machine record {path.name}: {exc.strerror}"
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or (info.st_dev, info.st_ino)
+            != (published.device, published.inode)
+        ):
+            return f"Machine record {path.name} was replaced; it is kept"
+
+        data = os.read(
+            descriptor,
+            MAX_RECORD_BYTES + 1,
+        )
+    except OSError as exc:
+        return f"cannot read Machine record {path.name}: {exc.strerror}"
+    finally:
+        os.close(
+            descriptor
+        )
+
+    if hashlib.sha256(
+        data
+    ).hexdigest() != published.sha256:
+        return f"Machine record {path.name} changed after it was published; it is kept"
+
+    try:
+        os.unlink(
+            path
+        )
+    except OSError as exc:
+        return f"cannot remove Machine record {path.name}: {exc.strerror}"
+
+    try:
+        _fsync_directory(
+            path.parent,
+        )
+    except OSError as exc:
+        return (
+            f"Machine record {path.name} was removed, but its removal "
+            f"is not durable: {exc.strerror}"
+        )
+
+    return None
 
 
 def read_machine(

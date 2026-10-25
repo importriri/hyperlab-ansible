@@ -22,11 +22,16 @@ domain out of the product if it is not held to the Machine's state.
 shell).** `machine create --project`, under the registry lock, checks that
 the name is free, writes the generated spec, and only then publishes the
 record. When the record cannot be published, it removes the spec it wrote,
-and only while that file still holds exactly this projection. Every refusal
-before the record is published leaves nothing; nothing published ever has
-to be undone. A creation killed between the two writes leaves a spec
-without a record, never a record without its spec, and the next request
-for that name is refused with "already exists" by the spec.
+and only while that file is still the one it wrote, with its bytes. The
+publication is not the end of the step: the record is synced, read back and
+its digest compared with the one published. A failure there undoes the
+record this step published (same inode, same bytes) under the same lock,
+and only then the spec, so the undo never leaves a record without its
+spec. When the undo cannot finish, the refusal says "cleanup incomplete"
+and names what stays; bytes this step did not write are kept. A creation
+killed between the two writes leaves a spec without a record, and the next
+request for that name is refused with "already exists" by the spec. None
+of this is atomic across process death or power loss.
 
 **B. Two calls, and withdraw the record when `project` refuses.** This was
 the first implementation. It needs a command that removes a published

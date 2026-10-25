@@ -12,12 +12,17 @@ halves to the factory that writes the Machine record:
     otherwise, and the private key beside it is never opened;
   * the real bridge over the real CLI records and projects a Machine in one
     staged `machine create --project`, and every refusal (a name in use, a
-    stale spec, a link or a directory where the spec goes, a record that
-    cannot be published after its spec was written, an unreadable libvirt
-    list) leaves the registry and the generated specs as they were;
+    stale spec, a link or a directory where the spec goes, an unreadable
+    libvirt list) leaves the registry and the generated specs as they were;
+  * a failure at the real publication or after it (the directory sync,
+    the read-back, the digest) undoes the record and then the spec under
+    the lock, and an undo that cannot finish says so and keeps what is not
+    this creation's, and the spec while the record stays;
   * `machine withdraw` removes only the record whose digest it is given, and
     keeps it while its projection exists, while a libvirt domain has its
-    name or the domain list cannot be read, and while the registry is locked.
+    name or the domain list cannot be read, while the registry is locked,
+    and while the spec where its projection goes cannot be read as one YAML
+    mapping.
 
 The plan's shape and the provisioning steps are held by
 `c10_machine_creation_plan_contract.py`. Everything here runs in a temporary
@@ -57,6 +62,124 @@ KEY_BLOB = base64.b64encode(KEY_RAW).decode()
 KEY_FINGERPRINT = "SHA256:" + base64.b64encode(hashlib.sha256(KEY_RAW).digest()).decode().rstrip("=")
 KEY_LINE = f"ssh-ed25519 {KEY_BLOB} sid@nitro"
 PRIVATE = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
+
+
+# Installed in the CLI's own process by the wrapper while fault.json exists.
+# Every fault strikes the real code at a real system call or at the call
+# after it; nothing replaces the publication itself. The log records what
+# the fault saw, so a case proves the record had been published by the real
+# os.link before the failure, and that every removal ran under the lock.
+FAULTS = """
+import errno, fcntl, json, os, pathlib
+
+from hyperlabctl import machine_registry
+from hyperlabctl.commands import machine as command
+from hyperlabctl.errors import Unavailable
+
+
+def install(config_path):
+    config = json.loads(config_path.read_text())
+    faults = set(config["faults"])
+    registry = pathlib.Path(config["registry"])
+    specs = pathlib.Path(config["specs"])
+    record = registry / (config["name"] + ".yml")
+    spec = specs / (config["name"] + ".yml")
+    log = pathlib.Path(config["log"])
+    fired = set()
+
+    def note(event):
+        with log.open("a") as handle:
+            handle.write(event + "\\n")
+
+    def once(fault):
+        if fault in faults and fault not in fired:
+            fired.add(fault)
+            note(fault + (" with the record published" if record.is_file() else " with no record"))
+            return True
+        return False
+
+    def lock_held():
+        try:
+            descriptor = os.open(registry / ".lock", os.O_RDWR | os.O_CLOEXEC)
+        except FileNotFoundError:
+            return False
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            os.close(descriptor)
+        return False
+
+    def replace(path, data=b"replaced: true\\n"):
+        other = path.with_name(".replacement")
+        other.write_bytes(data)
+        other.chmod(0o600)
+        os.replace(other, path)
+
+    real_fsync = machine_registry._fsync_directory
+
+    def fsync(directory):
+        if record.is_file() and once("fsync"):
+            if once("replace-record"):
+                replace(record)
+            if once("rewrite-record"):
+                # The same file, its bytes changed in place.
+                record.write_bytes(b"rewritten: true\\n")
+            if once("copy-record"):
+                # Another file with the very same bytes is still not this one.
+                replace(record, record.read_bytes())
+            if once("replace-spec"):
+                replace(spec)
+            raise OSError(errno.EIO, "injected directory fsync failure")
+        if "fsync" in fired and once("fsync-again"):
+            raise OSError(errno.EIO, "injected second directory fsync failure")
+        return real_fsync(directory)
+
+    machine_registry._fsync_directory = fsync
+
+    real_read = command.read_machine
+
+    def read(*args, **kwargs):
+        if record.is_file() and once("read"):
+            raise Unavailable("injected record read failure")
+        return real_read(*args, **kwargs)
+
+    command.read_machine = read
+
+    real_digest = command.record_sha256
+
+    def digest(*args, **kwargs):
+        if record.is_file() and once("digest"):
+            raise Unavailable("injected record digest failure")
+        return real_digest(*args, **kwargs)
+
+    command.record_sha256 = digest
+
+    real_link = os.link
+
+    def link(source, destination, *args, **kwargs):
+        if pathlib.Path(destination) == record and once("link"):
+            raise OSError(errno.EIO, "injected link failure")
+        return real_link(source, destination, *args, **kwargs)
+
+    os.link = link
+
+    real_unlink = os.unlink
+
+    def unlink(path, *args, **kwargs):
+        target = pathlib.Path(os.fsdecode(path))
+        if target.parent in (registry, specs):
+            if not lock_held():
+                note("unlink without the lock: " + target.name)
+            if target == record and once("unlink-record"):
+                raise OSError(errno.EACCES, "injected record unlink failure")
+            if target == spec and once("unlink-spec"):
+                raise OSError(errno.EACCES, "injected spec unlink failure")
+        return real_unlink(path, *args, **kwargs)
+
+    os.unlink = unlink
+"""
 
 
 def require(condition: bool, message: str) -> None:
@@ -112,18 +235,59 @@ class Lab:
         return json.loads(result.stdout)
 
     def wrapper(self) -> Path:
-        """An executable that stands where the bridge expects hyperlabctl."""
+        """An executable that stands where the bridge expects hyperlabctl.
+
+        It runs the real CLI in its own process; while `fault.json` exists it
+        first installs the faults that file names (FAULTS below).
+        """
         path = self.root / "bin/hyperlabctl"
+        if path.exists():
+            return path
         path.parent.mkdir()
+        (self.root / "faults.py").write_text(FAULTS)
         path.write_text(
             f"#!{sys.executable}\n"
-            "import os, sys\n"
+            "import os, pathlib, sys\n"
             f"os.environ.update({{'HOME': {str(self.home)!r}, 'XDG_STATE_HOME': {str(self.state)!r},"
             " 'PYTHONDONTWRITEBYTECODE': '1'})\n"
-            f"os.execv(sys.executable, [sys.executable, {str(CLI)!r}, '--repo', {str(self.repo)!r},"
-            " *sys.argv[1:]])\n")
+            "sys.dont_write_bytecode = True\n"
+            f"sys.path.insert(0, {str(ROOT / 'tools/hyperlabctl')!r})\n"
+            f"config = pathlib.Path({str(self.root / 'fault.json')!r})\n"
+            "if config.exists():\n"
+            f"    sys.path.insert(0, {str(self.root)!r})\n"
+            "    import faults\n"
+            "    faults.install(config)\n"
+            "from hyperlabctl.cli import main\n"
+            f"sys.exit(main(['--repo', {str(self.repo)!r}, *sys.argv[1:]]))\n")
         path.chmod(0o700)
         return path
+
+    def faulty(self, faults: list[str], name: str, *args: str) -> subprocess.CompletedProcess:
+        """The real CLI with `faults` installed for Machine `name`."""
+        self.arm(faults, name)
+        try:
+            return subprocess.run([str(self.wrapper()), "--json", *args], text=True,
+                                  capture_output=True, check=False, env=self.env)
+        finally:
+            self.disarm()
+
+    def arm(self, faults: list[str], name: str) -> None:
+        self.wrapper()
+        self.fault_log.write_text("")
+        (self.root / "fault.json").write_text(json.dumps({
+            "faults": faults, "name": name, "log": str(self.fault_log),
+            "registry": str(self.state / "hyperlab/machines"),
+            "specs": str(self.repo / "vm-specs/.generated")}))
+
+    def disarm(self) -> None:
+        (self.root / "fault.json").unlink()
+
+    @property
+    def fault_log(self) -> Path:
+        return self.root / "fault.log"
+
+    def events(self) -> list[str]:
+        return self.fault_log.read_text().splitlines()
 
     def snapshot(self) -> dict[str, Any]:
         """Every path below the state home and the generated specs, with mode and bytes."""
@@ -139,22 +303,6 @@ class Lab:
                     content = path.read_bytes() if info.st_mode & 0o400 else info.st_size
                 tree[str(path.relative_to(self.root))] = (info.st_mode, content)
         return tree
-
-    def forced_publish_failure(self, template: str, name: str) -> subprocess.CompletedProcess:
-        """`machine create --project` in a process whose record publication fails."""
-        script = (
-            "import sys\n"
-            f"sys.path.insert(0, {str(ROOT / 'tools/hyperlabctl')!r})\n"
-            "from hyperlabctl.commands import machine\n"
-            "from hyperlabctl.errors import ContractError\n"
-            "def refuse(*args, **kwargs):\n"
-            "    raise ContractError('forced publish failure')\n"
-            "machine.create_machine = refuse\n"
-            "from hyperlabctl.cli import main\n"
-            f"sys.exit(main(['--repo', {str(self.repo)!r}, '--json', 'machine', 'create', {template!r},"
-            f" {name!r}, '--project']))\n")
-        return subprocess.run([sys.executable, "-c", script], text=True, capture_output=True,
-                              check=False, env=self.env)
 
     def records(self) -> list[str]:
         return [row["id"] for row in self.ok("machine", "list")["machines"]]
@@ -370,15 +518,6 @@ def check_bridge(lab: Lab) -> None:
         require(not launched, f"{name}: a refused projection reached the runner")
     require(not (lab.root / "elsewhere.yml").exists(), "a projection followed the link at srv-09")
 
-    # The record cannot be published after its spec was written: the spec
-    # this creation wrote goes, and nothing else changes.
-    before = lab.snapshot()
-    result = lab.forced_publish_failure("server-arch", "srv-11")
-    require(result.returncode != 0 and "forced publish failure" in result.stderr,
-            f"fixture: the forced publish failure did not happen: {result.stderr}")
-    require(lab.snapshot() == before and "srv-11" not in lab.records(),
-            f"a failed publication left its spec or record behind: {result.stderr}")
-
     # Refused by the bridge before anything runs.
     before = lab.snapshot()
     for args in (("server-arch", "srv-04", "-p", "dev", "balanced"),
@@ -386,6 +525,132 @@ def check_bridge(lab: Lab) -> None:
         result = attempt(*args)
         require(result.startswith("refused") and not calls, f"{args} was not refused before use: {calls}")
     require(lab.snapshot() == before, "a refused request changed the registry")
+
+
+def bridge_with_recorder(lab: Lab):
+    """The real bridge over the wrapper; the runner is a recorder."""
+    bridge = load_bridge(lab)
+    launched: list[tuple[str, str]] = []
+    bridge.privileged = lambda action, name: launched.append((action, name))
+
+    def attempt(*args: str) -> str:
+        launched.clear()
+        try:
+            bridge.create(list(args))
+        except bridge.Refused as exc:
+            return "refused: " + str(exc)
+        return "launched"
+
+    return attempt, launched
+
+
+# A fault, where it strikes, and what the refusal must say.
+UNDONE = (
+    (["link"], "with no record", "cannot publish Machine record"),
+    (["fsync"], "with the record published", "durability is uncertain"),
+    (["read"], "with the record published", "injected record read failure"),
+    (["digest"], "with the record published", "injected record digest failure"),
+)
+
+
+def check_publication_faults(lab: Lab) -> None:
+    """A creation that fails after its record was published undoes it (ADR 0053).
+
+    The bridge runs over the real CLI; each fault strikes after the real
+    os.link published the record (or, for "link", at it). Where the undo
+    succeeds, the registry and the generated specs equal their snapshot and
+    nothing reaches the runner. Where it cannot finish, the refusal says so,
+    bytes that are not this creation's stay, and the spec stays while the
+    record does.
+    """
+    attempt, launched = bridge_with_recorder(lab)
+    spec = lab.repo / "vm-specs/.generated"
+    registry = lab.state / "hyperlab/machines"
+
+    def struck(faults: list[str], name: str) -> str:
+        lab.arm(faults, name)
+        try:
+            return attempt("server-arch", name, "permanent", "dev", "balanced")
+        finally:
+            lab.disarm()
+
+    for serial, (faults, when, reason) in enumerate(UNDONE):
+        name = f"pub-{serial:02d}"
+        before = lab.snapshot()
+        result = struck(faults, name)
+        events = lab.events()
+        require(not [event for event in events if "without the lock" in event],
+                f"{faults}: a removal ran without the registry lock: {events}")
+        require(events[:1] == [f"{faults[0]} {when}"], f"fixture: {faults} struck as {events}")
+        require(result.startswith("refused") and reason in result and "incomplete" not in result,
+                f"{faults}: the refusal does not name the failure: {result}")
+        require(lab.snapshot() == before and not launched,
+                f"{faults}: a creation refused {when} left a record or spec behind: {result}")
+
+    # Without --project the record alone is undone, on the manual path too.
+    before = lab.snapshot()
+    result = lab.faulty(["fsync"], "pub-10", "machine", "create", "server-arch", "pub-10")
+    require(result.returncode != 0 and "durability is uncertain" in result.stderr
+            and lab.events()[:1] == ["fsync with the record published"] and lab.snapshot() == before,
+            f"a plain create that failed after publication kept its record: {result.stderr}")
+
+    # The undo cannot finish. Each case names what stays.
+    record = registry / "pub-20.yml"
+    staged = spec / "pub-20.yml"
+    replaced = b"replaced: true\n"
+    for faults, then, record_left, spec_left in (
+        (["fsync", "unlink-record"], "with the record published", "published", "staged"),
+        (["fsync", "replace-record"], "with the record published", replaced, "staged"),
+        (["fsync", "copy-record"], "with the record published", "copy", "staged"),
+        (["fsync", "rewrite-record"], "with the record published", b"rewritten: true\n", "staged"),
+        (["fsync", "fsync-again"], "with no record", None, "staged"),
+        (["fsync", "replace-spec"], "with the record published", None, replaced),
+        (["fsync", "unlink-spec"], "with no record", None, "staged"),
+    ):
+        before = lab.snapshot()
+        result = struck(faults, "pub-20")
+        events = lab.events()
+        expected = ["fsync with the record published", f"{faults[1]} {then}"]
+        require(sorted(events) == sorted(expected), f"fixture: {faults} struck as {events}")
+        require(result.startswith("refused") and "cleanup incomplete" in result and not launched,
+                f"{faults}: an unfinished undo was not reported as such: {result}")
+        if record_left is None:
+            require(not record.exists() and "pub-20" not in lab.records(),
+                    f"{faults}: the record this creation published stayed: {result}")
+        elif record_left == "copy":
+            require(record.is_file() and lab.ok("machine", "show", "pub-20")["id"] == "pub-20"
+                    and "was replaced" in result, f"{faults}: a copy of the record was taken for it: {result}")
+        elif record_left == "published":
+            require(record.is_file() and lab.ok("machine", "show", "pub-20")["id"] == "pub-20",
+                    f"{faults}: the record that could not be removed is gone: {result}")
+        else:
+            require(record.read_bytes() == record_left, f"{faults}: bytes this creation did not write were removed")
+        require(staged.is_file() and not staged.is_symlink(), f"{faults}: the spec was removed: {result}")
+        if spec_left == replaced:
+            require(staged.read_bytes() == replaced, f"{faults}: a replaced spec was not kept as it was")
+        else:
+            require(staged.read_bytes().startswith(b"---\nschema_version: 1\nname: pub-20\n"),
+                    f"{faults}: the staged spec changed: {staged.read_bytes()[:80]!r}")
+        # The fixture clears what the refusal named and the tree is as before.
+        for path in (record, staged):
+            if path.exists():
+                path.unlink()
+        require(lab.snapshot() == before, f"{faults}: something besides the named files changed")
+
+    # A fresh state home: the registry directories and the lock may appear,
+    # nothing else.
+    fresh = Lab(lab.root / "fresh")
+    attempt, launched = bridge_with_recorder(fresh)
+    fresh.arm(["fsync"], "pub-30")
+    try:
+        result = attempt("server-arch", "pub-30", "permanent", "dev", "balanced")
+    finally:
+        fresh.disarm()
+    created = sorted(path.relative_to(fresh.state).as_posix() for path in fresh.state.rglob("*"))
+    require(result.startswith("refused") and fresh.events()[:1] == ["fsync with the record published"]
+            and created == ["hyperlab", "hyperlab/machines", "hyperlab/machines/.lock"]
+            and not list((fresh.repo / "vm-specs").rglob("*.yml")) and not launched,
+            f"a refused first creation left more than the registry and its lock: {created} {result}")
 
 
 def check_withdraw(lab: Lab) -> None:
@@ -524,6 +789,7 @@ def main() -> int:
         lab = Lab(root)
         check_key_refusals(lab)
         check_bridge(lab)
+        check_publication_faults(lab)
         check_withdraw(lab)
         check_withdraw_reads_the_spec(lab)
         check_plan_matches_factory(lab)
