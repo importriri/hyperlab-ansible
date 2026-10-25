@@ -18,22 +18,29 @@ host name, the user name, the home path or an address. Every tool it calls
 has both output streams discarded; a failure prints one fixed `demo:` line
 on standard error and exits with status 1. The inventory must be readable
 JSON that names the Machine at most once, otherwise the take stops before
-the first shot.
+the first shot. `sleep` is in the preflight too, and a failed `sleep`
+stops the wait with a fixed reason. The Looking Glass client runs in the
+background for the rest of the take; when shot 5 is done and before the
+take is called complete, a client that has already ended with an error
+stops the take (it used to be ignored and the take was announced complete).
 
 ## Regression proof
 
-`tests/showcase_contract.py` runs the real script in a temporary
-directory. Stubs for `hyperlabctl`, `qs`, `sleep`, the identity commands
-(`hostname`, `id`, `ip`, `cat` and others) and the privileged ones answer
-with sentinel host, user, home and address values on both streams, and the
-environment carries the same sentinels. The complete walkthrough must show
-the six shots in order with only the reviewed IPC calls and `hyperlabctl`
-arguments; each failure (missing tool, shell not answering, existing
-Machine, unreadable inventory, inventory failing during the wait, a Machine
-that never runs, no acknowledgement) must exit with 1 and print only its
-reason. No sentinel may reach either stream and no identity command may
-run. The old printing block fails it with `walkthrough: a private sentinel
-(zq7x) reached stdout`; the other breaks are in `tests/MUTATIONS.md`.
+`tests/showcase_contract.py` runs a copy of the real script by its full
+path from a checkout inside a sentinel home, answering each shot's prompt
+as the operator does. Stubs for `hyperlabctl`, `qs`, `sleep`, the identity
+commands (`hostname`, `id`, `ip`, `cat` and others) and the privileged ones
+answer with sentinel host, user, home and address values on both streams,
+and the environment carries the same sentinels. The complete walkthrough
+must show the six shots in order with only the reviewed IPC calls and
+`hyperlabctl` arguments; each failure (missing tool, shell not answering,
+existing Machine, unreadable inventory, inventory failing during the wait,
+a failing `sleep`, a Machine that never runs, Looking Glass failing during
+shot 5 or 6, no acknowledgement) must exit with 1 and print only its
+reason; a client that is still running must not hold the take. No sentinel
+may reach either stream and no identity command may run. The old printing
+block fails it with `walkthrough: a private sentinel (zq7x) reached
+stdout`; the other breaks are in `tests/MUTATIONS.md`.
 
 The contract proves only the script's own output. Other windows,
 notifications and the recorded frames still need the review in

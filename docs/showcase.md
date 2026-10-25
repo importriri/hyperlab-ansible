@@ -27,8 +27,9 @@ tools/showcase/demo.sh demo-01
 ```
 
 The script never changes the host. Before the first shot it checks that
-`hyperlabctl`, Quickshell and Python are installed, that the shell answers,
-and that the Machine inventory is readable and does not hold the name yet.
+`hyperlabctl`, Quickshell, Python and `sleep` are installed, that the shell
+answers, and that the Machine inventory is readable and does not hold the
+name yet.
 The name is refused, before anything runs, unless it is 2 to 31 lowercase
 letters, digits and dashes starting with a letter. The script then prints a
 generic list of what must not appear in the published film, and walks the
@@ -42,9 +43,15 @@ Its terminal may be on camera, so the script never reads the host name,
 the user name, the home path or an address, and never shows the output of
 the tools it calls: a failure prints one fixed reason, such as `demo: the
 HyperLab shell does not answer; start the session first`, and stops the take
-with a nonzero status. `tests/showcase_contract.py` runs the whole take and
-each failure with stub tools that answer with made-up host values, and
-fails if one of them reaches either output stream.
+with a nonzero status. The Looking Glass client opened for shot 5 keeps
+running after the take, so the script does not wait for it: if it has
+already ended with an error when shot 5 is done, or before the take is
+called complete, the take stops with `demo: Looking Glass failed for NAME`.
+A client that fails after that is not seen by the script.
+
+`tests/showcase_contract.py` runs the whole take and each failure from a
+checkout inside a made-up home, with stub tools that answer with made-up
+host values, and fails if one of them reaches either output stream.
 
 ## Review before publishing
 

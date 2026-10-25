@@ -82,15 +82,27 @@ wait_running() {
             fail "$1 is not running after 15 minutes; stop the take"
         fi
         printf '.'
-        sleep 5
+        sleep 5 >/dev/null 2>&1 || { printf '\n'; fail "the wait for $1 was interrupted; stop the take"; }
         waited=$((waited + 5))
     done
     printf ' running\n'
 }
 
+# The Looking Glass client runs on after the take, so only a client that
+# has already ended is judged: an error status stops the take.
+viewer=""
+check_looking_glass() {
+    [ -n "${viewer}" ] || return 0
+    if kill -0 "${viewer}" 2>/dev/null; then
+        return 0
+    fi
+    wait "${viewer}" 2>/dev/null || fail "Looking Glass failed for ${name}; stop the take"
+    viewer=""
+}
+
 # Preflight: the tools exist, the shell answers and the Machine does not
 # exist yet.
-for tool in hyperlabctl qs python3; do
+for tool in hyperlabctl qs python3 sleep; do
     command -v "${tool}" >/dev/null 2>&1 || fail "${tool} is not installed"
 done
 qs -c hyperlab ipc call workspace close >/dev/null 2>&1 \
@@ -121,12 +133,15 @@ shot 4 "The GPU" \
     "The GPU badge shows the Machine holding the GPU. The per-run GPU lease is not built yet (ADR 0019): skip its shot."
 
 hyperlabctl open looking-glass "${name}" >/dev/null 2>&1 &
+viewer=$!
 shot 5 "Looking Glass and the Desks" \
     "In the guest: ALT+1, ALT+2 between Desks, ALT+D for the overview, ALT+Space for the launcher. Release the capture with Right CTRL."
+check_looking_glass
 
 shell_ipc workspace diagnostics
 shot 6 "The host frame" \
     "The frame colour is the Machine's network identity; Diagnostics shows the GPU class and the trust ladder."
 
+check_looking_glass
 shell_ipc workspace close
 printf '\nTake complete. Review every frame where text is on screen against the list above before publishing (docs/showcase.md).\n'

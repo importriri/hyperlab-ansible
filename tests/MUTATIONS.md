@@ -754,6 +754,28 @@ sentinel `zq7x` and the address `203.0.113.77`.
   Red: "Machine never running: stderr is not the one reason 'demo-01 is
   not running after 15 minutes'" (the fixture's `sleep` gives up after
   1000 seconds).
+- Break: drop `>/dev/null 2>&1` from `sleep 5` (the fixture's `sleep`
+  answers with sentinels on both streams).
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout".
+- Break: drop the `|| { ...; fail ...; }` after `sleep 5`.
+  Red: "sleep failing during the wait: stderr is not the one reason 'the
+  wait for demo-01 was interrupted'".
+- Break: drop `sleep` from the preflight tool loop.
+  Red: "without sleep: stderr is not the one reason 'sleep is not
+  installed'".
+- Break: delete the `wait "${viewer}" ... || fail` line of
+  `check_looking_glass`.
+  Red: "Looking Glass failing during shot 5: exit status 0, not 1".
+- Break: delete the `check_looking_glass` before the last `shell_ipc`.
+  Red: "Looking Glass failing during shot 6: exit status 0, not 1".
+- Break: delete the `kill -0` test, so the script waits for the client.
+  Red: "Looking Glass failing during shot 6: the script did not finish
+  within 120 seconds" (that stub ends only at shot 6's prompt; the case
+  takes the full 120 seconds).
+- Break: print `${PWD}` before shot 1, or `$0` on stderr. The fixture runs
+  the script by its full path from a checkout inside the sentinel home.
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout" (stderr
+  for `$0`).
 - Break: add `sudo -n true` before shot 1.
   Red: "walkthrough: the script ran a privileged or lifecycle tool:
   [['sudo', '-n', 'true']]".

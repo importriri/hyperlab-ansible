@@ -8,17 +8,22 @@ prints who or where the host is, and a failing dependency is reported by a
 fixed reason, never by that dependency's own output. The storyboard it
 follows must fit the roadmap's 60 to 90 seconds.
 
-The script runs here for real, in a fixture: every command it may call is
-a stub that answers with sentinel host, user, home and address values on
-both of its streams, and the environment carries the same sentinels. None
-of them may reach the script's standard output or error, on the complete
-walkthrough or on any failure.
+The script runs here for real, in a fixture: a copy runs by its full path
+from a checkout inside a sentinel home, every command it may call is a stub
+that answers with sentinel host, user, home and address values on both of
+its streams, the environment carries the same sentinels, and each shot's
+prompt is answered as the operator does. None of them may reach the
+script's standard output or error, on the complete walkthrough or on any
+failure.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import select
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -65,6 +70,7 @@ class Run:
     sleeps: list[str]
     identity: list[list[str]]
     forbidden: list[list[str]]
+    client_alive: bool = False
 
     def shots(self) -> list[str]:
         return re.findall(r"^== Shot (\d+): ", self.stdout, re.M)
@@ -127,6 +133,15 @@ if [ "$#" -eq 3 ] && [ "$1" = machine ] && [ "$2" = inventory ] && [ "$3" = --js
     esac
     exit 0
 fi
+read -r mode <"${logdir}/../open-mode" || mode=ok
+case "${mode}" in
+    fail) leak_out; leak_err; printf '%s\n' "$$" >"${logdir}/../open-pid"; exit 7 ;;
+    fail-late)
+        printf '%s\n' "$$" >"${logdir}/../open-pid"
+        while [ ! -e "${logdir}/../open-go" ]; do "${real_sleep}" 0.02; done
+        leak_out; leak_err; exit 7 ;;
+    linger) printf '%s\n' "$$" >"${logdir}/../open-pid"; exec "${real_sleep}" 20 ;;
+esac
 leak_out
 exit 0
 """
@@ -143,6 +158,9 @@ exit 0
 
 SLEEP = """\
 record sleep "$@"
+leak_out
+leak_err
+[ -s "${logdir}/../sleep-fail" ] && exit 1
 total=0
 read -r total <"${logdir}/../slept" || total=0
 total=$((total + $1))
@@ -170,22 +188,83 @@ exit 1
 """
 
 
+PROMPT = b"Press Enter when the shot is done. "
+
+
+def drive(argv: list[str], env: dict[str, str], cwd: Path, stderr: Path, acks: int,
+          on_prompt) -> tuple[int, str, str]:
+    """Answer each shot's prompt as the operator does, one at a time."""
+    with stderr.open("wb") as err:
+        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err,
+                                   env=env, cwd=cwd)
+        assert process.stdin is not None and process.stdout is not None
+        if acks == 0:
+            process.stdin.close()
+        out, prompts, deadline = b"", 0, time.monotonic() + 120
+        while True:
+            ready, _, _ = select.select([process.stdout], [], [], max(0.0, deadline - time.monotonic()))
+            if not ready:
+                process.kill()
+                process.wait()
+                raise AssertionError(f"the script did not finish within 120 seconds:\n{out.decode()}")
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                break
+            out += chunk
+            while out.count(PROMPT) > prompts:
+                prompts += 1
+                if on_prompt is not None:
+                    on_prompt(prompts)
+                if not process.stdin.closed:
+                    try:
+                        process.stdin.write(b"\n")
+                        process.stdin.flush()
+                        if prompts >= acks:
+                            process.stdin.close()
+                    except BrokenPipeError:
+                        pass
+        process.stdout.close()
+        if not process.stdin.closed:
+            try:
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+        returncode = process.wait(timeout=10)
+    return returncode, out.decode(), stderr.read_text()
+
+
+def gone(pid: int) -> bool:
+    """True once the process has exited and its parent has reaped it."""
+    return not Path(f"/proc/{pid}").exists()
+
+
 def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreating\nrunning\n",
-         stdin: str = "\n" * 6, qs_fail: str = "", missing: tuple[str, ...] = ()) -> Run:
+         acks: int = 6, qs_fail: str = "", missing: tuple[str, ...] = (), sleep_fail: bool = False,
+         open_mode: str = "ok", after: list[int] | None = None) -> Run:
     with tempfile.TemporaryDirectory(prefix="showcase-") as raw:
         fixture = Path(raw)
+        home = fixture / ("home-" + MARK)
+        # The script runs from a checkout in the sentinel home, by its full
+        # path: the working directory and every diagnostic the shell prefixes
+        # with the script's path carry the sentinel.
+        checkout = home / "hyperlab-ansible"
+        script = checkout / SCRIPT.relative_to(ROOT)
         stubs, pybin, log = fixture / "stubs", fixture / "python", fixture / "log"
-        for directory in (stubs, pybin, log, fixture / ("home-" + MARK)):
-            directory.mkdir()
+        for directory in (stubs, pybin, log, script.parent):
+            directory.mkdir(parents=True)
+        shutil.copy2(SCRIPT, script)
         (fixture / "states").write_text(states)
         (fixture / "qs-fail").write_text(qs_fail)
+        (fixture / "sleep-fail").write_text("fail\n" if sleep_fail else "")
+        (fixture / "open-mode").write_text(open_mode + "\n")
         (fixture / "calls").write_text("0\n")
         (fixture / "slept").write_text("0\n")
-        python3 = shutil.which("python3")
-        require(python3 is not None, "the showcase fixture needs python3")
+        python3, real_sleep, shell = shutil.which("python3"), shutil.which("sleep"), shutil.which("sh")
+        require(None not in (python3, real_sleep, shell), "the showcase fixture needs python3, sleep and sh")
         if "python3" not in missing:
-            (pybin / "python3").symlink_to(Path(python3).resolve())
-        programs = {"hyperlabctl": f"machine='{NAME}'\n" + CLI, "qs": QS, "sleep": SLEEP}
+            (pybin / "python3").symlink_to(Path(str(python3)).resolve())
+        programs = {"hyperlabctl": f"machine='{NAME}'\nreal_sleep='{real_sleep}'\n" + CLI, "qs": QS,
+                    "sleep": SLEEP}
         programs |= dict.fromkeys(IDENTITY, IDENTITY_STUB)
         programs |= dict.fromkeys(FORBIDDEN, FORBIDDEN_STUB)
         for tool, body in programs.items():
@@ -196,32 +275,50 @@ def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreati
             stub.chmod(0o755)
         env = {
             "PATH": f"{stubs}:{pybin}",
-            "HOME": str(fixture / ("home-" + MARK)),
+            "HOME": str(home),
             "USER": SENT_USER,
             "LOGNAME": SENT_USER,
             "HOSTNAME": SENT_HOST,
             "XDG_RUNTIME_DIR": SENT_RUNTIME,
             "LANG": "C.UTF-8",
         }
-        shell = shutil.which("sh")
-        require(shell is not None, "the showcase fixture needs sh")
+        pid_file = fixture / "open-pid"
+
+        def on_prompt(prompt: int) -> None:
+            # A failing client must have ended, and been reaped by the
+            # script's shell, before the operator answers this prompt.
+            if after is None or prompt not in after:
+                return
+            (fixture / "open-go").write_text("")
+            deadline = time.monotonic() + 10
+            while not (pid_file.exists() and pid_file.read_text().strip()
+                       and gone(int(pid_file.read_text()))):
+                require(time.monotonic() < deadline, f"{label}: the Looking Glass stub did not end")
+                time.sleep(0.02)
+
         try:
-            result = subprocess.run([str(shell), str(SCRIPT), *argv], input=stdin, capture_output=True,
-                                    text=True, timeout=120, check=False, env=env, cwd=fixture)
-        except subprocess.TimeoutExpired as exc:
-            raise AssertionError(f"{label}: the script did not finish within 120 seconds") from exc
+            returncode, stdout, stderr = drive([str(shell), str(script), *argv], env, checkout,
+                                               fixture / "stderr", acks, on_prompt)
+        except AssertionError as exc:
+            raise AssertionError(f"{label}: {exc}") from exc
         # `open looking-glass` runs in the background; give its stub a moment.
         deadline = time.monotonic() + 5
-        while (result.returncode == 0 and time.monotonic() < deadline
+        while (returncode == 0 and time.monotonic() < deadline
                and not any(call[1:3] == ["open", "looking-glass"]
                            for call in argv_log(log / "hyperlabctl"))):
             time.sleep(0.05)
-        run = Run(label, result.returncode, result.stdout, result.stderr,
+        lingering = None
+        if open_mode == "linger" and pid_file.exists():
+            lingering = int(pid_file.read_text())
+        run = Run(label, returncode, stdout, stderr,
                   [call[1:] for call in argv_log(log / "qs")],
                   [call[1:] for call in argv_log(log / "hyperlabctl")],
                   [call[1] for call in argv_log(log / "sleep")],
                   [call[1:] for call in argv_log(log / "identity")],
-                  [call[1:] for call in argv_log(log / "forbidden")])
+                  [call[1:] for call in argv_log(log / "forbidden")],
+                  lingering is not None and not gone(lingering))
+        if lingering is not None and not gone(lingering):
+            os.kill(lingering, signal.SIGTERM)
     check_always(run)
     return run
 
@@ -298,7 +395,7 @@ def check_names() -> None:
 
 
 def check_failures() -> None:
-    for tool in ("hyperlabctl", "qs", "python3"):
+    for tool in ("hyperlabctl", "qs", "python3", "sleep"):
         run = walk(f"without {tool}", [NAME], missing=(tool,))
         check_failure(run, f"{tool} is not installed")
         require(not run.ipc and not run.cli and not run.shots(), f"without {tool}: something ran")
@@ -329,11 +426,30 @@ def check_failures() -> None:
     require(slept == 900, f"Machine never running: the wait slept {slept} seconds, not 900")
     require(len(run.cli) == 1 + 900 // 5 + 1, f"Machine never running: {len(run.cli)} inventory calls")
 
+    run = walk("sleep failing during the wait", [NAME], states="absent\ncreating\n", sleep_fail=True)
+    check_failure(run, f"the wait for {NAME} was interrupted")
+    require(run.shots() == ["1", "2"], f"sleep failing during the wait: shots {run.shots()}")
+
+    for mode, after, label in (("fail", [5], "Looking Glass failing during shot 5"),
+                               ("fail-late", [6], "Looking Glass failing during shot 6")):
+        run = walk(label, [NAME], open_mode=mode, after=after)
+        require(run.returncode == 1, f"{label}: exit status {run.returncode}, not 1")
+        lines = run.stderr.splitlines()
+        require(lines == [f"demo: Looking Glass failed for {NAME}; stop the take"],
+                f"{label}: stderr is not the one reason:\n{run.stderr}")
+        require(run.shots() == SHOTS[:after[0]], f"{label}: shots {run.shots()}")
+        require("Take complete" not in run.stdout, f"{label}: the take was announced complete")
+
+    run = walk("Looking Glass client still running", [NAME], open_mode="linger")
+    require(run.returncode == 0 and "Take complete" in run.stdout,
+            f"Looking Glass client still running: exit status {run.returncode}:\n{run.stderr}")
+    require(run.client_alive, "Looking Glass client still running: the script waited for the client to end")
+
     run = walk("shell failing mid-take", [NAME], qs_fail="workspace.machines\n")
     check_failure(run, "the HyperLab shell did not open workspace machines")
     require(run.shots() == ["1"], f"shell failing mid-take: shots {run.shots()}")
 
-    run = walk("no acknowledgement", [NAME], stdin="")
+    run = walk("no acknowledgement", [NAME], acks=0)
     check_failure(run, "no answer from the terminal")
     require(run.shots() == ["1"], f"no acknowledgement: shots {run.shots()}")
 
