@@ -52,6 +52,11 @@ A client that fails after that is not seen by the script.
 `tests/showcase_contract.py` runs the whole take and each failure from a
 checkout inside a made-up home, with stub tools that answer with made-up
 host values, and fails if one of them reaches either output stream.
+It runs under whatever `sh` comes first in `PATH`, Bash on Arch and dash on
+the CI runner. Before answering a shot whose Looking Glass stub fails, it
+waits for the stub to exit, not for the shell to reap it: dash reaps it
+only after that answer
+([`showcase-contract-waited-for-reaping.md`](../problems/showcase-contract-waited-for-reaping.md)).
 
 ## Review before publishing
 

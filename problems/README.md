@@ -10,6 +10,9 @@ proof.
 - [`showcase-name-pattern-checked-three-characters.md`](showcase-name-pattern-checked-three-characters.md):
   the demo's `case` pattern checked only three characters of the Machine
   name, so `ab;id` passed; every character is now checked before any tool runs.
+- [`showcase-contract-waited-for-reaping.md`](showcase-contract-waited-for-reaping.md):
+  the showcase contract waited for dash to reap a Looking Glass stub that had
+  already failed, and timed out in CI; an exited child now counts as ended.
 - [`acceptance-contract-depended-on-the-local-zone.md`](acceptance-contract-depended-on-the-local-zone.md):
   the sender-identity contract read its fixed start time in the local
   zone and failed on the UTC runner; it now carries an explicit offset.

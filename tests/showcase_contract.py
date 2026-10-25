@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools/showcase/demo.sh"
 DOC = ROOT / "docs/showcase.md"
 IPC = ROOT / "roles/host_desktop_common/files/quickshell/hyperlab/ShellIpc.qml"
+PROC = Path("/proc")
 
 NAME = "demo-01"
 MARK = "zq7x"
@@ -233,9 +235,52 @@ def drive(argv: list[str], env: dict[str, str], cwd: Path, stderr: Path, acks: i
     return returncode, out.decode(), stderr.read_text()
 
 
-def gone(pid: int) -> bool:
-    """True once the process has exited and its parent has reaped it."""
-    return not Path(f"/proc/{pid}").exists()
+def exited(pid: int, proc: Path = PROC) -> bool:
+    """True once the process has exited, whether or not it has been reaped.
+
+    An exited child stays in the process table, in state Z, until its
+    parent waits for it, and when that happens depends on the shell: Bash
+    reaps a background job as soon as it ends, dash and BusyBox sh leave it
+    there while `read` waits for the operator. A status line that cannot be
+    read or parsed is a refusal, never an exit.
+    """
+    path = proc / str(pid) / "stat"
+    try:
+        stat = path.read_text()
+    except (FileNotFoundError, ProcessLookupError):
+        require((proc / "self" / "stat").is_file(), f"{proc} is not a proc filesystem")
+        return True
+    # "PID (COMMAND) STATE ...": the command may hold ") " itself.
+    head, close, tail = stat.rpartition(") ")
+    fields = tail.split()
+    require(close != "" and head.partition(" (")[0] == str(pid) and len(fields) > 0
+            and len(fields[0]) == 1, f"{path} is not a process status line: {stat!r}")
+    return fields[0] == "Z"
+
+
+def client_pid(path: Path) -> int | None:
+    """The PID the client stub wrote, read once; None until it is written.
+
+    The stub writes the PID and a newline: a missing or empty file, or one
+    without the newline yet, is not written yet. Anything else that is not
+    a PID is a refusal.
+    """
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return None
+    if not text.endswith("\n"):
+        return None
+    require(re.fullmatch(r"[1-9][0-9]*\n", text) is not None, f"{path} does not hold a PID: {text!r}")
+    return int(text)
+
+
+def refused(call: Callable[[], object]) -> bool:
+    try:
+        call()
+    except (AssertionError, OSError):
+        return True
+    return False
 
 
 def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreating\nrunning\n",
@@ -285,14 +330,17 @@ def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreati
         pid_file = fixture / "open-pid"
 
         def on_prompt(prompt: int) -> None:
-            # A failing client must have ended, and been reaped by the
-            # script's shell, before the operator answers this prompt.
+            # A failing client must have ended before the operator answers
+            # this prompt. Whether the script's shell has reaped it by then
+            # depends on the shell, so it is not waited for.
             if after is None or prompt not in after:
                 return
             (fixture / "open-go").write_text("")
             deadline = time.monotonic() + 10
-            while not (pid_file.exists() and pid_file.read_text().strip()
-                       and gone(int(pid_file.read_text()))):
+            while True:
+                pid = client_pid(pid_file)
+                if pid is not None and exited(pid):
+                    return
                 require(time.monotonic() < deadline, f"{label}: the Looking Glass stub did not end")
                 time.sleep(0.02)
 
@@ -307,17 +355,16 @@ def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreati
                and not any(call[1:3] == ["open", "looking-glass"]
                            for call in argv_log(log / "hyperlabctl"))):
             time.sleep(0.05)
-        lingering = None
-        if open_mode == "linger" and pid_file.exists():
-            lingering = int(pid_file.read_text())
+        lingering = client_pid(pid_file) if open_mode == "linger" else None
+        alive = lingering is not None and not exited(lingering)
         run = Run(label, returncode, stdout, stderr,
                   [call[1:] for call in argv_log(log / "qs")],
                   [call[1:] for call in argv_log(log / "hyperlabctl")],
                   [call[1] for call in argv_log(log / "sleep")],
                   [call[1:] for call in argv_log(log / "identity")],
                   [call[1:] for call in argv_log(log / "forbidden")],
-                  lingering is not None and not gone(lingering))
-        if lingering is not None and not gone(lingering):
+                  alive)
+        if lingering is not None and alive:
             os.kill(lingering, signal.SIGTERM)
     check_always(run)
     return run
@@ -475,7 +522,63 @@ def check_storyboard() -> None:
             f"the storyboard runs {sum(seconds)} seconds, not 60 to 90")
 
 
+def check_exit_predicate() -> None:
+    """The fixture tells a client that has ended from one still running."""
+    child = subprocess.Popen([sys.executable, "-I", "-c", ""])
+    try:
+        # Returns once the child has exited and leaves it unreaped (state Z).
+        os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOWAIT)
+        require((PROC / str(child.pid)).exists(), "exit predicate: the child was reaped before the check")
+        require(exited(child.pid), "exit predicate: an exited, unreaped child counts as running")
+    finally:
+        child.wait()
+    require(exited(child.pid), "exit predicate: a reaped child counts as running")
+
+    live = subprocess.Popen([sys.executable, "-I", "-c", "import sys; sys.stdin.read()"],
+                            stdin=subprocess.PIPE)
+    assert live.stdin is not None
+    try:
+        # The child cannot end before its standard input is closed.
+        require(not exited(live.pid), "exit predicate: a live child counts as exited")
+    finally:
+        live.stdin.close()
+        live.wait()
+
+    with tempfile.TemporaryDirectory(prefix="showcase-proc-") as raw:
+        proc = Path(raw)
+        require(refused(lambda: exited(7, proc)),
+                "exit predicate: a missing proc filesystem counts as an exit")
+        (proc / "self").mkdir()
+        (proc / "self" / "stat").write_text("1 (python3) R 0 1 1\n")
+        require(exited(7, proc), "exit predicate: a missing PID counts as running")
+        entry = proc / "7"
+        entry.mkdir()
+        # The command name is in parentheses and may hold ") " itself.
+        for stat, ended in (("7 (sh) S 1 7\n", False), ("7 (sh) Z 1 7\n", True),
+                            ("7 (a) Z (b) S 1 7\n", False), ("7 (a) S (b) Z 1 7\n", True)):
+            (entry / "stat").write_text(stat)
+            require(exited(7, proc) is ended, f"exit predicate: {stat!r} read as exited={not ended}")
+        for stat in ("", "garbage\n", "8 (sh) Z 1 8\n", "7 (sh)\n", "7 sh Z 1\n", "7 (sh) ZZ 1\n"):
+            (entry / "stat").write_text(stat)
+            require(refused(lambda: exited(7, proc)), f"exit predicate: {stat!r} was not refused")
+        (entry / "stat").unlink()
+        (entry / "stat").mkdir()
+        require(refused(lambda: exited(7, proc)), "exit predicate: an unreadable stat was not refused")
+
+        pid_file = proc / "open-pid"
+        require(client_pid(pid_file) is None, "client PID: a missing PID file holds a PID")
+        for text in ("", "12"):
+            pid_file.write_text(text)
+            require(client_pid(pid_file) is None, f"client PID: {text!r} is a PID before it is written")
+        pid_file.write_text("12\n")
+        require(client_pid(pid_file) == 12, "client PID: '12\\n' is not PID 12")
+        for text in ("\n", "x\n", "0\n", "-3\n", "12 13\n", "12\n13\n"):
+            pid_file.write_text(text)
+            require(refused(lambda: client_pid(pid_file)), f"client PID: {text!r} was not refused")
+
+
 def main() -> int:
+    check_exit_predicate()
     check_walkthrough()
     check_names()
     check_failures()

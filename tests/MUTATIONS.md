@@ -771,7 +771,9 @@ sentinel `zq7x` and the address `203.0.113.77`.
 - Break: delete the `kill -0` test, so the script waits for the client.
   Red: "Looking Glass failing during shot 6: the script did not finish
   within 120 seconds" (that stub ends only at shot 6's prompt; the case
-  takes the full 120 seconds).
+  takes the full 120 seconds). The lingering-client case alone is red too:
+  "Looking Glass client still running: the script waited for the client to
+  end" (its stub sleeps 20 seconds).
 - Break: print `${PWD}` before shot 1, or `$0` on stderr. The fixture runs
   the script by its full path from a checkout inside the sentinel home.
   Red: "walkthrough: a private sentinel (zq7x) reached stdout" (stderr
@@ -784,3 +786,29 @@ sentinel `zq7x` and the address `203.0.113.77`.
   Red: "walkthrough: hyperlabctl was asked for ['machine', 'delete',
   'demo-01']".
 - Restore: `git checkout -- tools/showcase/demo.sh`.
+
+### The showcase fixture tells an exited client from a reaped one
+
+`problems/showcase-contract-waited-for-reaping.md`. Each break goes into
+`exited()` or `client_pid()` in `tests/showcase_contract.py` and turns
+`python tests/showcase_contract.py` red with the message shown before the
+take runs, whatever `sh` is. To replay the Looking Glass breaks above
+under dash, put a directory whose `sh` links to dash first in `PATH`;
+they are red under dash as under Bash.
+
+- Break: replace the body of `exited()` with
+  `return not Path(f"/proc/{pid}").exists()` (the check CI timed out on
+  under dash).
+  Red: "exit predicate: an exited, unreaped child counts as running".
+- Break: replace the body of `exited()` with `return True`.
+  Red: "exit predicate: a live child counts as exited".
+- Break: drop the `require` on `<proc>/self/stat`, so a missing proc
+  filesystem reads as every process gone.
+  Red: "exit predicate: a missing proc filesystem counts as an exit".
+- Break: in `client_pid()`, return `None` instead of refusing a line that
+  is not a PID.
+  Red: "client PID: '\n' was not refused".
+- Break: in `client_pid()`, accept a file without its newline
+  (`if not text:` for `if not text.endswith("\n"):`).
+  Red: "... open-pid does not hold a PID: '12'".
+- Restore: `git checkout -- tests/showcase_contract.py`.

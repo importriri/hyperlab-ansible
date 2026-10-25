@@ -338,7 +338,8 @@ platform, recorded on the host:
 - [x] a demo script that runs the steps in order, so the take is clean
       (`tools/showcase/demo.sh`, read-only; it prints a generic privacy
       checklist, never this host's names, paths or addresses, and a failing
-      tool only as a fixed reason; software-verified)
+      tool only as a fixed reason; software-verified with `sh` as Bash and
+      as dash, the CI runner's shell)
 - [ ] recording on the host, editing, captions
 - [ ] review before publishing: no host name, user name, address or private
       path on screen
