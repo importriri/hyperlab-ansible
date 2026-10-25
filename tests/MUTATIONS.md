@@ -906,8 +906,9 @@ turns the named contract red with the message shown.
   creation, as two calls.
   Red: `tests/c10_machine_create_plan_contract.py`, "a refused projection
   left a record on a fresh registry: ['.lock', 'srv-01.yml']";
-  `tests/host_machine_actions_bridge_contract.py`, "the bridge made another
-  call".
+  `tests/host_machine_actions_bridge_contract.py`, "an unconfirmed creation
+  went on: {} -> 'crashed: ... unexpected hyperlabctl call ('machine',
+  'project', 'srv-a')'".
 - Break: in `_undo_creation()` of `commands/machine.py`, replace the call
   to `_remove_staged_spec()` with `reason = None`.
   Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a creation
@@ -956,9 +957,11 @@ turns the named contract red with the message shown.
   custom values are checked only after the plan is read.
   Red: `tests/host_machine_actions_bridge_contract.py`, "an option-like value
   at position 7 reached hyperlabctl".
-- Break: in `guest_key()` of `machine_provision.py`, return a key for a line
-  whose type is `ssh-rsa`.
-  Red: `tests/c10_machine_create_plan_contract.py`, "rsa key accepted".
+- Break: in `guest_key()` of `machine_provision.py`, let the type check
+  pass `ssh-rsa` (`if kind not in ("ssh-ed25519", "ssh-rsa"):`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "rsa key refused for
+  the wrong reason" (the shape check still refuses it, without naming the
+  type).
 - Break: in `guest_key()`, count only the non-blank lines again
   (`[line for line in text.splitlines() if line.strip()]`).
   Red: `tests/c10_machine_create_plan_contract.py`, "leading blank key
