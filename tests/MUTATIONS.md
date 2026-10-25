@@ -828,3 +828,58 @@ they are red under dash as under Bash.
   (`return int(path.read_text())`).
   Red: "client PID: '12\n' was read 2 times, not once".
 - Restore: `git checkout -- tests/showcase_contract.py`.
+
+### A release gate passes only with every reviewed boolean true
+
+`problems/release-pass-with-false-booleans.md`. The breaks go into
+`tools/release_acceptance.py` (M1-M7) or `tools/release_probe.py`
+(M8-M9). Run `python tests/release_acceptance_contract.py` and
+`python tests/release_probe_contract.py`; they build temporary fixture
+campaigns only. The red message is the first one each contract prints.
+
+- M1. Break: in `validate_gate_payload`, replace
+  `value is True or not complete,` with `True,`.
+  Red: acceptance contract, "repository-software.clean_worktrees=false
+  was recorded as a pass" (record) and "status accepted an edited pass
+  with repository-software.clean_worktrees=false" (status and seal).
+- M2. Break: delete `"spice_socket_private",` from `BOOL_FIELDS`.
+  Red: acceptance contract, "tool booleans differ from the reviewed
+  manifest booleans: missing=['spice_socket_private'] extra=[]", "pass
+  gate looking-glass accepted spice_socket_private='true'" and the record
+  and edited-evidence cases for `looking-glass`; probe contract, "field
+  spice_socket_private is not a reviewed boolean".
+- M3. Break: check truth only on record. Replace
+  `value is True or not complete,` with `True,` and, after
+  `validate_gate_payload(planned, payload, ...)` in `record_gate`, add a
+  loop over `BOOL_FIELDS & set(payload)` that requires `payload[field] is
+  True or status_value != "pass"`.
+  Red: "status accepted an edited pass with
+  repository-software.clean_worktrees=false". The record case stays
+  green, as it should: `record_gate` still checks the incoming payload
+  itself. Only the read paths lose the guard, which is what this break
+  is meant to show.
+- M4. Break: `isinstance(value, bool),` becomes
+  `isinstance(value, (bool, int, str)),`.
+  Red: "pass clean_worktrees='true': passed evidence gate
+  repository-software field clean_worktrees must be true" (the refusal
+  names truth instead of the type); in a failed gate the text is
+  accepted.
+- M5. Break: `"ready_to_seal": True,` in `status_report`.
+  Red: "a pending campaign is ready to seal" and "a campaign failed at
+  repository-software is ready to seal".
+- M6. Break: `value is True or not complete,` becomes `value is True,`.
+  Red: "a failed gate cannot hold repository-software.clean_worktrees=false"
+  and "repository-software.clean_worktrees=false refused in a failed gate".
+- M7. Break: add `"loopback_spice",` back to `BOOL_FIELDS`.
+  Red: "tool booleans differ from the reviewed manifest booleans:
+  missing=[] extra=['loopback_spice']"; probe contract, "gate looking-glass
+  fields differ: missing=[] extra=['loopback_spice']".
+- M8. Break: in `build_payload`, delete the `require(field not in
+  BOOL_FIELDS, ...)` line of the `--value` loop.
+  Red: probe contract, "boolean text was accepted", "boolean field
+  clean_worktrees needs --true or --false" and "--value
+  spice_socket_private=true was accepted".
+- M9. Break: in the `--false` loop of `build_payload`,
+  `set_once(field, False)` becomes `set_once(field, True)`.
+  Red: probe contract, "--false clean_worktrees did not give false".
+- Restore: `git checkout -- tools/release_acceptance.py tools/release_probe.py`.

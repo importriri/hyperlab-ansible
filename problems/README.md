@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`release-pass-with-false-booleans.md`](release-pass-with-false-booleans.md):
+  a release gate could pass and seal with its boolean evidence false, and the
+  private SPICE socket was typed as text; a pass now needs every boolean true.
 - [`showcase-demo-showed-host-values-on-camera.md`](showcase-demo-showed-host-values-on-camera.md):
   the demo script printed this host's names, home path and addresses on the
   terminal of the take; it now prints a generic checklist and fixed reasons.

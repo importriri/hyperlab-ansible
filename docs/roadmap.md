@@ -614,6 +614,12 @@ Measured with the complete security plane active.
       host-idempotence, network-isolation, standard-vm-lifecycle,
       vfio-trust-lifecycle, looking-glass, jellyfin-service, service-recovery,
       sanitized-publication
+  - [x] a passed gate needs every reviewed boolean exactly true on record,
+        status and seal; `spice_socket_private` is a typed boolean
+        ([`problems/release-pass-with-false-booleans.md`](../problems/release-pass-with-false-booleans.md),
+        `tests/release_acceptance_contract.py`,
+        `tests/release_probe_contract.py`, software-verified on fixture
+        campaigns)
 - [ ] `arch-bootstrap` frozen at the same campaign; `arch-hypervisor-lab`
       receives only the sanitized evidence
 - [x] threat model document: what HyperLab protects against and what it does

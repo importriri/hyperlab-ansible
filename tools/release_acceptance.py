@@ -29,7 +29,7 @@ BOOL_FIELDS = {
     "second_apply_changed_zero",
     "exclusive_owner",
     "reboot_resets_trust",
-    "loopback_spice",
+    "spice_socket_private",
     "guest_health",
     "lan_http_health",
     "tcp_8096_only",
@@ -391,6 +391,12 @@ def validate_gate_payload(
             require(
                 isinstance(value, bool),
                 f"evidence gate {planned['id']} field {field} must be boolean",
+            )
+            # A pass proves every reviewed observation; only a failed gate
+            # may keep a false one.
+            require(
+                value is True or not complete,
+                f"passed evidence gate {planned['id']} field {field} must be true",
             )
 
 

@@ -2,8 +2,10 @@
 """Host-independent contracts for read-only M9 gate probes."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -14,10 +16,14 @@ os.environ["PRIVATESTACK_BOOTSTRAP_STORAGE_TEST"] = "1"
 import sys
 
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tests"))
 from release_acceptance import AcceptanceError, load_yaml  # noqa: E402
+from release_acceptance_contract import REVIEWED_EVIDENCE  # noqa: E402
 from release_probe import build_payload, hash_regular_file, storage_payload  # noqa: E402
 
 MANIFEST = ROOT / "release/acceptance.v2.yml"
+PROBE = ROOT / "tools/release_probe.py"
+BOOLEAN_TEXT = ("true", "false", "yes", "no", "0", "1")
 
 
 def contract(topology: str) -> dict[str, object]:
@@ -54,6 +60,41 @@ def observation(source: str, fsroot: str, target: str = "/var/lib/libvirt/images
 def write_contract(path: Path, topology: str) -> None:
     path.write_text(yaml.safe_dump(contract(topology), sort_keys=False), encoding="utf-8")
     path.chmod(0o644)
+
+
+def text_values(gate_id: str, *, without: str = "") -> list[str]:
+    """--value arguments for every hash and descriptive field of a gate."""
+    classes = REVIEWED_EVIDENCE[gate_id]
+    values = [
+        f"{field}={hashlib.sha256(field.encode()).hexdigest()}"
+        for field in classes["hashes"]
+    ]
+    values.extend(f"{field}=reviewed-{field}" for field in classes["descriptive"])
+    return [value for value in values if value.split("=", 1)[0] != without]
+
+
+def payload_refused(
+    message: str,
+    gate_id: str,
+    values: list[str],
+    true_fields: list[str],
+) -> None:
+    try:
+        build_payload(load_yaml(MANIFEST), gate_id, values, true_fields, [], [])
+    except AcceptanceError as exc:
+        assert message in str(exc), f"expected {message!r}, got {exc}"
+    else:
+        raise AssertionError(f"accepted, expected refusal: {message}")
+
+
+def probe_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(PROBE), "--manifest", str(MANIFEST), "payload", *arguments],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "PYTHONNOUSERSITE": "1"},
+    )
 
 
 def test_storage_probe_accepts_both_reviewed_shapes() -> None:
@@ -225,6 +266,79 @@ def test_publication_gate_hashes_the_bundle_not_its_future_receipt() -> None:
         "known_limits",
     ]
     assert "evidence_receipt_sha256" not in json.dumps(manifest)
+
+
+def test_payload_types_every_reviewed_boolean_from_its_own_flag() -> None:
+    manifest = load_yaml(MANIFEST)
+    for gate_id, classes in REVIEWED_EVIDENCE.items():
+        values = text_values(gate_id)
+        booleans = list(classes["booleans"])
+        for field in booleans:
+            others = [item for item in booleans if item != field]
+            proven = build_payload(manifest, gate_id, values, booleans, [], [])
+            assert proven[field] is True, f"--true {field} did not give true"
+            failed = build_payload(manifest, gate_id, values, others, [field], [])
+            assert failed[field] is False, f"--false {field} did not give false"
+            for text in BOOLEAN_TEXT:
+                payload_refused(
+                    f"boolean field {field} needs --true or --false",
+                    gate_id,
+                    [*values, f"{field}={text}"],
+                    others,
+                )
+        for field in classes["descriptive"]:
+            payload_refused(
+                f"field {field} is not a reviewed boolean",
+                gate_id,
+                text_values(gate_id, without=field),
+                [*booleans, field],
+            )
+    payload_refused(
+        "field loopback_spice is not a reviewed boolean",
+        "looking-glass",
+        text_values("looking-glass"),
+        ["spice_socket_private", "loopback_spice"],
+    )
+
+
+def test_probe_command_types_the_private_spice_socket() -> None:
+    values = [
+        argument
+        for value in text_values("looking-glass")
+        for argument in ("--value", value)
+    ]
+    proven = probe_cli("--gate", "looking-glass", *values, "--true", "spice_socket_private")
+    assert proven.returncode == 0, proven.stderr
+    assert json.loads(proven.stdout)["spice_socket_private"] is True, proven.stdout
+
+    failed = probe_cli("--gate", "looking-glass", *values, "--false", "spice_socket_private")
+    assert failed.returncode == 0, failed.stderr
+    assert json.loads(failed.stdout)["spice_socket_private"] is False, (
+        f"--false spice_socket_private gave {failed.stdout}"
+    )
+
+    for text in BOOLEAN_TEXT:
+        result = probe_cli(
+            "--gate", "looking-glass", *values, "--value", f"spice_socket_private={text}"
+        )
+        assert result.returncode == 2, f"--value spice_socket_private={text} was accepted"
+        assert (
+            "boolean field spice_socket_private needs --true or --false" in result.stderr
+        ), result.stderr
+
+    retired = probe_cli(
+        "--gate",
+        "looking-glass",
+        *values,
+        "--true",
+        "spice_socket_private",
+        "--true",
+        "loopback_spice",
+    )
+    assert retired.returncode == 2, "--true loopback_spice was accepted"
+    assert "field loopback_spice is not a reviewed boolean" in retired.stderr, (
+        retired.stderr
+    )
 
 
 def main() -> int:
