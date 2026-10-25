@@ -15,7 +15,9 @@ halves to the factory that writes the Machine record:
     stale spec, a link or a directory where the spec goes, an unreadable
     libvirt list) leaves the registry and the generated specs as they were;
   * a failure at the real publication or after it (the directory sync,
-    the read-back, the digest) undoes the record and then the spec under
+    the read-back, the digest, a digest of other bytes, a cancellation
+    right after os.link, at the inspection or at the sync) undoes the
+    record and then the spec under
     the lock, and an undo that cannot finish says so and keeps what is not
     this creation's, and the spec while the record stays;
   * `machine withdraw` removes only the record whose digest it is given, and
@@ -120,6 +122,8 @@ def install(config_path):
     real_fsync = machine_registry._fsync_directory
 
     def fsync(directory):
+        if record.is_file() and once("interrupt-fsync"):
+            raise KeyboardInterrupt
         if record.is_file() and once("fsync"):
             if once("replace-record"):
                 replace(record)
@@ -132,11 +136,20 @@ def install(config_path):
             if once("replace-spec"):
                 replace(spec)
             raise OSError(errno.EIO, "injected directory fsync failure")
-        if "fsync" in fired and once("fsync-again"):
+        if fired and once("fsync-again"):
             raise OSError(errno.EIO, "injected second directory fsync failure")
         return real_fsync(directory)
 
     machine_registry._fsync_directory = fsync
+
+    real_inspect = machine_registry._inspect_record_file
+
+    def inspect(path, *args, **kwargs):
+        if pathlib.Path(path) == record and record.is_file() and once("interrupt-inspect"):
+            raise KeyboardInterrupt
+        return real_inspect(path, *args, **kwargs)
+
+    machine_registry._inspect_record_file = inspect
 
     real_read = command.read_machine
 
@@ -152,6 +165,9 @@ def install(config_path):
     def digest(*args, **kwargs):
         if record.is_file() and once("digest"):
             raise Unavailable("injected record digest failure")
+        if record.is_file() and once("wrong-digest"):
+            # A well-formed digest of other bytes.
+            return "0" * 64
         return real_digest(*args, **kwargs)
 
     command.record_sha256 = digest
@@ -161,6 +177,10 @@ def install(config_path):
     def link(source, destination, *args, **kwargs):
         if pathlib.Path(destination) == record and once("link"):
             raise OSError(errno.EIO, "injected link failure")
+        if pathlib.Path(destination) == record and "interrupt-after-link" in faults:
+            real_link(source, destination, *args, **kwargs)
+            once("interrupt-after-link")
+            raise KeyboardInterrupt
         return real_link(source, destination, *args, **kwargs)
 
     os.link = link
@@ -550,6 +570,11 @@ UNDONE = (
     (["fsync"], "with the record published", "durability is uncertain"),
     (["read"], "with the record published", "injected record read failure"),
     (["digest"], "with the record published", "injected record digest failure"),
+    (["wrong-digest"], "with the record published", "is not the one this creation published"),
+    # A handled cancellation is undone like any failure, record first.
+    (["interrupt-after-link"], "with the record published", "interrupted"),
+    (["interrupt-inspect"], "with the record published", "interrupted"),
+    (["interrupt-fsync"], "with the record published", "interrupted"),
 )
 
 
@@ -582,10 +607,13 @@ def check_publication_faults(lab: Lab) -> None:
         require(not [event for event in events if "without the lock" in event],
                 f"{faults}: a removal ran without the registry lock: {events}")
         require(events[:1] == [f"{faults[0]} {when}"], f"fixture: {faults} struck as {events}")
+        after = lab.snapshot()
+        require(after == before and not launched,
+                f"{faults}: a creation refused {when} left a record or spec behind "
+                f"(record kept: {(registry / (name + '.yml')).exists()}, "
+                f"spec kept: {(spec / (name + '.yml')).exists()}): {result}")
         require(result.startswith("refused") and reason in result and "incomplete" not in result,
                 f"{faults}: the refusal does not name the failure: {result}")
-        require(lab.snapshot() == before and not launched,
-                f"{faults}: a creation refused {when} left a record or spec behind: {result}")
 
     # Without --project the record alone is undone, on the manual path too.
     before = lab.snapshot()
@@ -606,11 +634,13 @@ def check_publication_faults(lab: Lab) -> None:
         (["fsync", "fsync-again"], "with no record", None, "staged"),
         (["fsync", "replace-spec"], "with the record published", None, replaced),
         (["fsync", "unlink-spec"], "with no record", None, "staged"),
+        (["interrupt-fsync", "unlink-record"], "with the record published", "published", "staged"),
+        (["interrupt-inspect", "fsync-again"], "with no record", None, "staged"),
     ):
         before = lab.snapshot()
         result = struck(faults, "pub-20")
         events = lab.events()
-        expected = ["fsync with the record published", f"{faults[1]} {then}"]
+        expected = [f"{faults[0]} with the record published", f"{faults[1]} {then}"]
         require(sorted(events) == sorted(expected), f"fixture: {faults} struck as {events}")
         require(result.startswith("refused") and "cleanup incomplete" in result and not launched,
                 f"{faults}: an unfinished undo was not reported as such: {result}")
@@ -619,7 +649,8 @@ def check_publication_faults(lab: Lab) -> None:
                     f"{faults}: the record this creation published stayed: {result}")
         elif record_left == "copy":
             require(record.is_file() and lab.ok("machine", "show", "pub-20")["id"] == "pub-20"
-                    and "was replaced" in result, f"{faults}: a copy of the record was taken for it: {result}")
+                    and "not the file this creation wrote" in result,
+                    f"{faults}: a copy of the record was taken for it: {result}")
         elif record_left == "published":
             require(record.is_file() and lab.ok("machine", "show", "pub-20")["id"] == "pub-20",
                     f"{faults}: the record that could not be removed is gone: {result}")

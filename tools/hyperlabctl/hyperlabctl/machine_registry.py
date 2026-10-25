@@ -25,7 +25,7 @@ import re
 import stat
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -701,18 +701,14 @@ class PublishedRecord:
     sha256: str
 
 
-class RecordPublicationFailed(Unavailable):
-    """The record was published, then a step after the publication failed."""
+def interruption(
+    exc: BaseException,
+) -> str:
+    """What a failure says, also when it is a cancellation with no text."""
 
-    def __init__(
-        self,
-        message: str,
-        published: PublishedRecord,
-    ) -> None:
-        super().__init__(
-            message
-        )
-        self.published = published
+    return str(
+        exc
+    ) or f"interrupted ({type(exc).__name__})"
 
 
 def create_machine(
@@ -720,36 +716,59 @@ def create_machine(
     *,
     state_home: Path | None = None,
 ) -> Path:
-    """Publish a new record; a failure after its publication withdraws it."""
+    """Publish a new record under the registry lock; any failure after the
+    publication, a cancellation included, withdraws it under the same lock."""
 
-    try:
-        return publish_machine(
-            record,
-            state_home=state_home,
-        ).path
-    except RecordPublicationFailed as exc:
-        left = withdraw_published(
-            exc.published
-        )
+    # A record refused on its own content touches nothing, not even the lock.
+    record = validate_machine_record(
+        record,
+    )
 
-        if left is not None:
-            raise Unavailable(
-                f"{exc}; cleanup incomplete: {left}"
-            ) from exc
+    announced: list[PublishedRecord] = []
 
-        raise
+    with registry_lock(
+        state_home=state_home,
+        create=True,
+    ):
+        try:
+            return publish_machine(
+                record,
+                state_home=state_home,
+                announce=announced.append,
+            ).path
+        except BaseException as exc:
+            if not announced:
+                raise
+
+            left = withdraw_published(
+                announced[0]
+            )
+
+            if left is not None:
+                raise Unavailable(
+                    f"{interruption(exc)}; cleanup incomplete: {left}"
+                ) from exc
+
+            if not isinstance(exc, Exception):
+                raise Unavailable(
+                    f"{interruption(exc)}; the record was withdrawn"
+                ) from exc
+
+            raise
 
 
 def publish_machine(
     record: dict[str, Any],
     *,
     state_home: Path | None = None,
+    announce: Callable[[PublishedRecord], None] | None = None,
 ) -> PublishedRecord:
     """Publish a new record and say which file it is.
 
-    A failure after the record is in place raises RecordPublicationFailed,
-    which carries the publication: the caller withdraws it with
-    withdraw_published(), so a refused creation leaves no record.
+    `announce` receives the publication before os.link puts it in place, so
+    a caller that sees any exception afterwards, a cancellation included,
+    knows which file to withdraw with withdraw_published(). Once announced,
+    the record may or may not be in place; withdraw_published() tells.
     """
 
     record = validate_machine_record(
@@ -834,6 +853,20 @@ def publish_machine(
 
         descriptor = -1
 
+        publication = PublishedRecord(
+            path=destination,
+            device=written.st_dev,
+            inode=written.st_ino,
+            sha256=hashlib.sha256(
+                encoded
+            ).hexdigest(),
+        )
+
+        if announce is not None:
+            announce(
+                publication
+            )
+
         try:
             os.link(
                 temporary,
@@ -884,34 +917,18 @@ def publish_machine(
             "Machine record publication failed"
         )
 
-    publication = PublishedRecord(
-        path=destination,
-        device=written.st_dev,
-        inode=written.st_ino,
-        sha256=hashlib.sha256(
-            encoded
-        ).hexdigest(),
+    _inspect_record_file(
+        destination,
     )
-
-    try:
-        _inspect_record_file(
-            destination,
-        )
-    except Unavailable as exc:
-        raise RecordPublicationFailed(
-            str(exc),
-            publication,
-        ) from exc
 
     try:
         _fsync_directory(
             directory,
         )
     except OSError as exc:
-        raise RecordPublicationFailed(
+        raise Unavailable(
             "Machine record directory "
-            "durability is uncertain",
-            publication,
+            "durability is uncertain"
         ) from exc
 
     return publication
@@ -924,11 +941,30 @@ def withdraw_published(
 
     Only the file this publication put in place goes: the same inode, still
     a regular file, still holding the bytes it wrote. The removal counts once
-    the directory is synced. The caller holds registry_lock(), and nothing
-    here is atomic against a writer that ignores the lock or across a crash.
+    the directory is synced. No record where it was announced means it was
+    never linked, or is gone: the directory is synced all the same before
+    that counts. The caller holds registry_lock(), and nothing here is
+    atomic against a writer that ignores the lock or across a crash.
     """
 
     path = published.path
+
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        try:
+            _fsync_directory(
+                path.parent,
+            )
+        except OSError as exc:
+            return (
+                f"Machine record {path.name} is absent, but its directory "
+                f"cannot be synced: {exc.strerror}"
+            )
+
+        return None
+    except OSError as exc:
+        return f"cannot inspect Machine record {path.name}: {exc.strerror}"
 
     try:
         descriptor = os.open(
@@ -953,7 +989,10 @@ def withdraw_published(
             or (info.st_dev, info.st_ino)
             != (published.device, published.inode)
         ):
-            return f"Machine record {path.name} was replaced; it is kept"
+            return (
+                f"Machine record {path.name} is not the file this "
+                "creation wrote (replaced); it is kept"
+            )
 
         data = os.read(
             descriptor,

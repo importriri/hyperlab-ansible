@@ -913,9 +913,9 @@ turns the named contract red with the message shown.
   to `_remove_staged_spec()` with `reason = None`.
   Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a creation
   refused with no record left a record or spec behind".
-- Break: in `MachineCommand._create()`, pass `None` instead of `published`
-  to `_undo_creation()`, so the record the real `os.link` published is
-  not undone.
+- Break: in `MachineCommand._create()`, pass `None` instead of the
+  announced publication to `_undo_creation()`, so the record the real
+  `os.link` published is not undone.
   Red: `tests/c10_machine_create_plan_contract.py`, "['fsync']: a creation
   refused with the record published left a record or spec behind".
 - Break: in `create_machine()` of `machine_registry.py`, replace the call
@@ -999,4 +999,30 @@ turns the named contract red with the message shown.
   `yaml.SafeLoader` instead of `_UniqueKeyLoader`.
   Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on with
   a duplicate key spec: 0".
+- Break: in `MachineCommand._create()`, catch `Exception` instead of
+  `BaseException` around the publication.
+  Red: `tests/c10_machine_create_plan_contract.py`,
+  "['interrupt-after-link']: a creation refused with the record published
+  left a record or spec behind (record kept: True, spec kept: True)".
+- Break: the same in `create_machine()` of `machine_registry.py`.
+  Red: `tests/c10_machine_registry_contract.py`, "a cancellation after the
+  publication escaped create_machine(); record left: True".
+- Break: in `publish_machine()`, delete the `announce(publication)` call
+  before `os.link`, so the caller learns of the publication only once it
+  returns.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync']: a creation
+  refused with the record published left a record or spec behind (record
+  kept: True, spec kept: False)"; `tests/c10_machine_registry_contract.py`,
+  "a creation refused after its publication left its record behind".
+- Break: in `create_machine()`, replace `with registry_lock(...)` with
+  `with contextlib.nullcontext():`.
+  Red: `tests/c10_machine_registry_contract.py`, "a library rollback
+  removed a record without the registry lock"; with
+  `verify_library_creation_locked` run on its own, "create_machine()
+  published while another process held the registry lock".
+- Break: in `MachineCommand._create()`, replace
+  `if digest != published.sha256:` with `if False:`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['wrong-digest']: a
+  creation refused with the record published left a record or spec behind
+  (record kept: True, spec kept: True): launched".
 - Restore: copy the broken file back from the copy taken before the break.

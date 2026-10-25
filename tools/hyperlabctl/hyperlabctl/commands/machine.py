@@ -28,7 +28,7 @@ from ..machine_provision import (
 )
 from ..machine_registry import (
     PublishedRecord,
-    RecordPublicationFailed,
+    interruption,
     list_machines,
     publish_machine,
     read_machine,
@@ -812,7 +812,9 @@ class MachineCommand(Command):
 
         spec = None
         staged = None
-        published = None
+        # Filled before os.link, so that whatever is raised after it, a
+        # cancellation included, the undo knows which record is this one.
+        announced: list[PublishedRecord] = []
 
         with registry_lock(
             create=True,
@@ -838,13 +840,10 @@ class MachineCommand(Command):
                         root / spec
                     )
 
-                try:
-                    published = publish_machine(
-                        record,
-                    )
-                except RecordPublicationFailed as exc:
-                    published = exc.published
-                    raise
+                published = publish_machine(
+                    record,
+                    announce=announced.append,
+                )
 
                 stored = read_machine(
                     args.machine_id
@@ -865,12 +864,19 @@ class MachineCommand(Command):
                     root,
                     spec,
                     staged,
-                    published,
+                    announced[0] if announced else None,
                 )
 
                 if left:
                     raise Unavailable(
-                        f"{exc}; cleanup incomplete: " + "; ".join(left)
+                        f"{interruption(exc)}; cleanup incomplete: "
+                        + "; ".join(left)
+                    ) from exc
+
+                if not isinstance(exc, Exception):
+                    raise Unavailable(
+                        f"{interruption(exc)}; nothing this creation "
+                        "wrote was left behind"
                     ) from exc
 
                 raise

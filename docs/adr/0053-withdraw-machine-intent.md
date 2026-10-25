@@ -24,8 +24,10 @@ the name is free, writes the generated spec, and only then publishes the
 record. When the record cannot be published, it removes the spec it wrote,
 and only while that file is still the one it wrote, with its bytes. The
 publication is not the end of the step: the record is synced, read back and
-its digest compared with the one published. A failure there undoes the
-record this step published (same inode, same bytes) under the same lock,
+its digest compared with the one published. The publication names its
+file before `os.link`, so a failure there, a handled cancellation
+included, undoes the record this step published (same inode, same bytes)
+under the same lock,
 and only then the spec, so the undo never leaves a record without its
 spec. When the undo cannot finish, the refusal says "cleanup incomplete"
 and names what stays; bytes this step did not write are kept. A creation

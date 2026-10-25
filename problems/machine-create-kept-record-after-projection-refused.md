@@ -49,13 +49,22 @@ factory.
   those steps was reported as a refusal while the record stayed, and the
   spec it projects was removed. A retry said "already exists" again, for a
   record now without its spec. The publication now returns which file it
-  put in place (`PublishedRecord`: path, inode, digest), a failure after
-  it carries that (`RecordPublicationFailed`), and the creation undoes it
-  under the lock with `withdraw_published()`: the record first, only while
+  put in place (`PublishedRecord`: path, inode, digest), and the creation
+  undoes it under the lock with `withdraw_published()`: the record first, only while
   it is the same inode with the same bytes, then the spec, only once the
   record's removal is synced and only while the spec is the file this
   creation wrote. When either cannot be removed, the refusal says "cleanup
   incomplete" and names what stays.
+- That first undo knew the publication only from an exception class
+  raised for `Unavailable` and `OSError`. A `KeyboardInterrupt` at the
+  inspection or the directory sync after `os.link` reached the undo
+  without it, so the undo removed the spec and kept the record: the very
+  state it exists to prevent. The publication is now announced to the
+  caller (`announce=`) before `os.link`, and every exception after that
+  is undone the same way; a record that is not where it was announced
+  counts as gone only once its directory is synced. `create_machine()`
+  had the undo without the registry lock; it now holds the lock across
+  publication and undo, as the CLI does.
 - `withdraw` first read the generated spec with `load_yaml` and took a
   spec that did not parse for "not what project writes", so malformed YAML
   or two YAML documents let it remove the record. It now reads the spec
@@ -96,6 +105,15 @@ the replaced bytes kept and the spec kept while the record stays. With the
 undo of the published record removed, the first case fails with "['fsync']:
 a creation refused with the record published left a record or spec
 behind". Every removal is checked to run while the registry lock is held.
+A `KeyboardInterrupt` right after the real `os.link`, at the inspection and
+at the directory sync is undone the same way; with the undo limited to
+`Exception` again it fails with "['interrupt-after-link']: ... left a record
+or spec behind (record kept: True, spec kept: True)", and with the
+publication announced only once complete, "['fsync']: ... (record kept:
+True, spec kept: False)". A read-back digest of other bytes is refused and
+undone. `tests/c10_machine_registry_contract.py` holds `create_machine()`
+to the same undo and to the lock: another process holding it makes the
+creation refuse as busy and change nothing.
 
 `check_withdraw_reads_the_spec` puts each unreadable spec in the way of a
 withdrawal through the real CLI and loader and requires a refusal with the

@@ -93,15 +93,19 @@ it to the host's).
 step under the registry lock: it checks the name is free, writes the
 generated spec, and publishes the record last. The creation is not done
 until the stored record has been synced, read back and found to have the
-digest it was published with. A failure at any of those steps, after the
-record is in place, undoes it under the same lock: the record this creation
+digest it was published with. The publication names its file (inode and
+digest) before `os.link` puts it in place, so a failure at any later step,
+a handled cancellation (`KeyboardInterrupt`) included, undoes it under the
+same lock: the record this creation
 published goes first, and only while it is the same file (inode) with the
 same bytes; then, once that removal is synced, the spec, again only while
 it is the file this creation wrote with its bytes. A refusal therefore
 leaves neither record nor spec; the shell bridge creates Machines only
 this way, so a refused creation leaves no record behind
 ([ADR 0017](adr/0017-shell-machine-creation.md)). Plain `machine create`
-undoes its record the same way. When the undo cannot finish (a removal
+and the library's `create_machine()` (used by `create_from_template()`)
+publish and undo their record the same way, holding the registry lock
+across both. When the undo cannot finish (a removal
 fails, a file was replaced, the removal cannot be synced), the refusal says
 "cleanup incomplete" and names what stays: bytes this creation did not
 write are never removed, and the spec stays whenever the record's
