@@ -300,6 +300,12 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       within the Template's limits, provisioned as one durable operation;
       password and become prompt only in the operation window
       ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
+  - [x] a refused creation leaves no record: one staged `machine create
+        --project` under the registry lock, a failure after the record's
+        publication undone record first, and the manual `machine withdraw`
+        held by digest, projection, a readable spec and the libvirt domain
+        list ([ADR 0053](adr/0053-withdraw-machine-intent.md), proposed,
+        software-verified)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell
 
