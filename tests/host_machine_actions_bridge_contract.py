@@ -300,9 +300,7 @@ def creation_cases(bridge) -> None:
         if args == ("machine", "create-plan"):
             return CREATE_PLAN
         if args[:2] == ("machine", "create"):
-            return {"record_path": "/state/x.yml", "machine": {"id": args[3]}}
-        if args[:2] == ("machine", "project"):
-            return {"machine": args[2], "spec": f"vm-specs/.generated/{args[2]}.yml"}
+            return created_answer(args[3])
         raise AssertionError("unexpected hyperlabctl call %r" % (args,))
 
     bridge.cli_json = fake_cli
@@ -315,14 +313,15 @@ def creation_cases(bridge) -> None:
             bridge.create(list(args))
         except bridge.Refused as exc:
             return "refused: " + str(exc)
+        except Exception as exc:  # noqa: BLE001 - a crash is a finding, not a refusal
+            return "crashed: %r" % exc
         return "launched"
 
     check(attempt("server-debian", "srv-deb-02", "disposable", "services", "balanced") == "launched",
           "a valid server request was not launched")
-    check(calls[1] == ("machine", "create", "server-debian", "srv-deb-02", "--lifecycle", "disposable",
-                       "--network-profile", "services", "--resource-profile", "balanced"),
-          "the factory got a different request: %r" % (calls[1:2],))
-    check(calls[2] == ("machine", "project", "srv-deb-02"), "the Machine was not projected")
+    check(calls[1:] == [("machine", "create", "server-debian", "srv-deb-02", "--lifecycle", "disposable",
+                         "--network-profile", "services", "--resource-profile", "balanced", "--project")],
+          "the factory got a different request: %r" % (calls[1:],))
     check(launched == [("machine.provision", "srv-deb-02")],
           "provisioning not handed to the reviewed runner: %r" % launched)
 
@@ -330,7 +329,7 @@ def creation_cases(bridge) -> None:
           "a valid custom workstation request was refused")
     check(calls[1][10:16] == ("--memory-mb", "8192", "--vcpus", "4", "--disk-gib", "120"),
           "custom values lost: %r" % (calls[1],))
-    check(calls[1][-2:] == ("--looking-glass-mode", "linux-experimental"),
+    check(calls[1][-3:] == ("--looking-glass-mode", "linux-experimental", "--project"),
           "the Template's Looking Glass mode was not applied")
 
     refusals = {
@@ -355,11 +354,106 @@ def creation_cases(bridge) -> None:
         result = attempt(*args)
         check(result.startswith("refused") and reason in result,
               "creation %r: expected refusal mentioning %r, got %r" % (args, reason, result))
-        check(not any(call[:2] in (("machine", "create"), ("machine", "project")) for call in calls)
+        check(not any(call[:2] == ("machine", "create") for call in calls)
               and not launched, "a refused request reached the factory or the runner: %r" % (args,))
+
+    # Every value is validated before anything runs: an option-like value in
+    # any position never reaches hyperlabctl, not even the plan.
+    for template in ("server-debian", "workstation-dev"):
+        valid = [template, "srv-a", "permanent", "dev", "custom", "4096", "2", "100"]
+        for position in range(len(valid)):
+            for value in ("-x", "--repo=/tmp", "-1"):
+                args = list(valid)
+                args[position] = value
+                result = attempt(*args)
+                check(result.startswith("refused") and not calls and not launched,
+                      "an option-like value at position %d reached hyperlabctl: %r %r"
+                      % (position, args, calls))
+
+    creation_answer_cases(bridge)
 
     source = BRIDGE.read_text(encoding="utf-8")
     check("password" not in source.lower(), "the bridge handles a password")
+
+
+DIGEST = "ab" * 32
+
+
+def created_answer(name):
+    return {"record_path": "/state/x.yml", "machine": {"id": name}, "record_sha256": DIGEST,
+            "spec": f"vm-specs/.generated/{name}.yml"}
+
+
+def creation_answer_cases(bridge) -> None:
+    """The Machine is recorded and projected by one staged call; the runner
+    starts only on its exact confirmation, and nothing is ever withdrawn."""
+    calls: list[tuple[str, ...]] = []
+    launched: list[tuple[str, str]] = []
+    behaviour: dict[str, object] = {}
+
+    def fake_cli(*args, **kwargs):
+        calls.append(args)
+        if args == ("machine", "create-plan"):
+            return CREATE_PLAN
+        if args[:2] == ("machine", "create"):
+            answer = behaviour.get("create", created_answer(args[3]))
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
+        raise AssertionError("unexpected hyperlabctl call %r" % (args,))
+
+    bridge.cli_json = fake_cli
+    bridge.privileged = lambda action, name: launched.append((action, name))
+
+    def attempt(**changes):
+        behaviour.clear()
+        behaviour.update(changes)
+        calls.clear()
+        launched.clear()
+        try:
+            bridge.create(["server-debian", "srv-a", "permanent", "dev", "balanced"])
+        except bridge.Refused as exc:
+            return str(exc)
+        except Exception as exc:  # noqa: BLE001 - a crash is a finding, not a refusal
+            return "crashed: %r" % exc
+        return "launched"
+
+    check(attempt() == "launched" and launched == [("machine.provision", "srv-a")],
+          "a confirmed creation was not launched")
+
+    for label, failure in (
+        ("refused", bridge.Refused("generated spec srv-a already exists")),
+        ("timed out", bridge.subprocess.TimeoutExpired(["hyperlabctl"], 15)),
+        ("unreadable", OSError("hyperlabctl is not executable")),
+    ):
+        result = attempt(create=failure)
+        check(not result.startswith(("launched", "crashed")) and not launched,
+              "a creation that %s went on: %r" % (label, result))
+    check("generated spec srv-a already exists" in attempt(create=bridge.Refused(
+        "generated spec srv-a already exists")), "the factory's reason was lost")
+
+    good = created_answer("srv-a")
+    for answer in ({key: value for key, value in good.items() if key != "spec"},
+                   {key: value for key, value in good.items() if key != "record_sha256"},
+                   {**good, "spec": "vm-specs/.generated/other.yml"},
+                   {**good, "spec": 1},
+                   {**good, "machine": {"id": "srv-b"}},
+                   {**good, "machine": "srv-a"},
+                   {**good, "record_sha256": "AB" * 32},
+                   {**good, "record_sha256": 1},
+                   ["srv-a"], None, {}):
+        result = attempt(create=answer)
+        check("did not confirm" in result and not launched,
+              "an unconfirmed creation went on: %r -> %r" % (answer, result))
+
+    # Whatever the answer, the bridge never projects or withdraws on its own.
+    seen: list[tuple[str, ...]] = []
+    for changes in ({}, {"create": bridge.Refused("x")}, {"create": {}},
+                    {"create": {**good, "spec": "vm-specs/.generated/other.yml"}}):
+        attempt(**changes)
+        seen += calls
+    check(all(call[:2] in (("machine", "create-plan"), ("machine", "create")) for call in seen),
+          "the bridge made another call: %r" % (seen,))
 
 
 def workbench_cases(bridge) -> None:

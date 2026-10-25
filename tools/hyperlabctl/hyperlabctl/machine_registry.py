@@ -17,10 +17,15 @@ The registry is intentionally outside the Git checkout.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
+import hashlib
 import os
 import re
 import stat
 import tempfile
+import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +36,12 @@ from .errors import ContractError, Unavailable
 
 MACHINE_SCHEMA_VERSION = 1
 MAX_RECORD_BYTES = 64 * 1024
+
+# Held by `machine create`, `project` and `withdraw`, so a record is never
+# withdrawn while its spec is being written, and a staged creation is never
+# overtaken between its checks and its writes. A dot name is never a record.
+LOCK_NAME = ".lock"
+LOCK_WAIT_SECONDS = 5.0
 
 MACHINE_ID_RE = re.compile(
     r"^[a-z0-9][a-z0-9-]{1,30}$"
@@ -623,6 +634,62 @@ def _fsync_directory(
         )
 
 
+def _require_free(
+    destination: Path,
+    machine_id: str,
+) -> None:
+    try:
+        existing = destination.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise Unavailable(
+            "cannot inspect Machine destination"
+        ) from exc
+
+    if (
+        stat.S_ISLNK(existing.st_mode)
+        or not stat.S_ISREG(
+            existing.st_mode
+        )
+        or existing.st_uid
+        != os.getuid()
+    ):
+        raise Unavailable(
+            "existing Machine destination "
+            "is not trusted"
+        )
+
+    raise ContractError(
+        f"Machine {machine_id} "
+        "already exists"
+    )
+
+
+def require_machine_absent(
+    machine_id: str,
+    *,
+    state_home: Path | None = None,
+) -> None:
+    """Refuse as create_machine() would when the id is already taken."""
+
+    directory = _registry_directory(
+        state_home,
+        create=False,
+    )
+
+    if directory is None:
+        return
+
+    _require_free(
+        _machine_path(
+            directory,
+            machine_id,
+        ),
+        machine_id,
+    )
+
+
 def create_machine(
     record: dict[str, Any],
     *,
@@ -648,33 +715,10 @@ def create_machine(
         record["id"],
     )
 
-    try:
-        existing = destination.lstat()
-    except FileNotFoundError:
-        existing = None
-    except OSError as exc:
-        raise Unavailable(
-            "cannot inspect Machine destination"
-        ) from exc
-
-    if existing is not None:
-        if (
-            stat.S_ISLNK(existing.st_mode)
-            or not stat.S_ISREG(
-                existing.st_mode
-            )
-            or existing.st_uid
-            != os.getuid()
-        ):
-            raise Unavailable(
-                "existing Machine destination "
-                "is not trusted"
-            )
-
-        raise ContractError(
-            f"Machine {record['id']} "
-            "already exists"
-        )
+    _require_free(
+        destination,
+        record["id"],
+    )
 
     payload = yaml.safe_dump(
         record,
@@ -881,3 +925,190 @@ def list_machines(
         )
 
     return result
+
+
+@contextlib.contextmanager
+def registry_lock(
+    *,
+    state_home: Path | None = None,
+    wait: float = LOCK_WAIT_SECONDS,
+    create: bool = False,
+) -> Iterator[None]:
+    """Hold the registry's exclusive lock, or refuse once `wait` has passed.
+
+    With `create`, a missing registry directory is created first, as
+    create_machine() would.
+    """
+
+    directory = _registry_directory(
+        state_home,
+        create=create,
+    )
+
+    if directory is None:
+        raise Unavailable(
+            "Machine registry does not exist"
+        )
+
+    path = directory / LOCK_NAME
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDWR
+            | os.O_CREAT
+            | os.O_NOFOLLOW
+            | os.O_CLOEXEC,
+            0o600,
+        )
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot open the Machine registry lock: {path}"
+        ) from exc
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077
+        ):
+            raise Unavailable(
+                f"Machine registry lock is not trusted: {path}"
+            )
+
+        deadline = time.monotonic() + wait
+
+        while True:
+            try:
+                fcntl.flock(
+                    descriptor,
+                    fcntl.LOCK_EX | fcntl.LOCK_NB,
+                )
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise Unavailable(
+                        "the Machine registry is busy; "
+                        "try again"
+                    ) from None
+                time.sleep(
+                    0.1
+                )
+            except OSError as exc:
+                raise Unavailable(
+                    f"cannot lock the Machine registry: {path}"
+                ) from exc
+
+        yield
+
+    finally:
+        # Closing the descriptor releases the lock.
+        os.close(
+            descriptor
+        )
+
+
+def _record_bytes(
+    machine_id: str,
+    state_home: Path | None,
+) -> tuple[Path, bytes]:
+    directory = _registry_directory(
+        state_home,
+        create=False,
+    )
+
+    if directory is None:
+        raise Unavailable(
+            "Machine registry does not exist"
+        )
+
+    path = _machine_path(
+        directory,
+        machine_id,
+    )
+
+    _inspect_record_file(
+        path,
+    )
+
+    try:
+        return path, path.read_bytes()
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot read Machine record: {path}"
+        ) from exc
+
+
+def record_sha256(
+    machine_id: str,
+    *,
+    state_home: Path | None = None,
+) -> str:
+    """The SHA-256 of one trusted record as it is stored."""
+
+    _path, data = _record_bytes(
+        machine_id,
+        state_home,
+    )
+
+    return hashlib.sha256(
+        data
+    ).hexdigest()
+
+
+def withdraw_machine(
+    machine_id: str,
+    digest: str,
+    *,
+    state_home: Path | None = None,
+) -> None:
+    """Remove the one record whose stored bytes have this digest.
+
+    This undoes a creation whose projection was refused (ADR 0017): the
+    digest create reported names the record it wrote, so a record written
+    or changed by anything else is never removed in its place. The caller
+    holds registry_lock() across its own checks and this call.
+    """
+
+    if (
+        not isinstance(digest, str)
+        or SHA256_RE.fullmatch(digest) is None
+    ):
+        raise ContractError(
+            "the record digest must be "
+            "64 lowercase hex digits"
+        )
+
+    path, data = _record_bytes(
+        machine_id,
+        state_home,
+    )
+
+    if hashlib.sha256(
+        data
+    ).hexdigest() != digest:
+        raise ContractError(
+            f"Machine {machine_id} is not "
+            "the record this digest names"
+        )
+
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot withdraw Machine record: {path}"
+        ) from exc
+
+    try:
+        _fsync_directory(
+            path.parent,
+        )
+    except OSError as exc:
+        raise Unavailable(
+            "Machine record directory "
+            "durability is uncertain"
+        ) from exc

@@ -4,6 +4,10 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`machine-create-kept-record-after-projection-refused.md`](machine-create-kept-record-after-projection-refused.md):
+  a creation refused by `project` kept the record `create` wrote, so a
+  retry said "already exists"; the shell now creates in one staged step
+  that writes the spec first and publishes the record last.
 - [`release-pass-with-false-booleans.md`](release-pass-with-false-booleans.md):
   a release gate could pass and seal with its boolean evidence false, and the
   private SPICE socket was typed as text; a pass now needs every boolean true.

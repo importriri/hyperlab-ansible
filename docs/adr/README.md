@@ -138,6 +138,10 @@ entered the pipeline.
 52. [`0052-host-without-gpu-passthrough.md`](0052-host-without-gpu-passthrough.md)
     — proposed: a host profile without GPU passthrough, chosen only by name,
     never by `auto`.
+53. [`0053-withdraw-machine-intent.md`](0053-withdraw-machine-intent.md) —
+    proposed: the shell creates a Machine in one staged step that publishes
+    the record last; a record is withdrawn only by its digest, under the
+    registry lock, and never while a projection or a domain follows from it.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,

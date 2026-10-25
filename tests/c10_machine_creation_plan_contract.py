@@ -132,7 +132,7 @@ def check_key_refusals(root: Path, repo: Path) -> None:
     target = root / "elsewhere.pub"
     target.write_text(KEY_LINE)
     (home / ".ssh/hyperlab_ed25519.pub").symlink_to(target)
-    refuses(lambda: guest_key(home), Unavailable, "missing")
+    refuses(lambda: guest_key(home), Unavailable, "symbolic link")
 
 
 def check_steps(repo: Path, home: Path, state: Path) -> None:

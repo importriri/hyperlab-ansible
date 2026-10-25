@@ -883,3 +883,75 @@ campaigns only. The red message is the first one each contract prints.
   `set_once(field, False)` becomes `set_once(field, True)`.
   Red: probe contract, "--false clean_worktrees did not give false".
 - Restore: `git checkout -- tools/release_acceptance.py tools/release_probe.py`.
+
+### The creation plan agrees with the factory; a refused creation keeps nothing
+
+`problems/machine-create-kept-record-after-projection-refused.md`. Each one
+turns the named contract red with the message shown.
+
+- Break: in `creation_plan()` of
+  `tools/hyperlabctl/hyperlabctl/machine_provision.py`, set
+  `profiles[profile] = {"memory_mb": "auto", "vcpus": 4, "disk_gib": 20}`
+  instead of calling `_resource_values`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "workstation-dev/balanced:
+  the plan differs from the record create writes".
+- Break: in `_resource_values()` of `machine_factory.py`, compare a custom
+  memory request with `MEMORY_FLOOR_MB` instead of
+  `custom_limits(image)["memory_mb_min"]`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "server-arch: the
+  factory accepted memory_mb=2047, below the plan's limit".
+- Break: in `create()` of
+  `roles/host_desktop_common/files/privatestack-machine-actions.py`, drop
+  `command.append("--project")` and call `machine project NAME` after the
+  creation, as two calls.
+  Red: `tests/c10_machine_create_plan_contract.py`, "a refused projection
+  left a record on a fresh registry: ['.lock', 'srv-01.yml']";
+  `tests/host_machine_actions_bridge_contract.py`, "the bridge made another
+  call".
+- Break: in `MachineCommand._create()`, replace the call to
+  `_remove_staged_spec()` with `left = None`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "a failed publication
+  left its spec or record behind".
+- Break: in `MachineCommand._create()`, replace
+  `with registry_lock(create=True):` with `with contextlib.nullcontext():`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "a staged creation did
+  not wait for the registry lock".
+- Break: in the bridge's `create()`, drop the comparison of the answer's
+  `spec` with `vm-specs/.generated/NAME.yml`.
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an unconfirmed
+  creation went on".
+- Break: let the bridge's `TOKEN` start with a dash
+  (`^[a-z0-9-][a-z0-9-]{0,63}$`).
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an option-like value
+  at position 4 reached hyperlabctl".
+- Break: drop the early `NUMBER` check in the bridge's `create()`, so the
+  custom values are checked only after the plan is read.
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an option-like value
+  at position 7 reached hyperlabctl".
+- Break: in `guest_key()` of `machine_provision.py`, return a key for a line
+  whose type is `ssh-rsa`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "rsa key accepted".
+- Break: in `guest_key()`, count only the non-blank lines again
+  (`[line for line in text.splitlines() if line.strip()]`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "leading blank key
+  accepted".
+- Break: in `withdraw_machine()` of `machine_registry.py`, skip the digest
+  comparison.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw with digest
+  '000...000': 0".
+- Break: in `MachineCommand._withdraw()`, compare the generated spec with
+  the projection by `is` instead of `==`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw removed a
+  projected Machine".
+- Break: in `MachineCommand._withdraw()`, remove the `domain_names(ctx)`
+  check.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw removed a
+  record whose domain exists".
+- Break: in `MachineCommand._withdraw()`, replace `with registry_lock():`
+  with `with contextlib.nullcontext():` (and import `contextlib`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw did not wait
+  for the registry lock".
+- Break: the same in `MachineCommand._project()`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "project did not wait
+  for the registry lock".
+- Restore: copy the broken file back from the copy taken before the break.

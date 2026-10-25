@@ -82,6 +82,37 @@ ownership or transport availability.
 Materialization reuses the existing planners, locks, confirmations and libvirt
 transactions instead of creating a second VM engine.
 
+The resources a record receives come from one factory function. The creation
+plan reports what each profile resolves to and the custom limits through the
+same code (`custom_limits`), and the factory holds every custom request to
+those limits itself: memory at least the image's `min_memory_mb`, disk at
+least the sealed image, vCPUs within the factory's ceiling (the plan narrows
+it to the host's).
+
+`machine create --project` records and projects a Machine as one staged
+step under the registry lock: it checks the name is free, writes the
+generated spec, and publishes the record last. If the record cannot be
+published, the spec it wrote is removed while it still holds exactly that
+projection. A refusal at any step therefore leaves neither record nor spec;
+the shell bridge creates Machines only this way, so a refused creation
+leaves no record behind ([ADR 0017](adr/0017-shell-machine-creation.md)).
+An interrupted creation can leave a spec without a record, never the
+reverse; the next request for that name is refused with "already exists"
+until `hyperlabctl compose delete NAME --confirm NAME` removes the spec.
+
+A record can be withdrawn, and only by its digest. `machine create` reports
+the SHA-256 of the record it stored; `machine withdraw ID --record-sha256
+DIGEST` removes that record only while its bytes still have that digest, no
+generated spec equal to its projection exists, and the libvirt domain list,
+read every time, has no domain with its name. An unreadable domain list is
+a refusal. The digest names a record; it is not an authorization, since
+anyone who can read the record can compute it. `create`, `project` and
+`withdraw` hold the registry lock (`.lock` in the registry directory), so a
+record is never withdrawn while its spec is being written; a lock held for
+more than five seconds is a refusal. `withdraw` is for the manual path, where
+`create` and `project` are two commands and the second can refuse
+([ADR 0053](adr/0053-withdraw-machine-intent.md)).
+
 ### Managed, fixture and external domains are different populations
 
 Normal `Machines` presents only product-managed user-created Machines.

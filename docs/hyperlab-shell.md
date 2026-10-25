@@ -179,8 +179,11 @@ Template that cannot be created stays visible, disabled, with the reason.
 
 `ShellState` validates the plan and turns the form into positional values;
 the view submits nothing else. The bridge checks the request against the
-plan again, records and projects the Machine through `hyperlabctl`, and
-launches the durable operation `machine.provision`. Its window asks for the
+plan again, records and projects the Machine through `hyperlabctl machine
+create --project`, and launches the durable operation `machine.provision`.
+A refusal leaves no record behind: the factory writes the spec first and
+publishes the record last, and removes the spec it wrote when the record
+cannot be published, so the same request can be sent again. Its window asks for the
 host's become password and, for a workstation, the Machine account's
 password; neither passes through the shell. The guest key is shown only by
 its fingerprint. Once the operation is dispatched the view closes on the new

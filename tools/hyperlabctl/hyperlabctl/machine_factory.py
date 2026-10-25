@@ -811,14 +811,15 @@ def template_entry(
     )
 
 
-def _resource_values(
+# Every resource request is held to these; a custom one also to its image's
+# memory floor and sealed size (custom_limits).
+MEMORY_FLOOR_MB = 512
+VCPU_LIMIT = 256
+
+
+def _image_sizes(
     image: dict[str, Any],
-    profile: str,
-    *,
-    memory_mb: int | str | None,
-    vcpus: int | None,
-    disk_gib: int | None,
-) -> dict[str, Any]:
+) -> tuple[int, int, int]:
     virtual = image.get(
         "virtual_size_gib"
     )
@@ -852,12 +853,57 @@ def _resource_values(
     if (
         not isinstance(memory_floor, int)
         or isinstance(memory_floor, bool)
-        or memory_floor < 512
+        or memory_floor < MEMORY_FLOOR_MB
     ):
         raise ContractError(
             "image min_memory_mb "
             "must be an integer >= 512"
         )
+
+    return virtual, minimum, memory_floor
+
+
+def custom_limits(
+    image: dict[str, Any],
+    *,
+    cpu_count: int | None = None,
+) -> dict[str, int]:
+    """The bounds a custom resource request is held to.
+
+    _resource_values enforces them on every custom request; the creation
+    plan reports them, with the vCPU ceiling narrowed to the host's.
+    """
+
+    virtual, _minimum, memory_floor = _image_sizes(
+        image
+    )
+
+    return {
+        "memory_mb_min": memory_floor,
+        "vcpus_min": 1,
+        "vcpus_max": (
+            VCPU_LIMIT
+            if cpu_count is None
+            else min(
+                VCPU_LIMIT,
+                cpu_count,
+            )
+        ),
+        "disk_gib_min": virtual,
+    }
+
+
+def _resource_values(
+    image: dict[str, Any],
+    profile: str,
+    *,
+    memory_mb: int | str | None,
+    vcpus: int | None,
+    disk_gib: int | None,
+) -> dict[str, Any]:
+    virtual, minimum, memory_floor = _image_sizes(
+        image
+    )
 
     if profile == "custom":
         resources = {
@@ -910,11 +956,22 @@ def _resource_values(
     if memory != "auto" and (
         not isinstance(memory, int)
         or isinstance(memory, bool)
-        or memory < 512
+        or memory < MEMORY_FLOOR_MB
     ):
         raise ContractError(
             "memory_mb must be auto "
             "or an integer >= 512"
+        )
+
+    if (
+        profile == "custom"
+        and memory != "auto"
+        and memory
+        < custom_limits(image)["memory_mb_min"]
+    ):
+        raise ContractError(
+            "memory_mb must be at least "
+            f"the image min_memory_mb {memory_floor}"
         )
 
     cpu_count = resources[
@@ -924,7 +981,7 @@ def _resource_values(
     if (
         not isinstance(cpu_count, int)
         or isinstance(cpu_count, bool)
-        or not 1 <= cpu_count <= 256
+        or not 1 <= cpu_count <= VCPU_LIMIT
     ):
         raise ContractError(
             "vcpus must be an integer "
