@@ -65,6 +65,7 @@ import subprocess
 import sys
 import tempfile
 from contextlib import redirect_stdout
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -418,7 +419,8 @@ def good_probe(identity, binary="b" * 64, exe=None, pid="918", started="2026-10-
 
 def check_sender_identity() -> None:
     identity = load_identity()
-    since = time.mktime(time.strptime("2026-10-06 22:30:00", "%Y-%m-%d %H:%M:%S"))
+    # 39 s before the probe's start line, with the same explicit offset.
+    since = datetime.fromisoformat("2026-10-06T22:30:00+02:00").timestamp()
     want = identity.expected()
 
     def verdict(text, **kwargs):
@@ -455,6 +457,38 @@ def check_sender_identity() -> None:
             if re.match(r'\s*(if\s+)?(check|expect)\s', line) and "looking-glass health" in line:
                 raise AssertionError(f"{group} passes the health command on its exit code: {line.strip()}")
     require('grep -q \'"health":"ok"\'' in (DIR / "lib.sh").read_text(), "health_ok does not look for the word ok")
+
+
+# POSIX zone strings need no tzdata. Each one is checked to be in effect on
+# 2026-10-06: a zone the C library does not understand falls back to UTC.
+SENDER_ZONES = {
+    "UTC0": "+0000",
+    "CET-1CEST,M3.5.0,M10.5.0/3": "+0200",
+    "<+14>-14": "+1400",
+    "<-10>10": "-1000",
+}
+
+
+def check_sender_identity_in_every_zone() -> None:
+    # The probe's start line carries its own offset and group 16 passes epoch
+    # seconds: the verdict must not depend on the zone the contract runs in.
+    saved = os.environ.get("TZ")
+    try:
+        for zone, offset in SENDER_ZONES.items():
+            os.environ["TZ"] = zone
+            time.tzset()
+            shown = time.strftime("%z", time.localtime(1791318639))
+            require(shown == offset, f"TZ={zone} is not in effect: {shown}, not {offset}")
+            try:
+                check_sender_identity()
+            except AssertionError as error:
+                raise AssertionError(f"{error} (TZ={zone})") from error
+    finally:
+        if saved is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = saved
+        time.tzset()
 
 
 FAKE_ANSIBLE = r"""#!/bin/sh
@@ -980,7 +1014,7 @@ def main() -> int:
     check_fail_closed_runs()
     check_dirty_header()
     check_machine_playbooks()
-    check_sender_identity()
+    check_sender_identity_in_every_zone()
     check_16_runs()
     check_tcp_probe()
     check_07_runs()

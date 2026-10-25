@@ -698,3 +698,18 @@ real resize.
   (`| first` instead of `| list | to_json`).
   Red: "the tool does not read every findmnt document the role collected".
 - Restore: `git checkout -- roles/vfio_boot/tasks/main.yml tools/esp_file_mode.py`.
+
+### The sender-identity contract depends on the local zone
+
+`problems/acceptance-contract-depended-on-the-local-zone.md`.
+
+- Break: in `check_sender_identity()` of
+  `tests/acceptance_scripts_contract.py`, set
+  `since = time.mktime(time.strptime("2026-10-06 22:30:00", "%Y-%m-%d %H:%M:%S"))`.
+- Red: `tests/acceptance_scripts_contract.py`, "a sender of this build was
+  refused (TZ=UTC0)", in any zone the contract itself runs in.
+- Break: remove the `time.tzset()` inside the zone loop (not the one in
+  `finally`).
+  Red: "TZ=<zone> is not in effect", for the first zone that is not the
+  machine's own (observed: "TZ=UTC0 is not in effect: +0200, not +0000").
+- Restore: `git checkout -- tests/acceptance_scripts_contract.py`.

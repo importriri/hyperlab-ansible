@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`acceptance-contract-depended-on-the-local-zone.md`](acceptance-contract-depended-on-the-local-zone.md):
+  the sender-identity contract read its fixed start time in the local
+  zone and failed on the UTC runner; it now carries an explicit offset.
 - [`vfio-boot-modes-on-vfat-esp.md`](vfio-boot-modes-on-vfat-esp.md):
   vfio_boot asked for 0644 on the vfat ESP, whose mount gives 0755, so
   every apply on Nitro changed the boot entries; the mount now decides.
