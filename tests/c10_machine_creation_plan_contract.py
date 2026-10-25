@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -28,7 +29,11 @@ from hyperlabctl.machine_provision import (  # noqa: E402
 )
 from hyperlabctl.machine_registry import read_machine  # noqa: E402
 
-KEY_BLOB = base64.b64encode(b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes(range(32))).decode()
+KEY_RAW = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes(range(32))
+KEY_BLOB = base64.b64encode(KEY_RAW).decode()
+# What `ssh-keygen -lf` prints for this key, computed here and never by
+# the helper under test: unpadded base64 of the SHA-256 of the blob.
+KEY_FINGERPRINT = "SHA256:" + base64.b64encode(hashlib.sha256(KEY_RAW).digest()).decode().rstrip("=")
 KEY_LINE = f"ssh-ed25519 {KEY_BLOB} sid@nitro"
 
 
@@ -70,7 +75,7 @@ def prepare(root: Path) -> tuple[Path, Path, Path]:
 def check_plan(repo: Path, home: Path) -> None:
     plan = creation_plan(repo, home=home, cpu_count=8)
     require(plan["schema"] == 1 and plan["host"] == {"vcpus": 8}, f"bad plan header: {plan}")
-    require(plan["guest_key"]["available"] and plan["guest_key"]["fingerprint"].startswith("SHA256:"),
+    require(plan["guest_key"]["available"] and plan["guest_key"]["fingerprint"] == KEY_FINGERPRINT,
             f"guest key not reported: {plan['guest_key']}")
     require("line" not in plan["guest_key"] and KEY_BLOB not in json.dumps(plan),
             "the plan carries key material; the shell needs only the fingerprint")

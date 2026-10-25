@@ -49,7 +49,11 @@ from hyperlabctl.errors import ContractError, Unavailable  # noqa: E402
 from hyperlabctl.machine_factory import template_catalog  # noqa: E402
 from hyperlabctl.machine_provision import creation_plan, guest_key  # noqa: E402
 
-KEY_BLOB = base64.b64encode(b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes(range(32))).decode()
+KEY_RAW = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes(range(32))
+KEY_BLOB = base64.b64encode(KEY_RAW).decode()
+# What `ssh-keygen -lf` prints for this key, computed here and never by
+# the helper under test: unpadded base64 of the SHA-256 of the blob.
+KEY_FINGERPRINT = "SHA256:" + base64.b64encode(hashlib.sha256(KEY_RAW).digest()).decode().rstrip("=")
 KEY_LINE = f"ssh-ed25519 {KEY_BLOB} sid@nitro"
 PRIVATE = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
 
@@ -154,6 +158,8 @@ class Lab:
 
 def check_plan_matches_factory(lab: Lab) -> None:
     plan = lab.ok("machine", "create-plan")
+    require(plan["guest_key"]["available"] is True and plan["guest_key"]["fingerprint"] == KEY_FINGERPRINT,
+            f"the plan does not report the guest key's fingerprint: {plan['guest_key']}")
     ready = sorted(entry["id"] for entry in template_catalog(lab.repo) if entry["ready"])
     offered = {entry["id"]: entry for entry in plan["templates"]}
     require(sorted(offered) == ready and ready, f"the plan offers {sorted(offered)}, the factory has {ready} ready")
@@ -232,7 +238,7 @@ def check_key_refusals(lab: Lab) -> None:
     sys.addaudithook(audit)
     try:
         key = watched(lambda: guest_key(lab.home))
-        require(key["fingerprint"].startswith("SHA256:") and key["line"] == f"ssh-ed25519 {KEY_BLOB}",
+        require(key["fingerprint"] == KEY_FINGERPRINT and key["line"] == f"ssh-ed25519 {KEY_BLOB}",
                 f"a valid guest key was not accepted: {key}")
         bare = lab.root / "key-without-newline"
         (bare / ".ssh").mkdir(parents=True)

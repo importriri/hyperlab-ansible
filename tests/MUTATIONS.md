@@ -954,4 +954,10 @@ turns the named contract red with the message shown.
 - Break: the same in `MachineCommand._project()`.
   Red: `tests/c10_machine_create_plan_contract.py`, "project did not wait
   for the registry lock".
+- Break: in `guest_key()` of `machine_provision.py`, return
+  `"fingerprint": "SHA256:wrong"`.
+  Red: `tests/c10_machine_creation_plan_contract.py`, "guest key not
+  reported"; `tests/c10_machine_create_plan_contract.py`, "a valid guest
+  key was not accepted". Both compute the expected fingerprint of their
+  synthetic key themselves.
 - Restore: copy the broken file back from the copy taken before the break.
