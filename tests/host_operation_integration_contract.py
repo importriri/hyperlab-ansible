@@ -5,8 +5,12 @@ The provisioning case runs the whole chain over a temporary checkout: the
 real bridge creates a Machine through the real CLI and hands it to the real
 runner, which launches its operation and runs the real provisioner on a real
 PTY, with recording ansible-playbook and openssl programs. systemd is the
-only thing replaced.
+only thing replaced. The stopped cases run that provisioner under a
+test-only observer which records, from outside its code, each started
+process, each reap and the removal of the hash file.
 """
+import contextlib
+import ctypes
 import importlib.util
 import json
 import multiprocessing
@@ -47,9 +51,12 @@ def load(name, path):
 
 
 # Records argv and environment; exits 4 while `fail` names a token of its
-# argv. While `hold` names one it announces itself in `ready` and waits: it
-# ignores SIGHUP and, on SIGTERM, takes `linger` seconds to end, then notes
-# whether its @file was still there.
+# argv. While `hold` names one it announces itself in `ready`, with its
+# @file present or not and the signals it was started with blocked or
+# ignored, and waits: it ignores
+# SIGHUP and, on SIGTERM, takes `linger` seconds to end, then notes whether
+# its @file was still there. While `stubborn` exists it ignores SIGTERM too,
+# so only SIGKILL ends it.
 ANSIBLE = r'''
 import json, os, signal, sys, time
 base, args = sys.argv[1], sys.argv[2:]
@@ -61,8 +68,13 @@ def token(name):
         return open(os.path.join(base, name)).read()
     except FileNotFoundError:
         return ""
+def signals(field):
+    with open("/proc/self/status") as stream:
+        mask = int(next(line.split()[1] for line in stream if line.startswith(field + ":")), 16)
+    return [number for number in range(1, 65) if mask >> (number - 1) & 1]
 fail, hold = token("fail"), token("hold")
 if hold and hold in " ".join(args):
+    started = {"blocked": signals("SigBlk"), "ignored": signals("SigIgn")}
     path = next(p[1:] for p in args if p.startswith("@"))
     def terminated(signum, frame):
         time.sleep(float(token("linger")))
@@ -70,9 +82,11 @@ if hold and hold in " ".join(args):
             json.dump({"file_present": os.path.exists(path)}, stream)
         os._exit(143)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
-    signal.signal(signal.SIGTERM, terminated)
+    stubborn = os.path.exists(os.path.join(base, "stubborn"))
+    signal.signal(signal.SIGTERM, signal.SIG_IGN if stubborn else terminated)
     with open(os.path.join(base, "ready.tmp"), "w") as stream:
-        json.dump({"pid": os.getpid(), "file": path}, stream)
+        json.dump({"pid": os.getpid(), "file": path, "file_present": os.path.isfile(path), **started},
+                  stream)
     os.rename(os.path.join(base, "ready.tmp"), os.path.join(base, "ready"))
     time.sleep(120)
     sys.exit(0)
@@ -97,6 +111,87 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 module.CLI, module.ANSIBLE, module.OPENSSL = {cli!r}, {ansible!r}, {openssl!r}
 module.POINTER = Path({pointer!r})
+sys.exit(module.entry(sys.argv[1:]))
+"""
+
+# Test-only observer around the same real provisioner, preceded by a
+# `CONFIG = {...}` line. It watches from outside the provisioner's code:
+# every reap (os.waitpid, wrapped before subprocess binds it), every removal
+# of a hash file with the state of each started process at that moment, and
+# every started process. While the file CONFIG["at_spawn"] exists it stops
+# the operation right where a playbook given an @file has been created,
+# inside Popen(): once that playbook is ready, the ending signals are held
+# in this process only (the playbook already runs with its own mask), the
+# real runner is terminated, and the hangup and SIGTERM it sends are
+# released here as soon as they are pending.
+TRACED = """\
+import importlib.util, json, os, signal, sys, time
+from pathlib import Path
+
+def note(**event):
+    fd = os.open(CONFIG["trace"], os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(fd, (json.dumps(event) + "\\n").encode())
+    finally:
+        os.close(fd)
+
+def state(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as stream:
+            return stream.read().rsplit(")", 1)[1].split()[0]
+    except FileNotFoundError:
+        return None
+
+def waited(function, deadline, what):
+    end = time.monotonic() + deadline
+    while not function():
+        if time.monotonic() > end:
+            note(event="fixture-timeout", what=what)
+            raise SystemExit(f"fixture: {what}")
+        time.sleep(0.01)
+
+if "subprocess" in sys.modules:
+    raise SystemExit("fixture: subprocess was imported before os.waitpid was wrapped")
+real_waitpid, real_unlink = os.waitpid, os.unlink
+started = []
+
+def waitpid(pid, options):
+    found, status = real_waitpid(pid, options)
+    if found:
+        note(event="reaped", pid=found, status=status)
+    return found, status
+
+def unlink(path, *args, **kwargs):
+    if os.fspath(path).endswith("-access.yml"):
+        note(event="unlinking", path=os.fspath(path), states={str(p): state(p) for p in started})
+    return real_unlink(path, *args, **kwargs)
+
+os.waitpid, os.unlink = waitpid, unlink
+import subprocess
+
+note(event="provisioner", pid=os.getpid())
+
+class Popen(subprocess.Popen):
+    def __init__(self, args, *rest, **kwargs):
+        super().__init__(args, *rest, **kwargs)
+        started.append(self.pid)
+        note(event="spawned", pid=self.pid, argv=list(args))
+        if os.path.exists(CONFIG["at_spawn"]) and any(str(part).startswith("@") for part in args):
+            ending = {signal.SIGINT, signal.SIGTERM, signal.SIGHUP}
+            waited(lambda: os.path.exists(CONFIG["ready"]), 20, "the playbook never got ready")
+            previous = signal.pthread_sigmask(signal.SIG_BLOCK, ending)
+            note(event="stopping-runner", runner=os.getppid())
+            os.kill(os.getppid(), signal.SIGTERM)
+            waited(lambda: signal.sigpending() & ending, 20, "the runner's signals never came")
+            note(event="releasing", pending=sorted(signal.sigpending() & ending))
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+subprocess.Popen = Popen
+spec = importlib.util.spec_from_file_location("provisioner", CONFIG["source"])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.CLI, module.ANSIBLE, module.OPENSSL = CONFIG["cli"], CONFIG["ansible"], CONFIG["openssl"]
+module.POINTER = Path(CONFIG["pointer"])
 sys.exit(module.entry(sys.argv[1:]))
 """
 
@@ -151,6 +246,13 @@ class Lab:
             source=str(FILES / 'privatestack-machine-provision.py'), cli=str(self.cli),
             ansible=str(programs['ansible-playbook']), openssl=str(programs['openssl']),
             pointer=str(self.pointer)))
+        self.trace = base / 'trace.jsonl'
+        self.traced = base / 'traced-provisioner.py'
+        config = {'source': str(FILES / 'privatestack-machine-provision.py'), 'cli': str(self.cli),
+                  'ansible': str(programs['ansible-playbook']), 'openssl': str(programs['openssl']),
+                  'pointer': str(self.pointer), 'trace': str(self.trace),
+                  'ready': str(base / 'ready'), 'at_spawn': str(base / 'at-spawn')}
+        self.traced.write_text(f'CONFIG = {config!r}\n' + TRACED)
 
     def log(self, name):
         path = self.base / name
@@ -249,7 +351,13 @@ def provisioning_contract():
         with patch.object(subprocess, 'Popen', popen):
             server_case(lab, op, create)
             workstation_case(lab, op, create)
-            stopped_case(lab, op, create)
+            subreaper(True)
+            try:
+                stopped_case(lab, op, create)
+                stubborn_case(lab, op, create)
+                at_spawn_case(lab, op, create)
+            finally:
+                subreaper(False)
 
 
 def server_case(lab, op, create):
@@ -354,24 +462,69 @@ def workstation_case(lab, op, create):
     require(lab.snapshot() == before, 'provisioning changed the Machine record or its spec')
 
 
-def stopped_case(lab, op, create):
-    """The operation is stopped while the first profile pass holds the hash
-    file, and that playbook ignores the hangup and takes longer to end than
-    the runner gives other commands: the provisioner still stops it and
-    removes the file before the runner may kill the provisioner."""
+PR_SET_CHILD_SUBREAPER = 36
+ENDING = (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+
+
+def subreaper(on):
+    """While on, a fixture process whose parent dies becomes this test's
+    child, so the test can kill and reap it on red as well as green runs."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    require(libc.prctl(PR_SET_CHILD_SUBREAPER, int(on), 0, 0, 0) == 0,
+            f'fixture: prctl: {os.strerror(ctypes.get_errno())}')
+
+
+def parent_of(pid):
+    try:
+        with open(f'/proc/{pid}/status') as stream:
+            return int(next(line.split()[1] for line in stream if line.startswith('PPid:')))
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
+def reap_fixture(pids):
+    """Kill and reap what a stopped case left running. This cleanup comes
+    after the observations; nothing it does can satisfy them."""
+    mine = os.getpid()
+    left = [pid for pid in pids if parent_of(pid) in {mine, *pids}]
+    for pid in left:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+    for pid in left:
+        end = time.monotonic() + 10
+        while parent_of(pid) not in (mine, None) and time.monotonic() < end:
+            time.sleep(0.05)
+        with contextlib.suppress(ChildProcessError):
+            os.waitpid(pid, 0)
+
+
+def stop_operation(lab, op, create, machine, *, linger=0, stubborn=False, at_spawn=False):
+    """Create a workstation, give its password through an observer and stop
+    its operation while the first profile pass holds the hash file: like
+    systemd, by terminating the runner after that playbook's handshake, or,
+    at_spawn, from inside the provisioner's Popen() of that playbook. The
+    provisioner runs under the test-only observer."""
     root = op.directory()
-    for name in ('calls.jsonl', 'launched.jsonl', 'openssl.jsonl'):
+    for name in ('calls.jsonl', 'launched.jsonl', 'openssl.jsonl', 'trace.jsonl', 'ready',
+                 'terminated', 'hold', 'linger', 'stubborn', 'at-spawn'):
         (lab.base / name).unlink(missing_ok=True)
-    result = create('workstation-dev', 'dev-02', 'permanent', 'dev', 'balanced')
+    result = create('workstation-dev', machine, 'permanent', 'dev', 'balanced')
     require(isinstance(result, list) and len(result) == 1 and result[0]['phase'] == 'dispatched',
             f'a workstation creation did not dispatch one operation: {result}')
     oid = result[0]['operation_id']
+    before = lab.snapshot()
     (lab.base / 'hold').write_text('guest-arch-dev-vfio.yml -e @')
-    (lab.base / 'linger').write_text('5')
+    (lab.base / 'linger').write_text(str(linger))
+    if stubborn:
+        (lab.base / 'stubborn').write_text('')
+    if at_spawn:
+        (lab.base / 'at-spawn').write_text('')
+    lab.launcher = lab.traced
     context = multiprocessing.get_context('fork')
     worker = context.Process(target=lambda: os._exit(op.run(oid)))
     worker.start()
     ready = lab.base / 'ready'
+    handshake = None
     try:
         endpoint = op.endpoint(root, oid)
         for _ in range(200):
@@ -389,26 +542,19 @@ def stopped_case(lab, op, create):
             require(time.monotonic() < end and worker.is_alive(), 'the first profile pass never started')
             time.sleep(0.05)
         handshake = json.loads(ready.read_text())
-        require(Path(handshake['file']).is_file(), 'fixture: no hash file at the handshake')
-        # What systemd does to the runner when the operation unit is stopped.
-        os.kill(worker.pid, signal.SIGTERM)
+        require(handshake['file_present'], 'fixture: no hash file at the handshake')
+        if not at_spawn:
+            # What systemd does to the runner when the operation unit is stopped.
+            os.kill(worker.pid, signal.SIGTERM)
         worker.join(60)
         observer.close()
     finally:
         if worker.is_alive():
             worker.kill()
             worker.join()
-    playbook = handshake['pid']
-    gone = False
-    for _ in range(100):
-        try:
-            os.kill(playbook, 0)
-        except ProcessLookupError:
-            gone = True
-            break
-        time.sleep(0.1)
-    if not gone:
-        os.kill(playbook, signal.SIGKILL)
+        trace = lab.log('trace.jsonl')
+        pids = {event['pid'] for event in trace if event['event'] in ('provisioner', 'spawned')}
+        reap_fixture(pids | ({handshake['pid']} if handshake else set()))
     record = op.read(root, oid)
     require(record['phase'] == 'interrupted' and record['reason'] == 'interrupted',
             f'a stopped provisioning has no terminal record: {record}')
@@ -417,12 +563,77 @@ def stopped_case(lab, op, create):
             'the hash file outlived the stopped operation')
     calls = lab.log('calls.jsonl')
     require(len(calls) == 3, f'a step ran after the operation was stopped: {[c["argv"] for c in calls]}')
-    require(gone, 'the running playbook outlived the stopped operation')
+    require(lab.snapshot() == before and lab.shown(machine)
+            and (lab.repo / f'vm-specs/.generated/{machine}.yml').is_file(),
+            'a stopped provisioning changed or withdrew the Machine record or its spec')
+    require(lab.log('launched.jsonl') == [[op.PROVISION, machine]],
+            f'the runner launched {lab.log("launched.jsonl")}')
+    for sig in ENDING:
+        require(sig not in handshake['blocked'] and sig not in handshake['ignored'],
+                f'the playbook started with {signal.Signals(sig).name} blocked or ignored: {handshake}')
+    return trace, handshake
+
+
+def removal_order(trace, handshake):
+    """The provisioner's reap of the playbook and its removal of the hash
+    file, as the observer saw them happen."""
+    playbook = handshake['pid']
+    events = [event['event'] for event in trace]
+    reaped = [i for i, event in enumerate(trace) if event['event'] == 'reaped' and event['pid'] == playbook]
+    removed = [i for i, event in enumerate(trace)
+               if event['event'] == 'unlinking' and event['path'] == handshake['file']]
+    require(removed, f'the provisioner never removed the hash file: {events}')
+    require(reaped and reaped[0] < removed[0]
+            and trace[removed[0]]['states'].get(str(playbook), 'unknown') is None,
+            'the playbook was not stopped and reaped before its hash file was removed: '
+            f'{events} {trace[removed[0]]["states"]}')
+    return trace[reaped[0]]['status'], reaped[0]
+
+
+def stopped_case(lab, op, create):
+    """The operation is stopped while the first profile pass holds the hash
+    file, and that playbook ignores the hangup and takes longer to end than
+    the runner gives other commands: the provisioner still stops it and
+    removes the file before the runner may kill the provisioner. It ends
+    on SIGTERM: the positive control of the stubborn case."""
+    trace, handshake = stop_operation(lab, op, create, 'dev-02', linger=5)
     stopped = lab.base / 'terminated'
     require(stopped.exists() and json.loads(stopped.read_text()) == {'file_present': True},
             'the running playbook was not stopped before its hash file went')
-    require(lab.log('launched.jsonl') == [[op.PROVISION, 'dev-02']],
-            f'the runner launched {lab.log("launched.jsonl")}')
+    status, _ = removal_order(trace, handshake)
+    require(os.WIFEXITED(status) and os.WEXITSTATUS(status) == 143,
+            f'the cooperative playbook did not end on its SIGTERM: {status}')
+
+
+def stubborn_case(lab, op, create):
+    """The playbook ignores the hangup and SIGTERM: only the provisioner's
+    own SIGKILL, after PLAYBOOK_GRACE, ends it, and the provisioner reaps it
+    before it removes the hash file."""
+    trace, handshake = stop_operation(lab, op, create, 'dev-03', stubborn=True)
+    status, _ = removal_order(trace, handshake)
+    require(os.WIFSIGNALED(status) and os.WTERMSIG(status) == signal.SIGKILL,
+            f'the provisioner did not kill the playbook that ignored SIGTERM: {status}')
+    require(not (lab.base / 'terminated').exists(), 'fixture: the stubborn playbook handled SIGTERM')
+
+
+def at_spawn_case(lab, op, create):
+    """The runner is stopped and its signals reach the provisioner while
+    Popen() of the first profile pass has created the playbook but not yet
+    returned it: that playbook is still stopped and reaped before the hash
+    file goes, and nothing runs after it."""
+    trace, handshake = stop_operation(lab, op, create, 'dev-04', at_spawn=True)
+    events = [event['event'] for event in trace]
+    playbook = handshake['pid']
+    spawned = [i for i, event in enumerate(trace) if event['event'] == 'spawned' and event['pid'] == playbook]
+    require(spawned and events[spawned[0] + 1:spawned[0] + 3] == ['stopping-runner', 'releasing']
+            and trace[spawned[0] + 2]['pending'],
+            f'fixture: the stop did not arrive while the playbook was being started: {events}')
+    status, reaped = removal_order(trace, handshake)
+    require(reaped > spawned[0] + 2, f'fixture: the playbook was reaped before the stop: {events}')
+    stopped = lab.base / 'terminated'
+    require(stopped.exists() and json.loads(stopped.read_text()) == {'file_present': True}
+            and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 143,
+            f'the playbook started at the stop was not terminated by the provisioner: {status}')
 
 
 def main():

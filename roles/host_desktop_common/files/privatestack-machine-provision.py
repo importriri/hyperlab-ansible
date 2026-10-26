@@ -70,6 +70,47 @@ class Cancelled(BaseException):
         self.signum = signum
 
 
+class Stop:
+    """The first ending signal, the only one that ends the run.
+
+    A stopped runner sends more than one: its PTY hangs up, then it
+    terminates this program, and systemd may signal the whole unit. A later
+    one must not cut short the cleanup that the first started.
+    """
+
+    def __init__(self) -> None:
+        self.signum: int | None = None
+        self.deferring = False
+
+    def handle(self, signum: int, frame: object) -> None:
+        if self.signum is not None:
+            return
+        self.signum = signum
+        if not self.deferring:
+            self.end()
+
+    def end(self) -> None:
+        if self.signum == signal.SIGINT:
+            raise KeyboardInterrupt
+        raise Cancelled(self.signum)
+
+    @contextlib.contextmanager
+    def deferred(self):
+        """Note an ending signal that arrives inside, and raise it only once
+        the block is over. No signal is blocked, so a playbook started
+        inside inherits no mask and still ends on its own signals."""
+        self.deferring = True
+        try:
+            yield
+        finally:
+            self.deferring = False
+            if self.signum is not None:
+                self.end()
+
+
+STOP = Stop()
+
+
 def require(ok: bool, reason: str) -> None:
     if not ok:
         raise Refused(reason)
@@ -260,19 +301,25 @@ def remove_access_file(path: Path | None) -> None:
 
 
 def run_step(repo: Path, argv: list[str]) -> int:
-    child = subprocess.Popen([ANSIBLE, *argv[1:]], cwd=repo)
+    child = None
     try:
+        # A signal while the playbook is being started is raised only once
+        # `child` names it, so every started playbook reaches the cleanup.
+        with STOP.deferred():
+            child = subprocess.Popen([ANSIBLE, *argv[1:]], cwd=repo)
         return child.wait()
     except BaseException:
-        # Cancelled: the playbook ends before its hash file is removed.
-        with held():
-            if child.poll() is None:
-                child.terminate()
-                try:
-                    child.wait(timeout=PLAYBOOK_GRACE)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait()
+        # Cancelled: the playbook ends, and is reaped, before its hash file
+        # is removed. A playbook that could not be started has nothing to end.
+        if child is not None:
+            with held():
+                if child.poll() is None:
+                    child.terminate()
+                    try:
+                        child.wait(timeout=PLAYBOOK_GRACE)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        child.wait()
         raise
 
 
@@ -323,24 +370,10 @@ def main(args: list[str]) -> int:
 
 
 def entry(args: list[str]) -> int:
-    stopping: list[int] = []
-
-    def cancel(signum: int, frame: object) -> None:
-        # A stopped runner sends more than one: its PTY hangs up, then it
-        # terminates this program, and systemd may signal the whole unit.
-        # Only the first ends the run; a later one must not cut short the
-        # cleanup that the first started.
-        if stopping:
-            return
-        stopping.append(signum)
-        if signum == signal.SIGINT:
-            raise KeyboardInterrupt
-        raise Cancelled(signum)
-
     # A stopped unit (SIGTERM) or a terminal that hangs up (SIGHUP) ends the
     # run like Ctrl-C: the running playbook is stopped, the hash file removed.
     for signum in (signal.SIGINT, *CANCELLING):
-        signal.signal(signum, cancel)
+        signal.signal(signum, STOP.handle)
     try:
         return main(args)
     except (Refused, OSError, ValueError, subprocess.TimeoutExpired) as exc:

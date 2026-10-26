@@ -98,7 +98,9 @@ def steps(machine: str, workstation: bool, runtime: Path) -> dict:
 # argv it announces itself in `ready` and waits; it survives the hangup of
 # its terminal, so only the provisioner's own SIGTERM ends it, takes
 # `linger` seconds (if given) to end, and records whether the hash file was
-# still there then. While `fail` names a token it exits 3.
+# still there then. While `fail` names a token it exits 3. While
+# `unspawnable` names one it makes itself non-executable, so the next step
+# cannot be started.
 ANSIBLE = r'''
 import json, os, signal, stat, sys, time
 base = sys.argv[1]
@@ -124,7 +126,9 @@ def token(name):
         return open(os.path.join(base, name)).read()
     except FileNotFoundError:
         return ""
-hold, fail = token("hold"), token("fail")
+hold, fail, unspawnable = token("hold"), token("fail"), token("unspawnable")
+if unspawnable and unspawnable in " ".join(args):
+    os.chmod(os.path.join(base, "bin", "ansible-playbook"), 0o600)
 if hold and hold in " ".join(args):
     def terminated(signum, frame):
         time.sleep(float(token("linger") or 0))
@@ -765,6 +769,26 @@ def check_terminal_failure(module) -> None:
         secret_free(fixture, terminal.transcript)
 
 
+def check_terminal_spawn_failure(module) -> None:
+    """The first profile pass cannot be started after its hash file was
+    written: no playbook exists to stop, the file still goes and no later
+    step runs."""
+    with tempfile.TemporaryDirectory() as temp:
+        fixture = Fixture(Path(temp), steps("dev-x", True, Path(temp) / "runtime"))
+        (fixture.base / "unspawnable").write_text("vm-guest-inventory.yml")
+        terminal = Terminal(fixture, "dev-x")
+        terminal.answer("New password for the Machine account: ", SECRET)
+        terminal.answer("Repeat it: ", SECRET)
+        status = terminal.wait()
+        require(os.WIFEXITED(status) and os.WEXITSTATUS(status) == 2
+                and b"HyperLab provisioning refused" in terminal.transcript,
+                f"a playbook that could not be started was not refused: {status} {terminal.transcript[-400:]!r}")
+        require(len(fixture.log("openssl.jsonl")) == 1, "fixture: the password was not hashed")
+        require(not list(fixture.private.iterdir()), "the hash file outlived a playbook that could not start")
+        require(len(fixture.calls) == 2, f"a step ran after a failed start: {argvs(fixture.calls)}")
+        secret_free(fixture, terminal.transcript)
+
+
 def check_terminal_signals(module) -> None:
     """A real signal while the first profile pass holds the hash file."""
     for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
@@ -868,6 +892,7 @@ def main() -> int:
     check_real_cli(module)
     check_terminal_success(module)
     check_terminal_failure(module)
+    check_terminal_spawn_failure(module)
     check_terminal_signals(module)
     check_terminal_repeated_signals(module)
 
