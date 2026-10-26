@@ -1094,6 +1094,33 @@ one the contract prints.
 - M11. Break: move `inventory.ini` away.
   Red: "inventory.ini:0: inventory is unreadable"; playbook red in all
   three runs.
+- M12. Break: append `[extra:children]`, then `[jellyfin] # connection
+  identity` and `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:16: connection user is not the admin_user
+  setting"; playbook red in all three runs (the later line wins, the
+  effective user is the literal). Before the contract took the plugin's
+  section expression, which allows a trailing `#` comment, it read the
+  commented header as a line of `[extra:children]`, skipped the host
+  line after it and stayed green.
+- M13. Positive control: `[services]` becomes `[services] # service
+  VMs`. Contract and playbook stay green. Before the same fix the
+  contract refused it with "svc-jellyfin is defined 0 times in
+  [services]".
+- M14. Break: append `[extra:children]` and
+  `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:15: child group line does not parse". The plugin
+  refuses the inventory with "Expected group name"; the playbook stays
+  green only because the hosts read before that line remain loaded.
+- M15. Break: `[jellyfin]` becomes `[jellyfin] ; connection identity`
+  (the plugin's header comment is `#` only).
+  Red: "inventory.ini:7: host variable is not key=value" and
+  "svc-jellyfin is defined 2 times in [services]". Playbook green.
+- M16. Break: append `[jellyfin:hostz]` and
+  `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:14: section type is unknown" and "inventory.ini:15:
+  connection user is not the admin_user setting". Playbook green for the
+  same reason as M14: the plugin refuses the inventory with "Section
+  [jellyfin:hostz] has unknown type: hostz" after the hosts above it.
 - Restore: copy the broken file back from the intact tree; the contract
   prints "Public repository process hygiene contract: OK" and the three
   playbook runs pass again.

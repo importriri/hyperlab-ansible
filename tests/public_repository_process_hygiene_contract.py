@@ -40,8 +40,13 @@ CONNECTION_USER_KEYS = (
 )
 CONNECTION_USER = "{{ admin_user }}"
 UNPARSABLE = object()
+# The INI inventory plugin's own expressions: a section header and a child
+# group name may end with a "#" comment.
 SECTION = re.compile(
-    r"^\[([^\[\]:\s]+)(?::(\w+))?\]$"
+    r"^\[([^:\]\s]+)(?::(\w+))?\]\s*(?:#.*)?$"
+)
+GROUP_NAME = re.compile(
+    r"^([^:\]\s]+)\s*(?:#.*)?$"
 )
 
 LOCAL_ONLY = {
@@ -153,9 +158,40 @@ def inventory_identity_failures() -> list[tuple[str, int, str]]:
         if section:
             group = section.group(1)
             state = section.group(2) or "hosts"
+
+            if state not in ("hosts", "children", "vars"):
+                failures.append(
+                    (
+                        INVENTORY,
+                        number,
+                        "section type is unknown",
+                    )
+                )
+
+            continue
+
+        if stripped.startswith("[") and stripped.endswith("]"):
+            failures.append(
+                (
+                    INVENTORY,
+                    number,
+                    "section header does not parse",
+                )
+            )
             continue
 
         if state == "children":
+            if not GROUP_NAME.match(
+                stripped
+            ):
+                failures.append(
+                    (
+                        INVENTORY,
+                        number,
+                        "child group line does not parse",
+                    )
+                )
+
             continue
 
         if state == "vars":
