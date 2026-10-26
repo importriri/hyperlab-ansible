@@ -519,21 +519,35 @@ def check_real_cli(module) -> None:
                 f"a projected workstation was not provisioned over the real CLI: {rc} {argvs(calls)}")
         (base / "calls.jsonl").unlink()
 
-        spec = fixture.repo / "vm-specs/.generated/srv-01.yml"
-        good = spec.read_bytes()
-        for field, change in (("memory", lambda d: d["resources"].__setitem__("memory_mb", 8192)),
-                              ("device", lambda d: d.__setitem__("device_profile", "vfio")),
-                              ("network", lambda d: d.__setitem__("network_profile", "lab"))):
+        # One vCPU, where `vcpus: true` is equal in Python and wrong in YAML.
+        factory("machine", "create", "server-arch", "srv-03", "--resource-profile", "custom",
+                "--memory-mb", "2048", "--vcpus", "1", "--disk-gib", "16", "--project")
+        for machine, field, change in (
+                ("srv-01", "memory", lambda d: d["resources"].__setitem__("memory_mb", 8192)),
+                ("srv-01", "device", lambda d: d.__setitem__("device_profile", "vfio")),
+                ("srv-01", "network", lambda d: d.__setitem__("network_profile", "lab")),
+                ("srv-01", "float memory", lambda d: d["resources"].__setitem__(
+                    "memory_mb", float(d["resources"]["memory_mb"]))),
+                ("srv-01", "boolean schema", lambda d: d.__setitem__("schema_version", True)),
+                ("srv-01", "integer autostart", lambda d: d.__setitem__("autostart", 0)),
+                ("srv-03", "vcpus true for 1", lambda d: d["resources"].__setitem__("vcpus", True)),
+                ("srv-03", "memory_mb 2048.0 for 2048", lambda d: d["resources"].__setitem__("memory_mb", 2048.0))):
+            spec = fixture.repo / f"vm-specs/.generated/{machine}.yml"
+            good = spec.read_bytes()
             document = yaml.safe_load(good)
             change(document)
             spec.write_text("---\n" + yaml.safe_dump(document, sort_keys=False))
             before = tree(state, fixture.repo / "vm-specs")
-            rc, calls, prompts, _ = run(module, fixture, ["srv-01"])
+            rc, calls, prompts, _ = run(module, fixture, [machine])
             require(isinstance(rc, str) and "differs from the projection" in rc and not calls and not prompts,
                     f"the provisioner ran with an edited spec ({field}): {rc} {argvs(calls)}")
             require(tree(state, fixture.repo / "vm-specs") == before,
                     f"a refused provisioning changed the registry or a spec ({field})")
-        spec.write_bytes(good)
+            spec.write_bytes(good)
+        rc, calls, prompts, _ = run(module, fixture, ["srv-03"])
+        require(rc == 0 and len(calls) == 3 and not prompts,
+                f"the restored one-vCPU projection was not provisioned: {rc} {argvs(calls)}")
+        (base / "calls.jsonl").unlink()
 
         factory("machine", "create", "workstation-unreviewed", "dev-02", "--looking-glass-mode",
                 "linux-experimental", "--project")

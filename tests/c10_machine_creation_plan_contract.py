@@ -249,6 +249,15 @@ def check_projection(root: Path, repo: Path, home: Path, state: Path) -> None:
                    ContractError, "differs from the projection"),
         "added field": (lambda: spec.write_bytes(edited(lambda d: d.__setitem__("clipboard", True))),
                         ContractError, "differs from the projection"),
+        # Equal in Python, not in YAML: true is not 1, 0 is not false and
+        # 2048.0 is not 2048. The spec's readers refuse those types.
+        "boolean for integer": (lambda: spec.write_bytes(edited(lambda d: d.__setitem__("schema_version", True))),
+                                ContractError, "differs from the projection"),
+        "integer for boolean": (lambda: spec.write_bytes(edited(lambda d: d.__setitem__("autostart", 0))),
+                                ContractError, "differs from the projection"),
+        "float for integer": (lambda: spec.write_bytes(edited(
+            lambda d: d["resources"].__setitem__("memory_mb", float(d["resources"]["memory_mb"])))),
+            ContractError, "differs from the projection"),
         "malformed": (lambda: spec.write_bytes(b"name: [\n"), ContractError, "not one valid YAML document"),
         "repeated key": (lambda: spec.write_bytes(good + b"name: srv-test\n"), ContractError, "duplicate key"),
         "not a mapping": (lambda: spec.write_bytes(b"- srv-test\n"), ContractError, "not a YAML mapping"),
@@ -276,6 +285,30 @@ def check_projection(root: Path, repo: Path, home: Path, state: Path) -> None:
         spec.chmod(0o600)
     require(provision_steps(repo, "srv-test", home=home, runtime_dir=runtime, state_home=state)["machine"]
             == "srv-test", "the restored projection is refused")
+
+    # One vCPU, where `vcpus: true` is equal in Python and wrong in YAML.
+    create_from_template(repo, state_home=state, template_id="server-arch", machine_id="srv-one",
+                         owner="sid", created_at="2026-10-04T00:00:00Z",
+                         resource_profile="custom", memory_mb=2048, vcpus=1, disk_gib=16)
+    write_projected_vm_spec(repo, read_machine("srv-one", state_home=state))
+    one = repo / "vm-specs/.generated/srv-one.yml"
+    projected = one.read_bytes()
+    require(provision_steps(repo, "srv-one", home=home, runtime_dir=runtime, state_home=state)["machine"]
+            == "srv-one", "a one-vCPU projection is refused")
+    for label, change in (("vcpus true for 1", lambda d: d["resources"].__setitem__("vcpus", True)),
+                          ("memory_mb 2048.0 for 2048", lambda d: d["resources"].__setitem__("memory_mb", 2048.0))):
+        typed = yaml.safe_load(projected)
+        change(typed)
+        require(typed == yaml.safe_load(projected), f"fixture: {label} is not equal in Python")
+        one.write_bytes(b"---\n" + yaml.safe_dump(typed, sort_keys=False).encode())
+        before = snapshot(repo, state)
+        try:
+            refuses(lambda: provision_steps(repo, "srv-one", home=home, runtime_dir=runtime,
+                                            state_home=state), ContractError, "differs from the projection")
+        except AssertionError as exc:
+            raise AssertionError(f"projection case {label}: {exc}") from None
+        require(snapshot(repo, state) == before, f"projection case {label} changed the registry or a spec")
+    one.write_bytes(projected)
 
     # A workstation Template without a reviewed profile playbook is refused
     # even when its Machine was recorded and projected.

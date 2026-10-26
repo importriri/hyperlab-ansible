@@ -166,6 +166,22 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
     }
 
 
+def same_document(left: Any, right: Any) -> bool:
+    """Equality that keeps YAML's scalar types.
+
+    Plain equality takes true for 1, 0 for false and 2048.0 for 2048; the
+    spec's readers do not, so neither does the projection comparison.
+    """
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return ({(type(key), key) for key in left} == {(type(key), key) for key in right}
+                and all(same_document(value, right[key]) for key, value in left.items()))
+    if isinstance(left, list):
+        return len(left) == len(right) and all(map(same_document, left, right))
+    return left == right
+
+
 def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
                     runtime_dir: Path, state_home: Path | None = None) -> dict[str, Any]:
     """The documented commands for one created and projected Machine."""
@@ -181,7 +197,7 @@ def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
     stored = read_generated_spec(root, machine_id)
     if stored is None:
         raise Unavailable(f"{machine_id} is not projected; run hyperlabctl machine project first")
-    if stored != project_vm_spec(root, record):
+    if not same_document(stored, project_vm_spec(root, record)):
         raise ContractError(f"{spec} differs from the projection of the Machine record {machine_id}")
     provision = _provision(record["template"]["id"], record["presentation"]["workspace_profile"])
     if "blocked_reason" in provision:
