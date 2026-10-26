@@ -139,6 +139,16 @@ more than five seconds is a refusal. `withdraw` is for the manual path, where
 `create` and `project` are two commands and the second can refuse
 ([ADR 0053](adr/0053-withdraw-machine-intent.md)).
 
+`machine provision-steps ID` prints the documented provisioning commands
+only for a Machine whose generated spec, read as stored with the same
+reader as `withdraw`, equals the projection the record gives now. The
+existence of a file proves nothing: a spec edited by hand (a resource, the
+device or network profile, an added field) is refused like a missing,
+linked, unreadable or malformed one, and so is a workstation Template with
+no reviewed profile playbook. The record holds no projection digest; the
+projection is recomputed for each comparison
+([ADR 0017](adr/0017-shell-machine-creation.md)).
+
 ### Managed, fixture and external domains are different populations
 
 Normal `Machines` presents only product-managed user-created Machines.

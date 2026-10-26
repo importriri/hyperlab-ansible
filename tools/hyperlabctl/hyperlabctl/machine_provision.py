@@ -25,6 +25,8 @@ from .machine_factory import (
     _resource_values,
     custom_limits,
     os_label,
+    project_vm_spec,
+    read_generated_spec,
     template_catalog,
 )
 from .machine_registry import read_machine
@@ -172,9 +174,15 @@ def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
         raise ContractError("invalid Machine id")
     record = read_machine(machine_id, state_home=state_home)
     spec = f"vm-specs/.generated/{machine_id}.yml"
-    spec_path = root / spec
-    if spec_path.is_symlink() or not spec_path.is_file():
+    # The record is the authority and the spec only its projection: what
+    # stands there must be exactly what the record projects to now. A link,
+    # an unreadable or malformed file, or one edited by hand is refused
+    # before any step, like a missing one.
+    stored = read_generated_spec(root, machine_id)
+    if stored is None:
         raise Unavailable(f"{machine_id} is not projected; run hyperlabctl machine project first")
+    if stored != project_vm_spec(root, record):
+        raise ContractError(f"{spec} differs from the projection of the Machine record {machine_id}")
     provision = _provision(record["template"]["id"], record["presentation"]["workspace_profile"])
     if "blocked_reason" in provision:
         raise ContractError(provision["blocked_reason"])

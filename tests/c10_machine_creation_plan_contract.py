@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""C10 creation plan and provisioning steps behind the shell's Create view (ADR 0017)."""
+"""C10 creation plan and provisioning steps behind the shell's Create view (ADR 0017).
+
+The provisioning steps are held to docs/first-machine.md twice: by literal
+expectations written here, and by the ansible-playbook commands parsed out
+of the document itself and compared with what the real `provision-steps`
+CLI prints for Machines named as in the document. A projection that is not
+exactly what the Machine record projects to is refused before any step.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +14,8 @@ import base64
 import hashlib
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -28,6 +37,8 @@ from hyperlabctl.machine_provision import (  # noqa: E402
     provision_steps,
 )
 from hyperlabctl.machine_registry import read_machine  # noqa: E402
+
+DOC = ROOT / "docs/first-machine.md"
 
 KEY_RAW = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20" + bytes(range(32))
 KEY_BLOB = base64.b64encode(KEY_RAW).decode()
@@ -187,6 +198,208 @@ def check_steps(repo: Path, home: Path, state: Path) -> None:
             ContractError, "absolute")
 
 
+def snapshot(repo: Path, state: Path) -> dict[str, object]:
+    """Every path below the state home and the VM specs, with mode and bytes."""
+    tree: dict[str, object] = {}
+    for base in (state, repo / "vm-specs"):
+        for path in sorted(base.rglob("*")):
+            info = path.lstat()
+            content = None
+            if path.is_file() and not path.is_symlink():
+                content = path.read_bytes() if info.st_mode & 0o400 else info.st_size
+            tree[str(path)] = (info.st_mode, content)
+    return tree
+
+
+def check_projection(root: Path, repo: Path, home: Path, state: Path) -> None:
+    """Only the projection of the record itself is provisioned.
+
+    Each case changes what stands where the spec goes; the steps are refused
+    and the registry and the specs stay exactly as the case left them.
+    """
+    runtime = Path("/run/user/1000")
+    spec = repo / "vm-specs/.generated/srv-test.yml"
+    good = spec.read_bytes()
+    document = yaml.safe_load(good)
+
+    def edited(change) -> bytes:
+        copy = json.loads(json.dumps(document))
+        change(copy)
+        return b"---\n" + yaml.safe_dump(copy, sort_keys=False).encode()
+
+    def link_to_copy() -> None:
+        outside = root / "outside-srv-test.yml"
+        outside.write_bytes(good)
+        spec.unlink()
+        spec.symlink_to(outside)
+
+    def directory() -> None:
+        spec.unlink()
+        spec.mkdir()
+
+    def unreadable() -> None:
+        spec.chmod(0)
+
+    cases = {
+        "memory": (lambda: spec.write_bytes(edited(lambda d: d["resources"].__setitem__("memory_mb", 4096))),
+                   ContractError, "differs from the projection"),
+        "vcpus": (lambda: spec.write_bytes(edited(lambda d: d["resources"].__setitem__("vcpus", 3))),
+                  ContractError, "differs from the projection"),
+        "device": (lambda: spec.write_bytes(edited(lambda d: d.__setitem__("device_profile", "vfio"))),
+                   ContractError, "differs from the projection"),
+        "added field": (lambda: spec.write_bytes(edited(lambda d: d.__setitem__("clipboard", True))),
+                        ContractError, "differs from the projection"),
+        "malformed": (lambda: spec.write_bytes(b"name: [\n"), ContractError, "not one valid YAML document"),
+        "repeated key": (lambda: spec.write_bytes(good + b"name: srv-test\n"), ContractError, "duplicate key"),
+        "not a mapping": (lambda: spec.write_bytes(b"- srv-test\n"), ContractError, "not a YAML mapping"),
+        "link": (link_to_copy, ContractError, "cannot be read"),
+        "directory": (directory, ContractError, "not a regular file"),
+        "missing": (spec.unlink, Unavailable, "not projected"),
+    }
+    if os.geteuid() != 0:
+        # As root a mode-000 file is readable; the other cases cover root.
+        cases["unreadable"] = (unreadable, ContractError, "cannot be read")
+    for label, (tamper, kind, text) in cases.items():
+        tamper()
+        before = snapshot(repo, state)
+        try:
+            refuses(lambda: provision_steps(repo, "srv-test", home=home, runtime_dir=runtime,
+                                            state_home=state), kind, text)
+        except AssertionError as exc:
+            raise AssertionError(f"projection case {label}: {exc}") from None
+        require(snapshot(repo, state) == before, f"projection case {label} changed the registry or a spec")
+        if spec.is_dir() and not spec.is_symlink():
+            spec.rmdir()
+        elif spec.exists() or spec.is_symlink():
+            spec.unlink()
+        spec.write_bytes(good)
+        spec.chmod(0o600)
+    require(provision_steps(repo, "srv-test", home=home, runtime_dir=runtime, state_home=state)["machine"]
+            == "srv-test", "the restored projection is refused")
+
+    # A workstation Template without a reviewed profile playbook is refused
+    # even when its Machine was recorded and projected.
+    create_from_template(repo, state_home=state, template_id="workstation-unreviewed",
+                         machine_id="dev-unrev", owner="sid", created_at="2026-10-04T00:00:00Z",
+                         looking_glass_mode="linux-experimental")
+    write_projected_vm_spec(repo, read_machine("dev-unrev", state_home=state))
+    before = snapshot(repo, state)
+    refuses(lambda: provision_steps(repo, "dev-unrev", home=home, runtime_dir=runtime, state_home=state),
+            ContractError, "no reviewed profile playbook")
+    require(snapshot(repo, state) == before, "an unreviewed workstation changed the registry or a spec")
+
+
+def doc_commands(section_titles: tuple[str, ...]) -> list[list[str]]:
+    """The ansible-playbook commands of the named sections, in document order."""
+    text = DOC.read_text(encoding="utf-8")
+    sections = re.split(r"^## ", text, flags=re.MULTILINE)
+    commands = []
+    for title in section_titles:
+        matches = [body for body in sections if body.split("\n", 1)[0].strip() == title]
+        require(len(matches) == 1, f"docs/first-machine.md has no single section {title!r}")
+        for block in re.findall(r"^```bash\n(.*?)^```", matches[0], flags=re.MULTILINE | re.DOTALL):
+            for line in block.replace("\\\n", " ").splitlines():
+                argv = shlex.split(line)
+                if argv and argv[0] == "ansible-playbook":
+                    commands.append(argv)
+    return commands
+
+
+def shape(argv: list[str]) -> tuple[str, bool, list[str], list[object]]:
+    """What a playbook run means: playbook, become prompt, inventories, extra vars."""
+    require(argv[0] == "ansible-playbook", f"not a playbook run: {argv}")
+    playbook, become, inventories, extra = None, False, [], []
+    index = 1
+    while index < len(argv):
+        part = argv[index]
+        if part == "-K":
+            become = True
+        elif part in ("-i", "-e"):
+            value = argv[index + 1]
+            index += 1
+            if part == "-i":
+                inventories.append(value)
+            else:
+                extra.append(json.loads(value) if value.startswith("{") else value)
+        else:
+            require(not part.startswith("-") and playbook is None, f"unexpected argument {part!r} in {argv}")
+            playbook = part
+        index += 1
+    require(playbook is not None, f"no playbook in {argv}")
+    return playbook, become, inventories, extra
+
+
+def documented(argv: list[str], machine: str, runtime: str, key: str) -> tuple:
+    """A documented command with the shell's spellings replaced by values."""
+    playbook, become, inventories, extra = shape(argv)
+    inventories = [value.replace("/run/user/$UID/", runtime + "/") for value in inventories]
+    values: list[object] = []
+    for value in extra:
+        if value == f"@/run/user/$UID/{machine}-access.yml":
+            value = "@{access_file}"
+        elif isinstance(value, dict):
+            # The document hands over the whole key file; the provisioner
+            # hands over type and key only, the comment stays on the host.
+            keys = value.get("guest_cloud_init_ssh_public_keys")
+            require(keys == ["$(command cat ~/.ssh/hyperlab_ed25519.pub)"],
+                    f"the documented key argument changed: {value}")
+            value = {"guest_cloud_init_ssh_public_keys": [key]}
+        values.append(value)
+    return playbook, become, inventories, values
+
+
+def check_docs(repo: Path, home: Path, state: Path) -> None:
+    """The real provision-steps CLI prints the documented commands, in order."""
+    runtime = "/run/user/4242"
+    env = {**os.environ, "HOME": str(home), "XDG_STATE_HOME": str(state),
+           "XDG_RUNTIME_DIR": runtime, "PYTHONDONTWRITEBYTECODE": "1"}
+    create_from_template(repo, state_home=state, template_id="server-arch", machine_id="srv-01",
+                         owner="sid", created_at="2026-10-04T00:00:00Z",
+                         resource_profile="custom", memory_mb=2048, vcpus=2, disk_gib=16)
+    create_from_template(repo, state_home=state, template_id="workstation-dev", machine_id="dev-01",
+                         owner="sid", created_at="2026-10-04T00:00:00Z",
+                         looking_glass_mode="linux-experimental")
+    for machine in ("srv-01", "dev-01"):
+        write_projected_vm_spec(repo, read_machine(machine, state_home=state))
+    key = f"ssh-ed25519 {KEY_BLOB}"
+
+    def steps(machine: str) -> list[dict]:
+        result = subprocess.run([str(CLI), "--repo", str(repo), "machine", "provision-steps", machine],
+                                text=True, capture_output=True, check=False, env=env)
+        require(result.returncode == 0, result.stderr + result.stdout)
+        plan = json.loads(result.stdout)
+        require(plan["machine"] == machine and plan["spec"] == f"vm-specs/.generated/{machine}.yml",
+                f"plan header: {plan}")
+        return plan["steps"]
+
+    server = steps("srv-01")
+    docs = doc_commands(("A server Machine",))
+    require([shape(step["argv"]) for step in server]
+            == [documented(argv, "srv-01", runtime, key) for argv in docs],
+            f"server steps differ from docs/first-machine.md:\n{server}\n{docs}")
+    require([step["id"] for step in server] == ["create-domain", "inventory", "close-access"],
+            f"server step ids: {server}")
+
+    work = steps("dev-01")
+    docs = doc_commands(("2. The domain", "3. The rice"))
+    require([shape(step["argv"]) for step in work]
+            == [documented(argv, "dev-01", runtime, key) for argv in docs],
+            f"workstation steps differ from docs/first-machine.md:\n{work}\n{docs}")
+    require([step["id"] for step in work]
+            == ["create-domain", "inventory", "profile-first", "profile-second", "close-access"],
+            f"workstation step ids: {work}")
+    # Independent of the document: the hash file goes to the first pass only.
+    require([step["password"] for step in work] == [False, False, True, False, False]
+            and [step["argv"].count("@{access_file}") for step in work] == [0, 0, 1, 0, 0],
+            f"the hash file is not the first profile pass's alone: {work}")
+    require(work[3]["argv"] == ["ansible-playbook", "-i", "inventory.ini", "-i", f"{runtime}/dev-01.ini",
+                                PROFILE_PLAYBOOKS["workstation-dev"]],
+            f"second profile pass: {work[3]}")
+    require(work[4]["argv"] == ["ansible-playbook", "-i", "inventory.ini", "-i", f"{runtime}/dev-01.ini",
+                                "playbooks/guest-close-access.yml"],
+            f"close-access step: {work[4]}")
+
+
 def check_cli(repo: Path, home: Path, state: Path) -> None:
     env = {**os.environ, "HOME": str(home), "XDG_STATE_HOME": str(state),
            "XDG_RUNTIME_DIR": "/run/user/4242", "PYTHONDONTWRITEBYTECODE": "1"}
@@ -214,6 +427,8 @@ def main() -> int:
         check_plan(repo, home)
         check_key_refusals(root, repo)
         check_steps(repo, home, state)
+        check_projection(root, repo, home, state)
+        check_docs(repo, home, state)
         check_cli(repo, home, state)
         (home / ".ssh/hyperlab_ed25519").chmod(0o600)
     print("C10 Machine creation plan contract: OK")
