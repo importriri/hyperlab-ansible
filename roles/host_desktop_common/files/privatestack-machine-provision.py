@@ -5,9 +5,9 @@ The operation runner starts this as the reviewed command of
 machine.provision, with the Machine's name as its only argument. The steps
 come from `hyperlabctl machine provision-steps` in the reviewed checkout,
 which refuses a Machine whose generated spec is not its record's
-projection. Every step must have its reviewed shape and every playbook must
-be a regular file in the checkout's playbooks directory before the first
-step runs. Each -K playbook asks for the become password in this terminal. A
+projection. Every step must have the reviewed shape that the Machine
+record's own Template calls for, and every playbook must be a regular file
+in the checkout's playbooks directory, before the first step runs. Each -K playbook asks for the become password in this terminal. A
 workstation password is asked here without echo, turned into a SHA-512
 crypt hash, written to a private runtime file for the first profile pass and
 deleted in every outcome, SIGINT, SIGTERM and SIGHUP included (ADR 0017).
@@ -35,14 +35,16 @@ KEY_RE = re.compile(r"^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]+={0,2}$")
 HOST_PLAYBOOKS = {"create-domain": "playbooks/vm-create.yml",
                   "inventory": "playbooks/vm-guest-inventory.yml"}
 CLOSE_PLAYBOOK = "playbooks/guest-close-access.yml"
-# The profile playbooks hyperlabctl maps workstation Templates to
-# (PROFILE_PLAYBOOKS in machine_provision.py); a contract keeps both equal.
-PROFILE_PLAYBOOKS = frozenset({
-    "playbooks/guest-arch-dev-vfio.yml",
-    "playbooks/guest-arch-dev.yml",
-    "playbooks/guest-arch-gaming-clean.yml",
-    "playbooks/guest-arch-gaming-dirty.yml",
-})
+# The profile playbook of each workstation Template, as hyperlabctl maps
+# them (PROFILE_PLAYBOOKS in machine_provision.py); a contract keeps both
+# equal. A Template in the server workspace has no profile.
+PROFILE_PLAYBOOKS = {
+    "workstation-dev": "playbooks/guest-arch-dev-vfio.yml",
+    "workstation-dev-standard": "playbooks/guest-arch-dev.yml",
+    "gaming-clean": "playbooks/guest-arch-gaming-clean.yml",
+    "gaming-dirty": "playbooks/guest-arch-gaming-dirty.yml",
+}
+SERVER_WORKSPACE = "server"
 ACCESS_FILE = "{access_file}"
 # A server has no profile; every Machine ends by closing its provisioning access.
 SERVER_STEPS = ["create-domain", "inventory", "close-access"]
@@ -116,7 +118,7 @@ def reviewed_argv(step_id: str, profile: str | None, spec: str, inventory: str) 
     guest = ["ansible-playbook", "-i", "inventory.ini", "-i", inventory]
     if step_id == "close-access":
         return [*guest, CLOSE_PLAYBOOK]
-    if profile not in PROFILE_PLAYBOOKS:
+    if profile is None:
         return None
     if step_id == "profile-first":
         return [*guest, profile, "-e", "@" + ACCESS_FILE]
@@ -168,21 +170,43 @@ def playbook_file(repo: Path, relative: str) -> None:
     require(stat.S_ISREG(info.st_mode), f"{relative} is not a regular file")
 
 
+def cli_json(repo: Path, *args: str, unavailable: str) -> object:
+    result = subprocess.run([CLI, "--repo", str(repo), *args],
+                            capture_output=True, text=True, timeout=60, check=False)
+    require(result.returncode == 0, (result.stderr.strip() or unavailable)[:400])
+    try:
+        return json.loads(result.stdout)
+    except ValueError:
+        raise Refused(unavailable) from None
+
+
+def mapped_profile(repo: Path, machine: str) -> str | None:
+    """The profile playbook the Machine record's Template maps to, or None
+    for a server; read from the registry before anything runs or is asked."""
+    record = cli_json(repo, "machine", "show", machine, unavailable="the Machine record is unavailable")
+    template = record.get("template") if isinstance(record, dict) else None
+    presentation = record.get("presentation") if isinstance(record, dict) else None
+    require(isinstance(record, dict) and record.get("id") == machine
+            and isinstance(template, dict) and isinstance(template.get("id"), str)
+            and isinstance(presentation, dict) and isinstance(presentation.get("workspace_profile"), str),
+            "invalid Machine record")
+    if presentation["workspace_profile"] == SERVER_WORKSPACE:
+        return None
+    profile = PROFILE_PLAYBOOKS.get(template["id"])
+    require(profile is not None, "no reviewed profile playbook for this Template")
+    return profile
+
+
 def steps_for(repo: Path, machine: str, spec: str, runtime: Path) -> list[dict]:
     """The whole plan, validated before anything runs or is asked."""
-    result = subprocess.run([CLI, "--repo", str(repo), "machine", "provision-steps", machine],
-                            capture_output=True, text=True, timeout=60, check=False)
-    require(result.returncode == 0, (result.stderr.strip() or "provisioning steps unavailable")[:400])
-    plan = json.loads(result.stdout)
+    # The record, not the plan, says which profile both passes run.
+    profile = mapped_profile(repo, machine)
+    plan = cli_json(repo, "machine", "provision-steps", machine, unavailable="provisioning steps unavailable")
     require(isinstance(plan, dict) and plan.get("schema") == 1 and plan.get("machine") == machine
             and plan.get("spec") == spec and isinstance(plan.get("steps"), list), "invalid provisioning plan")
     ids = [step.get("id") if isinstance(step, dict) else None for step in plan["steps"]]
-    require(ids in (SERVER_STEPS, WORKSTATION_STEPS), "provisioning steps out of order")
-    profile = None
-    if ids == WORKSTATION_STEPS:
-        # Both profile passes run the one profile the Template maps to.
-        argv = plan["steps"][2].get("argv")
-        profile = argv[5] if isinstance(argv, list) and len(argv) > 5 else None
+    require(ids == (SERVER_STEPS if profile is None else WORKSTATION_STEPS),
+            "the provisioning steps are not the ones the Machine's Template calls for")
     inventory = str(runtime / f"{machine}.ini")
     steps = [valid_step(step, step_id, profile, spec, inventory)
              for step, step_id in zip(plan["steps"], ids, strict=True)]

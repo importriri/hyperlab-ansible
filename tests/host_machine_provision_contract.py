@@ -152,16 +152,27 @@ sys.stdout.write(result.stdout)
 sys.exit(result.returncode)
 '''
 
+# `machine show` answers record.json, `machine provision-steps` plan.json.
 CLI_STUB = r'''
 import json, os, sys
 base = sys.argv[1]
 with open(os.path.join(base, "cli.jsonl"), "a") as stream:
     stream.write(json.dumps(sys.argv[2:]) + "\n")
-plan = os.path.join(base, "plan.json")
-if not os.path.exists(plan):
-    sys.exit("no plan")
-sys.stdout.write(open(plan).read())
+answer = os.path.join(base, "record.json" if "show" in sys.argv[2:] else "plan.json")
+if not os.path.exists(answer):
+    sys.exit("no such Machine")
+sys.stdout.write(open(answer).read())
 '''
+
+
+def record(machine: str, template: str, workspace: str) -> dict:
+    """The part of a Machine record the provisioner reads."""
+    return {"schema_version": 1, "id": machine, "template": {"id": template, "version": 1},
+            "presentation": {"workspace_profile": workspace}}
+
+
+SERVER = ("server-arch", "server")
+WORKSTATION = ("workstation-dev", "dev")
 
 
 class Fixture:
@@ -194,7 +205,18 @@ class Fixture:
         return path
 
     def plan(self, plan: dict) -> None:
+        """The steps; and, unless one was given, the record they belong to."""
         (self.base / "plan.json").write_text(json.dumps(plan))
+        if not (self.base / "record.json").exists():
+            workstation = any(step.get("id") == "profile-first" for step in plan["steps"])
+            self.record(record(plan["machine"], *(WORKSTATION if workstation else SERVER)))
+
+    def record(self, value: dict | str | None) -> None:
+        path = self.base / "record.json"
+        if value is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(value if isinstance(value, str) else json.dumps(value))
 
     def configure(self, module) -> None:
         module.CLI = str(self.cli)
@@ -262,9 +284,10 @@ def check_sequences(module) -> None:
                                                      steps("srv-a", False, fixture.runtime)["steps"]],
                 f"server steps ran differently: {argvs(calls)}")
         require(not prompts and not fixture.private.exists(), "a server asked for a password")
-        require(fixture.log("cli.jsonl") == [["--repo", str(fixture.repo.resolve()), "machine",
-                                              "provision-steps", "srv-a"]],
-                f"the steps were not asked for this Machine: {fixture.log('cli.jsonl')}")
+        repo = str(fixture.repo.resolve())
+        require(fixture.log("cli.jsonl") == [["--repo", repo, "machine", "show", "srv-a"],
+                                             ["--repo", repo, "machine", "provision-steps", "srv-a"]],
+                f"the record and the steps were not asked for this Machine: {fixture.log('cli.jsonl')}")
 
     with tempfile.TemporaryDirectory() as temp:
         fixture = Fixture(Path(temp))
@@ -311,10 +334,10 @@ def check_sequences(module) -> None:
 
 
 def check_profile_table(module) -> None:
-    reviewed = frozenset(PROFILE_PLAYBOOKS.values())
+    reviewed = dict(PROFILE_PLAYBOOKS)
     require(reviewed == module.PROFILE_PLAYBOOKS,
             "the provisioner's reviewed profiles differ from hyperlabctl's table: "
-            f"{sorted(module.PROFILE_PLAYBOOKS)} {sorted(PROFILE_PLAYBOOKS.values())}")
+            f"{module.PROFILE_PLAYBOOKS} {reviewed}")
 
 
 def check_plan_refusals(module) -> None:
@@ -360,6 +383,9 @@ def check_plan_refusals(module) -> None:
             5, "playbooks/guest-arch-hyprland.yml") for i in (2, 3)]),
         "profile passes differ": tampered(lambda p, r: argv(3)(p).__setitem__(
             5, PROFILE_PLAYBOOKS["workstation-dev-standard"])),
+        # Reviewed, and the same in both passes, but another Template's.
+        "another Template's profile": tampered(lambda p, r: [argv(i)(p).__setitem__(
+            5, PROFILE_PLAYBOOKS["gaming-dirty"]) for i in (2, 3)]),
         "inventory elsewhere": tampered(lambda p, r: argv(4)(p).__setitem__(4, "/tmp/dev-t.ini")),
         "another inventory": tampered(lambda p, r: argv(2)(p).__setitem__(2, "/etc/ansible/hosts")),
         "extra variable": tampered(lambda p, r: argv(1)(p).extend(["-e", "ansible_python_interpreter=/bin/sh"])),
@@ -380,6 +406,38 @@ def check_plan_refusals(module) -> None:
             rc, calls, prompts, _ = run(module, fixture, ["dev-t"], passwords=[SECRET] * 2)
             require(isinstance(rc, str) and rc.startswith("refused") and not calls and not prompts,
                     f"tampered steps ({label}) ran or asked: {rc} {argvs(calls)} {prompts}")
+
+
+def check_record_refusals(module) -> None:
+    """The plan must be the one the Machine's own record calls for."""
+    def plan_for(machine: str, workstation: bool):
+        return lambda runtime: steps(machine, workstation, runtime)
+
+    cases = {
+        "a server record": (plan_for("dev-t", True), record("dev-t", *SERVER)),
+        "another workstation Template": (plan_for("dev-t", True),
+                                         record("dev-t", "workstation-dev-standard", "dev")),
+        "an unmapped workstation Template": (plan_for("dev-t", True),
+                                             record("dev-t", "workstation-unreviewed", "dev")),
+        "a workstation record with server steps": (plan_for("dev-t", False), record("dev-t", *WORKSTATION)),
+        "an unmapped Template with server steps": (plan_for("dev-t", False),
+                                                   record("dev-t", "workstation-unreviewed", "dev")),
+        "another Machine's record": (plan_for("dev-t", True), record("dev-u", *WORKSTATION)),
+        "no record": (plan_for("dev-t", True), None),
+        "a record that is not JSON": (plan_for("dev-t", True), "id: dev-t\n"),
+        "a record without its Template": (plan_for("dev-t", True),
+                                          {"id": "dev-t", "presentation": {"workspace_profile": "dev"}}),
+    }
+    for label, (build, value) in cases.items():
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = Fixture(Path(temp))
+            fixture.record(value if value is not None else "")
+            fixture.plan(build(fixture.runtime))
+            if value is None:
+                fixture.record(None)
+            rc, calls, prompts, _ = run(module, fixture, ["dev-t"], passwords=[SECRET] * 2)
+            require(isinstance(rc, str) and rc.startswith("refused") and not calls and not prompts,
+                    f"a plan with {label} ran or asked: {rc} {argvs(calls)} {prompts}")
 
 
 def check_file_refusals(module) -> None:
@@ -762,6 +820,7 @@ def main() -> int:
     check_profile_table(module)
     check_sequences(module)
     check_plan_refusals(module)
+    check_record_refusals(module)
     check_file_refusals(module)
     check_arguments(module)
     check_real_cli(module)
