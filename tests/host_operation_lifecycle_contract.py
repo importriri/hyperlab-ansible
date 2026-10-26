@@ -260,6 +260,68 @@ def usb_contract(op, root, repo, base):
         (base / item['unit']).unlink()
 
 
+def provision_contract(op, root, repo, specs, fake_cli):
+    """machine.provision runs exactly [provisioner, NAME] on NAME's projection.
+
+    The registry's answer is the real one; the cases below replace it with
+    what a changed resolver could answer, and each must be refused.
+    """
+    argv, _, spec_hash = op.resolve('machine.provision', 'made-01', repo)
+    require(argv == ['/usr/local/bin/privatestack-machine-provision', 'made-01']
+            and argv == [op.PROVISION, 'made-01'],
+            'provisioning command is not exactly the reviewed provisioner and NAME: %r' % argv)
+    require(spec_hash == op.digest((repo / 'vm-specs/.generated/made-01.yml').read_bytes()),
+            'provisioning does not pin the projected spec')
+    # A checked-in fixture spec is never provisioned, whatever it is named.
+    refused(lambda: op.resolve('machine.provision', 'two', repo))
+    answers = {
+        'extra argument': [op.PROVISION, 'made-01', '--verbose'],
+        'option before the name': [op.PROVISION, '-x', 'made-01'],
+        'the old spec form': [op.PROVISION, '--spec', 'vm-specs/.generated/made-01.yml', 'made-01'],
+        'another Machine': [op.PROVISION, 'made-02'],
+        'no Machine': [op.PROVISION],
+        'relative provisioner': ['privatestack-machine-provision', 'made-01'],
+        'another program': ['/usr/bin/python3', 'made-01'],
+        'a playbook': ['ansible-playbook', 'playbooks/vm-create.yml', '-K', '-e',
+                       'guest_spec=vm-specs/.generated/made-01.yml'],
+    }
+    for label, answer in answers.items():
+        def changed(root_arg, *args, answer=answer):
+            if args[:3] == ('actions', '--resolve', 'machine.provision'):
+                return list(answer)
+            return fake_cli(root_arg, *args)
+        with patch.object(op, 'cli', changed):
+            try:
+                op.resolve('machine.provision', 'made-01', repo)
+            except ValueError as error:
+                require(str(error) == 'invalid-reviewed-command',
+                        '%s refused for the wrong reason: %s' % (label, error))
+            else:
+                raise AssertionError('the runner accepted a provisioning command with %s' % label)
+    # The other actions keep their reviewed playbook commands.
+    argv, _, _ = op.resolve('vm.managed-start', 'made-01', repo)
+    require(argv == ['/usr/bin/ansible-playbook', 'playbooks/vm-start.yml', '-K',
+                     '-e', 'guest_spec=vm-specs/.generated/made-01.yml'],
+            'a managed start of a created Machine changed: %r' % argv)
+
+    provision = op.launch('machine.provision', 'made-01')
+    require(provision['phase'] == 'dispatched' and provision['action_id'] == 'machine.provision',
+            'provisioning not launched as a durable operation')
+    record = op.read(root, provision['operation_id'])
+    require(record['command_digest'] == op.digest(
+        __import__('json').dumps([op.PROVISION, 'made-01']).encode()),
+        'the record does not pin the exact provisioning command')
+    # Between launch and run the spec changes: a durable failure, no child.
+    (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\nchanged: true\n')
+    with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('drifted spec ran')):
+        require(op.run(provision['operation_id']) == 1, 'a drifted provisioning reported success')
+    final = op.read(root, provision['operation_id'])
+    require(final['phase'] == 'failed' and final['reason'] == 'execution-unavailable'
+            and final['rc'] == 125,
+            'a spec changed after launch was provisioned: %r' % final)
+    (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\n')
+
+
 def main():
     spec = importlib.util.spec_from_file_location('operation', SOURCE)
     op = importlib.util.module_from_spec(spec)
@@ -461,22 +523,7 @@ def main():
             require(argv == ['/usr/bin/ansible-playbook', 'playbooks/workbench-seal.yml', '-K',
                              '-e', 'workbench_domain=two'],
                     'the seal command is not the reviewed playbook: %r' % argv)
-            # Provisioning runs the reviewed provisioner on a Machine's own
-            # projection only; a checked-in fixture spec is never provisioned.
-            argv, _, spec_hash = op.resolve('machine.provision', 'made-01', repo)
-            require(argv == [op.PROVISION, '--spec', 'vm-specs/.generated/made-01.yml', 'made-01'],
-                    'provisioning command is not the reviewed provisioner: %r' % argv)
-            require(spec_hash == op.digest((repo / 'vm-specs/.generated/made-01.yml').read_bytes()),
-                    'provisioning does not pin the projected spec')
-            refused(lambda: op.resolve('machine.provision', 'two', repo))
-            provision = op.launch('machine.provision', 'made-01')
-            require(provision['phase'] == 'dispatched' and provision['action_id'] == 'machine.provision',
-                    'provisioning not launched as a durable operation')
-            (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\nchanged: true\n')
-            with patch.object(op.subprocess, 'Popen', side_effect=AssertionError('drifted spec ran')):
-                op.run(provision['operation_id'])
-            require(op.read(root, provision['operation_id'])['phase'] == 'failed',
-                    'a spec changed after launch was provisioned')
+            provision_contract(op, root, repo, specs, fake_cli)
 
             usb_contract(op, root, repo, base)
 

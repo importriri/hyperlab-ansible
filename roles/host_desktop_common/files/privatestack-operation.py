@@ -255,11 +255,10 @@ def resolve(action, machine, repo):
     # caller or record. Normalize only its reviewed executable token.
     reviewed(argv)
     if action == "machine.provision":
-        # Only a Machine's own projection is provisioned, never a fixture spec.
+        # Only a Machine's own projection is provisioned, never a fixture
+        # spec, and only by exactly the provisioner and that Machine's name.
         require(row["path"] == f"vm-specs/.generated/{machine}.yml"
-                and argv == ["privatestack-machine-provision", "--spec", row["path"], machine],
-                "invalid-reviewed-command")
-        argv[0] = PROVISION
+                and argv == [PROVISION, machine], "invalid-reviewed-command")
     else:
         require(argv[0] == "ansible-playbook" and "-K" in argv, "invalid-reviewed-command")
         argv[0] = "/usr/bin/ansible-playbook"

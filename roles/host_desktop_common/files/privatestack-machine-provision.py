@@ -2,7 +2,7 @@
 """Provision one created and projected Machine inside its operation terminal.
 
 The operation runner starts this as the reviewed command of
-machine.provision. The steps come from `hyperlabctl machine provision-steps`
+machine.provision, with the Machine's name as its only argument. The steps come from `hyperlabctl machine provision-steps`
 in the reviewed checkout, never from a caller; only ansible-playbook runs of
 reviewed playbooks are accepted. Each -K playbook asks for the become
 password in this terminal. A workstation password is asked here without
@@ -151,10 +151,11 @@ def run_step(repo: Path, argv: list[str]) -> int:
 
 def main(args: list[str]) -> int:
     os.umask(0o077)
-    require(len(args) == 3 and args[0] == "--spec", "usage: privatestack-machine-provision --spec SPEC MACHINE")
-    spec, machine = args[1], args[2]
-    require(MACHINE_RE.fullmatch(machine) is not None, "invalid Machine id")
-    require(spec == f"vm-specs/.generated/{machine}.yml", "the spec is not this Machine's projection")
+    require(len(args) == 1 and MACHINE_RE.fullmatch(args[0]) is not None,
+            "usage: privatestack-machine-provision MACHINE")
+    machine = args[0]
+    # The provisioner derives the projection; nobody hands it a spec path.
+    spec = f"vm-specs/.generated/{machine}.yml"
     repo = checkout()
     require(Path.cwd().resolve() == repo, "provisioning must run in the reviewed checkout")
     steps = steps_for(repo, machine, spec)

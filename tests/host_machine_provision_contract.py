@@ -118,7 +118,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp:
         rc, calls, runtime, _ = run(module, Path(temp), steps("srv-a", False),
-                                    ["--spec", "vm-specs/.generated/srv-a.yml", "srv-a"])
+                                    ["srv-a"])
         require(rc == 0, f"server provisioning failed: {rc}")
         require([call["argv"][0] for call in calls[:2]] == ["playbooks/vm-create.yml", "playbooks/vm-guest-inventory.yml"]
                 and len(calls) == 3 and calls[2]["argv"][-1] == "playbooks/guest-close-access.yml",
@@ -127,7 +127,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp:
         rc, calls, runtime, output = run(module, Path(temp), steps("dev-a", True),
-                                         ["--spec", "vm-specs/.generated/dev-a.yml", "dev-a"],
+                                         ["dev-a"],
                                          passwords=[SECRET, SECRET])
         require(rc == 0, f"workstation provisioning failed: {rc}")
         require(len(calls) == 5 and calls[4]["argv"][-1] == "playbooks/guest-close-access.yml",
@@ -146,19 +146,19 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp:
         rc, calls, runtime, _ = run(module, Path(temp), steps("dev-b", True),
-                                    ["--spec", "vm-specs/.generated/dev-b.yml", "dev-b"],
+                                    ["dev-b"],
                                     passwords=[SECRET, SECRET], fail_step="guest-arch-dev-vfio.yml -e")
         require(rc == 3 and len(calls) == 3, f"a failed profile pass did not stop: {rc} {calls}")
         require(not list((runtime / "hyperlab/provision").iterdir()), "a failed pass left the hash file")
 
     with tempfile.TemporaryDirectory() as temp:
         rc, calls, _, _ = run(module, Path(temp), steps("srv-b", False),
-                              ["--spec", "vm-specs/.generated/srv-b.yml", "srv-b"], fail_step="vm-create")
+                              ["srv-b"], fail_step="vm-create")
         require(rc == 3 and len(calls) == 1, "a failed domain creation did not stop provisioning")
 
     with tempfile.TemporaryDirectory() as temp:
         rc, calls, _, _ = run(module, Path(temp), steps("dev-c", True),
-                              ["--spec", "vm-specs/.generated/dev-c.yml", "dev-c"],
+                              ["dev-c"],
                               passwords=["one-password", "two-password", "short", "short",
                                          SECRET, SECRET + "x"])
         require(isinstance(rc, str) and "no password" in rc and len(calls) == 2,
@@ -186,12 +186,12 @@ def main() -> int:
     for label, plan in refusals.items():
         with tempfile.TemporaryDirectory() as temp:
             rc, calls, _, _ = run(module, Path(temp), plan,
-                                  ["--spec", "vm-specs/.generated/dev-t.yml", "dev-t"], passwords=[SECRET] * 2)
+                                  ["dev-t"], passwords=[SECRET] * 2)
             require(isinstance(rc, str) and rc.startswith("refused") and not calls,
                     f"tampered steps ({label}) ran: {rc} {calls}")
 
-    for args in (["--spec", "vm-specs/arch-dev.yml", "dev-t"], ["dev-t"],
-                 ["--spec", "vm-specs/.generated/../x.yml", "../x"]):
+    for args in (["--spec", "vm-specs/.generated/dev-t.yml", "dev-t"], [], ["dev-t", "dev-t"],
+                 ["../x"], ["dev-u"]):
         with tempfile.TemporaryDirectory() as temp:
             rc, calls, _, _ = run(module, Path(temp), steps("dev-t", True), args)
             require(isinstance(rc, str) and not calls, f"bad arguments accepted: {args}")
