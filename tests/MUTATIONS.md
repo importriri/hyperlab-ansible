@@ -1155,3 +1155,78 @@ one the contract prints.
 - Restore: copy the broken file back from the intact tree; the contract
   prints "Public repository process hygiene contract: OK" and the three
   playbook runs pass again.
+
+### Machine provisioning runs the reviewed plan on the exact projection
+
+`tests/host_machine_provision_contract.py`,
+`tests/c10_machine_creation_plan_contract.py`,
+`tests/host_operation_lifecycle_contract.py` and
+`tests/host_operation_integration_contract.py`. Each break was made in
+the working tree with a copy of the file kept aside, the named contract
+run (`python tests/<contract>.py`), the copy put back and the contract
+run again green. The red message is the one the contract prints.
+
+- M1. Break: in `resolve()` of `privatestack-operation.py`, accept any
+  argv whose first element is the provisioner (`argv[:1] ==
+  [PROVISION]`).
+  Red (lifecycle): "the runner accepted a provisioning command with
+  extra argument".
+- M2. Break: accept any two-element argv starting with the provisioner,
+  whatever the name.
+  Red (lifecycle): "the runner accepted a provisioning command with
+  another Machine".
+- M3. Break: the registry's `machine.provision` command back to
+  `privatestack-machine-provision --spec {spec} {domain}` (absolute).
+  Red (lifecycle): the first `resolve()` raises
+  "invalid-reviewed-command".
+- M4. Break: in `provision_steps()`, `if stored !=
+  project_vm_spec(root, record):` becomes `if False:`.
+  Red (creation plan): "projection case memory: accepted what must be
+  refused (differs from the projection)"; red (provisioner, real CLI):
+  "the provisioner ran with an edited spec (memory)", three playbooks
+  called.
+- M5. Break: drop `and spec_hash == record["spec_digest"]` from the
+  run-time check in `run()`.
+  Red (lifecycle): "drifted spec ran", the child the runner tried to
+  start after the spec changed.
+- M6. Break: check the playbook files in the step loop of `main()`
+  instead of in `steps_for()`.
+  Red (provisioner): "a plan with a missing final playbook ran or
+  asked", four playbooks called and the password asked before the
+  refusal.
+- M7. Break: check every playbook file but the last
+  (`for step in steps[:-1]:`).
+  Red (provisioner): "a plan with a missing final playbook ran or
+  asked", all five called.
+- M8. Break: `CANCELLING = (signal.SIGHUP,)`, no SIGTERM handler.
+  Red (provisioner, real PTY): "the hash file outlived SIGTERM".
+- M9. Break: `CANCELLING = (signal.SIGTERM,)`, no SIGHUP handler.
+  Red (provisioner, real PTY): "the hash file outlived SIGHUP".
+- M10. Break: `provision_steps()` no longer appends `profile-second`.
+  Red (creation plan): "steps: ['create-domain', 'inventory',
+  'profile-first', 'close-access']".
+- M11. Break: `provision_steps()` no longer appends `close-access`.
+  Red (creation plan): "server steps differ from docs/first-machine.md".
+- M12. Break: a step only has to start with its reviewed argv
+  (`argv[:len(expected)] == expected`).
+  Red (provisioner): "tampered steps (host privilege) ran or asked".
+- M13. Break: drop `guest-arch-gaming-dirty.yml` from the provisioner's
+  `PROFILE_PLAYBOOKS`.
+  Red (provisioner): "the provisioner's reviewed profiles differ from
+  hyperlabctl's table".
+- M14. Break: `run_step()` catches `ZeroDivisionError` instead of
+  `BaseException`, so a cancelled run does not stop its playbook.
+  Red (provisioner, real PTY): "the running playbook outlived SIGINT".
+  The first version of the contract stayed green: the provisioner leads
+  the terminal's session, so its exit hangs the terminal up and the
+  recording playbook died of SIGHUP. The held playbook now ignores
+  SIGHUP and records the SIGTERM it gets, with the hash file still
+  present.
+- M15. Break: in `resolve()`, drop the requirement that the spec is
+  `vm-specs/.generated/NAME.yml`.
+  Red (lifecycle): "unsafe request accepted" (a checked-in spec).
+- M16. Break: the provisioner's `if rc != 0:` becomes `if False:`.
+  Red (provisioner): "a failed profile pass did not stop"; red
+  (integration, real bridge, runner and provisioner): "a failed
+  provisioning reported success".
+- Restore: the copy goes back; the four contracts print their OK line.
