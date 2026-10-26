@@ -45,6 +45,10 @@ STAT_LINE = re.compile(r"(?P<pid>[1-9][0-9]*) \((?P<command>.*)\) (?P<state>[A-Z
                        r"(?: -?[0-9]+){49,}\n", re.S)
 
 NAME = "demo-01"
+# A second valid name for a complete take, beside an unrelated Machine
+# named NAME that is already running.
+CHOSEN = "v1-showcase"
+UNRELATED = "other-01"
 MARK = "zq7x"
 SENT_HOST = f"host-{MARK}-nitro"
 SENT_USER = f"user-{MARK}"
@@ -70,6 +74,7 @@ def require(condition: bool, message: str) -> None:
 @dataclass
 class Run:
     label: str
+    machine: str
     returncode: int
     stdout: str
     stderr: str
@@ -115,7 +120,8 @@ def stub_text(fixture: Path, body: str) -> str:
 
 
 # hyperlabctl: the inventory answers the next line of `states` on each call
-# (the last line repeats); `open` only records.
+# (the last line repeats) for `machine`, beside `unrelated`, which is always
+# running; `open` only records.
 CLI = """\
 record hyperlabctl "$@"
 leak_err
@@ -131,7 +137,7 @@ if [ "$#" -eq 3 ] && [ "$1" = machine ] && [ "$2" = inventory ] && [ "$3" = --js
         state="${line}"
         [ "${seen}" -ge "${calls}" ] && break
     done <"${logdir}/../states"
-    other='{"name": "other-01", "state": "running", "display_name": "'"${sent_host}"'", "owner": "'"${sent_user}"'", "address": "'"${sent_addr}"'"}'
+    other='{"name": "'"${unrelated}"'", "state": "running", "display_name": "'"${sent_host}"'", "owner": "'"${sent_user}"'", "address": "'"${sent_addr}"'"}'
     case "${state}" in
         fail) exit 1 ;;
         garbage) printf 'Traceback: %s %s\\n' "${sent_home}" "${sent_addr}"; exit 0 ;;
@@ -287,9 +293,11 @@ def refused(call: Callable[[], object]) -> bool:
     return False
 
 
-def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreating\nrunning\n",
-         acks: int = 6, qs_fail: str = "", missing: tuple[str, ...] = (), sleep_fail: bool = False,
-         open_mode: str = "ok", after: list[int] | None = None) -> Run:
+def walk(label: str, argv: list[str], *, machine: str = NAME, unrelated: str = UNRELATED,
+         states: str = "absent\ncreating\ncreating\nrunning\n", acks: int = 6, qs_fail: str = "",
+         missing: tuple[str, ...] = (), sleep_fail: bool = False, open_mode: str = "ok",
+         after: list[int] | None = None) -> Run:
+    require(machine != unrelated, f"{label}: the unrelated inventory row is the Machine itself")
     with tempfile.TemporaryDirectory(prefix="showcase-") as raw:
         fixture = Path(raw)
         home = fixture / ("home-" + MARK)
@@ -312,8 +320,9 @@ def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreati
         require(None not in (python3, real_sleep, shell), "the showcase fixture needs python3, sleep and sh")
         if "python3" not in missing:
             (pybin / "python3").symlink_to(Path(str(python3)).resolve())
-        programs = {"hyperlabctl": f"machine='{NAME}'\nreal_sleep='{real_sleep}'\n" + CLI, "qs": QS,
-                    "sleep": SLEEP}
+        programs = {"hyperlabctl": f"machine='{machine}'\nunrelated='{unrelated}'\n"
+                                   f"real_sleep='{real_sleep}'\n" + CLI,
+                    "qs": QS, "sleep": SLEEP}
         programs |= dict.fromkeys(IDENTITY, IDENTITY_STUB)
         programs |= dict.fromkeys(FORBIDDEN, FORBIDDEN_STUB)
         for tool, body in programs.items():
@@ -361,7 +370,7 @@ def walk(label: str, argv: list[str], *, states: str = "absent\ncreating\ncreati
             time.sleep(0.05)
         lingering = client_pid(pid_file) if open_mode == "linger" else None
         alive = lingering is not None and not exited(lingering)
-        run = Run(label, returncode, stdout, stderr,
+        run = Run(label, machine, returncode, stdout, stderr,
                   [call[1:] for call in argv_log(log / "qs")],
                   [call[1:] for call in argv_log(log / "hyperlabctl")],
                   [call[1] for call in argv_log(log / "sleep")],
@@ -397,7 +406,7 @@ def check_always(run: Run) -> None:
                 and (call[4], call[5]) in reviewed,
                 f"{run.label}: shell IPC {call} is not a reviewed target")
     for call in run.cli:
-        require(call == ["machine", "inventory", "--json"] or call == ["open", "looking-glass", NAME],
+        require(call == ["machine", "inventory", "--json"] or call == ["open", "looking-glass", run.machine],
                 f"{run.label}: hyperlabctl was asked for {call}")
 
 
@@ -406,28 +415,45 @@ def check_failure(run: Run, reason: str) -> None:
     lines = run.stderr.splitlines()
     require(len(lines) == 1 and lines[0].startswith("demo: ") and reason in lines[0],
             f"{run.label}: stderr is not the one reason {reason!r}:\n{run.stderr}")
-    require(["open", "looking-glass", NAME] not in run.cli, f"{run.label}: Looking Glass opened anyway")
+    require(not any(call[:2] == ["open", "looking-glass"] for call in run.cli),
+            f"{run.label}: Looking Glass opened anyway")
+
+
+def shot_text(stdout: str, shot: str) -> str:
+    """What the take printed from shot SHOT's heading to the next heading."""
+    match = re.search(rf"^== Shot {shot}: .*?(?=^== Shot |\Z)", stdout, re.M | re.S)
+    return match.group(0) if match is not None else ""
+
+
+def check_take(label: str, machine: str, unrelated: str) -> None:
+    """A complete take names, waits for and opens the Machine it was given."""
+    run = walk(label, [machine], machine=machine, unrelated=unrelated)
+    # The target comes first: a take that was refused because of the
+    # unrelated Machine, or went on with it, fails here by name.
+    second = shot_text(run.stdout, "2")
+    require(f"name {machine}," in second,
+            f"{label}: shot 2 does not give the chosen Machine name {machine}:\n{run.stderr}")
+    require(re.search(rf"Waiting for {re.escape(machine)} to run\.+ running$", second, re.M) is not None,
+            f"{label}: shot 3 did not wait for the inventory to show {machine} running:\n{second}")
+    inventory = [["machine", "inventory", "--json"]] * 4
+    require(run.cli == [*inventory, ["open", "looking-glass", machine]],
+            f"{label}: hyperlabctl calls {run.cli}, not four inventory reads and one open of {machine}")
+    require(run.sleeps == ["5", "5"], f"{label}: waited {run.sleeps}")
+    require(run.returncode == 0, f"{label}: exit status {run.returncode}:\n{run.stderr}")
+    require(run.stderr == "", f"{label}: the take's stderr is not empty:\n{run.stderr}")
+    require(run.shots() == SHOTS, f"{label}: shots {run.shots()}, not {SHOTS}")
+    before = run.stdout.split("== Shot 1:", 1)[0]
+    for category in ("host name", "user name", "home path", "address", "notification", "password"):
+        require(category in before, f"{label}: the checklist before shot 1 does not name the {category}")
+    require([tuple(call[4:]) for call in run.ipc] == WALK_IPC,
+            f"{label}: shell IPC {run.ipc}, not {WALK_IPC}")
 
 
 def check_walkthrough() -> None:
-    run = walk("walkthrough", [NAME])
-    require(run.returncode == 0, f"walkthrough: exit status {run.returncode}:\n{run.stderr}")
-    require(run.stderr == "", f"walkthrough: the take's stderr is not empty:\n{run.stderr}")
-    require(run.shots() == SHOTS, f"walkthrough: shots {run.shots()}, not {SHOTS}")
-    before = run.stdout.split("== Shot 1:", 1)[0]
-    for category in ("host name", "user name", "home path", "address", "notification", "password"):
-        require(category in before, f"walkthrough: the checklist before shot 1 does not name the {category}")
-    require(f"name {NAME}," in run.stdout.split("== Shot 3:", 1)[0].split("== Shot 2:", 1)[1],
-            "walkthrough: shot 2 does not give the chosen Machine name")
-    between = run.stdout.split("== Shot 2:", 1)[1].split("== Shot 3:", 1)[0]
-    require(re.search(rf"Waiting for {NAME} to run\.+ running$", between, re.M) is not None,
-            "walkthrough: shot 3 did not wait for the inventory to show the Machine running")
-    require([tuple(call[4:]) for call in run.ipc] == WALK_IPC,
-            f"walkthrough: shell IPC {run.ipc}, not {WALK_IPC}")
-    inventory = [["machine", "inventory", "--json"]] * 4
-    require(run.cli == [*inventory, ["open", "looking-glass", NAME]],
-            f"walkthrough: hyperlabctl calls {run.cli}")
-    require(run.sleeps == ["5", "5"], f"walkthrough: waited {run.sleeps}")
+    check_take("walkthrough", NAME, UNRELATED)
+    # NAME is already running beside the chosen Machine: it must neither be
+    # refused as the chosen one nor end the wait.
+    check_take(f"walkthrough {CHOSEN}", CHOSEN, NAME)
 
 
 def check_names() -> None:
@@ -441,7 +467,7 @@ def check_names() -> None:
         require(not run.ipc and not run.cli and not run.sleeps,
                 f"name {argv!r} reached the backend: {run.ipc} {run.cli}")
     for good in ("ab", "a" * 31, "dev-2"):
-        run = walk(f"name {good!r}", [good], qs_fail="workspace.close\n")
+        run = walk(f"name {good!r}", [good], machine=good, qs_fail="workspace.close\n")
         require(run.returncode == 1 and run.ipc, f"name {good!r} was refused before the preflight")
 
 
@@ -459,6 +485,13 @@ def check_failures() -> None:
         run = walk(label, [NAME], states=states)
         check_failure(run, f"{NAME} already exists")
         require(len(run.ipc) == 1 and not run.shots(), f"{label}: the take went on")
+
+    # The chosen Machine exists; the unrelated running one is NAME.
+    label = f"existing {CHOSEN}"
+    run = walk(label, [CHOSEN], machine=CHOSEN, unrelated=NAME, states="running\n")
+    check_failure(run, f"{CHOSEN} already exists")
+    require(len(run.ipc) == 1 and not run.shots() and run.cli == [["machine", "inventory", "--json"]],
+            f"{label}: the take went on: {run.ipc} {run.cli}")
 
     for states, label in (("fail\n", "failed inventory"), ("garbage\n", "unreadable inventory"),
                           ("duplicate\n", "inventory naming the Machine twice")):

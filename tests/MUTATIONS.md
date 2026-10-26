@@ -829,6 +829,37 @@ they are red under dash as under Bash.
   Red: "client PID: '12\n' was read 2 times, not once".
 - Restore: `git checkout -- tests/showcase_contract.py`.
 
+### The showcase take keeps the chosen Machine
+
+`tests/showcase_contract.py` completes the take twice: for `demo-01`
+beside an unrelated running `other-01`, and for `v1-showcase` beside an
+unrelated `demo-01` that is already running while `v1-showcase` goes from
+absent to creating to running. Each break goes into
+`tools/showcase/demo.sh` of a throwaway copy of the files the contract
+reads (`tests/showcase_contract.py`, `tools/showcase/demo.sh`,
+`docs/showcase.md` and `ShellIpc.qml`, at their repository paths); run
+the copy's `tests/showcase_contract.py`. Every break below passes the
+`demo-01` take and the contract as it was before the second take.
+
+- Break: add `name=demo-01` after the 31-character limit.
+  Red: "walkthrough v1-showcase: shot 2 does not give the chosen Machine
+  name v1-showcase", followed by the script's own refusal "demo: demo-01
+  already exists; pick a new name for a clean take".
+- Break: open `demo-01` instead of `"${name}"` in the `open looking-glass`
+  line.
+  Red: "walkthrough v1-showcase: hyperlabctl was asked for ['open',
+  'looking-glass', 'demo-01']" (every shot completes).
+- Break: give `name demo-01,` instead of `name ${name},` in shot 2.
+  Red: "walkthrough v1-showcase: shot 2 does not give the chosen Machine
+  name v1-showcase".
+- Break: in `wait_running`, ask `state_of demo-01` instead of
+  `state_of "$1"`.
+  Red: "walkthrough v1-showcase: shot 3 did not wait for the inventory to
+  show v1-showcase running" (the wait ends on the unrelated running
+  Machine at once, without a sleep).
+- Restore: copy the intact `demo.sh` back; the copy's contract prints
+  "Showcase contract: OK".
+
 ### A release gate passes only with every reviewed boolean true
 
 `problems/release-pass-with-false-booleans.md`. The breaks go into
