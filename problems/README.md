@@ -370,6 +370,7 @@ proof.
 - [`machine-provision-trusted-names-not-files.md`](machine-provision-trusted-names-not-files.md):
   provisioning took a hand-edited spec for the projection, let unchecked
   arguments, another Template's profile and playbook files through, and
-  left the hash file on SIGTERM or when the runner was stopped.
+  left the hash file on SIGTERM or when the runner was stopped, or removed
+  it beside a playbook that a stop caught while it was being started.
 
 Author: [importriri](https://github.com/importriri).

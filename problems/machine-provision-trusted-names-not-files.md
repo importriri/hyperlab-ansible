@@ -52,6 +52,18 @@ An independent review of the first fix found three more:
   them arriving between the first cancellation and the removal could still
   skip it.
 
+A second review of those fixes found two more:
+
+- `run_step()` created the playbook with `subprocess.Popen()` and only
+  then entered the `try` whose handler stops it. A signal handled inside
+  `Popen()` (which waits for the child's `exec` before it returns) or
+  between its return and the `try` raised the cancellation with no name
+  for the child: nothing terminated or reaped it, and the hash file was
+  removed while that profile pass kept running.
+- The provisioner's SIGKILL after `PLAYBOOK_GRACE` was never exercised.
+  Every real-process fixture ended on SIGTERM within the ten seconds, so
+  replacing `child.kill()` with nothing kept all contracts green.
+
 ## Fix
 
 - `provision_steps()` reads the generated spec with `read_generated_spec()`,
@@ -77,6 +89,14 @@ An independent review of the first fix found three more:
   signals blocked. Only the first of them ends the run; the later ones are
   ignored, so none can skip the removal. The exit status is 128 plus the
   first signal.
+- The playbook is started inside `Stop.deferred()`: an ending signal that
+  arrives there is noted by the handler and raised only when the block
+  ends, once `child` names the started process inside the `try`. The
+  block blocks nothing in the kernel on purpose: a mask held across
+  `Popen()` would be inherited through `exec`, and restoring it in the
+  provisioner would leave the playbook deaf to its own SIGTERM and SIGHUP.
+  A playbook that cannot be started raises with no child; the hash file
+  still goes and no later step runs.
 - The runner keeps three seconds (`STOP_GRACE`) for every action except
   `machine.provision`, which gets thirty (`PROVISION_STOP_GRACE`): longer
   than the provisioner's whole escalation, inside the user manager's
@@ -105,4 +125,18 @@ argv and holds every action's stop deadline.
 `tests/host_operation_integration_contract.py` runs the real bridge,
 runner and provisioner together, and stops the runner while the first
 profile pass ignores the hangup and takes five seconds to end: the record
-is interrupted and the hash file is gone. The mutations are in `tests/MUTATIONS.md`.
+is interrupted and the hash file is gone. In the stopped cases the
+provisioner runs under a test-only observer that wraps `os.waitpid` and
+`os.unlink` and records each start, each reap with its wait status and,
+at the removal of the hash file, whether each started process still
+exists. Three stops are held there: the cooperative playbook (reaped with
+exit 143 before the removal); a playbook that ignores the hangup and
+SIGTERM (reaped with SIGKILL from the provisioner before the removal); and
+a stop delivered inside `Popen()` of the first profile pass, after that
+playbook announced itself (terminated, reaped, then the removal). On
+4607885 that last case showed the playbook still sleeping when the hash
+file was removed. Each playbook also reports the signals it started with
+blocked or ignored: none of SIGHUP, SIGINT and SIGTERM.
+`tests/host_machine_provision_contract.py` also makes the first profile
+pass impossible to start: status 2, no hash file, no later step.
+The mutations are in `tests/MUTATIONS.md`.

@@ -313,7 +313,8 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
         bound to the record's Template, and its playbook files are checked
         before the first step, and the hash file is removed after success,
         failure, SIGINT, SIGTERM and SIGHUP, also when the runner is
-        stopped while a playbook is slow to end
+        stopped while a playbook is slow to end, ignores SIGTERM or is
+        still being started, only after that playbook is stopped and reaped
         ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell
