@@ -306,6 +306,13 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
         held by digest, projection, a readable spec and the libvirt domain
         list ([ADR 0053](adr/0053-withdraw-machine-intent.md), proposed,
         software-verified)
+  - [x] provisioning prepared for Nitro: the runner accepts exactly
+        `privatestack-machine-provision NAME` on NAME's own projection,
+        `provision-steps` refuses a spec that is not the record's
+        projection, the whole plan and its playbook files are checked
+        before the first step, and the hash file is removed after success,
+        failure, SIGINT, SIGTERM and SIGHUP
+        ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell
 

@@ -36,21 +36,38 @@ Creation is split along the existing boundary.
 - **Provision.** It then launches the durable operation `machine.provision`
   through `privatestack-operation`, the runner that already owns managed
   start and shutdown. The command is never taken from the caller: the
-  runner resolves it through the action registry to
-  `privatestack-machine-provision NAME` and pins the projected spec's
-  digest. The provisioner asks `hyperlabctl machine provision-steps NAME`
-  for the documented steps, derived from the Machine record, its projected
-  spec and its Template, accepts only `ansible-playbook` runs of reviewed
-  playbooks, and runs them in order inside the operation's private
-  terminal.
+  runner resolves it through the action registry and accepts exactly
+  `["/usr/local/bin/privatestack-machine-provision", NAME]`, for a NAME
+  whose spec is its own generated projection
+  (`vm-specs/.generated/NAME.yml`), never a checked-in spec. It pins the
+  digest of that spec's bytes in the operation record at launch and
+  checks it again before it runs anything: a spec changed in between is
+  a durable failure with no child started. The provisioner takes NAME
+  alone and asks `hyperlabctl machine provision-steps NAME` for the
+  documented steps, derived from the Machine record, its projected spec
+  and its Template. `provision-steps` reads the generated spec as stored
+  and refuses it unless it is exactly what the record projects to now: a
+  missing spec, a link, an unreadable or malformed file and a spec edited
+  by hand are refused alike. The provisioner then holds the whole plan to
+  the reviewed one before the first step runs or anything is asked: each
+  step has its exact reviewed command (the host playbooks with `-K`, the
+  profile playbook the Template maps to, `guest-close-access.yml` last),
+  and every playbook is an existing regular file directly in the real
+  `playbooks/` directory of the reviewed checkout, with no link anywhere
+  on the way. Then it runs the steps in order inside the operation's
+  private terminal.
 - **Privilege.** Each `-K` playbook asks for the become password in that
   terminal, exactly as by hand. Nothing caches it.
 - **Password.** For a Template whose profile needs one, the provisioner asks
   for it twice without echo in the same terminal, turns it into a SHA-512
   crypt hash with `openssl passwd -6 -stdin`, writes the hash to a 0600 file
-  below `$XDG_RUNTIME_DIR/hyperlab/provision/`, passes the file to the first
-  profile pass and deletes it in every outcome. The password never reaches
-  QML, an argument vector, the operation record or the transcript.
+  below `$XDG_RUNTIME_DIR/hyperlab/provision/` (0700), passes the file to
+  the first profile pass only and deletes it in every outcome: success, a
+  failed step, Ctrl-C (SIGINT), a stopped operation unit (SIGTERM) and a
+  terminal that hangs up (SIGHUP). On those signals the running playbook is
+  stopped first; the file is created and removed with them held back, so
+  none can leave it behind. The password never reaches QML, an argument
+  vector, a child's environment, the operation record or the transcript.
 - **Key.** The guest key is the host's one HyperLab guest key,
   `~/.ssh/hyperlab_ed25519.pub`: one public ed25519 line, validated before
   use. The shell shows its fingerprint and offers no choice; the private key
@@ -67,8 +84,24 @@ Creation is split along the existing boundary.
   password on the host.
 - A failed step leaves the Machine record, the projected spec and possibly
   the domain in place, exactly as the manual path would; the operation
-  window shows the step and its output, and the next step is the same
-  documented command.
+  record ends `failed` with the step's exit status, the operation window
+  shows the step and its output, and the next step is the same documented
+  command. Failed provisioning is not refused intent: the creation had
+  already succeeded, so nothing is withdrawn
+  ([ADR 0053](0053-withdraw-machine-intent.md) covers only refused
+  creations).
+- Closing the operation window is not a signal: the window only observes,
+  the operation keeps running and the window can be reopened.
+- Limits. The checks hold when the plan is validated and when the runner
+  starts: the spec and the playbooks are read again by `ansible-playbook`
+  later, and a writer of the checkout between those moments is not
+  detected. The Machine record holds no digest of its projection; the
+  comparison recomputes the projection every time. The reviewed profile
+  playbooks are listed both in `hyperlabctl` and in the provisioner, which
+  cannot import it; a contract keeps the two equal. SIGKILL (or a lost
+  power) cannot be handled: the hash file then stays in the runtime
+  directory, which is memory, until logout or the next provisioning of the
+  same Machine replaces it.
 - Template profile playbooks are a reviewed table in `hyperlabctl`. A
   workstation Template without an entry is not offered for creation.
 - Disposable Machines and the GPU lease (roadmap 5 and 5b) reuse this flow

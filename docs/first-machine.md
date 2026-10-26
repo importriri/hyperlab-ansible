@@ -11,11 +11,21 @@ sealed Golden Image  arch-dev-20261003   images/arch-dev-20261003.yml
 ```
 
 The shell's Create view runs the same steps: **Machines → New Machine**
-records and projects the Machine, then one operation window runs steps 2
-and 3, asking for your password for each `-K` playbook and, for a
-workstation, for the Machine account's password
-([ADR 0017](adr/0017-shell-machine-creation.md)). By hand they are these
-commands.
+records and projects the Machine, then one operation window runs every
+`ansible-playbook` command of steps 2 and 3 below (for a server, those of
+"A server Machine"), in the same order with the same arguments, asking for
+your password for each `-K` playbook and, for a workstation, for the
+Machine account's password
+([ADR 0017](adr/0017-shell-machine-creation.md)). The `ansible -m ping`
+check of the server section is yours to run. Before the first step, the
+operation refuses a Machine whose generated spec is not exactly the
+projection of its record (edited by hand, a link, unreadable or missing)
+and a plan with any playbook that is not the reviewed one, present as a
+regular file in `playbooks/`; it then runs nothing and asks for nothing.
+If a step fails, the operation stops there and ends `failed` with that
+step's exit status. The Machine record and its spec stay: a failed
+provisioning is not a refused creation, and the remaining steps are the
+commands below. By hand they are these commands.
 
 ## Before
 

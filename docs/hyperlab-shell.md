@@ -187,8 +187,13 @@ record fails, it removes the record and then the spec this creation wrote,
 so the same request can be sent again. When it cannot remove them, the
 refusal says "cleanup incomplete" and names what stays. Its window asks for the
 host's become password and, for a workstation, the Machine account's
-password; neither passes through the shell. The guest key is shown only by
-its fingerprint. Once the operation is dispatched the view closes on the new
+password; neither passes through the shell. The operation runs exactly
+`privatestack-machine-provision NAME`, which refuses a spec that is not
+the record's projection and any plan step that is not the reviewed one
+before it runs or asks anything; a failed step ends the operation `failed`
+with the step's exit status and keeps the Machine and its spec, since the
+creation itself had succeeded ([first Machine](first-machine.md)). The
+guest key is shown only by its fingerprint. Once the operation is dispatched the view closes on the new
 Machine, whose pane can reopen the operation window; success is verified
 like a start, by a fresh Running observation.
 

@@ -367,5 +367,8 @@ proof.
   live.
 - [`host-pc-speaker-beeped.md`](host-pc-speaker-beeped.md): the host's
   internal PC speaker driver loaded at every boot and beeped.
+- [`machine-provision-trusted-names-not-files.md`](machine-provision-trusted-names-not-files.md):
+  provisioning took a hand-edited spec for the projection, let unchecked
+  arguments and playbook files through, and left the hash file on SIGTERM.
 
 Author: [importriri](https://github.com/importriri).

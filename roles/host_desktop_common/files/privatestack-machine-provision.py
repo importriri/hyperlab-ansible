@@ -2,12 +2,15 @@
 """Provision one created and projected Machine inside its operation terminal.
 
 The operation runner starts this as the reviewed command of
-machine.provision, with the Machine's name as its only argument. The steps come from `hyperlabctl machine provision-steps`
-in the reviewed checkout, never from a caller; only ansible-playbook runs of
-reviewed playbooks are accepted. Each -K playbook asks for the become
-password in this terminal. A workstation password is asked here without
-echo, turned into a SHA-512 crypt hash, written to a private runtime file for
-the first profile pass and deleted in every outcome (ADR 0017).
+machine.provision, with the Machine's name as its only argument. The steps
+come from `hyperlabctl machine provision-steps` in the reviewed checkout,
+which refuses a Machine whose generated spec is not its record's
+projection. Every step must have its reviewed shape and every playbook must
+be a regular file in the checkout's playbooks directory before the first
+step runs. Each -K playbook asks for the become password in this terminal. A
+workstation password is asked here without echo, turned into a SHA-512
+crypt hash, written to a private runtime file for the first profile pass and
+deleted in every outcome, SIGINT, SIGTERM and SIGHUP included (ADR 0017).
 """
 from __future__ import annotations
 
@@ -16,6 +19,7 @@ import getpass
 import json
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -27,23 +31,53 @@ OPENSSL = "/usr/bin/openssl"
 POINTER = Path("/etc/hyperlabctl/checkout")
 MACHINE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
 HASH_RE = re.compile(r"^\$6\$[^$]{1,16}\$[./A-Za-z0-9]{86}$")
-PLAYBOOKS = {"playbooks/vm-create.yml", "playbooks/vm-guest-inventory.yml"}
-PROFILE_RE = re.compile(r"^playbooks/guest-[a-z0-9-]+\.yml$")
+KEY_RE = re.compile(r"^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]+={0,2}$")
+HOST_PLAYBOOKS = {"create-domain": "playbooks/vm-create.yml",
+                  "inventory": "playbooks/vm-guest-inventory.yml"}
+CLOSE_PLAYBOOK = "playbooks/guest-close-access.yml"
+# The profile playbooks hyperlabctl maps workstation Templates to
+# (PROFILE_PLAYBOOKS in machine_provision.py); a contract keeps both equal.
+PROFILE_PLAYBOOKS = frozenset({
+    "playbooks/guest-arch-dev-vfio.yml",
+    "playbooks/guest-arch-dev.yml",
+    "playbooks/guest-arch-gaming-clean.yml",
+    "playbooks/guest-arch-gaming-dirty.yml",
+})
 ACCESS_FILE = "{access_file}"
-STEP_IDS = ("create-domain", "inventory", "profile-first", "profile-second", "close-access")
 # A server has no profile; every Machine ends by closing its provisioning access.
 SERVER_STEPS = ["create-domain", "inventory", "close-access"]
-CLOSE_PLAYBOOK = "playbooks/guest-close-access.yml"
+WORKSTATION_STEPS = ["create-domain", "inventory", "profile-first", "profile-second", "close-access"]
 PASSWORD_MIN = 8
+# Signals that end the run; the hash file is never left behind by them.
+CANCELLING = (signal.SIGTERM, signal.SIGHUP)
 
 
 class Refused(ValueError):
     pass
 
 
+class Cancelled(BaseException):
+    """SIGTERM or SIGHUP: the unit is stopped or the terminal is gone."""
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(signum)
+        self.signum = signum
+
+
 def require(ok: bool, reason: str) -> None:
     if not ok:
         raise Refused(reason)
+
+
+@contextlib.contextmanager
+def held():
+    """Defer the ending signals while a hash file is created or removed."""
+    blocked = {signal.SIGINT, *CANCELLING}
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, blocked)
+    try:
+        yield
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
 
 
 def checkout() -> Path:
@@ -72,40 +106,88 @@ def private_dir(runtime: Path) -> Path:
     return path
 
 
-def valid_step(step: object, spec: str) -> dict:
-    require(isinstance(step, dict) and step.get("id") in STEP_IDS
-            and isinstance(step.get("label"), str) and isinstance(step.get("password"), bool),
-            "invalid provisioning step")
-    argv = step.get("argv")
-    require(isinstance(argv, list) and len(argv) >= 2 and argv[0] == "ansible-playbook"
-            and all(isinstance(part, str) and part and not any(ord(c) < 32 for c in part)
-                    for part in argv), "invalid provisioning command")
-    playbooks = [part for part in argv[1:] if part.startswith("playbooks/")]
-    require(len(playbooks) == 1 and (playbooks[0] in PLAYBOOKS or PROFILE_RE.fullmatch(playbooks[0])),
-            "unreviewed playbook in a provisioning step")
-    files = [argv[i + 1] for i, part in enumerate(argv[:-1]) if part == "-e" and argv[i + 1].startswith("@")]
-    require(files == (["@" + ACCESS_FILE] if step["password"] else []),
-            "a provisioning step reads an unexpected variables file")
-    require(step["password"] or ACCESS_FILE not in argv, "unexpected password placeholder")
-    require((step["id"] == "close-access") == (playbooks[0] == CLOSE_PLAYBOOK),
-            "the access-closing playbook runs only as the close-access step")
-    if playbooks[0] in PLAYBOOKS:
-        require("-K" in argv and f"guest_spec={spec}" in argv, "a host step lost its spec or become prompt")
+def reviewed_argv(step_id: str, profile: str | None, spec: str, inventory: str) -> list[str] | None:
+    """The one argv a step may have, except the create step's key argument."""
+    if step_id in HOST_PLAYBOOKS:
+        argv = ["ansible-playbook", HOST_PLAYBOOKS[step_id], "-K", "-e", f"guest_spec={spec}"]
+        if step_id == "create-domain":
+            argv += ["-e", "guest_start_after_create=true", "-e"]
+        return argv
+    guest = ["ansible-playbook", "-i", "inventory.ini", "-i", inventory]
+    if step_id == "close-access":
+        return [*guest, CLOSE_PLAYBOOK]
+    if profile not in PROFILE_PLAYBOOKS:
+        return None
+    if step_id == "profile-first":
+        return [*guest, profile, "-e", "@" + ACCESS_FILE]
+    return [*guest, profile]
+
+
+def guest_key_argument(value: str) -> bool:
+    """The create step's last argument: exactly one guest public key."""
+    try:
+        document = json.loads(value)
+    except ValueError:
+        return False
+    keys = document.get("guest_cloud_init_ssh_public_keys") if isinstance(document, dict) else None
+    return (set(document) == {"guest_cloud_init_ssh_public_keys"} and isinstance(keys, list)
+            and len(keys) == 1 and isinstance(keys[0], str) and KEY_RE.fullmatch(keys[0]) is not None)
+
+
+def valid_step(step: object, step_id: str, profile: str | None, spec: str, inventory: str) -> dict:
+    require(isinstance(step, dict) and set(step) == {"id", "label", "password", "argv"}
+            and step["id"] == step_id and isinstance(step["label"], str)
+            and step["password"] is (step_id == "profile-first"), "invalid provisioning step")
+    argv = step["argv"]
+    require(isinstance(argv, list) and all(isinstance(part, str) and part
+                                           and not any(ord(c) < 32 for c in part) for part in argv),
+            "invalid provisioning command")
+    expected = reviewed_argv(step_id, profile, spec, inventory)
+    require(expected is not None, "unreviewed profile playbook in a provisioning step")
+    if step_id == "create-domain":
+        require(len(argv) == len(expected) + 1 and argv[:-1] == expected and guest_key_argument(argv[-1]),
+                "the create-domain step is not the reviewed command")
     else:
-        require("-K" not in argv, "a profile pass must not ask for host privilege")
+        require(argv == expected, f"the {step_id} step is not the reviewed command")
     return step
 
 
-def steps_for(repo: Path, machine: str, spec: str) -> list[dict]:
+def playbook(step: dict) -> str:
+    return next(part for part in step["argv"][1:] if part.startswith("playbooks/"))
+
+
+def playbook_file(repo: Path, relative: str) -> None:
+    """An existing regular file directly in the checkout's real playbooks/."""
+    directory, name = relative.split("/")
+    info = (repo / directory).lstat()
+    require(stat.S_ISDIR(info.st_mode), f"{directory}/ is not a real directory in the checkout")
+    try:
+        info = (repo / directory / name).lstat()
+    except FileNotFoundError:
+        raise Refused(f"{relative} is missing from the checkout") from None
+    require(stat.S_ISREG(info.st_mode), f"{relative} is not a regular file")
+
+
+def steps_for(repo: Path, machine: str, spec: str, runtime: Path) -> list[dict]:
+    """The whole plan, validated before anything runs or is asked."""
     result = subprocess.run([CLI, "--repo", str(repo), "machine", "provision-steps", machine],
                             capture_output=True, text=True, timeout=60, check=False)
     require(result.returncode == 0, (result.stderr.strip() or "provisioning steps unavailable")[:400])
     plan = json.loads(result.stdout)
     require(isinstance(plan, dict) and plan.get("schema") == 1 and plan.get("machine") == machine
             and plan.get("spec") == spec and isinstance(plan.get("steps"), list), "invalid provisioning plan")
-    steps = [valid_step(step, spec) for step in plan["steps"]]
-    ids = [step["id"] for step in steps]
-    require(ids in (SERVER_STEPS, list(STEP_IDS)), "provisioning steps out of order")
+    ids = [step.get("id") if isinstance(step, dict) else None for step in plan["steps"]]
+    require(ids in (SERVER_STEPS, WORKSTATION_STEPS), "provisioning steps out of order")
+    profile = None
+    if ids == WORKSTATION_STEPS:
+        # Both profile passes run the one profile the Template maps to.
+        argv = plan["steps"][2].get("argv")
+        profile = argv[5] if isinstance(argv, list) and len(argv) > 5 else None
+    inventory = str(runtime / f"{machine}.ini")
+    steps = [valid_step(step, step_id, profile, spec, inventory)
+             for step, step_id in zip(plan["steps"], ids, strict=True)]
+    for step in steps:
+        playbook_file(repo, playbook(step))
     return steps
 
 
@@ -134,19 +216,36 @@ def password_hash(password: str) -> str:
     return value
 
 
-def write_access_file(directory: Path, machine: str, value: str) -> Path:
-    path = directory / f"{machine}-access.yml"
+def write_access_file(path: Path, value: str) -> None:
     with contextlib.suppress(FileNotFoundError):
         require(stat.S_ISREG(path.lstat().st_mode), "unsafe stale access file")
         path.unlink()
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
         stream.write(f"workstation_access_password_hash: '{value}'\n")
-    return path
+
+
+def remove_access_file(path: Path | None) -> None:
+    if path is not None:
+        with held(), contextlib.suppress(FileNotFoundError):
+            path.unlink()
 
 
 def run_step(repo: Path, argv: list[str]) -> int:
-    return subprocess.run([ANSIBLE, *argv[1:]], cwd=repo, check=False).returncode
+    child = subprocess.Popen([ANSIBLE, *argv[1:]], cwd=repo)
+    try:
+        return child.wait()
+    except BaseException:
+        # Cancelled: the playbook ends before its hash file is removed.
+        with held():
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+        raise
 
 
 def main(args: list[str]) -> int:
@@ -158,42 +257,64 @@ def main(args: list[str]) -> int:
     spec = f"vm-specs/.generated/{machine}.yml"
     repo = checkout()
     require(Path.cwd().resolve() == repo, "provisioning must run in the reviewed checkout")
-    steps = steps_for(repo, machine, spec)
     runtime = runtime_dir()
+    steps = steps_for(repo, machine, spec, runtime)
 
-    for number, step in enumerate(steps, 1):
-        print(f"\n=== Step {number}/{len(steps)}: {step['label']}", flush=True)
-        argv = list(step["argv"])
-        access = None
-        try:
+    access = None
+    try:
+        for number, step in enumerate(steps, 1):
+            print(f"\n=== Step {number}/{len(steps)}: {step['label']}", flush=True)
+            argv = list(step["argv"])
             if step["password"]:
+                # An unsafe directory is refused before the password is asked.
+                path = private_dir(runtime) / f"{machine}-access.yml"
                 password = ask_password(machine)
                 try:
                     value = password_hash(password)
                 finally:
                     del password
-                access = write_access_file(private_dir(runtime), machine, value)
+                # Known before it exists, so no signal can leave it unnamed.
+                with held():
+                    access = path
+                    write_access_file(path, value)
                 argv = [part.replace(ACCESS_FILE, str(access)) for part in argv]
-            rc = run_step(repo, argv)
-        finally:
-            if access is not None:
-                with contextlib.suppress(FileNotFoundError):
-                    access.unlink()
-        if rc != 0:
-            print(f"\nStep {number} failed (exit {rc}): {step['label']}.")
-            print(f"The Machine record and {spec} stay; the remaining steps are in docs/first-machine.md.")
-            return rc
+            try:
+                rc = run_step(repo, argv)
+            finally:
+                remove_access_file(access)
+                access = None
+            if rc != 0:
+                print(f"\nStep {number} failed (exit {rc}): {step['label']}.")
+                print(f"The Machine record and {spec} stay; the remaining steps are in docs/first-machine.md.")
+                return rc
+    finally:
+        remove_access_file(access)
 
     print(f"\n{machine} is provisioned.", flush=True)
     return 0
 
 
-if __name__ == "__main__":
+def entry(args: list[str]) -> int:
+    def cancel(signum: int, frame: object) -> None:
+        raise Cancelled(signum)
+
+    # A stopped unit (SIGTERM) or a terminal that hangs up (SIGHUP) ends the
+    # run like Ctrl-C: the running playbook is stopped, the hash file removed.
+    for signum in CANCELLING:
+        signal.signal(signum, cancel)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        raise SystemExit(main(sys.argv[1:]))
+        return main(args)
     except (Refused, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"HyperLab provisioning refused: {exc}", file=sys.stderr)
-        raise SystemExit(2) from None
+        return 2
     except (KeyboardInterrupt, EOFError):
         print("\nHyperLab provisioning cancelled.", file=sys.stderr)
-        raise SystemExit(130) from None
+        return 128 + signal.SIGINT
+    except Cancelled as exc:
+        print(f"\nHyperLab provisioning stopped by {signal.Signals(exc.signum).name}.", file=sys.stderr)
+        return 128 + exc.signum
+
+
+if __name__ == "__main__":
+    raise SystemExit(entry(sys.argv[1:]))
