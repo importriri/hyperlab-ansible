@@ -1030,3 +1030,70 @@ turns the named contract red with the message shown.
   creation refused with the record published left a record or spec behind
   (record kept: True, spec kept: True): launched".
 - Restore: copy the broken file back from the copy taken before the break.
+
+### Public content stays free of process wording and a local login
+
+`tests/public_repository_process_hygiene_contract.py` and a local
+assertion playbook. The breaks were made in a temporary copy of the
+tree: the files of `git ls-files -c -o --exclude-standard` copied to a
+new directory, which then gets `git init`, so the contract discovers
+every file there as untracked. The playbook runs from that copy with
+`-i inventory.ini` on `localhost` through the local connection, gathers
+no facts and asserts `hostvars['svc-jellyfin']['ansible_user']` equals
+the expected name and `admin_user`; it never contacts the service VM.
+It runs three times: with the repository setting, and with
+`-e admin_user=svcproofa` and `-e admin_user=svcproofb` (the positive
+controls, green on the intact tree). `ansible-inventory --host
+svc-jellyfin` shows only the unrendered `{{ admin_user }}`, which is
+why the effective value is asserted in a play. The red message is the
+one the contract prints.
+
+- M1. Break: put "outside the restricted" and, on the next line, the
+  removed two-word phrase back at the end of the introductory note of
+  `docs/c9-independent-review-2026-09-27.md`.
+  Red: "FAIL public process metadata:
+  docs/c9-independent-review-2026-09-27.md:11". The playbook stays
+  green: it does not read the document.
+- M2. Break: the `svc-jellyfin` line of `inventory.ini` gets back the
+  literal `ansible_user=` of the configured name.
+  Red: "FAIL public connection identity: inventory.ini:5: connection
+  user is not the admin_user setting"; playbook red for both overrides
+  (the effective user stays the literal).
+- M3. Break: `ansible_user=svcliteral`, an unrelated synthetic name.
+  Red: the same contract message; playbook red in all three runs.
+- M4. Break: delete `ansible_user="{{ admin_user }}"` from the line.
+  Red: "inventory.ini:5: svc-jellyfin sets its connection user 0
+  times"; playbook red in all three runs (no `ansible_user`).
+- M5. Break: `ansible_user="{{ 'NAME' }}"`, a quoted constant.
+  Red: "inventory.ini:5: connection user does not parse". The INI
+  plugin evaluates that value as a set inside a set and rejects the
+  whole inventory, so the playbook is red in all three runs. Before the
+  contract caught `TypeError` here it stopped with a traceback.
+- M5b. Break: `ansible_user="{{ 'NAME' | string }}"`, a constant the
+  plugin accepts.
+  Red: "connection user is not the admin_user setting"; playbook red
+  for both overrides.
+- M6. Break: `ansible_user="{{ guest_cloud_init_user }}"`.
+  Red: the same contract message; playbook red for both overrides.
+- M7. Break: a `[services:vars]` section with
+  `ansible_ssh_user=svcliteral` before `[jellyfin]`.
+  Red: "inventory.ini:8: connection user is not the admin_user
+  setting". The playbook stays green: the host variable wins over the
+  group one, so only the contract sees it.
+- M8. Break: uncomment the `devbox` line and add
+  `ansible_user=svcliteral`.
+  Red: "inventory.ini:13: connection user is not the admin_user
+  setting". Playbook green, as it reads only `svc-jellyfin`.
+- M9. Break: a second identical `svc-jellyfin` line in `[services]`.
+  Red: "inventory.ini:0: svc-jellyfin is defined 2 times in
+  [services]". Playbook green.
+- M10. Break: append a second `ansible_user="{{ admin_user }}"` to the
+  line.
+  Red: "inventory.ini:5: svc-jellyfin sets its connection user 2
+  times". Playbook green: both assignments carry the same value.
+- M11. Break: move `inventory.ini` away.
+  Red: "inventory.ini:0: inventory is unreadable"; playbook red in all
+  three runs.
+- Restore: copy the broken file back from the intact tree; the contract
+  prints "Public repository process hygiene contract: OK" and the three
+  playbook runs pass again.
