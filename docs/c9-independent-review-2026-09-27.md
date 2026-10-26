@@ -7,8 +7,7 @@
 > presentation completion issue, completed physical focused-surface provenance
 > acceptance, physically accepted the Linux Looking Glass SDR correction,
 > localized the Valley artefact upstream as application-specific/non-blocking,
-> and obtained a complete green repository verification outside the restricted
-> chat bridge.
+> and obtained a complete green repository verification.
 
 Independent C9 review, 2026-09-27
 
