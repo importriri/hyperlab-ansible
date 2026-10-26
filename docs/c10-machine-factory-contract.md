@@ -143,7 +143,8 @@ more than five seconds is a refusal. `withdraw` is for the manual path, where
 only for a Machine whose generated spec, read as stored with the same
 reader as `withdraw`, equals the projection the record gives now. The
 existence of a file proves nothing: a spec edited by hand (a resource, the
-device or network profile, an added field) is refused like a missing,
+device or network profile, an added field, or only a scalar's type, such as
+`vcpus: true` for `1` or `memory_mb: 2048.0` for `2048`) is refused like a missing,
 linked, unreadable or malformed one, and so is a workstation Template with
 no reviewed profile playbook. The record holds no projection digest; the
 projection is recomputed for each comparison

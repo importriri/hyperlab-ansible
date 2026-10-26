@@ -309,9 +309,11 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
   - [x] provisioning prepared for Nitro: the runner accepts exactly
         `privatestack-machine-provision NAME` on NAME's own projection,
         `provision-steps` refuses a spec that is not the record's
-        projection, the whole plan and its playbook files are checked
+        projection with its scalar types, the whole plan, its profile
+        bound to the record's Template, and its playbook files are checked
         before the first step, and the hash file is removed after success,
-        failure, SIGINT, SIGTERM and SIGHUP
+        failure, SIGINT, SIGTERM and SIGHUP, also when the runner is
+        stopped while a playbook is slow to end
         ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell

@@ -1179,8 +1179,8 @@ run again green. The red message is the one the contract prints.
   `privatestack-machine-provision --spec {spec} {domain}` (absolute).
   Red (lifecycle): the first `resolve()` raises
   "invalid-reviewed-command".
-- M4. Break: in `provision_steps()`, `if stored !=
-  project_vm_spec(root, record):` becomes `if False:`.
+- M4. Break: in `provision_steps()`, `if not same_document(stored,
+  project_vm_spec(root, record)):` becomes `if False:`.
   Red (creation plan): "projection case memory: accepted what must be
   refused (differs from the projection)"; red (provisioner, real CLI):
   "the provisioner ran with an edited spec (memory)", three playbooks
@@ -1210,7 +1210,7 @@ run again green. The red message is the one the contract prints.
 - M12. Break: a step only has to start with its reviewed argv
   (`argv[:len(expected)] == expected`).
   Red (provisioner): "tampered steps (host privilege) ran or asked".
-- M13. Break: drop `guest-arch-gaming-dirty.yml` from the provisioner's
+- M13. Break: drop the `gaming-dirty` entry from the provisioner's
   `PROFILE_PLAYBOOKS`.
   Red (provisioner): "the provisioner's reviewed profiles differ from
   hyperlabctl's table".
@@ -1229,4 +1229,36 @@ run again green. The red message is the one the contract prints.
   Red (provisioner): "a failed profile pass did not stop"; red
   (integration, real bridge, runner and provisioner): "a failed
   provisioning reported success".
+- M1-M16 were run again on the tree that carries the three review fixes
+  below, with the same breaks (M4 and M13 on the code as it now reads)
+  and the same red messages.
+- M17. Break: in `run()` of `privatestack-operation.py`, the stopped
+  command's wait back to `child.wait(timeout=3)` for every action.
+  Red (integration, real runner and provisioner, the first profile pass
+  ignoring the hangup and taking five seconds to end): "the hash file
+  outlived the stopped operation"; red (lifecycle): "stop deadlines
+  changed".
+- M18. Break: `PROVISION_STOP_GRACE = 3`.
+  Red (integration): "the hash file outlived the stopped operation"; red
+  (lifecycle): "the runner may kill the provisioner before it removes the
+  hash file: 3 s for 10 s".
+- M19. Break: in the provisioner's `cancel()`, drop `if stopping:
+  return`, so every later signal raises again.
+  Red (provisioner, real PTY, SIGHUP, SIGTERM and SIGINT sent while the
+  cancelled playbook takes two seconds to end): "the hash file outlived
+  repeated signals".
+- M20. Break: in `provision_steps()`, back to plain equality, `if stored
+  != project_vm_spec(root, record):`.
+  Red (creation plan): "projection case boolean for integer: accepted
+  what must be refused (differs from the projection)"; red (provisioner,
+  real CLI): "the provisioner ran with an edited spec (float memory)".
+  The contracts stop at their first red case; `vcpus true for 1` on the
+  one-vCPU Machine follows in both.
+- M21. Break: after the step ids are checked in `steps_for()`, take the
+  profile from the plan again (`profile = plan["steps"][2]["argv"][5]`
+  for a workstation).
+  Red (provisioner): "tampered steps (another Template's profile) ran or
+  asked".
+- M22. Break: in `mapped_profile()`, drop `record.get("id") == machine`.
+  Red (provisioner): "a plan with another Machine's record ran or asked".
 - Restore: the copy goes back; the four contracts print their OK line.

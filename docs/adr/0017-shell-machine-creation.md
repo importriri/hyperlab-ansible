@@ -46,16 +46,21 @@ Creation is split along the existing boundary.
   alone and asks `hyperlabctl machine provision-steps NAME` for the
   documented steps, derived from the Machine record, its projected spec
   and its Template. `provision-steps` reads the generated spec as stored
-  and refuses it unless it is exactly what the record projects to now: a
+  and refuses it unless it is exactly what the record projects to now,
+  scalar types included (`true` is not `1`, `2048.0` is not `2048`): a
   missing spec, a link, an unreadable or malformed file and a spec edited
-  by hand are refused alike. The provisioner then holds the whole plan to
-  the reviewed one before the first step runs or anything is asked: each
-  step has its exact reviewed command (the host playbooks with `-K`, the
-  profile playbook the Template maps to, `guest-close-access.yml` last),
-  and every playbook is an existing regular file directly in the real
-  `playbooks/` directory of the reviewed checkout, with no link anywhere
-  on the way. Then it runs the steps in order inside the operation's
-  private terminal.
+  by hand are refused alike. Before the steps, the provisioner reads the
+  Machine record itself with `hyperlabctl machine show NAME`; the record's
+  Template and workspace, not the plan, decide whether the steps are a
+  server's or a workstation's and which profile playbook both profile
+  passes run. A missing or malformed record is a refusal. The provisioner
+  then holds the whole plan to the reviewed one before the first step runs
+  or anything is asked: each step has its exact reviewed command (the host
+  playbooks with `-K`, the profile playbook the record's Template maps to,
+  `guest-close-access.yml` last), and every playbook is an existing
+  regular file directly in the real `playbooks/` directory of the reviewed
+  checkout, with no link anywhere on the way. Then it runs the steps in
+  order inside the operation's private terminal.
 - **Privilege.** Each `-K` playbook asks for the become password in that
   terminal, exactly as by hand. Nothing caches it.
 - **Password.** For a Template whose profile needs one, the provisioner asks
@@ -65,8 +70,14 @@ Creation is split along the existing boundary.
   the first profile pass only and deletes it in every outcome: success, a
   failed step, Ctrl-C (SIGINT), a stopped operation unit (SIGTERM) and a
   terminal that hangs up (SIGHUP). On those signals the running playbook is
-  stopped first; the file is created and removed with them held back, so
-  none can leave it behind. The password never reaches QML, an argument
+  stopped first (SIGTERM, then SIGKILL after ten seconds); the file is
+  created and removed with them held back, and only the first of them ends
+  the run, so the ones that follow (a stopped runner's hangup, its SIGTERM,
+  systemd's signal to the unit) cannot cut the cleanup short. A stopped
+  operation gives its command three seconds before the runner kills it,
+  except `machine.provision`, which gets thirty, longer than the
+  provisioner's own ten-second escalation and inside the user manager's
+  default 90 s stop timeout. The password never reaches QML, an argument
   vector, a child's environment, the operation record or the transcript.
 - **Key.** The guest key is the host's one HyperLab guest key,
   `~/.ssh/hyperlab_ed25519.pub`: one public ed25519 line, validated before
@@ -96,9 +107,11 @@ Creation is split along the existing boundary.
   starts: the spec and the playbooks are read again by `ansible-playbook`
   later, and a writer of the checkout between those moments is not
   detected. The Machine record holds no digest of its projection; the
-  comparison recomputes the projection every time. The reviewed profile
-  playbooks are listed both in `hyperlabctl` and in the provisioner, which
-  cannot import it; a contract keeps the two equal. SIGKILL (or a lost
+  comparison recomputes the projection every time. The table of reviewed
+  profile playbooks by Template is held both in `hyperlabctl` and in the
+  provisioner, which cannot import it; a contract keeps the two equal. The
+  thirty seconds are a bound, not a handshake: a provisioner stuck past
+  them for another reason is killed. SIGKILL (or a lost
   power) cannot be handled: the hash file then stays in the runtime
   directory, which is memory, until logout or the next provisioning of the
   same Machine replaces it.

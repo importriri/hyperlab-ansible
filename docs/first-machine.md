@@ -19,9 +19,11 @@ Machine account's password
 ([ADR 0017](adr/0017-shell-machine-creation.md)). The `ansible -m ping`
 check of the server section is yours to run. Before the first step, the
 operation refuses a Machine whose generated spec is not exactly the
-projection of its record (edited by hand, a link, unreadable or missing)
-and a plan with any playbook that is not the reviewed one, present as a
-regular file in `playbooks/`; it then runs nothing and asks for nothing.
+projection of its record (edited by hand, even only from `2048` to
+`2048.0`, a link, unreadable or missing) and a plan with any playbook that
+is not the reviewed one, present as a regular file in `playbooks/`; the
+profile it accepts is the one the Machine record's Template maps to. It
+then runs nothing and asks for nothing.
 If a step fails, the operation stops there and ends `failed` with that
 step's exit status. The Machine record and its spec stay: a failed
 provisioning is not a refused creation, and the remaining steps are the

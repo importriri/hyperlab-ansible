@@ -369,6 +369,7 @@ proof.
   internal PC speaker driver loaded at every boot and beeped.
 - [`machine-provision-trusted-names-not-files.md`](machine-provision-trusted-names-not-files.md):
   provisioning took a hand-edited spec for the projection, let unchecked
-  arguments and playbook files through, and left the hash file on SIGTERM.
+  arguments, another Template's profile and playbook files through, and
+  left the hash file on SIGTERM or when the runner was stopped.
 
 Author: [importriri](https://github.com/importriri).
