@@ -1242,8 +1242,9 @@ run again green. The red message is the one the contract prints.
   Red (integration): "the hash file outlived the stopped operation"; red
   (lifecycle): "the runner may kill the provisioner before it removes the
   hash file: 3 s for 10 s".
-- M19. Break: in the provisioner's `cancel()`, drop `if stopping:
-  return`, so every later signal raises again.
+- M19. Break: in the provisioner's signal handler (`cancel()` then,
+  `Stop.handle()` now), drop the early return for a signal that is not
+  the first, so every later signal raises again.
   Red (provisioner, real PTY, SIGHUP, SIGTERM and SIGINT sent while the
   cancelled playbook takes two seconds to end): "the hash file outlived
   repeated signals".
@@ -1261,4 +1262,34 @@ run again green. The red message is the one the contract prints.
   asked".
 - M22. Break: in `mapped_profile()`, drop `record.get("id") == machine`.
   Red (provisioner): "a plan with another Machine's record ran or asked".
+- M1-M22 were run again on the tree that also starts each playbook
+  inside `Stop.deferred()`, with the same red messages.
+- M23. Break: `run_step()` back to its earlier form, `child =
+  subprocess.Popen(...)` before the `try` and no deferral.
+  Red (integration, the stop delivered inside `Popen()` of the first
+  profile pass): "the playbook was not stopped and reaped before its hash
+  file was removed", the observer showing the playbook still sleeping
+  (`S`) when the file was removed and no reap of it.
+- M24. Break: the provisioner's `child.kill()` after `PLAYBOOK_GRACE`
+  becomes `pass`.
+  Red (integration, a playbook that ignores the hangup and SIGTERM): "the
+  hash file outlived the stopped operation"; the provisioner waits on the
+  playbook until the runner kills it after `PROVISION_STOP_GRACE`.
+- M25. Break: drop the `child.wait()` that follows `child.kill()`.
+  Red (integration, the same playbook): "the playbook was not stopped and
+  reaped before its hash file was removed"; the killed playbook still has
+  a `/proc` entry when the file is removed.
+- M26. Break: start the playbook under `held()` (the ending signals
+  blocked in the kernel) instead of `Stop.deferred()`.
+  Red (integration, cooperative case): "the playbook started with SIGHUP
+  blocked or ignored"; the mask survives `exec`, so restoring the
+  provisioner's own does not reach the playbook.
+- M27. Break: `Stop.deferred()` no longer raises the signal it noted.
+  Red (integration, the stop inside `Popen()`): "the hash file outlived
+  the stopped operation"; the run goes on waiting on the playbook.
+- M28. Break: `run_step()` cleans up without checking that a playbook was
+  started (`if True:` for `if child is not None:`).
+  Red (provisioner, real PTY, the first profile pass cannot be started):
+  "a playbook that could not be started was not refused"; the cleanup
+  fails on `None` and the run ends with a traceback instead of status 2.
 - Restore: the copy goes back; the four contracts print their OK line.
