@@ -96,9 +96,9 @@ def steps(machine: str, workstation: bool, runtime: Path) -> dict:
 # Records its argv, environment, terminal and, for an @file argument, the
 # file as it is while the playbook runs. While `hold` names a token of its
 # argv it announces itself in `ready` and waits; it survives the hangup of
-# its terminal, so only the provisioner's own SIGTERM ends it, and records
-# whether the hash file was still there when that came. While `fail` names
-# a token it exits 3.
+# its terminal, so only the provisioner's own SIGTERM ends it, takes
+# `linger` seconds (if given) to end, and records whether the hash file was
+# still there then. While `fail` names a token it exits 3.
 ANSIBLE = r'''
 import json, os, signal, stat, sys, time
 base = sys.argv[1]
@@ -127,6 +127,7 @@ def token(name):
 hold, fail = token("hold"), token("fail")
 if hold and hold in " ".join(args):
     def terminated(signum, frame):
+        time.sleep(float(token("linger") or 0))
         with open(os.path.join(base, "terminated"), "w") as stream:
             json.dump({"file_present": os.path.exists(entry["file"])}, stream)
         os._exit(143)
@@ -815,6 +816,47 @@ def check_terminal_signals(module) -> None:
             secret_free(fixture, terminal.transcript)
 
 
+def check_terminal_repeated_signals(module) -> None:
+    """More ending signals arrive while the cancelled run cleans up, as when
+    the runner is stopped: its PTY hangs up, it terminates the provisioner,
+    systemd signals the unit. The first one ends the run; the others do not
+    cut its cleanup short."""
+    with tempfile.TemporaryDirectory() as temp:
+        fixture = Fixture(Path(temp), steps("dev-r", True, Path(temp) / "runtime"))
+        (fixture.base / "hold").write_text("guest-arch-dev-vfio.yml -e")
+        (fixture.base / "linger").write_text("2")
+        terminal = Terminal(fixture, "dev-r")
+        try:
+            terminal.answer("New password for the Machine account: ", SECRET)
+            terminal.answer("Repeat it: ", SECRET)
+            ready = fixture.base / "ready"
+            end = time.monotonic() + 20
+            while not ready.exists():
+                require(time.monotonic() < end and terminal.alive(),
+                        f"the first profile pass never started: {terminal.transcript[-400:]!r}")
+                terminal.pump(0.1)
+            handshake = json.loads(ready.read_text())
+            os.kill(terminal.pid, signal.SIGTERM)
+            for later in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT) * 3:
+                terminal.pump(0.2)
+                if terminal.alive():
+                    os.kill(terminal.pid, later)
+            status = terminal.wait()
+        finally:
+            if terminal.alive():
+                os.kill(terminal.pid, signal.SIGKILL)
+                terminal.wait()
+        require(not Path(handshake["file"]).exists() and not list(fixture.private.iterdir()),
+                "the hash file outlived repeated signals")
+        require(os.WIFEXITED(status) and os.WEXITSTATUS(status) == 128 + signal.SIGTERM,
+                f"a later signal took over the cancelled run: {status}")
+        require(len(fixture.calls) == 3, f"a step ran after SIGTERM: {argvs(fixture.calls)}")
+        stopped = fixture.base / "terminated"
+        require(stopped.exists() and json.loads(stopped.read_text()) == {"file_present": True},
+                "the running playbook was not stopped before its hash file went")
+        secret_free(fixture, terminal.transcript)
+
+
 def main() -> int:
     module = load()
     check_profile_table(module)
@@ -827,6 +869,7 @@ def main() -> int:
     check_terminal_success(module)
     check_terminal_failure(module)
     check_terminal_signals(module)
+    check_terminal_repeated_signals(module)
 
     source = SOURCE.read_text(encoding="utf-8")
     require("shell=True" not in source and "--become-password" not in source,

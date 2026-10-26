@@ -12,6 +12,7 @@ import json
 import multiprocessing
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -45,17 +46,36 @@ def load(name, path):
     return module
 
 
-# Records argv and environment; exits 4 while `fail` names a token of its argv.
+# Records argv and environment; exits 4 while `fail` names a token of its
+# argv. While `hold` names one it announces itself in `ready` and waits: it
+# ignores SIGHUP and, on SIGTERM, takes `linger` seconds to end, then notes
+# whether its @file was still there.
 ANSIBLE = r'''
-import json, os, sys
+import json, os, signal, sys, time
 base, args = sys.argv[1], sys.argv[2:]
 with open(os.path.join(base, "calls.jsonl"), "a") as stream:
     stream.write(json.dumps({"argv": args, "env": dict(os.environ),
                              "file": [p for p in args if p.startswith("@")]}) + "\n")
-try:
-    fail = open(os.path.join(base, "fail")).read()
-except FileNotFoundError:
-    fail = ""
+def token(name):
+    try:
+        return open(os.path.join(base, name)).read()
+    except FileNotFoundError:
+        return ""
+fail, hold = token("fail"), token("hold")
+if hold and hold in " ".join(args):
+    path = next(p[1:] for p in args if p.startswith("@"))
+    def terminated(signum, frame):
+        time.sleep(float(token("linger")))
+        with open(os.path.join(base, "terminated"), "w") as stream:
+            json.dump({"file_present": os.path.exists(path)}, stream)
+        os._exit(143)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, terminated)
+    with open(os.path.join(base, "ready.tmp"), "w") as stream:
+        json.dump({"pid": os.getpid(), "file": path}, stream)
+    os.rename(os.path.join(base, "ready.tmp"), os.path.join(base, "ready"))
+    time.sleep(120)
+    sys.exit(0)
 sys.exit(4 if fail and fail in " ".join(args) else 0)
 '''
 
@@ -229,6 +249,7 @@ def provisioning_contract():
         with patch.object(subprocess, 'Popen', popen):
             server_case(lab, op, create)
             workstation_case(lab, op, create)
+            stopped_case(lab, op, create)
 
 
 def server_case(lab, op, create):
@@ -331,6 +352,77 @@ def workstation_case(lab, op, create):
     private = lab.runtime / 'hyperlab/provision'
     require(private.is_dir() and not list(private.iterdir()), 'the hash file outlived the operation')
     require(lab.snapshot() == before, 'provisioning changed the Machine record or its spec')
+
+
+def stopped_case(lab, op, create):
+    """The operation is stopped while the first profile pass holds the hash
+    file, and that playbook ignores the hangup and takes longer to end than
+    the runner gives other commands: the provisioner still stops it and
+    removes the file before the runner may kill the provisioner."""
+    root = op.directory()
+    for name in ('calls.jsonl', 'launched.jsonl', 'openssl.jsonl'):
+        (lab.base / name).unlink(missing_ok=True)
+    result = create('workstation-dev', 'dev-02', 'permanent', 'dev', 'balanced')
+    require(isinstance(result, list) and len(result) == 1 and result[0]['phase'] == 'dispatched',
+            f'a workstation creation did not dispatch one operation: {result}')
+    oid = result[0]['operation_id']
+    (lab.base / 'hold').write_text('guest-arch-dev-vfio.yml -e @')
+    (lab.base / 'linger').write_text('5')
+    context = multiprocessing.get_context('fork')
+    worker = context.Process(target=lambda: os._exit(op.run(oid)))
+    worker.start()
+    ready = lab.base / 'ready'
+    try:
+        endpoint = op.endpoint(root, oid)
+        for _ in range(200):
+            if endpoint.exists():
+                break
+            time.sleep(0.05)
+        observer = socket.socket(socket.AF_UNIX)
+        observer.connect(str(endpoint))
+        require(PROMPT in read_until(observer, PROMPT), 'the password prompt did not reach an observer')
+        observer.sendall(SECRET.encode() + b'\n')
+        require(b'Repeat it: ' in read_until(observer, b'Repeat it: '), 'no confirmation prompt')
+        observer.sendall(SECRET.encode() + b'\n')
+        end = time.monotonic() + 30
+        while not ready.exists():
+            require(time.monotonic() < end and worker.is_alive(), 'the first profile pass never started')
+            time.sleep(0.05)
+        handshake = json.loads(ready.read_text())
+        require(Path(handshake['file']).is_file(), 'fixture: no hash file at the handshake')
+        # What systemd does to the runner when the operation unit is stopped.
+        os.kill(worker.pid, signal.SIGTERM)
+        worker.join(60)
+        observer.close()
+    finally:
+        if worker.is_alive():
+            worker.kill()
+            worker.join()
+    playbook = handshake['pid']
+    gone = False
+    for _ in range(100):
+        try:
+            os.kill(playbook, 0)
+        except ProcessLookupError:
+            gone = True
+            break
+        time.sleep(0.1)
+    if not gone:
+        os.kill(playbook, signal.SIGKILL)
+    record = op.read(root, oid)
+    require(record['phase'] == 'interrupted' and record['reason'] == 'interrupted',
+            f'a stopped provisioning has no terminal record: {record}')
+    private = lab.runtime / 'hyperlab/provision'
+    require(not Path(handshake['file']).exists() and not list(private.iterdir()),
+            'the hash file outlived the stopped operation')
+    calls = lab.log('calls.jsonl')
+    require(len(calls) == 3, f'a step ran after the operation was stopped: {[c["argv"] for c in calls]}')
+    require(gone, 'the running playbook outlived the stopped operation')
+    stopped = lab.base / 'terminated'
+    require(stopped.exists() and json.loads(stopped.read_text()) == {'file_present': True},
+            'the running playbook was not stopped before its hash file went')
+    require(lab.log('launched.jsonl') == [[op.PROVISION, 'dev-02']],
+            f'the runner launched {lab.log("launched.jsonl")}')
 
 
 def main():

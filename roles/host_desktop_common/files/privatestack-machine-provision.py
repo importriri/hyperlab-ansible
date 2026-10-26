@@ -50,6 +50,10 @@ ACCESS_FILE = "{access_file}"
 SERVER_STEPS = ["create-domain", "inventory", "close-access"]
 WORKSTATION_STEPS = ["create-domain", "inventory", "profile-first", "profile-second", "close-access"]
 PASSWORD_MIN = 8
+# Seconds a cancelled playbook gets to end before it is killed. The runner
+# waits longer for this program (PROVISION_STOP_GRACE there), so the hash
+# file is removed before anything can kill the provisioner.
+PLAYBOOK_GRACE = 10
 # Signals that end the run; the hash file is never left behind by them.
 CANCELLING = (signal.SIGTERM, signal.SIGHUP)
 
@@ -265,7 +269,7 @@ def run_step(repo: Path, argv: list[str]) -> int:
             if child.poll() is None:
                 child.terminate()
                 try:
-                    child.wait(timeout=10)
+                    child.wait(timeout=PLAYBOOK_GRACE)
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait()
@@ -319,14 +323,24 @@ def main(args: list[str]) -> int:
 
 
 def entry(args: list[str]) -> int:
+    stopping: list[int] = []
+
     def cancel(signum: int, frame: object) -> None:
+        # A stopped runner sends more than one: its PTY hangs up, then it
+        # terminates this program, and systemd may signal the whole unit.
+        # Only the first ends the run; a later one must not cut short the
+        # cleanup that the first started.
+        if stopping:
+            return
+        stopping.append(signum)
+        if signum == signal.SIGINT:
+            raise KeyboardInterrupt
         raise Cancelled(signum)
 
     # A stopped unit (SIGTERM) or a terminal that hangs up (SIGHUP) ends the
     # run like Ctrl-C: the running playbook is stopped, the hash file removed.
-    for signum in CANCELLING:
+    for signum in (signal.SIGINT, *CANCELLING):
         signal.signal(signum, cancel)
-    signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
         return main(args)
     except (Refused, OSError, ValueError, subprocess.TimeoutExpired) as exc:

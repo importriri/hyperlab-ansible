@@ -6,6 +6,7 @@ import os
 import signal
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -15,6 +16,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'roles/host_desktop_common/files/privatestack-operation.py'
+PROVISIONER = ROOT / 'roles/host_desktop_common/files/privatestack-machine-provision.py'
 sys.path.insert(0, str(ROOT / 'tools/hyperlabctl'))
 from hyperlabctl.registry import resolve as registry_resolve  # noqa: E402
 
@@ -322,6 +324,68 @@ def provision_contract(op, root, repo, specs, fake_cli):
     (repo / 'vm-specs/.generated/made-01.yml').write_text('name: made-01\n')
 
 
+def stop_deadline_contract(op, root, base):
+    """How long a stopped operation's command gets before it is killed.
+
+    Every action keeps three seconds, except machine.provision: the
+    provisioner first stops its own playbook and removes the password hash
+    file, and the runner must wait longer than that takes.
+    """
+    for unit in base.glob('hyperlab-operation-*'):
+        unit.unlink()
+    op.records(root)
+    spec = importlib.util.spec_from_file_location('provisioner', PROVISIONER)
+    provisioner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(provisioner)
+    targets = dict.fromkeys(op.ACTIONS, 'one')
+    targets.update({'machine.provision': 'made-01', 'usb.allow': 'usb:1-9:once:0781:5581'})
+    seen = {}
+    stubborn = []
+    for action, target in targets.items():
+        record = op.launch(action, target)
+        require(record['phase'] == 'dispatched', 'fixture launch of %s refused: %r' % (action, record))
+        stubborn.clear()
+
+        class Stubborn:
+            """Stopped while it runs, it outlives every deadline it is given."""
+            def __init__(self, argv, **kwargs):
+                self.timeouts, self.killed, self.polled = [], False, False
+                stubborn.append(self)
+
+            def poll(self):
+                if not self.polled:
+                    self.polled = True
+                    os.kill(os.getpid(), signal.SIGTERM)
+                return -9 if self.killed else None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                if self.killed:
+                    return -9
+                self.timeouts.append(timeout)
+                raise subprocess.TimeoutExpired('stubborn', timeout)
+
+            def kill(self):
+                self.killed = True
+
+        with patch.object(op.subprocess, 'Popen', Stubborn):
+            op.run(record['operation_id'])
+        final = op.read(root, record['operation_id'])
+        require(len(stubborn) == 1 and stubborn[0].killed and final['phase'] == 'interrupted',
+                '%s was not stopped, killed and recorded: %r' % (action, final))
+        seen[action] = stubborn[0].timeouts
+        (base / record['unit']).unlink()
+    require(seen == {action: [3] for action in op.ACTIONS if action != 'machine.provision'}
+            | {'machine.provision': [op.PROVISION_STOP_GRACE]},
+            'stop deadlines changed: %r' % seen)
+    # Its whole escalation, then the kill and the removal, fits in the wait.
+    require(op.PROVISION_STOP_GRACE >= provisioner.PLAYBOOK_GRACE + 10,
+            'the runner may kill the provisioner before it removes the hash file: %s s for %s s'
+            % (op.PROVISION_STOP_GRACE, provisioner.PLAYBOOK_GRACE))
+
+
 def main():
     spec = importlib.util.spec_from_file_location('operation', SOURCE)
     op = importlib.util.module_from_spec(spec)
@@ -526,6 +590,7 @@ def main():
             provision_contract(op, root, repo, specs, fake_cli)
 
             usb_contract(op, root, repo, base)
+            stop_deadline_contract(op, root, base)
 
             # A view that cannot open never fails or cancels the operation.
             viewless = op.launch('vm.managed-start', 'two')
