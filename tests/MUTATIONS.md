@@ -1474,3 +1474,23 @@ D4 to D8 break the one entry that has a receipt. That entry also says
 `operator-observed, unpublished` for its later run, and it still fails: a
 bad `evidence:` target is refused whatever else the entry says. Restore:
 `git checkout -- docs/roadmap.md docs/adr/`.
+
+Blank lines keep a checkbox's context for a later indented paragraph. The
+paragraph regression in `tests/docs_contract.py` covers empty and space-only
+blank lines, further continuation paragraphs, and boundaries formed by an
+unindented paragraph, a heading or an ordinary list item. A later checked
+observation keeps its own qualification; it cannot qualify the earlier one.
+The regression initially failed with `unqualified second-paragraph hardware
+claim was accepted`.
+
+| # | Break | Required red diagnostic |
+| --- | --- | --- |
+| D14 | Move the Guest Workspace Shell entry's existing Nitro observation to a second indented paragraph, then remove only its `operator-observed, unpublished` qualification. All other observations stay qualified. | `roadmap line 181: checked hardware claim names neither an evidence: receipt nor 'operator-observed, unpublished'` |
+| D15 | In `checkbox_entries`, reset the active indentation at a blank line, restoring the old paragraph boundary behavior. | `unqualified second-paragraph hardware claim was accepted` |
+
+For D14, the existing observation with its qualification in the second
+paragraph was green before removing the qualification. D14 and D15 then
+turned the full documentation contract red with the diagnostics above;
+restoring each file from its saved copy, checking identical bytes, and
+rerunning the contract was green. Neither mutation stayed green. These
+formatting checks add no observation or hardware evidence.

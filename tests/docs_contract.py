@@ -10,7 +10,8 @@ Every checked roadmap entry that claims a hardware observation (it says
 Nitro-verified or Predator-verified, opens a "(Nitro" note, says "on
 Nitro", or calls itself physical) names its evidence: an `evidence:` link
 to an acceptance receipt in docs/, or the words "operator-observed,
-unpublished". An entry is the checkbox line with its continuation lines.
+unpublished". An entry is the checkbox line with its indented continuation
+paragraphs, including those separated by blank lines.
 ADRs 0017, 0018 and 0022 carry one recognized Status line right below
 their title, and their index entries open with the same status. This
 proves the structure of a reference, not that an observation is authentic
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import unquote
 
 
@@ -62,7 +64,8 @@ def checkbox_entries(text: str) -> list[tuple[int, bool, str]]:
     """(first line, checked, whole text) of every checkbox entry.
 
     A continuation line is a non-blank line indented deeper than its
-    checkbox that does not start another list item; a nested checkbox is an
+    checkbox that does not start another list item. Blank lines preserve
+    the checkbox context for further paragraphs; a nested checkbox is an
     entry of its own.
     """
     entries: list[tuple[int, bool, list[str]]] = []
@@ -77,8 +80,10 @@ def checkbox_entries(text: str) -> list[tuple[int, bool, str]]:
             entries.append((number, match["mark"] == "x", [match["text"].strip()]))
             indent = len(match["indent"])
             continue
+        if not line.strip():
+            continue
         depth = len(line) - len(line.lstrip(" "))
-        if indent >= 0 and line.strip() and depth > indent and not LIST_ITEM.match(line):
+        if indent >= 0 and depth > indent and not LIST_ITEM.match(line):
             entries[-1][2].append(line.strip())
             continue
         indent = -1
@@ -119,6 +124,56 @@ def check_roadmap_evidence(root: Path) -> None:
                 f"roadmap line {number}: checked hardware claim names neither an "
                 f"evidence: receipt nor {UNPUBLISHED!r}",
             )
+
+
+def check_checkbox_paragraphs() -> None:
+    """Paragraph breaks retain an observation without borrowing evidence."""
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        roadmap = root / "docs" / "roadmap.md"
+        roadmap.parent.mkdir()
+        for blank in ("", "   "):
+            for boundary in ("An unrelated paragraph.", "## A heading", "- Another list item"):
+                text = (
+                    "- [x] A checked component\n"
+                    f"{blank}\n"
+                    "      Nitro-verified: operator-observed, unpublished\n"
+                    f"{blank}\n"
+                    "      The observation keeps its original scope.\n"
+                    f"{blank}\n"
+                    f"{boundary}\n"
+                    f"{blank}\n"
+                    "- [x] Another component on Nitro: operator-observed, unpublished\n"
+                )
+                roadmap.write_text(text, encoding="utf-8")
+                check_roadmap_evidence(root)
+                roadmap.write_text(text.replace(UNPUBLISHED, "unqualified", 1), encoding="utf-8")
+                try:
+                    check_roadmap_evidence(root)
+                except AssertionError as error:
+                    require(
+                        str(error).startswith("roadmap line 1: checked hardware claim"),
+                        f"second-paragraph observation failed for an unrelated reason: {error}",
+                    )
+                else:
+                    raise AssertionError("unqualified second-paragraph hardware claim was accepted")
+                entries = checkbox_entries(text)
+                require(
+                    entries == [
+                        (
+                            1,
+                            True,
+                            "A checked component Nitro-verified: operator-observed, unpublished "
+                            "The observation keeps its original scope.",
+                        ),
+                        (
+                            9,
+                            True,
+                            "Another component on Nitro: operator-observed, unpublished",
+                        ),
+                    ],
+                    f"checkbox paragraphs or entry boundaries changed: {entries!r}",
+                )
 
 
 def adr_status(path: Path) -> str:
@@ -162,6 +217,7 @@ def check_adr_status(root: Path) -> None:
 
 
 def main() -> int:
+    check_checkbox_paragraphs()
     check_adr_status(ROOT)
     check_roadmap_evidence(ROOT)
 
