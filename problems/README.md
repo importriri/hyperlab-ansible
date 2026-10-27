@@ -376,4 +376,8 @@ proof.
   left the hash file on SIGTERM or when the runner was stopped, or removed
   it beside a playbook that a stop caught while it was being started.
 
+- [`ci-skipped-shell-palette-and-choices.md`](ci-skipped-shell-palette-and-choices.md):
+  CI omitted six shell, palette and choices checks that the local verifier ran;
+  execution fixtures now compare both paths and require failure propagation.
+
 Author: [importriri](https://github.com/importriri).

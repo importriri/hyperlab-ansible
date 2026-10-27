@@ -1355,3 +1355,52 @@ fresh boot, two over rung 3.
   Red: "an interruption during a successful commit step still refuses":
   the hook publishes rung 1 and exits 0.
 - Restore: `git checkout -- roles/gpu_handoff/files/qemu`.
+
+### CI executes the local shell, palette and choices checks
+
+`problems/ci-skipped-shell-palette-and-choices.md`.
+`python tests/ci_verify_parity_contract.py` is the red check below. Run
+`python tests/contract_mutations.py CiVerifyParityMutationTests` to replay the
+breaks automatically on temporary copies of the two entrypoints. Each test
+requires the named behavioral or structural refusal; a surviving mutation is a
+failure. The baseline with every stub passing must be green, and each of the
+six stubs is independently made to fail in both paths. The actual suites run
+separately; successful stub runs do not certify their implementations.
+
+The test method names below follow
+`python tests/contract_mutations.py CiVerifyParityMutationTests.`; append the
+method to that prefix to replay one mutation. Copy the input files before a
+manual break and restore those copies afterward.
+
+| Test method | Break in the temporary copy | Required red diagnostic |
+| --- | --- | --- |
+| `test_ci_shell_step_kept_only_as_its_name_and_a_comment` | Replace the shell step's run command with a comment and echo of that command; keep the display name. | `CI did not run sh tools/shell-tests/run.sh` |
+| `test_ci_shell_check_behind_an_unreachable_branch` | Put the shell command inside `if false; then ...; fi`. | Same missing shell invocation |
+| `test_ci_shell_check_moved_into_the_toolchain_step` | Move the shell check into the excluded installation step. | Same missing shell invocation |
+| `test_ci_drops_any_palette_or_choices_command` | Remove each of the five 0g commands separately. | `CI did not run` followed by the exact removed argv |
+| `test_a_required_command_may_not_run_twice` | Duplicate the palette invocation in either entrypoint. | That path `ran` the command `2 times` |
+| `test_ci_palette_argument_changes` | Change `tools/palette/palette.yml` to `tools/palette/palette.yaml`. | Missing original palette argv and unexpected changed argv |
+| `test_ci_surfaces_argument_changes` | Change the surfaces argument from `roles/host_desktop_sway/files/palette` to `roles/host_desktop_sway/files`. | Missing original surfaces argv and unexpected changed argv |
+| `test_matching_wrong_arguments_in_both_paths_are_refused` | Change the palette argument in both entrypoints. | Missing original palette argv despite matching execution lists |
+| `test_ci_palette_step_may_not_continue_on_error` | Add `continue-on-error: true` to the palette step. | Step `sets 'continue-on-error'` |
+| `test_ci_shell_step_may_not_wait_for_a_manual_event` | Add `if: github.event_name == 'workflow_dispatch'` to the shell step. | Step `sets 'if'` |
+| `test_ci_validation_job_may_not_be_optional` | Add `continue-on-error: true` to `validate`. | Job `sets 'continue-on-error'` |
+| `test_ci_must_still_run_on_pull_requests` | Remove the pull-request trigger. | `CI must run on every push and every pull request, unfiltered` |
+| `test_ci_discarded_status_hides_a_failure` | Append `|| true` to the consistency check. | `CI succeeded while` that check `failed` |
+| `test_ci_discards_a_failed_child_status` | Background the shell check and discard `wait`'s result. | `CI succeeded while sh tools/shell-tests/run.sh failed` |
+| `test_ci_pipe_to_tee_hides_a_failure` | Pipe the shell check to `tee` under the default shell without pipefail. | Same masked shell failure |
+| `test_ci_later_success_hides_a_failure` | Use `set +e` before the palette check and append `echo done` after the last command. | `CI succeeded while` the palette check `failed` |
+| `test_verify_discarded_status_hides_a_failure` | Replace `run python3 tools/choices/choices.py check` with an unchecked command and discarded status. | `verify.sh exited 0 while` that check `failed` |
+| `test_verify_drops_the_shell_check` | Remove the local shell check. | `CI and verify.sh run different tool checks` |
+| `test_verify_gains_a_check_ci_does_not_run` | Add a stubbed invocation of a nonexistent extra palette script locally. | Same divergent execution diagnostic |
+| `test_ci_duplicate_yaml_key_is_refused` | Duplicate the shell step's `run` key. | `duplicate YAML key` |
+| `test_ci_duplicate_step_id_is_refused` | Give the shell step the existing `structural_contracts` id. | `duplicate step id` |
+| `test_redirected_entrypoints_are_refused` | Replace either entrypoint with a symlink to an identical copy. | `entrypoint must be a regular, unredirected file` |
+| `test_ci_unmodelled_shell_is_refused` | Supply a YAML mapping as the shell setting. | `uses shell` with a refusal, without a traceback |
+
+All listed breaks were observed red on temporary copies and restored green.
+Before the input validation fix, duplicate keys, duplicate step ids and both
+redirected files stayed green, and the malformed shell raised TypeError; the
+new mutation tests exposed these gaps and now pass. The earlier committed CI
+workflow, with only its toolchain id added for the fixture, was also observed
+red for all six missing invocations, then green after restoring the new steps.

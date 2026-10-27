@@ -28,6 +28,14 @@ ansible-playbook -K playbooks/lab.yml
 The last run must report `changed=0`. A successful CI run is a software result;
 hardware support is recorded separately in `arch-hypervisor-lab`.
 
+The required CI validation job also runs the shell structure suite and all five
+palette/choices checks from `verify.sh` levels 0f and 0g. Run
+`python tests/ci_verify_parity_contract.py` to check their execution parity:
+it parses the workflow, executes its run blocks and the local verifier with
+recording stubs, compares their arguments, and forces each check to fail in
+turn. This fixture needs no package installation, network or sudo; the actual
+suites still run separately in CI and `./verify.sh`.
+
 For a complete Nitro walkthrough, including images, workloads, VFIO and Looking
 Glass, follow the `arch-hypervisor-lab/SETUP.md` guide.
 

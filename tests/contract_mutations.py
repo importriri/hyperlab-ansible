@@ -12,9 +12,19 @@ from typing import Callable
 
 import yaml
 
+from ci_verify_parity_contract import collect_errors as parity_errors
 from static_contract import collect_errors
 
 ROOT = Path(__file__).resolve().parents[1]
+CI = ".github/workflows/ci.yml"
+SHELL_CHECK = "sh tools/shell-tests/run.sh"
+PALETTE_AND_CHOICES = (
+    "python3 tools/palette/audit_palette.py tools/palette/palette.yml",
+    "python3 tools/palette/verify_surfaces.py roles/host_desktop_sway/files/palette",
+    "python3 tools/choices/choices.py check",
+    "python3 tools/choices/test_choices.py",
+    "python3 tools/choices/test_consistency.py",
+)
 
 
 class ContractMutationTests(unittest.TestCase):
@@ -280,6 +290,264 @@ class ContractMutationTests(unittest.TestCase):
                 "runtime guest inventory must disable SSH pseudo-TTY allocation",
                 output,
             )
+
+
+class CiVerifyParityMutationTests(unittest.TestCase):
+    """Each break edits a copy of ci.yml or verify.sh and must turn the parity contract red."""
+
+    @staticmethod
+    def replace_once(path: Path, old: str, new: str) -> None:
+        source = path.read_text(encoding="utf-8")
+        if source.count(old) != 1:
+            raise AssertionError(f"{old!r} occurs {source.count(old)} times in {path.name}, not once")
+        path.write_text(source.replace(old, new), encoding="utf-8")
+
+    def assert_parity_fails(self, mutation: Callable[[Path], None], expected: str) -> None:
+        with tempfile.TemporaryDirectory(prefix="privatestack-parity-") as tmp:
+            copy = Path(tmp)
+            (copy / CI).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / CI, copy / CI)
+            shutil.copy2(ROOT / "verify.sh", copy / "verify.sh")
+            mutation(copy)
+            errors = parity_errors(copy)
+        self.assertTrue(errors, "mutation unexpectedly passed")
+        self.assertTrue(
+            any(expected in error for error in errors),
+            f"expected {expected!r}; got:\n" + "\n".join(errors),
+        )
+
+    def test_baseline_is_green(self) -> None:
+        self.assertEqual([], parity_errors(ROOT))
+
+    def test_ci_duplicate_yaml_key_is_refused(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        run: 'true'\n        run: {SHELL_CHECK}\n",
+            ),
+            "duplicate YAML key",
+        )
+
+    def test_ci_duplicate_step_id_is_refused(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        id: structural_contracts\n        run: {SHELL_CHECK}\n",
+            ),
+            "duplicate step id",
+        )
+
+    def test_redirected_entrypoints_are_refused(self) -> None:
+        for name in (CI, "verify.sh"):
+            with self.subTest(name=name):
+                def mutation(root: Path, name: str = name) -> None:
+                    path = root / name
+                    target = path.with_suffix(".original")
+                    path.rename(target)
+                    path.symlink_to(target.name)
+
+                self.assert_parity_fails(mutation, "entrypoint must be a regular, unredirected file")
+
+    def test_ci_unmodelled_shell_is_refused(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        shell: {{invalid: bash}}\n        run: {SHELL_CHECK}\n",
+            ),
+            "uses shell",
+        )
+
+    def test_ci_shell_step_kept_only_as_its_name_and_a_comment(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        run: |\n          # {SHELL_CHECK}\n          echo '{SHELL_CHECK}'\n",
+            ),
+            f"CI did not run {SHELL_CHECK}",
+        )
+
+    def test_ci_shell_check_behind_an_unreachable_branch(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        run: if false; then {SHELL_CHECK}; fi\n",
+            ),
+            f"CI did not run {SHELL_CHECK}",
+        )
+
+    def test_ci_shell_check_moved_into_the_toolchain_step(self) -> None:
+        def mutation(root: Path) -> None:
+            self.replace_once(root / CI, f"        run: {SHELL_CHECK}\n", "        run: 'true'\n")
+            self.replace_once(
+                root / CI,
+                "          test -x /usr/lib/qt6/bin/qmlscene\n",
+                f"          test -x /usr/lib/qt6/bin/qmlscene\n          {SHELL_CHECK}\n",
+            )
+
+        self.assert_parity_fails(mutation, f"CI did not run {SHELL_CHECK}")
+
+    def test_ci_drops_any_palette_or_choices_command(self) -> None:
+        for command in PALETTE_AND_CHOICES:
+            with self.subTest(command=command):
+                self.assert_parity_fails(
+                    lambda root, command=command: self.replace_once(
+                        root / CI, f"          {command}\n", ""
+                    ),
+                    f"CI did not run {command}",
+                )
+
+    def test_a_required_command_may_not_run_twice(self) -> None:
+        command = PALETTE_AND_CHOICES[0]
+        for name, prefix, where in ((CI, "          ", "CI"), ("verify.sh", "run ", "verify.sh")):
+            with self.subTest(name=name):
+                self.assert_parity_fails(
+                    lambda root, name=name, prefix=prefix: self.replace_once(
+                        root / name, f"{prefix}{command}\n", f"{prefix}{command}\n" * 2
+                    ),
+                    f"{where} ran {command} 2 times",
+                )
+
+    def test_ci_palette_argument_changes(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                "audit_palette.py tools/palette/palette.yml\n",
+                "audit_palette.py tools/palette/palette.yaml\n",
+            ),
+            f"CI did not run {PALETTE_AND_CHOICES[0]}",
+        )
+
+    def test_ci_surfaces_argument_changes(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                "verify_surfaces.py roles/host_desktop_sway/files/palette\n",
+                "verify_surfaces.py roles/host_desktop_sway/files\n",
+            ),
+            f"CI did not run {PALETTE_AND_CHOICES[1]}",
+        )
+
+    def test_matching_wrong_arguments_in_both_paths_are_refused(self) -> None:
+        def mutation(root: Path) -> None:
+            for name in (CI, "verify.sh"):
+                self.replace_once(
+                    root / name,
+                    "audit_palette.py tools/palette/palette.yml\n",
+                    "audit_palette.py tools/palette/palette.yaml\n",
+                )
+
+        self.assert_parity_fails(mutation, f"CI did not run {PALETTE_AND_CHOICES[0]}")
+
+    def test_ci_palette_step_may_not_continue_on_error(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                "      - name: Palette and open choices\n",
+                "      - name: Palette and open choices\n        continue-on-error: true\n",
+            ),
+            "sets 'continue-on-error'",
+        )
+
+    def test_ci_shell_step_may_not_wait_for_a_manual_event(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                "      - name: Shell structure (no display required)\n",
+                "      - name: Shell structure (no display required)\n"
+                "        if: github.event_name == 'workflow_dispatch'\n",
+            ),
+            "sets 'if'",
+        )
+
+    def test_ci_must_still_run_on_pull_requests(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(root / CI, "  pull_request:\n", ""),
+            "CI must run on every push and every pull request, unfiltered",
+        )
+
+    def test_ci_validation_job_may_not_be_optional(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI, "  validate:\n", "  validate:\n    continue-on-error: true\n"
+            ),
+            "the validate job sets 'continue-on-error'",
+        )
+
+    def test_ci_discards_a_failed_child_status(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        run: |\n          {SHELL_CHECK} &\n          wait || true\n",
+            ),
+            f"CI succeeded while {SHELL_CHECK} failed",
+        )
+
+    def test_ci_discarded_status_hides_a_failure(self) -> None:
+        command = PALETTE_AND_CHOICES[4]
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI, f"          {command}\n", f"          {command} || true\n"
+            ),
+            f"CI succeeded while {command} failed",
+        )
+
+    def test_ci_pipe_to_tee_hides_a_failure(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / CI,
+                f"        run: {SHELL_CHECK}\n",
+                f"        run: {SHELL_CHECK} | tee shell-tests.log\n",
+            ),
+            f"CI succeeded while {SHELL_CHECK} failed",
+        )
+
+    def test_ci_later_success_hides_a_failure(self) -> None:
+        command = PALETTE_AND_CHOICES[0]
+
+        def mutation(root: Path) -> None:
+            self.replace_once(
+                root / CI, f"          {command}\n", f"          set +e\n          {command}\n"
+            )
+            self.replace_once(
+                root / CI,
+                f"          {PALETTE_AND_CHOICES[4]}\n",
+                f"          {PALETTE_AND_CHOICES[4]}\n          echo done\n",
+            )
+
+        self.assert_parity_fails(mutation, f"CI succeeded while {command} failed")
+
+    def test_verify_discarded_status_hides_a_failure(self) -> None:
+        command = PALETTE_AND_CHOICES[2]
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                f"run {command}\n",
+                f"{command} >/dev/null 2>&1 || true\n",
+            ),
+            f"verify.sh exited 0 while {command} failed",
+        )
+
+    def test_verify_drops_the_shell_check(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(root / "verify.sh", f"run {SHELL_CHECK}\n", ""),
+            "CI and verify.sh run different tool checks",
+        )
+
+    def test_verify_gains_a_check_ci_does_not_run(self) -> None:
+        self.assert_parity_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                f"run {PALETTE_AND_CHOICES[4]}\n",
+                f"run {PALETTE_AND_CHOICES[4]}\nrun python3 tools/palette/verify_output.py\n",
+            ),
+            "CI and verify.sh run different tool checks",
+        )
 
 
 if __name__ == "__main__":
