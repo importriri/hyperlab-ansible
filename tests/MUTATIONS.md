@@ -1443,3 +1443,34 @@ errors), and restoring the copy turned it green. Before the change, the
 contract was red only for the three no-credential cases, in both stdout modes:
 the render suite was not run, the verdict was `VERIFICATION FAILED` and no
 `NOT RUN` line was printed. Every full-credential case was already green.
+
+### Roadmap hardware claims and ADR status lines name their evidence
+
+`python tests/docs_contract.py` is the red check below. It parses every
+checkbox entry of `docs/roadmap.md`, continuation lines included, and every
+numbered entry of `docs/adr/README.md`. Each break was made on the real file
+from a copy in a scratch directory, observed red with the message below,
+then the copy was put back and the contract was green again. No broken
+entry was kept. The contract proves that a claim carries a reference of the
+right shape, not that the observation happened or that a receipt is enough.
+
+| # | Break | Required red diagnostic |
+| --- | --- | --- |
+| D1 | Delete the `Status:` line of ADR 0018. | `0018-disposable-discards-on-stop.md has 0 Status lines, not one` |
+| D2 | `srv-01` entry: `(Nitro-verified: operator-observed, unpublished)` becomes `(Nitro-verified)`; every other entry keeps its qualification. | `roadmap line N: checked hardware claim names neither an evidence: receipt nor 'operator-observed, unpublished'`, N being the `srv-01` line |
+| D3 | Guest Workspace Shell entry of milestone 1: delete its continuation line `unpublished)`, so only `operator-observed,` is left. | The same message for that entry's first line: the qualification is read across the line break |
+| D4 | The `evidence:` target of the `guest-arch-dev-vfio.yml` idempotence entry becomes a receipt name that does not exist. | `evidence target '...-2026-08-30.md' is not an existing file` |
+| D5 | The same target becomes `../../../../../../../../etc/passwd`. | `evidence target ... escapes the repository` |
+| D6 | The same target becomes `/etc/passwd`. | `evidence target '/etc/passwd' is not a relative path inside the repository` |
+| D7 | The same target becomes `hyperlab-shell.md`, a guide that describes a physical acceptance. | `evidence target 'hyperlab-shell.md' is not an acceptance receipt in docs/` |
+| D8 | The same target becomes `../tests/docs_contract.py`, a software contract. | The same `is not an acceptance receipt in docs/` message |
+| D9 | The ADR index entry of 0017 loses its leading `proposed:`. | `ADR index entry of 0017-shell-machine-creation.md does not open with its status 'proposed'` |
+| D10 | ADR 0022: `Status: proposed.` becomes `Status: decided.` | `0022-network-trust-and-gpu-policy.md: unrecognized status line 'Status: decided. ...'` |
+| D11 | ADR 0017: add `Status: accepted.` below `## Context`. | `0017-shell-machine-creation.md has 2 Status lines, not one` |
+| D12 | `- [x] physical Quickshell per-screen panel creation` becomes `- [X] ...`. | `roadmap line N: unknown checkbox mark [X]` |
+| D13 | ADR 0018: insert a paragraph between the title and the `Status:` line. | `0018-disposable-discards-on-stop.md: the Status line is not right below the title` |
+
+D4 to D8 break the one entry that has a receipt. That entry also says
+`operator-observed, unpublished` for its later run, and it still fails: a
+bad `evidence:` target is refused whatever else the entry says. Restore:
+`git checkout -- docs/roadmap.md docs/adr/`.
