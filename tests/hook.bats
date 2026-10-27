@@ -568,6 +568,70 @@ race() {
     [ "$(state)" = "1" ]
 }
 
+@test "an interruption while taking the lock refuses and records nothing" {
+    seed_state 3
+    # shellcheck disable=SC2016 # expanded by the fake
+    fake flock 'kill -TERM "${PPID}"; exec "${REAL_FLOCK}" "$@"'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+
+    rm "${FAKE_BIN}/flock"
+    run timeout 30 "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "1" ]
+}
+
+# The step itself succeeds: only the signal can stop the commit here.
+@test "an interruption during a successful commit step still refuses" {
+    seed_state 3
+    REAL_CHMOD="$(command -v chmod)"
+    export REAL_CHMOD
+    # shellcheck disable=SC2016 # expanded by the fake
+    fake chmod 'kill -TERM "${PPID}"; exec "${REAL_CHMOD}" "$@"'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+}
+
+# The signal lands after the real temporary file exists and before the
+# command that created it has returned its name to the hook. The fake sends
+# it to the outermost process running the hook, never to a subshell.
+@test "a signal while the temporary file is created removes it and refuses" {
+    seed_state 3
+    fake mktemp "$(cat <<'FAKE'
+path="$("${REAL_MKTEMP}" "$@")" || exit 1
+hook_pid="${PPID}"
+parent_of() {
+    local _pid _comm _state ppid _rest
+    read -r _pid _comm _state ppid _rest < "/proc/$1/stat"
+    printf '%s\n' "${ppid}"
+}
+runs_hook() {
+    tr '\0' '\n' < "/proc/$1/cmdline" | grep -q 'gpu_handoff/files/qemu$'
+}
+runs_hook "${hook_pid}" || exit 1
+while runs_hook "$(parent_of "${hook_pid}")"; do
+    hook_pid="$(parent_of "${hook_pid}")"
+done
+kill -TERM "${hook_pid}"
+printf '%s\n' "${path}"
+FAKE
+)"
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"interrupted while creating"* ]]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+
+    rm "${FAKE_BIN}/mktemp"
+    run timeout 30 "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "1" ]
+}
+
 @test "a killed hook releases the lock and keeps the old rung" {
     seed_state 3
     # shellcheck disable=SC2016 # expanded by the fake

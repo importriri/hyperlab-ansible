@@ -43,19 +43,26 @@ directories and break one thing at a time:
 - the write: `trap '' XFSZ; ulimit -f 0` before running the hook. The file
   size limit binds root as well, and with SIGXFSZ ignored the write returns
   EFBIG to `printf`, a real short write;
-- `flock`, `mktemp` and `mv`: a replacement on `PATH` that exits 1, or that
-  sends TERM or KILL to the hook in the middle of the commit;
+- `flock`, `mktemp`, `chmod` and `mv`: a replacement on `PATH` that exits 1,
+  or that sends TERM or KILL to the hook while the lock is taken, after the
+  real temporary file exists but before its name reaches the hook, or in the
+  middle of the commit;
 - the race: wrappers around the real `flock` and `mktemp`. The lock stays the
   real `flock(2)`; the wrappers only report whether the lock was held and
   pause one request between its read and its commit until the test opens a
-  FIFO gate. Every wait has a bound; there is no sleep.
+  FIFO gate. Each race starts either on a fresh boot or over a committed
+  rung, and the completion reports are gated too, so they arrive in the
+  order the test chooses; events that arrive before they are awaited are
+  kept, not dropped. Every wait has a bound; there is no sleep.
 
 ## Test
 
 `tests/hook.bats`, the tests after "the state transaction". With the lock
-condition replaced by `false`, "concurrent prepares: a stale cleaner commit
-cannot overwrite a dirtier rung" fails on `[ "$(state)" = "1" ]`: the rung is
-3, the old race. With the write status ignored, the two write-failure tests
-fail because an empty rung is published. The full list of breaks is in
-`tests/MUTATIONS.md`, "The GPU ladder state is committed without its
-transaction".
+condition replaced by `false`, "concurrent prepares on a fresh boot: a stale
+clean commit cannot overwrite dirty" fails on `[ "$(state)" = "1" ]`: the rung
+is 3, the old race. With the lock dropped only when a rung already exists,
+"concurrent prepares over rung 3: a stale dev commit cannot overwrite dirty"
+fails the same way with rung 2. With the write status ignored, the two
+write-failure tests fail because an empty rung is published. The full list
+of breaks is in `tests/MUTATIONS.md`, "The GPU ladder state is committed
+without its transaction".

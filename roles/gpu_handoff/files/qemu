@@ -233,6 +233,11 @@ fi
 
 # Publish the new rung only once it is completely written: the old state
 # stays byte-identical on any failure, and no reader ever sees a partial one.
+# A signal between the creation of the temporary file and the moment the
+# hook owns it would exit with nothing to clean up: hold it until then.
+pending_signal=""
+trap 'pending_signal=1' HUP INT TERM
+
 if ! temp="$(mktemp -- "${STATE_DIR}/trust.XXXXXXXXXX")"; then
     echo "gpu-handoff: cannot create a temporary state file in ${STATE_DIR}: refusing" >&2
     exit 1
@@ -246,6 +251,12 @@ if [[ "${temp%/*}" != "${STATE_DIR}" ||
 fi
 
 owned_temp="${temp}"
+trap 'exit 1' HUP INT TERM
+
+if [[ -n "${pending_signal}" ]]; then
+    echo "gpu-handoff: interrupted while creating ${temp}: refusing" >&2
+    exit 1
+fi
 
 if ! printf '%s\n' "${trust}" > "${temp}"; then
     echo "gpu-handoff: cannot write ${temp}: refusing" >&2

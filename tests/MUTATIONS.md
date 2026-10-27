@@ -1298,6 +1298,8 @@ run again green. The red message is the one the contract prints.
 
 `problems/gpu-ladder-state-write-fail-open.md`. Each break is one edit of
 `roles/gpu_handoff/files/qemu`; the red check is `bats tests/hook.bats`.
+The six "concurrent prepares" tests are called the races below: four on a
+fresh boot, two over rung 3.
 
 - Break: ignore the write status
   (`if ! { printf '%s\n' "${trust}" > "${temp}" || :; }; then`).
@@ -1311,27 +1313,45 @@ run again green. The red message is the one the contract prints.
   Red: "a failed temporary file creation refuses and leaves the rung
   byte-identical" (the path check still refuses, but too late to say why).
 - Break: replace the `flock -x -w` condition with `false`.
-  Red: both "concurrent prepares" tests; the first fails on
-  `[ "$(state)" = "1" ]`: the stale clean commit overwrote the dirty rung
-  with 3. Also both "failed lock acquisition" tests.
+  Red: all six races; "concurrent prepares on a fresh boot: a stale clean
+  commit cannot overwrite dirty" fails on `[ "$(state)" = "1" ]`, the
+  stale clean commit having left rung 3. Also both "failed lock
+  acquisition" tests and "an interruption while taking the lock refuses
+  and records nothing".
 - Break: insert `flock -u "${lock_fd}"` before the trust file is read.
-  Red: both "concurrent prepares" tests, the first again on the rung 3.
+  Red: all six races, again on rung 3 for the fresh-boot clean/dirty one.
+- Break: insert
+  `if [[ -e "${STATE_FILE}" ]]; then flock -u "${lock_fd}"; fi` there
+  instead, so the lock holds only while the first rung is created.
+  Red: the two races over rung 3; "a stale dev commit cannot overwrite
+  dirty" fails on `[ "$(state)" = "1" ]` with rung 2, and in "dev waiting
+  on a dirty commit is refused" dev is accepted. The four fresh-boot races
+  stay green: they never see an existing rung.
 - Break: write the rung straight to `"${STATE_FILE}"` and drop the `mv`.
-  Red: the two write-failure tests (the old rung is truncated), the
-  rename, interrupt and kill tests, both concurrency tests and the mode
-  test.
+  Red: twelve tests, among them the two write-failure tests (the old rung
+  is truncated), the rename, interrupt and kill tests and the races.
 - Break: drop `-L "${STATE_FILE}" ||` from the trust file check.
   Red: "a redirected trust file is refused and neither it nor its target
   changes".
 - Break: drop `-L "${LOCK_FILE}" ||` from the first lock check.
   Red: "a redirected lock is refused and its target is not created".
-- Break: drop `umask 077 &&` from the lock creation, or the `chmod 0644`.
+- Break: drop `umask 077 &&` from the lock creation.
   Red: "the lock is created private and the published rung stays
   world-readable".
+- Break: drop the `chmod 0644` (`if false; then`).
+  Red: the same mode test, and "an interruption during a successful commit
+  step still refuses" (its signal came from `chmod`).
 - Break: disable the temporary path check (`if false && [[ ...`).
   Red: "a temporary file outside the state directory is refused and kept".
-- Break: drop `trap 'exit 1' HUP INT TERM`.
-  Red: "an interrupted commit refuses, removes its temporary file and
-  releases the lock", on the status only: Bash still runs the EXIT trap
-  on a fatal TERM and removes the temporary file, but exits 143, not 1.
+- Break: drop the first `trap 'exit 1' HUP INT TERM`, before `mkdir`.
+  Red: "an interruption while taking the lock refuses and records nothing",
+  on the status only: Bash still runs the EXIT trap on a fatal TERM, but
+  exits 143, not 1.
+- Break: drop `trap 'pending_signal=1' HUP INT TERM`.
+  Red: "a signal while the temporary file is created removes it and
+  refuses": the hook exits before it owns the file and leaves it behind.
+- Break: drop the `trap 'exit 1' HUP INT TERM` after `owned_temp`, so the
+  signal stays held for the rest of the commit.
+  Red: "an interruption during a successful commit step still refuses":
+  the hook publishes rung 1 and exits 0.
 - Restore: `git checkout -- roles/gpu_handoff/files/qemu`.

@@ -60,10 +60,13 @@ For a mapped domain the hook:
 
 Any failure in step 4 exits nonzero and removes the temporary file, and the
 previous `trust` stays byte-identical: a failed write can never leave a missing
-or truncated level that would authorize a cleaner domain later. The kernel
-releases the lock when the hook exits, whether it succeeded, refused, was
-interrupted or was killed. A hook killed with `SIGKILL` may leave a `trust.*`
-file behind; it is never read, and the next reboot clears it.
+or truncated level that would authorize a cleaner domain later. HUP, INT and
+TERM refuse the start with status 1 at any step. Between the creation of the
+temporary file and the moment the hook records it as its own, such a signal is
+held and acted on right after, so the file is removed in that window too. The
+kernel releases the lock when the hook exits, whether it succeeded, refused,
+was interrupted or was killed. A hook killed with `SIGKILL` may leave a
+`trust.*` file behind; it is never read, and the next reboot clears it.
 
 The lock is the hook's own. The managed start's GPU and capacity locks are
 directories under the guest lock root, taken by the playbook around
