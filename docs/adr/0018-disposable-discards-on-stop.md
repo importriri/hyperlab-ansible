@@ -1,5 +1,9 @@
 # ADR 0018 - A disposable Machine discards its writes every time it stops
 
+Status: proposed. No record accepts it. The transient disk is built and
+software-verified; closing access and re-pinning the host key at every later
+boot are not built (see Limits).
+
 ## Context
 
 [`0002-lifecycle-disposable-permanent.md`](0002-lifecycle-disposable-permanent.md)
@@ -41,11 +45,30 @@ start begins from the sealed base exactly as the first boot did.
 - Every start is a first boot. cloud-init runs again from the same seed:
   the account and the key come back, and the guest generates a new
   machine-id and new SSH host keys. The pinned host key is stale after a
-  restart; `vm-guest-inventory.yml` reads the new one through QEMU Guest
-  Agent and replaces the pin, as it does for a new Machine.
+  restart; this decision needs `vm-guest-inventory.yml` to read the new one
+  through QEMU Guest Agent and replace the pin, as it does for a new
+  Machine. Nothing runs it at a start yet (see Limits).
 - Snapshots and live migration of a transient disk are not supported by
   libvirt; HyperLab offers neither for disposable Machines.
 - libvirt creates the temporary overlay beside the lifecycle overlay in
   `disposable/` and removes it on stop. Whether a temporary file survives a
   host crash, and how the next start treats it, is part of the Nitro
   acceptance, not assumed here.
+
+## Limits
+
+- Built and software-verified: only `lifecycle: disposable` gets
+  `<transient/>` in `roles/guest/templates/domain.xml.j2`, and the managed
+  XML contract refuses a disposable domain without it
+  (`tests/guest_contract.py`).
+- Not built: what every later boot needs. The managed start,
+  `playbooks/vm-start.yml`, runs only the `guest` role. It runs neither
+  `vm-guest-inventory.yml` nor `guest-close-access.yml`. The agent
+  allowlist that `guest-close-access.yml` writes to `/etc/qemu/qemu-ga.conf`
+  is a write to the discarded layer, like any other. The seed's cloud-init
+  grants the account `NOPASSWD` sudo again at every first boot. After the
+  first stop, then, a disposable Machine runs its agent without the
+  allowlist, and its strict SSH pin no longer matches its host key, until
+  the two playbooks are run again by hand.
+- Not proven on hardware: no disposable Machine has been started, stopped
+  and started again on Nitro.

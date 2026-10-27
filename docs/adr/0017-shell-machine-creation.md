@@ -1,5 +1,8 @@
 # ADR 0017 - The shell creates a Machine through the reviewed bridge and one durable operation
 
+Status: proposed. No record accepts it; what is built of it is listed
+under "Implementation status" below.
+
 ## Context
 
 [`../first-machine.md`](../first-machine.md) creates a Machine by hand:
@@ -30,9 +33,13 @@ Creation is split along the existing boundary.
 - **Intent.** `privatestack-machine-actions create TEMPLATE NAME LIFECYCLE
   NETWORK PROFILE [MEMORY VCPUS DISK]` takes positional, validated values
   only. It
-  runs `hyperlabctl machine create` and `project`, which refuse anything the
-  Template forbids, and answers with structured JSON. A refusal leaves no
-  record behind.
+  runs one staged `hyperlabctl machine create --project`
+  ([ADR 0053](0053-withdraw-machine-intent.md), proposed), which refuses
+  anything the Template forbids, writes the projected spec first and
+  publishes the Machine record last under the registry lock. It answers
+  with structured JSON, and the bridge launches nothing unless that answer
+  names the Machine, its `vm-specs/.generated/NAME.yml` spec and the
+  record's SHA-256 digest. A refusal leaves no record behind.
 - **Provision.** It then launches the durable operation `machine.provision`
   through `privatestack-operation`, the runner that already owns managed
   start and shutdown. The command is never taken from the caller: the
@@ -126,3 +133,20 @@ Creation is split along the existing boundary.
   workstation Template without an entry is not offered for creation.
 - Disposable Machines and the GPU lease (roadmap 5 and 5b) reuse this flow
   when their Templates allow them.
+
+## Implementation status
+
+- Built and software-verified: the plan, the staged intent, the Create
+  view in the shell (`CreateMachineView.qml`) and the provisioning runner
+  with its whole-plan check and its hash-file cleanup
+  (`tests/c10_machine_create_plan_contract.py`,
+  `tests/host_quickshell_create_view_contract.py`,
+  `tests/host_machine_provision_contract.py`). These contracts run on
+  fixtures, with the limits listed above.
+- Not proven on hardware: no Machine has been created from the shell on
+  Nitro, and a real unit stop and a real `ansible-playbook` under the
+  runner have not been observed.
+- Of the flows that reuse this one, a disposable Machine is offered by the
+  server Templates, but what it needs after its first stop is open
+  ([ADR 0018](0018-disposable-discards-on-stop.md)); the GPU lease is a
+  proposal and is not built ([ADR 0019](0019-gpu-lease.md)).

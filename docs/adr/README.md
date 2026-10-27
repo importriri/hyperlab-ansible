@@ -36,12 +36,14 @@ entered the pipeline.
     Workbench and the capture, generalization and seal of a Golden Image.
 16. [`0016-gpu-shared-definition-running-lease.md`](0016-gpu-shared-definition-running-lease.md) — several
     managed VFIO domains may name the GPU; only the running one owns it.
-17. [`0017-shell-machine-creation.md`](0017-shell-machine-creation.md) — the
-    shell creates a Machine through the reviewed bridge and one durable
-    operation; the password and the become prompt stay in its terminal.
+17. [`0017-shell-machine-creation.md`](0017-shell-machine-creation.md) —
+    proposed: the shell creates a Machine through the reviewed bridge and one
+    durable operation; the password and the become prompt stay in its
+    terminal.
 18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
-    — a disposable Machine's disk is a libvirt transient disk, so every stop
-    discards its writes.
+    — proposed: a disposable Machine's disk is a libvirt transient disk, so
+    every stop discards its writes; access closing and the host-key pin at
+    every later boot are not built.
 19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — proposed: a GPU-capable
     Machine chooses at each start whether this run owns the GPU.
 20. [`0020-host-to-guest-clipboard.md`](0020-host-to-guest-clipboard.md) —
@@ -51,8 +53,9 @@ entered the pipeline.
     map from Image Factory to Golden Image, Template, Machine, Desk and
     Project; a fresh install has no Machines.
 22. [`0022-network-trust-and-gpu-policy.md`](0022-network-trust-and-gpu-policy.md)
-    — network identity and GPU handoff class are separate authorities; the
-    ladder, the ceiling rule, services and the per-run lease.
+    — proposed: network identity and GPU handoff class are separate
+    authorities; the ladder, the ceiling rule and services, with the per-run
+    lease left to ADR 0019.
 23. [`0023-gaming-identities.md`](0023-gaming-identities.md) — gaming
     uses clean, dirty and lab, not a separate PLAY identity.
 24. [`0024-rereceipt-after-policy-change.md`](0024-rereceipt-after-policy-change.md)
