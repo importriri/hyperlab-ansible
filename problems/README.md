@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`gpu-ladder-state-write-fail-open.md`](gpu-ladder-state-write-fail-open.md):
+  the qemu hook ignored a failed rung write and let concurrent prepares
+  overwrite a dirtier rung; it now commits under a lock by atomic rename.
 - [`acceptance-contract-depended-on-the-local-zone.md`](acceptance-contract-depended-on-the-local-zone.md):
   the sender-identity contract read its fixed start time in the local
   zone and failed on the UTC runner; it now carries an explicit offset.

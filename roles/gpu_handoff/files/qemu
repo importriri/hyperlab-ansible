@@ -166,13 +166,59 @@ if [[ -z "${trust}" ]]; then
     exit 1
 fi
 
-if ! mkdir -p "${STATE_DIR}"; then
+# The read, the comparison and the commit are one transaction under a lock
+# owned by this hook alone. libvirt may run prepare hooks for different
+# domains at once (manual virsh, autostart); without the lock a cleaner
+# request could read a stale rung and overwrite a dirtier one committed in
+# between. The managed start's mkdir locks are a separate, outer layer: the
+# hook never takes them and the playbook never takes this one, so neither
+# waits on itself. The kernel drops the lock when the hook exits, however it
+# exits.
+LOCK_FILE="${STATE_DIR}/lock"
+LOCK_WAIT_SECONDS=10
+owned_temp=""
+
+trap 'if [[ -n "${owned_temp}" ]]; then rm -f -- "${owned_temp}"; fi' EXIT
+trap 'exit 1' HUP INT TERM
+
+if ! mkdir -p -- "${STATE_DIR}"; then
     echo "gpu-handoff: cannot create ${STATE_DIR}: refusing" >&2
     exit 1
 fi
 
+if [[ -L "${STATE_DIR}" || ! -d "${STATE_DIR}" ]]; then
+    echo "gpu-handoff: ${STATE_DIR} redirected or not a directory: refusing (fail closed)" >&2
+    exit 1
+fi
+
+# A lock others can open is a lock others can hold: create it private.
+if [[ -L "${LOCK_FILE}" || ( -e "${LOCK_FILE}" && ! -f "${LOCK_FILE}" ) ]]; then
+    echo "gpu-handoff: ${LOCK_FILE} redirected or not a regular file: refusing (fail closed)" >&2
+    exit 1
+fi
+
+if ! ( umask 077 && : >> "${LOCK_FILE}" ) ||
+   [[ -L "${LOCK_FILE}" || ! -f "${LOCK_FILE}" ]] ||
+   ! exec {lock_fd}< "${LOCK_FILE}"; then
+    echo "gpu-handoff: cannot open ${LOCK_FILE}: refusing (fail closed)" >&2
+    exit 1
+fi
+
+if ! flock -x -w "${LOCK_WAIT_SECONDS}" "${lock_fd}"; then
+    echo "gpu-handoff: cannot lock ${LOCK_FILE} within ${LOCK_WAIT_SECONDS}s: refusing (fail closed)" >&2
+    exit 1
+fi
+
+if [[ -L "${STATE_FILE}" || ( -e "${STATE_FILE}" && ! -f "${STATE_FILE}" ) ]]; then
+    echo "gpu-handoff: ${STATE_FILE} redirected or not a regular file: refusing - a reboot resets it" >&2
+    exit 1
+fi
+
 if [[ -e "${STATE_FILE}" ]]; then
-    current="$(cat "${STATE_FILE}" 2>/dev/null || true)"
+    if ! current="$(cat -- "${STATE_FILE}")"; then
+        echo "gpu-handoff: cannot read ${STATE_FILE}: refusing (fail closed)" >&2
+        exit 1
+    fi
 
     if [[ ! "${current}" =~ ^[0-9]+$ ]]; then
         echo "gpu-handoff: corrupt state '${current}': refusing - a reboot resets it" >&2
@@ -185,5 +231,37 @@ if [[ -e "${STATE_FILE}" ]]; then
     fi
 fi
 
-printf '%s\n' "${trust}" > "${STATE_FILE}"
+# Publish the new rung only once it is completely written: the old state
+# stays byte-identical on any failure, and no reader ever sees a partial one.
+if ! temp="$(mktemp -- "${STATE_DIR}/trust.XXXXXXXXXX")"; then
+    echo "gpu-handoff: cannot create a temporary state file in ${STATE_DIR}: refusing" >&2
+    exit 1
+fi
+
+if [[ "${temp%/*}" != "${STATE_DIR}" ||
+      ! "${temp##*/}" =~ ^trust\.[A-Za-z0-9]{10}$ ||
+      -L "${temp}" || ! -f "${temp}" ]]; then
+    echo "gpu-handoff: unexpected temporary state file '${temp}': refusing (fail closed)" >&2
+    exit 1
+fi
+
+owned_temp="${temp}"
+
+if ! printf '%s\n' "${trust}" > "${temp}"; then
+    echo "gpu-handoff: cannot write ${temp}: refusing" >&2
+    exit 1
+fi
+
+# The desktop reads the rung as an unprivileged user; mktemp creates 0600.
+if ! chmod 0644 -- "${temp}"; then
+    echo "gpu-handoff: cannot set the mode of ${temp}: refusing" >&2
+    exit 1
+fi
+
+if ! mv -f -T -- "${temp}" "${STATE_FILE}"; then
+    echo "gpu-handoff: cannot publish ${STATE_FILE}: refusing" >&2
+    exit 1
+fi
+
+owned_temp=""
 exit 0

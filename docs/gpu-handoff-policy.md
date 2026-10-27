@@ -31,6 +31,47 @@ phase the hook compares the domain's level with the level recorded in
 `/run` is a tmpfs, so the record never survives a reboot. A missing, redirected,
 corrupt or duplicated policy input is a refusal, never a default.
 
+## The state transaction
+
+Reading the recorded level, comparing the request and committing the new level
+are one transaction. libvirt may run `prepare` hooks for different domains at
+the same time (a manual `virsh start`, autostart), so without serialization a
+cleaner request could read a stale level and overwrite a dirtier one committed
+in between.
+
+```text
+/run/gpu-handoff/            real directory, never a symlink
+/run/gpu-handoff/lock        hook-owned flock(2) lock, mode 0600
+/run/gpu-handoff/trust       the committed level, mode 0644
+/run/gpu-handoff/trust.*     a commit in progress, never read
+```
+
+For a mapped domain the hook:
+
+1. creates the state directory if needed and refuses one that is a symlink;
+2. creates the lock privately if needed, refuses a lock that is a symlink or
+   not a regular file, and waits at most 10 s for an exclusive `flock`; any
+   failure to create, open or acquire it refuses the start;
+3. under the lock, refuses a `trust` that is a symlink, not a regular file,
+   unreadable or not a number, and refuses a request above the recorded level;
+4. writes the new level to a `mktemp` file in the same directory, makes it
+   `0644` (the desktop reads the level without privilege) and renames it over
+   `trust`.
+
+Any failure in step 4 exits nonzero and removes the temporary file, and the
+previous `trust` stays byte-identical: a failed write can never leave a missing
+or truncated level that would authorize a cleaner domain later. The kernel
+releases the lock when the hook exits, whether it succeeded, refused, was
+interrupted or was killed. A hook killed with `SIGKILL` may leave a `trust.*`
+file behind; it is never read, and the next reboot clears it.
+
+The lock is the hook's own. The managed start's GPU and capacity locks are
+directories under the guest lock root, taken by the playbook around
+`virsh start`; the hook never takes them and the playbook never takes this one,
+so a managed start whose hook runs inside them cannot wait on itself. The
+managed locks order managed starts; this lock orders every `prepare`, managed
+or not.
+
 The ladder is monotonic per boot by design. It does not try to prove that a GPU
 reset removed guest state; it assumes it did not. That is why the decision is a
 ladder and not a per-guest allowlist: what matters is the worst code that has

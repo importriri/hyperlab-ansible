@@ -45,14 +45,102 @@ EOF
 <interface type="hostdev" managed="yes"><source/></interface>
 </devices></domain>
 EOF
+    # Failure injection replaces one utility on PATH. chmod alone is no
+    # injection: the battery also runs as root.
+    FAKE_BIN="${TESTDIR}/bin"
+    mkdir "${FAKE_BIN}"
+    REAL_FLOCK="$(command -v flock)"
+    REAL_MKTEMP="$(command -v mktemp)"
+    export REAL_FLOCK REAL_MKTEMP
+    BACKGROUND_PIDS=()
 }
 
 teardown() {
+    local pid
+    for pid in "${BACKGROUND_PIDS[@]}"; do
+        kill "${pid}" 2>/dev/null || :
+    done
     rm -rf "${TESTDIR}"
 }
 
 state() {
     cat "${GPU_HANDOFF_STATE_DIR}/trust"
+}
+
+# Record a complete committed rung and a byte copy to compare against.
+seed_state() {
+    mkdir -p "${GPU_HANDOFF_STATE_DIR}"
+    printf '%s\n' "$1" > "${GPU_HANDOFF_STATE_DIR}/trust"
+    cp "${GPU_HANDOFF_STATE_DIR}/trust" "${TESTDIR}/trust.before"
+}
+
+# Replace one utility for the hook: fake <name> <bash body>.
+fake() {
+    printf '#!/usr/bin/env bash\n%s\n' "$2" > "${FAKE_BIN}/$1"
+    chmod 0755 "${FAKE_BIN}/$1"
+}
+
+run_hook_with_fakes() {
+    run env PATH="${FAKE_BIN}:${PATH}" "${HOOK}" "$@"
+}
+
+temp_files() {
+    find "${GPU_HANDOFF_STATE_DIR}" -mindepth 1 -name 'trust.*' | wc -l
+}
+
+# Barrier utilities for the concurrency tests. They observe and pause the
+# hook; the lock itself is the real flock(2) on the hook's own lock file.
+# flock reports whether the lock was free or held by the other request,
+# then runs the real flock with the hook's arguments. mktemp is the first
+# step of the commit, after the previous rung was read: a request started
+# with BARRIER_HOLD=1 waits there until the test opens the gate.
+make_barriers() {
+    EVENTS="${TESTDIR}/events"
+    GATE="${TESTDIR}/gate"
+    mkfifo "${EVENTS}" "${GATE}"
+    export BARRIER_EVENTS="${EVENTS}" BARRIER_GATE="${GATE}"
+    # Read-write opens never block on a FIFO and keep both ends alive.
+    exec {events_fd}<>"${EVENTS}"
+    exec {gate_fd}<>"${GATE}"
+    # shellcheck disable=SC2016 # expanded by the fake, not here
+    fake flock '
+fd="${*: -1}"
+if "${REAL_FLOCK}" -n -x "${fd}"; then seen=free; else seen=contended; fi
+printf "lock %s %s\n" "${seen}" "${BARRIER_ROLE}" > "${BARRIER_EVENTS}"
+exec "${REAL_FLOCK}" "$@"'
+    # shellcheck disable=SC2016 # expanded by the fake, not here
+    fake mktemp '
+printf "commit %s\n" "${BARRIER_ROLE}" > "${BARRIER_EVENTS}"
+if [[ "${BARRIER_HOLD:-}" == 1 ]]; then
+    read -r -t 20 _ < "${BARRIER_GATE}" || exit 1
+fi
+exec "${REAL_MKTEMP}" "$@"'
+}
+
+# Start one prepare in the background; it reports "done <role> <status>".
+start_prepare() {
+    local role="$1" hold="$2" domain="$3"
+    {
+        local rc=0
+        env PATH="${FAKE_BIN}:${PATH}" BARRIER_ROLE="${role}" \
+            BARRIER_HOLD="${hold}" timeout 30 "${HOOK}" "${domain}" prepare \
+            > "${TESTDIR}/${role}.out" 2>&1 || rc=$?
+        printf 'done %s %s\n' "${role}" "${rc}" > "${EVENTS}"
+    } 3>&- &
+    BACKGROUND_PIDS+=("$!")
+}
+
+# Read events until one matches an extended regex; fail after a bound.
+await_event() {
+    local pattern="$1" line=""
+    while read -r -t 20 -u "${events_fd}" line; do
+        if [[ "${line}" =~ ${pattern} ]]; then
+            AWAITED="${line}"
+            return 0
+        fi
+    done
+    echo "no event matching '${pattern}' within the bound" >&2
+    return 1
 }
 
 @test "the hook file itself carries the executable bit (the 100644 trap)" {
@@ -272,4 +360,205 @@ state() {
     run "${HOOK}" svc-jellyfin prepare
     [ "$status" -eq 1 ]
     [[ "$output" == *"missing or redirected"* ]]
+}
+
+# --- the state transaction: lock, read, compare, atomic commit ---------------
+
+@test "the lock is created private and the published rung stays world-readable" {
+    run "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 0 ]
+    [ "$(stat -c %a "${GPU_HANDOFF_STATE_DIR}/lock")" = "600" ]
+    [ "$(stat -c %a "${GPU_HANDOFF_STATE_DIR}/trust")" = "644" ]
+    [ "$(temp_files)" -eq 0 ]
+}
+
+@test "a failed lock acquisition refuses and leaves the rung byte-identical" {
+    seed_state 3
+    fake flock 'exit 1'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot lock"* ]]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+}
+
+@test "a failed lock acquisition on a fresh boot records nothing" {
+    fake flock 'exit 1'
+    run_hook_with_fakes win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "a redirected lock is refused and its target is not created" {
+    mkdir -p "${GPU_HANDOFF_STATE_DIR}"
+    ln -s "${TESTDIR}/victim" "${GPU_HANDOFF_STATE_DIR}/lock"
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"lock"*"redirected"* ]]
+    [ ! -e "${TESTDIR}/victim" ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "a lock that is not a regular file is refused" {
+    mkdir -p "${GPU_HANDOFF_STATE_DIR}/lock"
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+}
+
+@test "a redirected state directory is refused and nothing is written there" {
+    mkdir "${TESTDIR}/elsewhere"
+    ln -s "${TESTDIR}/elsewhere" "${GPU_HANDOFF_STATE_DIR}"
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"redirected"* ]]
+    [ -z "$(ls -A "${TESTDIR}/elsewhere")" ]
+}
+
+@test "a redirected trust file is refused and neither it nor its target changes" {
+    mkdir -p "${GPU_HANDOFF_STATE_DIR}"
+    printf '3\n' > "${TESTDIR}/elsewhere"
+    ln -s "${TESTDIR}/elsewhere" "${GPU_HANDOFF_STATE_DIR}/trust"
+    run "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"redirected"* ]]
+    [ -L "${GPU_HANDOFF_STATE_DIR}/trust" ]
+    [ "$(cat "${TESTDIR}/elsewhere")" = "3" ]
+    [ "$(temp_files)" -eq 0 ]
+}
+
+@test "a trust path that is not a regular file is refused" {
+    mkdir -p "${GPU_HANDOFF_STATE_DIR}/trust"
+    run "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [ -d "${GPU_HANDOFF_STATE_DIR}/trust" ]
+    [ -z "$(ls -A "${GPU_HANDOFF_STATE_DIR}/trust")" ]
+}
+
+@test "a failed temporary file creation refuses and leaves the rung byte-identical" {
+    seed_state 3
+    fake mktemp 'exit 1'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot create a temporary state file"* ]]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+}
+
+@test "a temporary file outside the state directory is refused and kept" {
+    seed_state 3
+    : > "${TESTDIR}/foreign"
+    fake mktemp "echo '${TESTDIR}/foreign'"
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ -e "${TESTDIR}/foreign" ]
+    [ ! -s "${TESTDIR}/foreign" ]
+}
+
+# A real short write: the file-size limit binds root too, and an ignored
+# SIGXFSZ turns it into an EFBIG write error inside the hook.
+@test "a failed rung write refuses, keeps the old rung and leaves no temporary file" {
+    seed_state 3
+    # shellcheck disable=SC2016 # expanded by the inner shell
+    run bash -c 'trap "" XFSZ; ulimit -f 0; exec "$@"' _ \
+        "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot write"* ]]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+}
+
+@test "a failed first rung write records no state that could authorize a start" {
+    # shellcheck disable=SC2016 # expanded by the inner shell
+    run bash -c 'trap "" XFSZ; ulimit -f 0; exec "$@"' _ \
+        "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [ ! -e "${GPU_HANDOFF_STATE_DIR}/trust" ]
+    [ "$(temp_files)" -eq 0 ]
+}
+
+@test "a failed rename refuses, keeps the old rung and leaves no temporary file" {
+    seed_state 3
+    fake mv 'exit 1'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot publish"* ]]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+}
+
+@test "an interrupted commit refuses, removes its temporary file and releases the lock" {
+    seed_state 3
+    # shellcheck disable=SC2016 # expanded by the fake
+    fake mv 'kill -TERM "${PPID}"; exit 1'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -eq 1 ]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+    [ "$(temp_files)" -eq 0 ]
+
+    rm "${FAKE_BIN}/mv"
+    run timeout 30 "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "1" ]
+}
+
+@test "a killed hook releases the lock and keeps the old rung" {
+    seed_state 3
+    # shellcheck disable=SC2016 # expanded by the fake
+    fake mv 'kill -KILL "${PPID}"; exit 1'
+    run_hook_with_fakes win11dirty-disposable prepare
+    [ "$status" -ne 0 ]
+    cmp "${TESTDIR}/trust.before" "${GPU_HANDOFF_STATE_DIR}/trust"
+
+    rm "${FAKE_BIN}/mv"
+    run timeout 30 "${HOOK}" win11dirty-disposable prepare
+    [ "$status" -eq 0 ]
+    [ "$(state)" = "1" ]
+}
+
+# The old race: the cleaner request reads the fresh-boot state, the dirtier
+# one commits, and the cleaner one then overwrites it with a higher rung.
+@test "concurrent prepares: a stale cleaner commit cannot overwrite a dirtier rung" {
+    make_barriers
+    start_prepare clean 1 win11clean-valley
+    await_event '^commit clean$'
+
+    # Without the lock the dirtier request commits here, before the gate.
+    start_prepare dirty 0 win11dirty-disposable
+    await_event '^(lock contended dirty|done dirty .*)$'
+    dirty_first="${AWAITED}"
+
+    printf 'go\n' >&"${gate_fd}"
+    await_event '^done clean '
+    [ "${AWAITED}" = "done clean 0" ]
+    if [ "${dirty_first}" = "lock contended dirty" ]; then
+        await_event '^done dirty '
+        [ "${AWAITED}" = "done dirty 0" ]
+    fi
+    [ "$(state)" = "1" ]
+    [ "${dirty_first}" = "lock contended dirty" ]
+    [ "$(temp_files)" -eq 0 ]
+
+    run "${HOOK}" win11clean-valley prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *REFUSING* ]]
+    [ "$(state)" = "1" ]
+}
+
+@test "concurrent prepares: a cleaner request waiting on a dirtier commit is refused" {
+    make_barriers
+    start_prepare dirty 1 win11dirty-disposable
+    await_event '^commit dirty$'
+
+    start_prepare clean 0 win11clean-valley
+    await_event '^(lock contended clean|done clean .*)$'
+    [ "${AWAITED}" = "lock contended clean" ]
+
+    printf 'go\n' >&"${gate_fd}"
+    await_event '^done dirty '
+    [ "${AWAITED}" = "done dirty 0" ]
+    await_event '^done clean '
+    [ "${AWAITED}" = "done clean 1" ]
+    grep -q REFUSING "${TESTDIR}/clean.out"
+    [ "$(state)" = "1" ]
+    [ "$(temp_files)" -eq 0 ]
 }
