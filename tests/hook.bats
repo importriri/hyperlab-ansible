@@ -53,6 +53,8 @@ EOF
     REAL_MKTEMP="$(command -v mktemp)"
     export REAL_FLOCK REAL_MKTEMP
     BACKGROUND_PIDS=()
+    EVENT_LOG=()
+    declare -gA REPORT_FD=()
 }
 
 teardown() {
@@ -117,30 +119,95 @@ fi
 exec "${REAL_MKTEMP}" "$@"'
 }
 
-# Start one prepare in the background; it reports "done <role> <status>".
+# The GPU profile each race role requests.
+declare -gA ROLE_DOMAIN=(
+    [clean]=win11clean-valley
+    [dev]=arch-dev-vfio
+    [dirty]=win11dirty-disposable
+)
+
+# Start one prepare in the background. When the hook exits it reports
+# "exit <role>" at once, then waits for its own report gate before
+# reporting "done <role> <status>", so the test decides the order in which
+# completions arrive.
 start_prepare() {
-    local role="$1" hold="$2" domain="$3"
+    local role="$1" hold="$2" report_fd
+    mkfifo "${TESTDIR}/report-${role}"
+    exec {report_fd}<>"${TESTDIR}/report-${role}"
+    REPORT_FD[${role}]="${report_fd}"
     {
         local rc=0
         env PATH="${FAKE_BIN}:${PATH}" BARRIER_ROLE="${role}" \
-            BARRIER_HOLD="${hold}" timeout 30 "${HOOK}" "${domain}" prepare \
+            BARRIER_HOLD="${hold}" timeout 30 "${HOOK}" "${ROLE_DOMAIN[${role}]}" prepare \
             > "${TESTDIR}/${role}.out" 2>&1 || rc=$?
+        printf 'exit %s\n' "${role}" > "${EVENTS}"
+        read -r -t 20 _ < "${TESTDIR}/report-${role}" || rc="${rc}-unreleased"
         printf 'done %s %s\n' "${role}" "${rc}" > "${EVENTS}"
     } 3>&- &
     BACKGROUND_PIDS+=("$!")
 }
 
-# Read events until one matches an extended regex; fail after a bound.
-await_event() {
-    local pattern="$1" line=""
-    while read -r -t 20 -u "${events_fd}" line; do
-        if [[ "${line}" =~ ${pattern} ]]; then
-            AWAITED="${line}"
-            return 0
+# take_event [--keep] <regex>: the first event not yet taken that matches,
+# in arrival order, reading more within a bound when none has arrived yet.
+# Events that do not match stay for a later take. --keep leaves the match
+# in place: it only waits for the arrival.
+take_event() {
+    local keep=0 pattern line i=0
+    if [[ "$1" == --keep ]]; then
+        keep=1
+        shift
+    fi
+    pattern="$1"
+    while :; do
+        for (( ; i < ${#EVENT_LOG[@]}; i++ )); do
+            if [[ "${EVENT_LOG[i]}" =~ ${pattern} ]]; then
+                AWAITED="${EVENT_LOG[i]}"
+                if (( keep == 0 )); then
+                    EVENT_LOG=("${EVENT_LOG[@]:0:i}" "${EVENT_LOG[@]:i+1}")
+                fi
+                return 0
+            fi
+        done
+        if ! read -r -t 20 -u "${events_fd}" line; then
+            echo "no event matching '${pattern}' within the bound; untaken: ${EVENT_LOG[*]}" >&2
+            return 1
         fi
+        EVENT_LOG+=("${line}")
     done
-    echo "no event matching '${pattern}' within the bound" >&2
-    return 1
+}
+
+# Release the completion reports one at a time, each only after the
+# previous one has arrived: they arrive exactly in the order given.
+report_in_order() {
+    local role
+    for role in "$@"; do
+        printf 'go\n' >&"${REPORT_FD[${role}]}"
+        take_event --keep "^done ${role} "
+    done
+}
+
+# race <held> <waiting> <held status> <waiting status> <report order...>
+# <held> reads the rung and stops before its commit. <waiting> is started
+# only then; the test goes on once it is seen waiting on the lock, or
+# finished (which only happens if nothing serializes them). Then <held>
+# commits, both complete, and their reports arrive in the order given.
+race() {
+    local held="$1" waiting="$2" held_status="$3" waiting_status="$4"
+    shift 4
+    make_barriers
+    start_prepare "${held}" 1
+    take_event "^commit ${held}$"
+
+    start_prepare "${waiting}" 0
+    take_event "^(lock contended ${waiting}|exit ${waiting})$"
+    WAITING_SEEN="${AWAITED}"
+
+    printf 'go\n' >&"${gate_fd}"
+    report_in_order "$@"
+    take_event "^done ${held} "
+    [ "${AWAITED}" = "done ${held} ${held_status}" ]
+    take_event "^done ${waiting} "
+    [ "${AWAITED}" = "done ${waiting} ${waiting_status}" ]
 }
 
 @test "the hook file itself carries the executable bit (the 100644 trap)" {
@@ -517,48 +584,61 @@ await_event() {
 
 # The old race: the cleaner request reads the fresh-boot state, the dirtier
 # one commits, and the cleaner one then overwrites it with a higher rung.
-@test "concurrent prepares: a stale cleaner commit cannot overwrite a dirtier rung" {
-    make_barriers
-    start_prepare clean 1 win11clean-valley
-    await_event '^commit clean$'
-
-    # Without the lock the dirtier request commits here, before the gate.
-    start_prepare dirty 0 win11dirty-disposable
-    await_event '^(lock contended dirty|done dirty .*)$'
-    dirty_first="${AWAITED}"
-
-    printf 'go\n' >&"${gate_fd}"
-    await_event '^done clean '
-    [ "${AWAITED}" = "done clean 0" ]
-    if [ "${dirty_first}" = "lock contended dirty" ]; then
-        await_event '^done dirty '
-        [ "${AWAITED}" = "done dirty 0" ]
-    fi
+# Each race runs twice, with the completion reports arriving in both orders.
+@test "concurrent prepares on a fresh boot: a stale clean commit cannot overwrite dirty (clean reports first)" {
+    race clean dirty 0 0 clean dirty
     [ "$(state)" = "1" ]
-    [ "${dirty_first}" = "lock contended dirty" ]
+    [ "${WAITING_SEEN}" = "lock contended dirty" ]
     [ "$(temp_files)" -eq 0 ]
-
     run "${HOOK}" win11clean-valley prepare
     [ "$status" -eq 1 ]
     [[ "$output" == *REFUSING* ]]
     [ "$(state)" = "1" ]
 }
 
-@test "concurrent prepares: a cleaner request waiting on a dirtier commit is refused" {
-    make_barriers
-    start_prepare dirty 1 win11dirty-disposable
-    await_event '^commit dirty$'
+@test "concurrent prepares on a fresh boot: a stale clean commit cannot overwrite dirty (dirty reports first)" {
+    race clean dirty 0 0 dirty clean
+    [ "$(state)" = "1" ]
+    [ "${WAITING_SEEN}" = "lock contended dirty" ]
+    [ "$(temp_files)" -eq 0 ]
+}
 
-    start_prepare clean 0 win11clean-valley
-    await_event '^(lock contended clean|done clean .*)$'
-    [ "${AWAITED}" = "lock contended clean" ]
-
-    printf 'go\n' >&"${gate_fd}"
-    await_event '^done dirty '
-    [ "${AWAITED}" = "done dirty 0" ]
-    await_event '^done clean '
-    [ "${AWAITED}" = "done clean 1" ]
+@test "concurrent prepares on a fresh boot: clean waiting on a dirty commit is refused (dirty reports first)" {
+    race dirty clean 0 1 dirty clean
     grep -q REFUSING "${TESTDIR}/clean.out"
     [ "$(state)" = "1" ]
+    [ "${WAITING_SEEN}" = "lock contended clean" ]
     [ "$(temp_files)" -eq 0 ]
+}
+
+@test "concurrent prepares on a fresh boot: clean waiting on a dirty commit is refused (clean reports first)" {
+    race dirty clean 0 1 clean dirty
+    [ "$(state)" = "1" ]
+    [ "${WAITING_SEEN}" = "lock contended clean" ]
+}
+
+# The same races over a committed rung: the lock must also hold when the
+# previous rung exists, not only when the first one is being created.
+@test "concurrent prepares over rung 3: a stale dev commit cannot overwrite dirty" {
+    seed_state 3
+    race dev dirty 0 0 dirty dev
+    [ "$(state)" = "1" ]
+    [ "${WAITING_SEEN}" = "lock contended dirty" ]
+    [ "$(temp_files)" -eq 0 ]
+    run "${HOOK}" arch-dev-vfio prepare
+    [ "$status" -eq 1 ]
+    [[ "$output" == *REFUSING* ]]
+    [ "$(state)" = "1" ]
+}
+
+@test "concurrent prepares over rung 3: dev waiting on a dirty commit is refused" {
+    seed_state 3
+    race dirty dev 0 1 dev dirty
+    grep -q REFUSING "${TESTDIR}/dev.out"
+    [ "$(state)" = "1" ]
+    [ "${WAITING_SEEN}" = "lock contended dev" ]
+    [ "$(temp_files)" -eq 0 ]
+    run "${HOOK}" arch-dev-vfio prepare
+    [ "$status" -eq 1 ]
+    [ "$(state)" = "1" ]
 }
