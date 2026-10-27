@@ -713,3 +713,45 @@ real resize.
   Red: "TZ=<zone> is not in effect", for the first zone that is not the
   machine's own (observed: "TZ=UTC0 is not in effect: +0200, not +0000").
 - Restore: `git checkout -- tests/acceptance_scripts_contract.py`.
+
+### The GPU ladder state is committed without its transaction
+
+`problems/gpu-ladder-state-write-fail-open.md`. Each break is one edit of
+`roles/gpu_handoff/files/qemu`; the red check is `bats tests/hook.bats`.
+
+- Break: ignore the write status
+  (`if ! { printf '%s\n' "${trust}" > "${temp}" || :; }; then`).
+  Red: "a failed rung write refuses, keeps the old rung and leaves no
+  temporary file" and "a failed first rung write records no state that
+  could authorize a start" (the empty temporary file is published).
+- Break: ignore the rename status (`|| :` after the `mv -f -T`).
+  Red: "a failed rename refuses, keeps the old rung and leaves no
+  temporary file".
+- Break: ignore the `mktemp` status (`|| :` inside the substitution).
+  Red: "a failed temporary file creation refuses and leaves the rung
+  byte-identical" (the path check still refuses, but too late to say why).
+- Break: replace the `flock -x -w` condition with `false`.
+  Red: both "concurrent prepares" tests; the first fails on
+  `[ "$(state)" = "1" ]`: the stale clean commit overwrote the dirty rung
+  with 3. Also both "failed lock acquisition" tests.
+- Break: insert `flock -u "${lock_fd}"` before the trust file is read.
+  Red: both "concurrent prepares" tests, the first again on the rung 3.
+- Break: write the rung straight to `"${STATE_FILE}"` and drop the `mv`.
+  Red: the two write-failure tests (the old rung is truncated), the
+  rename, interrupt and kill tests, both concurrency tests and the mode
+  test.
+- Break: drop `-L "${STATE_FILE}" ||` from the trust file check.
+  Red: "a redirected trust file is refused and neither it nor its target
+  changes".
+- Break: drop `-L "${LOCK_FILE}" ||` from the first lock check.
+  Red: "a redirected lock is refused and its target is not created".
+- Break: drop `umask 077 &&` from the lock creation, or the `chmod 0644`.
+  Red: "the lock is created private and the published rung stays
+  world-readable".
+- Break: disable the temporary path check (`if false && [[ ...`).
+  Red: "a temporary file outside the state directory is refused and kept".
+- Break: drop `trap 'exit 1' HUP INT TERM`.
+  Red: "an interrupted commit refuses, removes its temporary file and
+  releases the lock", on the status only: Bash still runs the EXIT trap
+  on a fatal TERM and removes the temporary file, but exits 143, not 1.
+- Restore: `git checkout -- roles/gpu_handoff/files/qemu`.
