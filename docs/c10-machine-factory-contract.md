@@ -82,6 +82,74 @@ ownership or transport availability.
 Materialization reuses the existing planners, locks, confirmations and libvirt
 transactions instead of creating a second VM engine.
 
+The resources a record receives come from one factory function. The creation
+plan reports what each profile resolves to and the custom limits through the
+same code (`custom_limits`), and the factory holds every custom request to
+those limits itself: memory at least the image's `min_memory_mb`, disk at
+least the sealed image, vCPUs within the factory's ceiling (the plan narrows
+it to the host's).
+
+`machine create --project` records and projects a Machine as one staged
+step under the registry lock: it checks the name is free, writes the
+generated spec, and publishes the record last. The creation is not done
+until the stored record has been synced, read back and found to have the
+digest it was published with. The publication names its file (inode and
+digest) before `os.link` puts it in place, so a failure at any later step,
+a handled cancellation (`KeyboardInterrupt`) included, undoes it under the
+same lock: the record this creation
+published goes first, and only while it is the same file (inode) with the
+same bytes; then, once that removal is synced, the spec, again only while
+it is the file this creation wrote with its bytes. A refusal therefore
+leaves neither record nor spec; the shell bridge creates Machines only
+this way, so a refused creation leaves no record behind
+([ADR 0017](adr/0017-shell-machine-creation.md)). Plain `machine create`
+and the library's `create_machine()` (used by `create_from_template()`)
+publish and undo their record the same way, holding the registry lock
+across both. When the undo cannot finish (a removal
+fails, a file was replaced, the removal cannot be synced), the refusal says
+"cleanup incomplete" and names what stays: bytes this creation did not
+write are never removed, and the spec stays whenever the record's
+withdrawal did not complete, so a record is never left without its spec by
+the undo.
+
+The undo is not atomic, and nothing here holds across process death or
+power loss. A creation killed before its record is published leaves a
+spec without a record: the next request for that name is refused with
+"already exists" until `hyperlabctl compose delete NAME --confirm NAME`
+removes the spec. One killed after the publication leaves both, as a
+completed creation would, with no provisioning started. The generated
+spec's directory is not synced, so after a power loss a published record
+may come back without its spec.
+
+A record can be withdrawn, and only by its digest. `machine create` reports
+the SHA-256 of the record it stored; `machine withdraw ID --record-sha256
+DIGEST` removes that record only while its bytes still have that digest, no
+generated spec equal to its projection exists, and the libvirt domain list,
+read every time, has no domain with its name. An unreadable domain list is
+a refusal, and so is a `vm-specs/.generated` that is a link (to a
+directory or to nothing), and a generated spec that cannot be read as exactly one
+YAML mapping: a link, anything but a regular file, an unreadable or
+non-UTF-8 file, malformed YAML, several documents or a repeated key. Only
+a spec that parsed is compared with the projection; a parsed spec that
+differs is stale and stays. The digest names a record; it is not an
+authorization, since anyone who can read the record can compute it. `create`, `project` and
+`withdraw` hold the registry lock (`.lock` in the registry directory), so a
+record is never withdrawn while its spec is being written; a lock held for
+more than five seconds is a refusal. `withdraw` is for the manual path, where
+`create` and `project` are two commands and the second can refuse
+([ADR 0053](adr/0053-withdraw-machine-intent.md)).
+
+`machine provision-steps ID` prints the documented provisioning commands
+only for a Machine whose generated spec, read as stored with the same
+reader as `withdraw`, equals the projection the record gives now. The
+existence of a file proves nothing: a spec edited by hand (a resource, the
+device or network profile, an added field, or only a scalar's type, such as
+`vcpus: true` for `1` or `memory_mb: 2048.0` for `2048`) is refused like a missing,
+linked, unreadable or malformed one, and so is a workstation Template with
+no reviewed profile playbook. The record holds no projection digest; the
+projection is recomputed for each comparison
+([ADR 0017](adr/0017-shell-machine-creation.md)).
+
 ### Managed, fixture and external domains are different populations
 
 Normal `Machines` presents only product-managed user-created Machines.

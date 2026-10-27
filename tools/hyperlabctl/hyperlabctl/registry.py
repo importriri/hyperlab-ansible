@@ -201,7 +201,9 @@ ACTIONS = [
     {
         "id": "machine.provision",
         "label": "Provision a created and projected Machine",
-        "command": ["privatestack-machine-provision", "--spec", "{spec}", "{domain}"],
+        # The provisioner takes the Machine alone and derives its projection
+        # itself; the operation runner accepts exactly this argv (ADR 0017).
+        "command": ["/usr/local/bin/privatestack-machine-provision", "{domain}"],
         "privileged": True,
         "destructive": False,
         "target": "spec",

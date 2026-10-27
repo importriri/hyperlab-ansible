@@ -17,10 +17,16 @@ The registry is intentionally outside the Git checkout.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
+import hashlib
 import os
 import re
 import stat
 import tempfile
+import time
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +37,12 @@ from .errors import ContractError, Unavailable
 
 MACHINE_SCHEMA_VERSION = 1
 MAX_RECORD_BYTES = 64 * 1024
+
+# Held by `machine create`, `project` and `withdraw`, so a record is never
+# withdrawn while its spec is being written, and a staged creation is never
+# overtaken between its checks and its writes. A dot name is never a record.
+LOCK_NAME = ".lock"
+LOCK_WAIT_SECONDS = 5.0
 
 MACHINE_ID_RE = re.compile(
     r"^[a-z0-9][a-z0-9-]{1,30}$"
@@ -623,11 +635,142 @@ def _fsync_directory(
         )
 
 
+def _require_free(
+    destination: Path,
+    machine_id: str,
+) -> None:
+    try:
+        existing = destination.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise Unavailable(
+            "cannot inspect Machine destination"
+        ) from exc
+
+    if (
+        stat.S_ISLNK(existing.st_mode)
+        or not stat.S_ISREG(
+            existing.st_mode
+        )
+        or existing.st_uid
+        != os.getuid()
+    ):
+        raise Unavailable(
+            "existing Machine destination "
+            "is not trusted"
+        )
+
+    raise ContractError(
+        f"Machine {machine_id} "
+        "already exists"
+    )
+
+
+def require_machine_absent(
+    machine_id: str,
+    *,
+    state_home: Path | None = None,
+) -> None:
+    """Refuse as create_machine() would when the id is already taken."""
+
+    directory = _registry_directory(
+        state_home,
+        create=False,
+    )
+
+    if directory is None:
+        return
+
+    _require_free(
+        _machine_path(
+            directory,
+            machine_id,
+        ),
+        machine_id,
+    )
+
+
+@dataclass(frozen=True)
+class PublishedRecord:
+    """The one record a publication put in place, and how to know it again."""
+
+    path: Path
+    device: int
+    inode: int
+    sha256: str
+
+
+def interruption(
+    exc: BaseException,
+) -> str:
+    """What a failure says, also when it is a cancellation with no text."""
+
+    return str(
+        exc
+    ) or f"interrupted ({type(exc).__name__})"
+
+
 def create_machine(
     record: dict[str, Any],
     *,
     state_home: Path | None = None,
 ) -> Path:
+    """Publish a new record under the registry lock; any failure after the
+    publication, a cancellation included, withdraws it under the same lock."""
+
+    # A record refused on its own content touches nothing, not even the lock.
+    record = validate_machine_record(
+        record,
+    )
+
+    announced: list[PublishedRecord] = []
+
+    with registry_lock(
+        state_home=state_home,
+        create=True,
+    ):
+        try:
+            return publish_machine(
+                record,
+                state_home=state_home,
+                announce=announced.append,
+            ).path
+        except BaseException as exc:
+            if not announced:
+                raise
+
+            left = withdraw_published(
+                announced[0]
+            )
+
+            if left is not None:
+                raise Unavailable(
+                    f"{interruption(exc)}; cleanup incomplete: {left}"
+                ) from exc
+
+            if not isinstance(exc, Exception):
+                raise Unavailable(
+                    f"{interruption(exc)}; the record was withdrawn"
+                ) from exc
+
+            raise
+
+
+def publish_machine(
+    record: dict[str, Any],
+    *,
+    state_home: Path | None = None,
+    announce: Callable[[PublishedRecord], None] | None = None,
+) -> PublishedRecord:
+    """Publish a new record and say which file it is.
+
+    `announce` receives the publication before os.link puts it in place, so
+    a caller that sees any exception afterwards, a cancellation included,
+    knows which file to withdraw with withdraw_published(). Once announced,
+    the record may or may not be in place; withdraw_published() tells.
+    """
+
     record = validate_machine_record(
         record,
     )
@@ -648,33 +791,10 @@ def create_machine(
         record["id"],
     )
 
-    try:
-        existing = destination.lstat()
-    except FileNotFoundError:
-        existing = None
-    except OSError as exc:
-        raise Unavailable(
-            "cannot inspect Machine destination"
-        ) from exc
-
-    if existing is not None:
-        if (
-            stat.S_ISLNK(existing.st_mode)
-            or not stat.S_ISREG(
-                existing.st_mode
-            )
-            or existing.st_uid
-            != os.getuid()
-        ):
-            raise Unavailable(
-                "existing Machine destination "
-                "is not trusted"
-            )
-
-        raise ContractError(
-            f"Machine {record['id']} "
-            "already exists"
-        )
+    _require_free(
+        destination,
+        record["id"],
+    )
 
     payload = yaml.safe_dump(
         record,
@@ -727,8 +847,25 @@ def create_machine(
             os.fsync(
                 handle.fileno()
             )
+            written = os.fstat(
+                handle.fileno()
+            )
 
         descriptor = -1
+
+        publication = PublishedRecord(
+            path=destination,
+            device=written.st_dev,
+            inode=written.st_ino,
+            sha256=hashlib.sha256(
+                encoded
+            ).hexdigest(),
+        )
+
+        if announce is not None:
+            announce(
+                publication
+            )
 
         try:
             os.link(
@@ -794,7 +931,103 @@ def create_machine(
             "durability is uncertain"
         ) from exc
 
-    return destination
+    return publication
+
+
+def withdraw_published(
+    published: PublishedRecord,
+) -> str | None:
+    """Undo one publication; say why the record stays, if it does.
+
+    Only the file this publication put in place goes: the same inode, still
+    a regular file, still holding the bytes it wrote. The removal counts once
+    the directory is synced. No record where it was announced means it was
+    never linked, or is gone: the directory is synced all the same before
+    that counts. The caller holds registry_lock(), and nothing here is
+    atomic against a writer that ignores the lock or across a crash.
+    """
+
+    path = published.path
+
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        try:
+            _fsync_directory(
+                path.parent,
+            )
+        except OSError as exc:
+            return (
+                f"Machine record {path.name} is absent, but its directory "
+                f"cannot be synced: {exc.strerror}"
+            )
+
+        return None
+    except OSError as exc:
+        return f"cannot inspect Machine record {path.name}: {exc.strerror}"
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | os.O_NOFOLLOW
+            | os.O_NONBLOCK
+            | os.O_CLOEXEC,
+        )
+    except FileNotFoundError:
+        return f"Machine record {path.name} is no longer where it was published"
+    except OSError as exc:
+        return f"cannot open Machine record {path.name}: {exc.strerror}"
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or (info.st_dev, info.st_ino)
+            != (published.device, published.inode)
+        ):
+            return (
+                f"Machine record {path.name} is not the file this "
+                "creation wrote (replaced); it is kept"
+            )
+
+        data = os.read(
+            descriptor,
+            MAX_RECORD_BYTES + 1,
+        )
+    except OSError as exc:
+        return f"cannot read Machine record {path.name}: {exc.strerror}"
+    finally:
+        os.close(
+            descriptor
+        )
+
+    if hashlib.sha256(
+        data
+    ).hexdigest() != published.sha256:
+        return f"Machine record {path.name} changed after it was published; it is kept"
+
+    try:
+        os.unlink(
+            path
+        )
+    except OSError as exc:
+        return f"cannot remove Machine record {path.name}: {exc.strerror}"
+
+    try:
+        _fsync_directory(
+            path.parent,
+        )
+    except OSError as exc:
+        return (
+            f"Machine record {path.name} was removed, but its removal "
+            f"is not durable: {exc.strerror}"
+        )
+
+    return None
 
 
 def read_machine(
@@ -881,3 +1114,190 @@ def list_machines(
         )
 
     return result
+
+
+@contextlib.contextmanager
+def registry_lock(
+    *,
+    state_home: Path | None = None,
+    wait: float = LOCK_WAIT_SECONDS,
+    create: bool = False,
+) -> Iterator[None]:
+    """Hold the registry's exclusive lock, or refuse once `wait` has passed.
+
+    With `create`, a missing registry directory is created first, as
+    create_machine() would.
+    """
+
+    directory = _registry_directory(
+        state_home,
+        create=create,
+    )
+
+    if directory is None:
+        raise Unavailable(
+            "Machine registry does not exist"
+        )
+
+    path = directory / LOCK_NAME
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDWR
+            | os.O_CREAT
+            | os.O_NOFOLLOW
+            | os.O_CLOEXEC,
+            0o600,
+        )
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot open the Machine registry lock: {path}"
+        ) from exc
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077
+        ):
+            raise Unavailable(
+                f"Machine registry lock is not trusted: {path}"
+            )
+
+        deadline = time.monotonic() + wait
+
+        while True:
+            try:
+                fcntl.flock(
+                    descriptor,
+                    fcntl.LOCK_EX | fcntl.LOCK_NB,
+                )
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise Unavailable(
+                        "the Machine registry is busy; "
+                        "try again"
+                    ) from None
+                time.sleep(
+                    0.1
+                )
+            except OSError as exc:
+                raise Unavailable(
+                    f"cannot lock the Machine registry: {path}"
+                ) from exc
+
+        yield
+
+    finally:
+        # Closing the descriptor releases the lock.
+        os.close(
+            descriptor
+        )
+
+
+def _record_bytes(
+    machine_id: str,
+    state_home: Path | None,
+) -> tuple[Path, bytes]:
+    directory = _registry_directory(
+        state_home,
+        create=False,
+    )
+
+    if directory is None:
+        raise Unavailable(
+            "Machine registry does not exist"
+        )
+
+    path = _machine_path(
+        directory,
+        machine_id,
+    )
+
+    _inspect_record_file(
+        path,
+    )
+
+    try:
+        return path, path.read_bytes()
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot read Machine record: {path}"
+        ) from exc
+
+
+def record_sha256(
+    machine_id: str,
+    *,
+    state_home: Path | None = None,
+) -> str:
+    """The SHA-256 of one trusted record as it is stored."""
+
+    _path, data = _record_bytes(
+        machine_id,
+        state_home,
+    )
+
+    return hashlib.sha256(
+        data
+    ).hexdigest()
+
+
+def withdraw_machine(
+    machine_id: str,
+    digest: str,
+    *,
+    state_home: Path | None = None,
+) -> None:
+    """Remove the one record whose stored bytes have this digest.
+
+    This undoes a creation whose projection was refused (ADR 0017): the
+    digest create reported names the record it wrote, so a record written
+    or changed by anything else is never removed in its place. The caller
+    holds registry_lock() across its own checks and this call.
+    """
+
+    if (
+        not isinstance(digest, str)
+        or SHA256_RE.fullmatch(digest) is None
+    ):
+        raise ContractError(
+            "the record digest must be "
+            "64 lowercase hex digits"
+        )
+
+    path, data = _record_bytes(
+        machine_id,
+        state_home,
+    )
+
+    if hashlib.sha256(
+        data
+    ).hexdigest() != digest:
+        raise ContractError(
+            f"Machine {machine_id} is not "
+            "the record this digest names"
+        )
+
+    try:
+        path.unlink()
+    except OSError as exc:
+        raise Unavailable(
+            f"cannot withdraw Machine record: {path}"
+        ) from exc
+
+    try:
+        _fsync_directory(
+            path.parent,
+        )
+    except OSError as exc:
+        raise Unavailable(
+            "Machine record directory "
+            "durability is uncertain"
+        ) from exc

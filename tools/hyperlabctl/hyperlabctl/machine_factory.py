@@ -8,11 +8,15 @@ Observed runtime state remains owned by the existing runtime providers.
 
 from __future__ import annotations
 
+import os
 import re
+import stat
 from pathlib import Path
 from typing import Any
 
-from .composer import write_spec
+import yaml
+
+from .composer import generated_root, write_spec
 from .config import load_yaml
 from .errors import ContractError, Unavailable
 from .machine_registry import (
@@ -811,14 +815,15 @@ def template_entry(
     )
 
 
-def _resource_values(
+# Every resource request is held to these; a custom one also to its image's
+# memory floor and sealed size (custom_limits).
+MEMORY_FLOOR_MB = 512
+VCPU_LIMIT = 256
+
+
+def _image_sizes(
     image: dict[str, Any],
-    profile: str,
-    *,
-    memory_mb: int | str | None,
-    vcpus: int | None,
-    disk_gib: int | None,
-) -> dict[str, Any]:
+) -> tuple[int, int, int]:
     virtual = image.get(
         "virtual_size_gib"
     )
@@ -852,12 +857,57 @@ def _resource_values(
     if (
         not isinstance(memory_floor, int)
         or isinstance(memory_floor, bool)
-        or memory_floor < 512
+        or memory_floor < MEMORY_FLOOR_MB
     ):
         raise ContractError(
             "image min_memory_mb "
             "must be an integer >= 512"
         )
+
+    return virtual, minimum, memory_floor
+
+
+def custom_limits(
+    image: dict[str, Any],
+    *,
+    cpu_count: int | None = None,
+) -> dict[str, int]:
+    """The bounds a custom resource request is held to.
+
+    _resource_values enforces them on every custom request; the creation
+    plan reports them, with the vCPU ceiling narrowed to the host's.
+    """
+
+    virtual, _minimum, memory_floor = _image_sizes(
+        image
+    )
+
+    return {
+        "memory_mb_min": memory_floor,
+        "vcpus_min": 1,
+        "vcpus_max": (
+            VCPU_LIMIT
+            if cpu_count is None
+            else min(
+                VCPU_LIMIT,
+                cpu_count,
+            )
+        ),
+        "disk_gib_min": virtual,
+    }
+
+
+def _resource_values(
+    image: dict[str, Any],
+    profile: str,
+    *,
+    memory_mb: int | str | None,
+    vcpus: int | None,
+    disk_gib: int | None,
+) -> dict[str, Any]:
+    virtual, minimum, memory_floor = _image_sizes(
+        image
+    )
 
     if profile == "custom":
         resources = {
@@ -910,11 +960,22 @@ def _resource_values(
     if memory != "auto" and (
         not isinstance(memory, int)
         or isinstance(memory, bool)
-        or memory < 512
+        or memory < MEMORY_FLOOR_MB
     ):
         raise ContractError(
             "memory_mb must be auto "
             "or an integer >= 512"
+        )
+
+    if (
+        profile == "custom"
+        and memory != "auto"
+        and memory
+        < custom_limits(image)["memory_mb_min"]
+    ):
+        raise ContractError(
+            "memory_mb must be at least "
+            f"the image min_memory_mb {memory_floor}"
         )
 
     cpu_count = resources[
@@ -924,7 +985,7 @@ def _resource_values(
     if (
         not isinstance(cpu_count, int)
         or isinstance(cpu_count, bool)
-        or not 1 <= cpu_count <= 256
+        or not 1 <= cpu_count <= VCPU_LIMIT
     ):
         raise ContractError(
             "vcpus must be an integer "
@@ -1348,6 +1409,140 @@ def project_vm_spec(
         ] = mode
 
     return spec
+
+
+MAX_SPEC_BYTES = 64 * 1024
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """safe_load, except that a key repeated in one mapping is refused."""
+
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
+            seen = set()
+            for key_node, _value in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                if key in seen:
+                    raise yaml.constructor.ConstructorError(
+                        None, None, f"duplicate key {key!r}", key_node.start_mark
+                    )
+                seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def read_generated_spec(
+    repo_root: Path | str,
+    machine_id: str,
+) -> dict[str, Any] | None:
+    """The generated spec of one Machine as stored, or None when there is none.
+
+    Only absence is None. A link, anything but a regular file, an unreadable
+    file, text that is not UTF-8, several YAML documents, a repeated key or a
+    document that is not a mapping is a refusal: what cannot be read cannot
+    prove that the Machine was never projected.
+    """
+
+    name = f"generated spec {machine_id}"
+    directory = generated_root(
+        repo_root
+    )
+
+    # generated_root() looks at the directory only when it exists, and a
+    # dangling link does not: a link here, to anything or to nothing, is
+    # a refusal before a missing file may mean "no spec".
+    try:
+        info = directory.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ContractError(
+            f"{name}: cannot inspect {directory.name}: {exc.strerror}"
+        ) from exc
+
+    if not stat.S_ISDIR(info.st_mode):
+        raise ContractError(
+            f"{name}: vm-specs/{directory.name} is not a real directory"
+        )
+
+    path = directory / (
+        machine_id + ".yml"
+    )
+
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | os.O_NOFOLLOW
+            | os.O_NONBLOCK
+            | os.O_CLOEXEC,
+        )
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise ContractError(
+            f"{name} cannot be read: {exc.strerror}"
+        ) from exc
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if not stat.S_ISREG(info.st_mode):
+            raise ContractError(
+                f"{name} is not a regular file"
+            )
+
+        if info.st_size > MAX_SPEC_BYTES:
+            raise ContractError(
+                f"{name} exceeds {MAX_SPEC_BYTES} bytes"
+            )
+
+        with os.fdopen(
+            descriptor,
+            "rb",
+        ) as handle:
+            descriptor = -1
+            data = handle.read(
+                MAX_SPEC_BYTES + 1
+            )
+    except OSError as exc:
+        raise ContractError(
+            f"{name} cannot be read: {exc.strerror}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(
+                descriptor
+            )
+
+    if len(data) > MAX_SPEC_BYTES:
+        raise ContractError(
+            f"{name} exceeds {MAX_SPEC_BYTES} bytes"
+        )
+
+    try:
+        document = yaml.load(  # noqa: S506 - a SafeLoader subclass
+            data.decode(
+                "utf-8"
+            ),
+            Loader=_UniqueKeyLoader,
+        )
+    except (
+        UnicodeDecodeError,
+        yaml.YAMLError,
+    ) as exc:
+        raise ContractError(
+            f"{name} is not one valid YAML document: {exc}"
+        ) from exc
+
+    if not isinstance(document, dict):
+        raise ContractError(
+            f"{name} is not a YAML mapping"
+        )
+
+    return document
 
 
 def write_projected_vm_spec(

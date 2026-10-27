@@ -26,6 +26,23 @@ The host-side part validates registration, installs the managed exposure hook an
 starts the service through the normal guest lifecycle. Guest configuration waits
 for SSH, checks the Debian identity and installs Jellyfin inside the VM.
 
+## Connection user
+
+`inventory.ini` gives `svc-jellyfin` no user name of its own: Ansible connects
+over SSH as `admin_user`, set in
+[`group_vars/all/identity.yml`](../group_vars/all/identity.yml). To connect as
+another account for one run, override it on the command line:
+
+```bash
+ansible-playbook -K playbooks/jellyfin.yml -e admin_user=NAME
+```
+
+This only selects the login. The account inside the VM is the one cloud-init
+created from `guest_cloud_init_user` when the VM was made; changing
+`admin_user`, or creating that account on the hypervisor, does not create it in
+the guest. Keep the two names the same, or connect as an account that already
+exists in the VM with an authorized key.
+
 ## Package provenance
 
 The guest uses Debian `extrepo`, enables only the Jellyfin repository definition

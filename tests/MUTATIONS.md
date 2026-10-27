@@ -714,6 +714,586 @@ real resize.
   machine's own (observed: "TZ=UTC0 is not in effect: +0200, not +0000").
 - Restore: `git checkout -- tests/acceptance_scripts_contract.py`.
 
+### The showcase script keeps host values off the take
+
+`problems/showcase-demo-showed-host-values-on-camera.md` and
+`problems/showcase-name-pattern-checked-three-characters.md`. Each break
+goes into `tools/showcase/demo.sh` and turns `tests/showcase_contract.py`
+red with the message shown. The fixture's stubs and environment carry the
+sentinel `zq7x` and the address `203.0.113.77`.
+
+- Break: put the old block back after the generic checklist (host name
+  from `/proc/sys/kernel/hostname`, `id -un`, `${HOME}`, `ip -4 -o addr`),
+  or any one of its four prints alone.
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout" (for the
+  address print alone: "(203.0.113.77) reached stdout").
+- Break: print `${HOME}` or `$(id -un)` with `>&2`.
+  Red: "walkthrough: a private sentinel (zq7x) reached stderr".
+- Break: read the host name with the `read` builtin from
+  `/proc/sys/kernel/hostname` and print it. No stub can answer a builtin.
+  Red: "the showcase script reads a host file: /proc/" (the source check,
+  not the fixture).
+- Break: drop `2>&1` from `shell_ipc` or from the preflight `qs` call,
+  drop `2>/dev/null` from the inventory call, or drop `2>&1` from
+  `open looking-glass`.
+  Red: "walkthrough: a private sentinel (zq7x) reached stderr".
+- Break: drop `2>/dev/null` after the inventory parser.
+  Red: "unreadable inventory: stderr is not the one reason 'the Machine
+  inventory is not readable'" (the traceback carries no sentinel; the
+  one-line rule catches it).
+- Break: remove the `*[!a-z0-9-]*` refusal.
+  Red: "name ['x;id']: exit status 1, not 2".
+- Break: remove the 31-character limit.
+  Red: "name ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']: exit status 1, not 2".
+- Break: read an unreadable preflight inventory as absent
+  (`|| state=absent`).
+  Red: "failed inventory: the take went on".
+- Break: remove the `already exists` refusal.
+  Red: "duplicate Machine: exit status 0, not 1".
+- Break: remove the 900-second bound of `wait_running`.
+  Red: "Machine never running: stderr is not the one reason 'demo-01 is
+  not running after 15 minutes'" (the fixture's `sleep` gives up after
+  1000 seconds).
+- Break: drop `>/dev/null 2>&1` from `sleep 5` (the fixture's `sleep`
+  answers with sentinels on both streams).
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout".
+- Break: drop the `|| { ...; fail ...; }` after `sleep 5`.
+  Red: "sleep failing during the wait: stderr is not the one reason 'the
+  wait for demo-01 was interrupted'".
+- Break: drop `sleep` from the preflight tool loop.
+  Red: "without sleep: stderr is not the one reason 'sleep is not
+  installed'".
+- Break: delete the `wait "${viewer}" ... || fail` line of
+  `check_looking_glass`.
+  Red: "Looking Glass failing during shot 5: exit status 0, not 1".
+- Break: delete the `check_looking_glass` before the last `shell_ipc`.
+  Red: "Looking Glass failing during shot 6: exit status 0, not 1".
+- Break: delete the `kill -0` test, so the script waits for the client.
+  Red: "Looking Glass failing during shot 6: the script did not finish
+  within 120 seconds" (that stub ends only at shot 6's prompt; the case
+  takes the full 120 seconds). The lingering-client case alone is red too:
+  "Looking Glass client still running: the script waited for the client to
+  end" (its stub sleeps 20 seconds).
+- Break: print `${PWD}` before shot 1, or `$0` on stderr. The fixture runs
+  the script by its full path from a checkout inside the sentinel home.
+  Red: "walkthrough: a private sentinel (zq7x) reached stdout" (stderr
+  for `$0`).
+- Break: add `sudo -n true` before shot 1.
+  Red: "walkthrough: the script ran a privileged or lifecycle tool:
+  [['sudo', '-n', 'true']]".
+- Break: add `hyperlabctl machine delete "${name}"` before the last
+  `shell_ipc`.
+  Red: "walkthrough: hyperlabctl was asked for ['machine', 'delete',
+  'demo-01']".
+- Restore: `git checkout -- tools/showcase/demo.sh`.
+
+### The showcase fixture tells an exited client from a reaped one
+
+`problems/showcase-contract-waited-for-reaping.md`. Each break goes into
+`exited()` or `client_pid()` in `tests/showcase_contract.py` and turns
+`python tests/showcase_contract.py` red with the message shown before the
+take runs, whatever `sh` is. To replay the Looking Glass breaks above
+under dash, put a directory whose `sh` links to dash first in `PATH`;
+they are red under dash as under Bash.
+
+- Break: replace the body of `exited()` with
+  `return not Path(f"/proc/{pid}").exists()` (the check CI timed out on
+  under dash).
+  Red: "exit predicate: an exited, unreaped child counts as running".
+- Break: replace the body of `exited()` with `return True`.
+  Red: "exit predicate: a live child counts as exited".
+- Break: drop the `require` on `<proc>/self/stat`, so a missing proc
+  filesystem reads as every process gone.
+  Red: "exit predicate: a missing proc filesystem counts as an exit".
+- Break: in `client_pid()`, return `None` instead of refusing a line that
+  is not a PID.
+  Red: "client PID: '\n' was not refused".
+- Break: in `client_pid()`, accept a file without its newline
+  (`if not text:` for `if not text.endswith("\n"):`).
+  Red: "... open-pid does not hold a PID: '12'".
+- Break: put the first parser back in `exited()`, which split the line at
+  its last `") "` and read the next word as the state.
+  Red: "exit predicate: '7) Z\n' was not refused".
+- Break: in `STAT_LINE`, accept any number of fields after the state
+  (`(?: -?[0-9]+)*` for `(?: -?[0-9]+){49,}`).
+  Red: "exit predicate: '7 (sh) Z\n' was not refused".
+- Break: in `STAT_LINE`, accept a line with fewer than 49 fields after the
+  state (`{1,}` for `{49,}`).
+  Red: "exit predicate: '7 (sh) Z 1 -20 0 ... 0\n' was not refused" (48
+  numbers).
+- Break: in `STAT_LINE`, make the opening parenthesis optional (`\(?` for
+  `\(`).
+  Red: "exit predicate: '7 sh) Z 1 -20 0 ... 0\n' was not refused".
+- Break: in `client_pid()`, read the file a second time for the result
+  (`return int(path.read_text())`).
+  Red: "client PID: '12\n' was read 2 times, not once".
+- Restore: `git checkout -- tests/showcase_contract.py`.
+
+### The showcase take keeps the chosen Machine
+
+`tests/showcase_contract.py` completes the take twice: for `demo-01`
+beside an unrelated running `other-01`, and for `v1-showcase` beside an
+unrelated `demo-01` that is already running while `v1-showcase` goes from
+absent to creating to running. Each break goes into
+`tools/showcase/demo.sh` of a throwaway copy of the files the contract
+reads (`tests/showcase_contract.py`, `tools/showcase/demo.sh`,
+`docs/showcase.md` and `ShellIpc.qml`, at their repository paths); run
+the copy's `tests/showcase_contract.py`. Every break below passes the
+`demo-01` take and the contract as it was before the second take.
+
+- Break: add `name=demo-01` after the 31-character limit.
+  Red: "walkthrough v1-showcase: shot 2 does not give the chosen Machine
+  name v1-showcase", followed by the script's own refusal "demo: demo-01
+  already exists; pick a new name for a clean take".
+- Break: open `demo-01` instead of `"${name}"` in the `open looking-glass`
+  line.
+  Red: "walkthrough v1-showcase: hyperlabctl was asked for ['open',
+  'looking-glass', 'demo-01']" (every shot completes).
+- Break: give `name demo-01,` instead of `name ${name},` in shot 2.
+  Red: "walkthrough v1-showcase: shot 2 does not give the chosen Machine
+  name v1-showcase".
+- Break: in `wait_running`, ask `state_of demo-01` instead of
+  `state_of "$1"`.
+  Red: "walkthrough v1-showcase: shot 3 did not wait for the inventory to
+  show v1-showcase running" (the wait ends on the unrelated running
+  Machine at once, without a sleep).
+- Restore: copy the intact `demo.sh` back; the copy's contract prints
+  "Showcase contract: OK".
+
+### A release gate passes only with every reviewed boolean true
+
+`problems/release-pass-with-false-booleans.md`. The breaks go into
+`tools/release_acceptance.py` (M1-M7) or `tools/release_probe.py`
+(M8-M9). Run `python tests/release_acceptance_contract.py` and
+`python tests/release_probe_contract.py`; they build temporary fixture
+campaigns only. The red message is the first one each contract prints.
+
+- M1. Break: in `validate_gate_payload`, replace
+  `value is True or not complete,` with `True,`.
+  Red: acceptance contract, "repository-software.clean_worktrees=false
+  was recorded as a pass" (record) and "status accepted an edited pass
+  with repository-software.clean_worktrees=false" (status and seal).
+- M2. Break: delete `"spice_socket_private",` from `BOOL_FIELDS`.
+  Red: acceptance contract, "tool booleans differ from the reviewed
+  manifest booleans: missing=['spice_socket_private'] extra=[]", "pass
+  gate looking-glass accepted spice_socket_private='true'" and the record
+  and edited-evidence cases for `looking-glass`; probe contract, "field
+  spice_socket_private is not a reviewed boolean".
+- M3. Break: check truth only on record. Replace
+  `value is True or not complete,` with `True,` and, after
+  `validate_gate_payload(planned, payload, ...)` in `record_gate`, add a
+  loop over `BOOL_FIELDS & set(payload)` that requires `payload[field] is
+  True or status_value != "pass"`.
+  Red: "status accepted an edited pass with
+  repository-software.clean_worktrees=false". The record case stays
+  green, as it should: `record_gate` still checks the incoming payload
+  itself. Only the read paths lose the guard, which is what this break
+  is meant to show.
+- M4. Break: `isinstance(value, bool),` becomes
+  `isinstance(value, (bool, int, str)),`.
+  Red: "pass clean_worktrees='true': passed evidence gate
+  repository-software field clean_worktrees must be true" (the refusal
+  names truth instead of the type); in a failed gate the text is
+  accepted.
+- M5. Break: `"ready_to_seal": True,` in `status_report`.
+  Red: "a pending campaign is ready to seal" and "a campaign failed at
+  repository-software is ready to seal".
+- M6. Break: `value is True or not complete,` becomes `value is True,`.
+  Red: "a failed gate cannot hold repository-software.clean_worktrees=false"
+  and "repository-software.clean_worktrees=false refused in a failed gate".
+- M7. Break: add `"loopback_spice",` back to `BOOL_FIELDS`.
+  Red: "tool booleans differ from the reviewed manifest booleans:
+  missing=[] extra=['loopback_spice']"; probe contract, "gate looking-glass
+  fields differ: missing=[] extra=['loopback_spice']".
+- M8. Break: in `build_payload`, delete the `require(field not in
+  BOOL_FIELDS, ...)` line of the `--value` loop.
+  Red: probe contract, "boolean text was accepted", "boolean field
+  clean_worktrees needs --true or --false" and "--value
+  spice_socket_private=true was accepted".
+- M9. Break: in the `--false` loop of `build_payload`,
+  `set_once(field, False)` becomes `set_once(field, True)`.
+  Red: probe contract, "--false clean_worktrees did not give false".
+- Restore: `git checkout -- tools/release_acceptance.py tools/release_probe.py`.
+
+### The creation plan agrees with the factory; a refused creation keeps nothing
+
+`problems/machine-create-kept-record-after-projection-refused.md`. Each one
+turns the named contract red with the message shown.
+
+- Break: in `creation_plan()` of
+  `tools/hyperlabctl/hyperlabctl/machine_provision.py`, set
+  `profiles[profile] = {"memory_mb": "auto", "vcpus": 4, "disk_gib": 20}`
+  instead of calling `_resource_values`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "workstation-dev/balanced:
+  the plan differs from the record create writes".
+- Break: in `_resource_values()` of `machine_factory.py`, compare a custom
+  memory request with `MEMORY_FLOOR_MB` instead of
+  `custom_limits(image)["memory_mb_min"]`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "server-arch: the
+  factory accepted memory_mb=2047, below the plan's limit".
+- Break: in `create()` of
+  `roles/host_desktop_common/files/privatestack-machine-actions.py`, drop
+  `command.append("--project")` and call `machine project NAME` after the
+  creation, as two calls.
+  Red: `tests/c10_machine_create_plan_contract.py`, "a refused projection
+  left a record on a fresh registry: ['.lock', 'srv-01.yml']";
+  `tests/host_machine_actions_bridge_contract.py`, "an unconfirmed creation
+  went on: {} -> 'crashed: ... unexpected hyperlabctl call ('machine',
+  'project', 'srv-a')'".
+- Break: in `_undo_creation()` of `commands/machine.py`, replace the call
+  to `_remove_staged_spec()` with `reason = None`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a creation
+  refused with no record left a record or spec behind".
+- Break: in `MachineCommand._create()`, pass `None` instead of the
+  announced publication to `_undo_creation()`, so the record the real
+  `os.link` published is not undone.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync']: a creation
+  refused with the record published left a record or spec behind".
+- Break: in `create_machine()` of `machine_registry.py`, replace the call
+  to `withdraw_published()` with `left = None`.
+  Red: `tests/c10_machine_registry_contract.py`, "a creation refused after
+  its publication left its record behind". (The create-plan contract stays
+  green: the CLI calls `publish_machine()`, not `create_machine()`.)
+- Break: in `_undo_creation()`, change `if left:` before "is kept, since
+  the record's withdrawal did not complete" to `if False:`, so the spec is
+  removed although the record stays.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'unlink-record']: the spec was removed".
+- Break: in `withdraw_published()`, replace the regular-file and inode
+  condition with `False`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'copy-record']: an unfinished undo was not reported as such".
+- Break: in `withdraw_published()`, append `and False` to the digest
+  comparison.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'rewrite-record']: an unfinished undo was not reported as such".
+- Break: in `_remove_staged_spec()`, append `and False` to
+  `_identify(path) != staged`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync',
+  'replace-spec']: an unfinished undo was not reported as such".
+- Break: in `MachineCommand._create()`, replace
+  `with registry_lock(create=True):` with `with contextlib.nullcontext():`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['link']: a removal
+  ran without the registry lock"; with `check_withdraw` run on its own,
+  "a staged creation did not wait for the registry lock".
+- Break: in the bridge's `create()`, drop the comparison of the answer's
+  `spec` with `vm-specs/.generated/NAME.yml`.
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an unconfirmed
+  creation went on".
+- Break: let the bridge's `TOKEN` start with a dash
+  (`^[a-z0-9-][a-z0-9-]{0,63}$`).
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an option-like value
+  at position 4 reached hyperlabctl".
+- Break: drop the early `NUMBER` check in the bridge's `create()`, so the
+  custom values are checked only after the plan is read.
+  Red: `tests/host_machine_actions_bridge_contract.py`, "an option-like value
+  at position 7 reached hyperlabctl".
+- Break: in `guest_key()` of `machine_provision.py`, let the type check
+  pass `ssh-rsa` (`if kind not in ("ssh-ed25519", "ssh-rsa"):`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "rsa key refused for
+  the wrong reason" (the shape check still refuses it, without naming the
+  type).
+- Break: in `guest_key()`, count only the non-blank lines again
+  (`[line for line in text.splitlines() if line.strip()]`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "leading blank key
+  accepted".
+- Break: in `withdraw_machine()` of `machine_registry.py`, skip the digest
+  comparison.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw with digest
+  '000...000': 0".
+- Break: in `MachineCommand._withdraw()`, compare the generated spec with
+  the projection by `is` instead of `==`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw removed a
+  projected Machine".
+- Break: in `MachineCommand._withdraw()`, remove the `domain_names(ctx)`
+  check.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw removed a
+  record whose domain exists".
+- Break: in `MachineCommand._withdraw()`, replace `with registry_lock():`
+  with `with contextlib.nullcontext():` (and import `contextlib`).
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw did not wait
+  for the registry lock".
+- Break: the same in `MachineCommand._project()`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "project did not wait
+  for the registry lock".
+- Break: in `guest_key()` of `machine_provision.py`, return
+  `"fingerprint": "SHA256:wrong"`.
+  Red: `tests/c10_machine_creation_plan_contract.py`, "guest key not
+  reported"; `tests/c10_machine_create_plan_contract.py`, "a valid guest
+  key was not accepted". Both compute the expected fingerprint of their
+  synthetic key themselves.
+- Break: in `MachineCommand._withdraw()`, catch `ContractError` from
+  `read_generated_spec()` and set `existing = None`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on with
+  a malformed spec: 0".
+- Break: in `read_generated_spec()` of `machine_factory.py`, load with
+  `yaml.SafeLoader` instead of `_UniqueKeyLoader`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on with
+  a duplicate key spec: 0".
+- Break: in `MachineCommand._create()`, catch `Exception` instead of
+  `BaseException` around the publication.
+  Red: `tests/c10_machine_create_plan_contract.py`,
+  "['interrupt-after-link']: a creation refused with the record published
+  left a record or spec behind (record kept: True, spec kept: True)".
+- Break: the same in `create_machine()` of `machine_registry.py`.
+  Red: `tests/c10_machine_registry_contract.py`, "a cancellation after the
+  publication escaped create_machine(); record left: True".
+- Break: in `publish_machine()`, delete the `announce(publication)` call
+  before `os.link`, so the caller learns of the publication only once it
+  returns.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['fsync']: a creation
+  refused with the record published left a record or spec behind (record
+  kept: True, spec kept: False)"; `tests/c10_machine_registry_contract.py`,
+  "a creation refused after its publication left its record behind".
+- Break: in `create_machine()`, replace `with registry_lock(...)` with
+  `with contextlib.nullcontext():`.
+  Red: `tests/c10_machine_registry_contract.py`, "a library rollback
+  removed a record without the registry lock"; with
+  `verify_library_creation_locked` run on its own, "create_machine()
+  published while another process held the registry lock".
+- Break: in `read_generated_spec()` of `machine_factory.py`, replace
+  `if not stat.S_ISDIR(info.st_mode):` with `if False:`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "withdraw went on
+  through a dangling generated directory link".
+- Break: in `MachineCommand._create()`, replace
+  `if digest != published.sha256:` with `if False:`.
+  Red: `tests/c10_machine_create_plan_contract.py`, "['wrong-digest']: a
+  creation refused with the record published left a record or spec behind
+  (record kept: True, spec kept: True): launched".
+- Restore: copy the broken file back from the copy taken before the break.
+
+### Public content stays free of process wording and a local login
+
+`tests/public_repository_process_hygiene_contract.py` and a local
+assertion playbook. The breaks were made in a temporary copy of the
+tree: the files of `git ls-files -c -o --exclude-standard` copied to a
+new directory, which then gets `git init`, so the contract discovers
+every file there as untracked. The playbook runs from that copy with
+`-i inventory.ini` on `localhost` through the local connection, gathers
+no facts and asserts `hostvars['svc-jellyfin']['ansible_user']` equals
+the expected name and `admin_user`; it never contacts the service VM.
+It runs three times: with the repository setting, and with
+`-e admin_user=svcproofa` and `-e admin_user=svcproofb` (the positive
+controls, green on the intact tree). `ansible-inventory --host
+svc-jellyfin` shows only the unrendered `{{ admin_user }}`, which is
+why the effective value is asserted in a play. The red message is the
+one the contract prints.
+
+- M1. Break: put "outside the restricted" and, on the next line, the
+  removed two-word phrase back at the end of the introductory note of
+  `docs/c9-independent-review-2026-09-27.md`.
+  Red: "FAIL public process metadata:
+  docs/c9-independent-review-2026-09-27.md:11". The playbook stays
+  green: it does not read the document.
+- M2. Break: the `svc-jellyfin` line of `inventory.ini` gets back the
+  literal `ansible_user=` of the configured name.
+  Red: "FAIL public connection identity: inventory.ini:5: connection
+  user is not the admin_user setting"; playbook red for both overrides
+  (the effective user stays the literal).
+- M3. Break: `ansible_user=svcliteral`, an unrelated synthetic name.
+  Red: the same contract message; playbook red in all three runs.
+- M4. Break: delete `ansible_user="{{ admin_user }}"` from the line.
+  Red: "inventory.ini:5: svc-jellyfin sets its connection user 0
+  times"; playbook red in all three runs (no `ansible_user`).
+- M5. Break: `ansible_user="{{ 'NAME' }}"`, a quoted constant.
+  Red: "inventory.ini:5: connection user does not parse". The INI
+  plugin evaluates that value as a set inside a set and rejects the
+  whole inventory, so the playbook is red in all three runs. Before the
+  contract caught `TypeError` here it stopped with a traceback.
+- M5b. Break: `ansible_user="{{ 'NAME' | string }}"`, a constant the
+  plugin accepts.
+  Red: "connection user is not the admin_user setting"; playbook red
+  for both overrides.
+- M6. Break: `ansible_user="{{ guest_cloud_init_user }}"`.
+  Red: the same contract message; playbook red for both overrides.
+- M7. Break: a `[services:vars]` section with
+  `ansible_ssh_user=svcliteral` before `[jellyfin]`.
+  Red: "inventory.ini:8: connection user is not the admin_user
+  setting". The playbook stays green: the host variable wins over the
+  group one, so only the contract sees it.
+- M8. Break: uncomment the `devbox` line and add
+  `ansible_user=svcliteral`.
+  Red: "inventory.ini:13: connection user is not the admin_user
+  setting". Playbook green, as it reads only `svc-jellyfin`.
+- M9. Break: a second identical `svc-jellyfin` line in `[services]`.
+  Red: "inventory.ini:0: svc-jellyfin is defined 2 times in
+  [services]". Playbook green.
+- M10. Break: append a second `ansible_user="{{ admin_user }}"` to the
+  line.
+  Red: "inventory.ini:5: svc-jellyfin sets its connection user 2
+  times". Playbook green: both assignments carry the same value.
+- M11. Break: move `inventory.ini` away.
+  Red: "inventory.ini:0: inventory is unreadable"; playbook red in all
+  three runs.
+- M12. Break: append `[extra:children]`, then `[jellyfin] # connection
+  identity` and `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:16: connection user is not the admin_user
+  setting"; playbook red in all three runs (the later line wins, the
+  effective user is the literal). Before the contract took the plugin's
+  section expression, which allows a trailing `#` comment, it read the
+  commented header as a line of `[extra:children]`, skipped the host
+  line after it and stayed green.
+- M13. Positive control: `[services]` becomes `[services] # service
+  VMs`. Contract and playbook stay green. Before the same fix the
+  contract refused it with "svc-jellyfin is defined 0 times in
+  [services]".
+- M14. Break: append `[extra:children]` and
+  `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:15: child group line does not parse". The plugin
+  refuses the inventory with "Expected group name"; the playbook stays
+  green only because the hosts read before that line remain loaded.
+- M15. Break: `[jellyfin]` becomes `[jellyfin] ; connection identity`
+  (the plugin's header comment is `#` only).
+  Red: "inventory.ini:7: host variable is not key=value" and
+  "svc-jellyfin is defined 2 times in [services]". Playbook green.
+- M16. Break: append `[jellyfin:hostz]` and
+  `svc-jellyfin ansible_user=svcliteral`.
+  Red: "inventory.ini:14: section type is unknown" and "inventory.ini:15:
+  connection user is not the admin_user setting". Playbook green for the
+  same reason as M14: the plugin refuses the inventory with "Section
+  [jellyfin:hostz] has unknown type: hostz" after the hosts above it.
+- Restore: copy the broken file back from the intact tree; the contract
+  prints "Public repository process hygiene contract: OK" and the three
+  playbook runs pass again.
+
+### Machine provisioning runs the reviewed plan on the exact projection
+
+`tests/host_machine_provision_contract.py`,
+`tests/c10_machine_creation_plan_contract.py`,
+`tests/host_operation_lifecycle_contract.py` and
+`tests/host_operation_integration_contract.py`. Each break was made in
+the working tree with a copy of the file kept aside, the named contract
+run (`python tests/<contract>.py`), the copy put back and the contract
+run again green. The red message is the one the contract prints.
+
+- M1. Break: in `resolve()` of `privatestack-operation.py`, accept any
+  argv whose first element is the provisioner (`argv[:1] ==
+  [PROVISION]`).
+  Red (lifecycle): "the runner accepted a provisioning command with
+  extra argument".
+- M2. Break: accept any two-element argv starting with the provisioner,
+  whatever the name.
+  Red (lifecycle): "the runner accepted a provisioning command with
+  another Machine".
+- M3. Break: the registry's `machine.provision` command back to
+  `privatestack-machine-provision --spec {spec} {domain}` (absolute).
+  Red (lifecycle): the first `resolve()` raises
+  "invalid-reviewed-command".
+- M4. Break: in `provision_steps()`, `if not same_document(stored,
+  project_vm_spec(root, record)):` becomes `if False:`.
+  Red (creation plan): "projection case memory: accepted what must be
+  refused (differs from the projection)"; red (provisioner, real CLI):
+  "the provisioner ran with an edited spec (memory)", three playbooks
+  called.
+- M5. Break: drop `and spec_hash == record["spec_digest"]` from the
+  run-time check in `run()`.
+  Red (lifecycle): "drifted spec ran", the child the runner tried to
+  start after the spec changed.
+- M6. Break: check the playbook files in the step loop of `main()`
+  instead of in `steps_for()`.
+  Red (provisioner): "a plan with a missing final playbook ran or
+  asked", four playbooks called and the password asked before the
+  refusal.
+- M7. Break: check every playbook file but the last
+  (`for step in steps[:-1]:`).
+  Red (provisioner): "a plan with a missing final playbook ran or
+  asked", all five called.
+- M8. Break: `CANCELLING = (signal.SIGHUP,)`, no SIGTERM handler.
+  Red (provisioner, real PTY): "the hash file outlived SIGTERM".
+- M9. Break: `CANCELLING = (signal.SIGTERM,)`, no SIGHUP handler.
+  Red (provisioner, real PTY): "the hash file outlived SIGHUP".
+- M10. Break: `provision_steps()` no longer appends `profile-second`.
+  Red (creation plan): "steps: ['create-domain', 'inventory',
+  'profile-first', 'close-access']".
+- M11. Break: `provision_steps()` no longer appends `close-access`.
+  Red (creation plan): "server steps differ from docs/first-machine.md".
+- M12. Break: a step only has to start with its reviewed argv
+  (`argv[:len(expected)] == expected`).
+  Red (provisioner): "tampered steps (host privilege) ran or asked".
+- M13. Break: drop the `gaming-dirty` entry from the provisioner's
+  `PROFILE_PLAYBOOKS`.
+  Red (provisioner): "the provisioner's reviewed profiles differ from
+  hyperlabctl's table".
+- M14. Break: `run_step()` catches `ZeroDivisionError` instead of
+  `BaseException`, so a cancelled run does not stop its playbook.
+  Red (provisioner, real PTY): "the running playbook outlived SIGINT".
+  The first version of the contract stayed green: the provisioner leads
+  the terminal's session, so its exit hangs the terminal up and the
+  recording playbook died of SIGHUP. The held playbook now ignores
+  SIGHUP and records the SIGTERM it gets, with the hash file still
+  present.
+- M15. Break: in `resolve()`, drop the requirement that the spec is
+  `vm-specs/.generated/NAME.yml`.
+  Red (lifecycle): "unsafe request accepted" (a checked-in spec).
+- M16. Break: the provisioner's `if rc != 0:` becomes `if False:`.
+  Red (provisioner): "a failed profile pass did not stop"; red
+  (integration, real bridge, runner and provisioner): "a failed
+  provisioning reported success".
+- M1-M16 were run again on the tree that carries the three review fixes
+  below, with the same breaks (M4 and M13 on the code as it now reads)
+  and the same red messages.
+- M17. Break: in `run()` of `privatestack-operation.py`, the stopped
+  command's wait back to `child.wait(timeout=3)` for every action.
+  Red (integration, real runner and provisioner, the first profile pass
+  ignoring the hangup and taking five seconds to end): "the hash file
+  outlived the stopped operation"; red (lifecycle): "stop deadlines
+  changed".
+- M18. Break: `PROVISION_STOP_GRACE = 3`.
+  Red (integration): "the hash file outlived the stopped operation"; red
+  (lifecycle): "the runner may kill the provisioner before it removes the
+  hash file: 3 s for 10 s".
+- M19. Break: in the provisioner's signal handler (`cancel()` then,
+  `Stop.handle()` now), drop the early return for a signal that is not
+  the first, so every later signal raises again.
+  Red (provisioner, real PTY, SIGHUP, SIGTERM and SIGINT sent while the
+  cancelled playbook takes two seconds to end): "the hash file outlived
+  repeated signals".
+- M20. Break: in `provision_steps()`, back to plain equality, `if stored
+  != project_vm_spec(root, record):`.
+  Red (creation plan): "projection case boolean for integer: accepted
+  what must be refused (differs from the projection)"; red (provisioner,
+  real CLI): "the provisioner ran with an edited spec (float memory)".
+  The contracts stop at their first red case; `vcpus true for 1` on the
+  one-vCPU Machine follows in both.
+- M21. Break: after the step ids are checked in `steps_for()`, take the
+  profile from the plan again (`profile = plan["steps"][2]["argv"][5]`
+  for a workstation).
+  Red (provisioner): "tampered steps (another Template's profile) ran or
+  asked".
+- M22. Break: in `mapped_profile()`, drop `record.get("id") == machine`.
+  Red (provisioner): "a plan with another Machine's record ran or asked".
+- M1-M22 were run again on the tree that also starts each playbook
+  inside `Stop.deferred()`, with the same red messages.
+- M23. Break: `run_step()` back to its earlier form, `child =
+  subprocess.Popen(...)` before the `try` and no deferral.
+  Red (integration, the stop delivered inside `Popen()` of the first
+  profile pass): "the playbook was not stopped and reaped before its hash
+  file was removed", the observer showing the playbook still sleeping
+  (`S`) when the file was removed and no reap of it.
+- M24. Break: the provisioner's `child.kill()` after `PLAYBOOK_GRACE`
+  becomes `pass`.
+  Red (integration, a playbook that ignores the hangup and SIGTERM): "the
+  hash file outlived the stopped operation"; the provisioner waits on the
+  playbook until the runner kills it after `PROVISION_STOP_GRACE`.
+- M25. Break: drop the `child.wait()` that follows `child.kill()`.
+  Red (integration, the same playbook): "the playbook was not stopped and
+  reaped before its hash file was removed"; the killed playbook still has
+  a `/proc` entry when the file is removed.
+- M26. Break: start the playbook under `held()` (the ending signals
+  blocked in the kernel) instead of `Stop.deferred()`.
+  Red (integration, cooperative case): "the playbook started with SIGHUP
+  blocked or ignored"; the mask survives `exec`, so restoring the
+  provisioner's own does not reach the playbook.
+- M27. Break: `Stop.deferred()` no longer raises the signal it noted.
+  Red (integration, the stop inside `Popen()`): "the hash file outlived
+  the stopped operation"; the run goes on waiting on the playbook.
+- M28. Break: `run_step()` cleans up without checking that a playbook was
+  started (`if True:` for `if child is not None:`).
+  Red (provisioner, real PTY, the first profile pass cannot be started):
+  "a playbook that could not be started was not refused"; the cleanup
+  fails on `None` and the run ends with a traceback instead of status 2.
+- Restore: the copy goes back; the four contracts print their OK line.
+
 ### The GPU ladder state is committed without its transaction
 
 `problems/gpu-ladder-state-write-fail-open.md`. Each break is one edit of

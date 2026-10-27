@@ -44,6 +44,13 @@ USB_TARGET = re.compile(
 # Provisioning is the one action that is not a single playbook: the reviewed
 # provisioner runs the documented steps, each -K playbook asking in the PTY.
 PROVISION = "/usr/local/bin/privatestack-machine-provision"
+# Seconds a stopped command gets to end before it is killed. A cancelled
+# provisioner first gives its running playbook ten seconds (PLAYBOOK_GRACE
+# there), kills it if needed and only then removes the password hash file:
+# it must always be allowed to finish that, so it gets longer, and still
+# well inside the user manager's default 90 s stop timeout.
+STOP_GRACE = 3
+PROVISION_STOP_GRACE = 30
 FINAL = {"succeeded", "failed", "interrupted"}
 PHASES = FINAL | {"requested", "dispatched", "running"}
 # terminal-opened and terminal-launch-failed are kept so earlier records stay
@@ -255,11 +262,10 @@ def resolve(action, machine, repo):
     # caller or record. Normalize only its reviewed executable token.
     reviewed(argv)
     if action == "machine.provision":
-        # Only a Machine's own projection is provisioned, never a fixture spec.
+        # Only a Machine's own projection is provisioned, never a fixture
+        # spec, and only by exactly the provisioner and that Machine's name.
         require(row["path"] == f"vm-specs/.generated/{machine}.yml"
-                and argv == ["privatestack-machine-provision", "--spec", row["path"], machine],
-                "invalid-reviewed-command")
-        argv[0] = PROVISION
+                and argv == [PROVISION, machine], "invalid-reviewed-command")
     else:
         require(argv[0] == "ansible-playbook" and "-K" in argv, "invalid-reviewed-command")
         argv[0] = "/usr/bin/ansible-playbook"
@@ -533,7 +539,8 @@ def run(oid):
         if child is not None and child.poll() is None:
             child.terminate()
             try:
-                child.wait(timeout=3)
+                child.wait(timeout=PROVISION_STOP_GRACE if record["action_id"] == "machine.provision"
+                           else STOP_GRACE)
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait()

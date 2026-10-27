@@ -120,6 +120,14 @@ python tools/release_probe.py \
   --true <reviewed-boolean-field>
 ```
 
+Booleans are typed. `--true FIELD` and `--false FIELD` set a reviewed boolean;
+`--value` refuses one, so `false`, `no` or `0` cannot stand in for an
+observation. A passed gate holds every reviewed boolean of that gate exactly
+`true`. `record`, `status` and `seal` refuse a pass with a boolean that is
+`false`, text or a number, including in an evidence file edited by hand. A
+false observation is recorded with `--status fail`: the failed gate keeps it,
+stays the next gate and keeps the campaign from sealing.
+
 ## 4. Storage hand-off
 
 A fresh installation accepts only the storage shape written by
@@ -166,7 +174,8 @@ profile. Reintroducing a hard-freeze condition is not a useful routine test.
 
 For the current Linux VFIO guest, distinguish demonstrated video transport from
 still-open persistence/input work. The Looking Glass gate records the reviewed
-per-domain Unix SPICE socket path and whether that socket stayed private;
+per-domain Unix SPICE socket path and the boolean `spice_socket_private`, true
+only when the socket was observed private;
 `127.0.0.1:5900` remains a static client fallback default, not the VFIO transport
 authority. Do not mark the gate complete until the release manifest's evidence
 fields and the current runbook agree with what was actually observed.
@@ -178,8 +187,9 @@ summaries. Raw terminal logs, home-directory paths, credentials, private keys,
 account details and guest image contents stay local.
 
 Check progress with `status`. Seal only when the runner reports that every gate
-is ready. The receipt binds the plan and evidence hashes, repository commits,
-storage topology and ordered gate IDs; sealing does not publish anything.
+is ready; a refused seal writes no receipt. The receipt binds the plan and
+evidence hashes, repository commits, storage topology and ordered gate IDs;
+sealing does not publish anything.
 
 ## 8. Publish Nitro, then replay Predator
 

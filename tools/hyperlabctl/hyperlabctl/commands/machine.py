@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import datetime
 import getpass
+import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 from typing import Any
 
 from .. import document as doc
-from ..errors import Unavailable
+from ..errors import ContractError, Unavailable
+from ..inventory import domain_names
 from ..machine_factory import (
-    create_from_template,
     image_os_label,
+    materialize_machine,
+    project_vm_spec,
+    read_generated_spec,
     template_catalog,
     write_projected_vm_spec,
 )
@@ -22,11 +27,137 @@ from ..machine_provision import (
     provision_steps,
 )
 from ..machine_registry import (
+    PublishedRecord,
+    interruption,
     list_machines,
+    publish_machine,
     read_machine,
+    record_sha256,
+    registry_lock,
+    require_machine_absent,
+    withdraw_machine,
+    withdraw_published,
 )
 from ..render import machine_cards
 from .base import Command
+
+
+def _identify(
+    path: Path,
+) -> tuple[int, int, str]:
+    """Device, inode and SHA-256 of one regular file, never through a link."""
+
+    descriptor = os.open(
+        path,
+        os.O_RDONLY
+        | os.O_NOFOLLOW
+        | os.O_NONBLOCK
+        | os.O_CLOEXEC,
+    )
+
+    try:
+        info = os.fstat(
+            descriptor
+        )
+
+        if not stat.S_ISREG(info.st_mode):
+            raise ContractError(
+                f"{path.name} is not a regular file"
+            )
+
+        digest = hashlib.sha256()
+
+        while chunk := os.read(
+            descriptor,
+            65536,
+        ):
+            digest.update(
+                chunk
+            )
+    finally:
+        os.close(
+            descriptor
+        )
+
+    return info.st_dev, info.st_ino, digest.hexdigest()
+
+
+def _remove_staged_spec(
+    path: Path,
+    staged: tuple[int, int, str],
+) -> str | None:
+    """Remove the spec a staged creation wrote; say why it stays, if it does."""
+
+    try:
+        # Only the file this creation wrote, with its bytes: anything else
+        # stays.
+        if _identify(
+            path
+        ) != staged:
+            return "it changed after it was written"
+
+        os.unlink(
+            path
+        )
+    except FileNotFoundError:
+        return None
+    except (OSError, ContractError) as exc:
+        return str(
+            exc
+        )
+
+    return None
+
+
+def _undo_creation(
+    root: Path,
+    spec: str | None,
+    staged: tuple[int, int, str] | None,
+    published: PublishedRecord | None,
+) -> list[str]:
+    """Undo what one creation wrote, record first; name what stays.
+
+    The caller holds the registry lock. The spec goes only once the record
+    it projects is durably withdrawn, so a spec may outlive its record but
+    a record never outlives its spec.
+    """
+
+    left = []
+
+    if published is not None:
+        reason = withdraw_published(
+            published
+        )
+
+        if reason is not None:
+            left.append(
+                reason
+            )
+
+    if spec is None:
+        return left
+
+    if left:
+        left.append(
+            f"generated spec {spec} is kept, since the record's "
+            "withdrawal did not complete"
+        )
+    elif staged is None:
+        left.append(
+            f"generated spec {spec} is kept: it could not be identified"
+        )
+    else:
+        reason = _remove_staged_spec(
+            root / spec,
+            staged,
+        )
+
+        if reason is not None:
+            left.append(
+                f"generated spec {spec} is kept: {reason}"
+            )
+
+    return left
 
 
 def _repo_root(ctx) -> Path:
@@ -432,6 +563,14 @@ class MachineCommand(Command):
                 "linux-experimental",
             ),
         )
+        create.add_argument(
+            "--project",
+            action="store_true",
+            help=(
+                "also write the projected spec, staged so that a refusal "
+                "leaves neither record nor spec"
+            ),
+        )
 
         project = sub.add_parser(
             "project",
@@ -439,6 +578,22 @@ class MachineCommand(Command):
         )
         project.add_argument(
             "machine_id",
+        )
+
+        withdraw = sub.add_parser(
+            "withdraw",
+            help=(
+                "remove the Machine record with this digest, while no "
+                "generated spec matches its projection and no libvirt "
+                "domain has its name"
+            ),
+        )
+        withdraw.add_argument(
+            "machine_id",
+        )
+        withdraw.add_argument(
+            "--record-sha256",
+            required=True,
         )
 
         sub.add_parser(
@@ -487,6 +642,12 @@ class MachineCommand(Command):
 
         if action == "project":
             return self._project(
+                args,
+                ctx,
+            )
+
+        if action == "withdraw":
+            return self._withdraw(
                 args,
                 ctx,
             )
@@ -640,23 +801,96 @@ class MachineCommand(Command):
             if value is not None:
                 kwargs[key] = value
 
-        path = create_from_template(
-            _repo_root(
-                ctx
-            ),
+        root = _repo_root(
+            ctx
+        )
+
+        record = materialize_machine(
+            root,
             **kwargs,
         )
 
-        record = read_machine(
-            args.machine_id
-        )
+        spec = None
+        staged = None
+        # Filled before os.link, so that whatever is raised after it, a
+        # cancellation included, the undo knows which record is this one.
+        announced: list[PublishedRecord] = []
+
+        with registry_lock(
+            create=True,
+        ):
+            if args.project:
+                # Staged: the spec is written first and the record, which is
+                # the Machine's authority, is published last (ADR 0053).
+                require_machine_absent(
+                    record["id"]
+                )
+
+                spec = write_projected_vm_spec(
+                    root,
+                    record,
+                )
+
+            # Until the stored record is read back and its digest is the
+            # one published, a failure undoes this creation: no refusal
+            # leaves a record behind.
+            try:
+                if spec is not None:
+                    staged = _identify(
+                        root / spec
+                    )
+
+                published = publish_machine(
+                    record,
+                    announce=announced.append,
+                )
+
+                stored = read_machine(
+                    args.machine_id
+                )
+
+                # Names this record, and no other, to withdraw.
+                digest = record_sha256(
+                    args.machine_id
+                )
+
+                if digest != published.sha256:
+                    raise Unavailable(
+                        f"the stored record of {record['id']} is not "
+                        "the one this creation published"
+                    )
+            except BaseException as exc:
+                left = _undo_creation(
+                    root,
+                    spec,
+                    staged,
+                    announced[0] if announced else None,
+                )
+
+                if left:
+                    raise Unavailable(
+                        f"{interruption(exc)}; cleanup incomplete: "
+                        + "; ".join(left)
+                    ) from exc
+
+                if not isinstance(exc, Exception):
+                    raise Unavailable(
+                        f"{interruption(exc)}; nothing this creation "
+                        "wrote was left behind"
+                    ) from exc
+
+                raise
 
         payload = {
             "record_path": str(
-                path
+                published.path
             ),
-            "machine": record,
+            "machine": stored,
+            "record_sha256": digest,
         }
+
+        if spec is not None:
+            payload["spec"] = spec
 
         if args.json:
             print(
@@ -668,22 +902,30 @@ class MachineCommand(Command):
         else:
             print(
                 "created %s"
-                % record["id"]
+                % stored["id"]
+                + (
+                    ", projected to %s" % spec
+                    if spec is not None
+                    else ""
+                )
             )
 
         return 0
 
     def _project(self, args, ctx):
-        record = read_machine(
-            args.machine_id
-        )
+        # A withdrawal never runs between reading the record and writing
+        # its spec.
+        with registry_lock():
+            record = read_machine(
+                args.machine_id
+            )
 
-        spec = write_projected_vm_spec(
-            _repo_root(
-                ctx
-            ),
-            record,
-        )
+            spec = write_projected_vm_spec(
+                _repo_root(
+                    ctx
+                ),
+                record,
+            )
 
         payload = {
             "machine": record["id"],
@@ -701,6 +943,62 @@ class MachineCommand(Command):
             print(
                 spec
             )
+
+        return 0
+
+    def _withdraw(self, args, ctx):
+        root = _repo_root(
+            ctx
+        )
+
+        with registry_lock():
+            record = read_machine(
+                args.machine_id
+            )
+
+            # Only a spec that reads as one YAML mapping may be compared:
+            # one that cannot be read proves nothing, and is a refusal.
+            existing = read_generated_spec(
+                root,
+                record["id"],
+            )
+
+            # A spec this record projects to means the Machine went past
+            # intent; one it does not is a stale file and stays.
+            if existing is not None and existing == project_vm_spec(
+                root,
+                record,
+            ):
+                raise ContractError(
+                    f"{record['id']} is projected; "
+                    "only an unprojected record is withdrawn"
+                )
+
+            # The spec alone does not prove there is no domain: it can be
+            # removed or edited by hand. A domain with this name keeps its
+            # record, and an unreadable libvirt list keeps it too.
+            if record["id"] in domain_names(
+                ctx
+            ):
+                raise ContractError(
+                    f"a libvirt domain named {record['id']} exists; "
+                    "its record is not withdrawn"
+                )
+
+            withdraw_machine(
+                args.machine_id,
+                args.record_sha256,
+            )
+
+        print(
+            json.dumps(
+                {
+                    "machine": record["id"],
+                    "withdrawn": True,
+                },
+                indent=2,
+            )
+        )
 
         return 0
 

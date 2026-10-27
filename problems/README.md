@@ -7,6 +7,22 @@ proof.
 - [`gpu-ladder-state-write-fail-open.md`](gpu-ladder-state-write-fail-open.md):
   the qemu hook ignored a failed rung write and let concurrent prepares
   overwrite a dirtier rung; it now commits under a lock by atomic rename.
+- [`machine-create-kept-record-after-projection-refused.md`](machine-create-kept-record-after-projection-refused.md):
+  a creation refused by `project` kept the record `create` wrote, so a
+  retry said "already exists"; the shell now creates in one staged step
+  that writes the spec first and publishes the record last.
+- [`release-pass-with-false-booleans.md`](release-pass-with-false-booleans.md):
+  a release gate could pass and seal with its boolean evidence false, and the
+  private SPICE socket was typed as text; a pass now needs every boolean true.
+- [`showcase-demo-showed-host-values-on-camera.md`](showcase-demo-showed-host-values-on-camera.md):
+  the demo script printed this host's names, home path and addresses on the
+  terminal of the take; it now prints a generic checklist and fixed reasons.
+- [`showcase-name-pattern-checked-three-characters.md`](showcase-name-pattern-checked-three-characters.md):
+  the demo's `case` pattern checked only three characters of the Machine
+  name, so `ab;id` passed; every character is now checked before any tool runs.
+- [`showcase-contract-waited-for-reaping.md`](showcase-contract-waited-for-reaping.md):
+  the showcase contract waited for dash to reap a Looking Glass stub that had
+  already failed, and timed out in CI; an exited child now counts as ended.
 - [`acceptance-contract-depended-on-the-local-zone.md`](acceptance-contract-depended-on-the-local-zone.md):
   the sender-identity contract read its fixed start time in the local
   zone and failed on the UTC runner; it now carries an explicit offset.
@@ -354,5 +370,10 @@ proof.
   live.
 - [`host-pc-speaker-beeped.md`](host-pc-speaker-beeped.md): the host's
   internal PC speaker driver loaded at every boot and beeped.
+- [`machine-provision-trusted-names-not-files.md`](machine-provision-trusted-names-not-files.md):
+  provisioning took a hand-edited spec for the projection, let unchecked
+  arguments, another Template's profile and playbook files through, and
+  left the hash file on SIGTERM or when the runner was stopped, or removed
+  it beside a playbook that a stop caught while it was being started.
 
 Author: [importriri](https://github.com/importriri).

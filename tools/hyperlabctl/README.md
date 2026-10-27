@@ -21,8 +21,9 @@ registry does not expose.
 | `hyperlabctl machine templates` | product Templates and whether each is ready |
 | `hyperlabctl machine list` | persistent product Machine records |
 | `hyperlabctl machine inventory` | product Machines merged with matching runtime observations |
-| `hyperlabctl machine create <template> <id>` | record Machine intent from a ready Template |
+| `hyperlabctl machine create <template> <id> [--project]` | record Machine intent from a ready Template; with `--project`, write its spec first and publish the record last, so a refusal leaves neither |
 | `hyperlabctl machine project <id>` | write the derived VM-spec adapter for one Machine |
+| `hyperlabctl machine withdraw <id> --record-sha256 <digest>` | manual path: remove the record with this digest, while no generated spec matches its projection and libvirt lists no domain with its name |
 | `hyperlabctl machine create-plan` | JSON: what the shell's Create view may offer, with the factory's limits |
 | `hyperlabctl machine provision-steps <id>` | JSON: the reviewed provisioning commands for one projected Machine |
 | `hyperlabctl clipboard send <id>` | send the host clipboard text to one running Machine, once |

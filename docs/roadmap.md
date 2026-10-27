@@ -300,6 +300,22 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       within the Template's limits, provisioned as one durable operation;
       password and become prompt only in the operation window
       ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
+  - [x] a refused creation leaves no record: one staged `machine create
+        --project` under the registry lock, a failure after the record's
+        publication undone record first, and the manual `machine withdraw`
+        held by digest, projection, a readable spec and the libvirt domain
+        list ([ADR 0053](adr/0053-withdraw-machine-intent.md), proposed,
+        software-verified)
+  - [x] provisioning prepared for Nitro: the runner accepts exactly
+        `privatestack-machine-provision NAME` on NAME's own projection,
+        `provision-steps` refuses a spec that is not the record's
+        projection with its scalar types, the whole plan, its profile
+        bound to the record's Template, and its playbook files are checked
+        before the first step, and the hash file is removed after success,
+        failure, SIGINT, SIGTERM and SIGHUP, also when the runner is
+        stopped while a playbook is slow to end, ignores SIGTERM or is
+        still being started, only after that playbook is stopped and reaped
+        ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell
 
@@ -336,7 +352,10 @@ platform, recorded on the host:
       Looking Glass, the Desks, the host frame showing trust and network
       ([`showcase.md`](showcase.md); the lease shot waits for ADR 0019)
 - [x] a demo script that runs the steps in order, so the take is clean
-      (`tools/showcase/demo.sh`, read-only, software-verified)
+      (`tools/showcase/demo.sh`, read-only; it prints a generic privacy
+      checklist, never this host's names, paths or addresses, and a failing
+      tool only as a fixed reason; software-verified with `sh` as Bash and
+      as dash, the CI runner's shell)
 - [ ] recording on the host, editing, captions
 - [ ] review before publishing: no host name, user name, address or private
       path on screen
@@ -611,6 +630,12 @@ Measured with the complete security plane active.
       host-idempotence, network-isolation, standard-vm-lifecycle,
       vfio-trust-lifecycle, looking-glass, jellyfin-service, service-recovery,
       sanitized-publication
+  - [x] a passed gate needs every reviewed boolean exactly true on record,
+        status and seal; `spice_socket_private` is a typed boolean
+        ([`problems/release-pass-with-false-booleans.md`](../problems/release-pass-with-false-booleans.md),
+        `tests/release_acceptance_contract.py`,
+        `tests/release_probe_contract.py`, software-verified on fixture
+        campaigns)
 - [ ] `arch-bootstrap` frozen at the same campaign; `arch-hypervisor-lab`
       receives only the sanitized evidence
 - [x] threat model document: what HyperLab protects against and what it does

@@ -23,7 +23,10 @@ from .machine_factory import (
     _image,
     _repo_root,
     _resource_values,
+    custom_limits,
     os_label,
+    project_vm_spec,
+    read_generated_spec,
     template_catalog,
 )
 from .machine_registry import read_machine
@@ -32,6 +35,8 @@ from .machine_registry import read_machine
 GUEST_KEY = Path(".ssh/hyperlab_ed25519.pub")
 GUEST_KEY_LIMIT = 4096
 KEY_RE = re.compile(r"^ssh-ed25519 (AAAAC3NzaC1lZDI1NTE5[A-Za-z0-9+/]+={0,2})(?: [^\r\n]*)?$")
+# A key type is named in a refusal only when it looks like one.
+KEY_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9@.-]{0,63}$")
 
 # Reviewed profile playbooks. A Template whose workspace is not a server must
 # have one here, or it is not offered for creation.
@@ -45,22 +50,38 @@ PROFILE_PLAYBOOKS = {
 
 # Placeholder for the private hash file; the provisioner substitutes it.
 ACCESS_FILE = "{access_file}"
-VCPU_LIMIT = 256
-MEMORY_FLOOR_MB = 512
 
 
 def guest_key(home: Path) -> dict[str, str]:
-    """Validate the host's guest key; return its key line and fingerprint."""
+    """Validate the host's guest key; return its key line and fingerprint.
+
+    Every refusal names what is wrong and never repeats the file's content.
+    """
     path = Path(home) / GUEST_KEY
-    if path.is_symlink() or not path.is_file():
+    if path.is_symlink():
+        raise Unavailable(f"the guest key ~/{GUEST_KEY} is a symbolic link")
+    if not path.is_file():
         raise Unavailable(f"the guest key ~/{GUEST_KEY} is missing")
     data = path.read_bytes()
     if len(data) > GUEST_KEY_LIMIT:
-        raise ContractError(f"~/{GUEST_KEY} is not one public key")
-    lines = [line.strip() for line in data.decode("ascii", "replace").splitlines() if line.strip()]
-    match = KEY_RE.fullmatch(lines[0]) if len(lines) == 1 else None
+        raise ContractError(f"~/{GUEST_KEY} is too large to be one public key")
+    text = data.decode("ascii", "replace")
+    if "PRIVATE KEY" in text:
+        raise ContractError(f"~/{GUEST_KEY} holds a private key; it must hold the public one")
+    # Physical lines, blank ones included; only the final newline is not a line.
+    lines = text.removesuffix("\n").split("\n")
+    if not text.strip():
+        raise ContractError(f"~/{GUEST_KEY} is empty")
+    if len(lines) > 1:
+        raise ContractError(f"~/{GUEST_KEY} holds {len(lines)} lines; it must hold exactly one public key")
+    lines = [lines[0].strip()]
+    kind = lines[0].split()[0]
+    if kind != "ssh-ed25519":
+        named = kind if KEY_TYPE_RE.fullmatch(kind) else "an unknown type"
+        raise ContractError(f"~/{GUEST_KEY} is not an ed25519 key ({named})")
+    match = KEY_RE.fullmatch(lines[0])
     if match is None:
-        raise ContractError(f"~/{GUEST_KEY} must hold exactly one ed25519 public key")
+        raise ContractError(f"~/{GUEST_KEY} is not one ssh-ed25519 public key line")
     try:
         blob = base64.b64decode(match.group(1), validate=True)
     except binascii.Error as exc:
@@ -87,7 +108,6 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
     root = _repo_root(repo_root)
     if not isinstance(cpu_count, int) or cpu_count < 1:
         raise Unavailable("the host CPU count is unknown")
-    vcpu_max = min(VCPU_LIMIT, cpu_count)
 
     try:
         key = guest_key(home)
@@ -109,12 +129,8 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
                                                      vcpus=None, disk_gib=None)
         custom = None
         if "custom" in entry["resource_profiles"]:
-            custom = {
-                "memory_mb_min": max(MEMORY_FLOOR_MB, image["min_memory_mb"]),
-                "vcpus_min": 1,
-                "vcpus_max": vcpu_max,
-                "disk_gib_min": image["virtual_size_gib"],
-            }
+            # The same bounds the factory holds a custom request to.
+            custom = custom_limits(image, cpu_count=cpu_count)
         provision = _provision(entry["id"], entry["presentation"]["workspace_profile"])
         blocked = provision.pop("blocked_reason", None)
         if blocked is None and not key_entry["available"]:
@@ -150,6 +166,22 @@ def creation_plan(repo_root: Path | str, *, home: Path, cpu_count: int) -> dict[
     }
 
 
+def same_document(left: Any, right: Any) -> bool:
+    """Equality that keeps YAML's scalar types.
+
+    Plain equality takes true for 1, 0 for false and 2048.0 for 2048; the
+    spec's readers do not, so neither does the projection comparison.
+    """
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return ({(type(key), key) for key in left} == {(type(key), key) for key in right}
+                and all(same_document(value, right[key]) for key, value in left.items()))
+    if isinstance(left, list):
+        return len(left) == len(right) and all(map(same_document, left, right))
+    return left == right
+
+
 def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
                     runtime_dir: Path, state_home: Path | None = None) -> dict[str, Any]:
     """The documented commands for one created and projected Machine."""
@@ -158,9 +190,15 @@ def provision_steps(repo_root: Path | str, machine_id: str, *, home: Path,
         raise ContractError("invalid Machine id")
     record = read_machine(machine_id, state_home=state_home)
     spec = f"vm-specs/.generated/{machine_id}.yml"
-    spec_path = root / spec
-    if spec_path.is_symlink() or not spec_path.is_file():
+    # The record is the authority and the spec only its projection: what
+    # stands there must be exactly what the record projects to now. A link,
+    # an unreadable or malformed file, or one edited by hand is refused
+    # before any step, like a missing one.
+    stored = read_generated_spec(root, machine_id)
+    if stored is None:
         raise Unavailable(f"{machine_id} is not projected; run hyperlabctl machine project first")
+    if not same_document(stored, project_vm_spec(root, record)):
+        raise ContractError(f"{spec} differs from the projection of the Machine record {machine_id}")
     provision = _provision(record["template"]["id"], record["presentation"]["workspace_profile"])
     if "blocked_reason" in provision:
         raise ContractError(provision["blocked_reason"])

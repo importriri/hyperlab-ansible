@@ -421,6 +421,7 @@ def capabilities(name: str) -> dict[str, Any]:
 MACHINE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
 TOKEN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 NUMBER = re.compile(r"^[1-9][0-9]{0,6}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def create_plan() -> dict[str, Any]:
@@ -445,6 +446,8 @@ def create(args: list[str]) -> None:
             raise Refused("invalid creation request")
     if not MACHINE_ID.fullmatch(name):
         raise Refused("the name must be 2-31 lowercase letters, digits or dashes")
+    if not all(NUMBER.fullmatch(value) for value in args[5:]):
+        raise Refused("custom resources need memory, vCPUs and disk")
 
     plan = create_plan()
     matches = [entry for entry in plan["templates"]
@@ -464,7 +467,7 @@ def create(args: list[str]) -> None:
     command = ["machine", "create", template_id, name, "--lifecycle", lifecycle,
                "--network-profile", network, "--resource-profile", profile]
     if profile == "custom":
-        if len(args) != 8 or not all(NUMBER.fullmatch(value) for value in args[5:]):
+        if len(args) != 8:
             raise Refused("custom resources need memory, vCPUs and disk")
         memory, vcpus, disk = (int(value) for value in args[5:])
         limits = template.get("custom")
@@ -485,12 +488,22 @@ def create(args: list[str]) -> None:
     if mode not in (None, "disabled"):
         command += ["--looking-glass-mode", str(mode)]
 
-    created = cli_json(*command)
-    if not isinstance(created, dict) or created.get("machine", {}).get("id") != name:
-        raise Refused("the factory did not confirm the Machine")
-    projected = cli_json("machine", "project", name)
-    if not isinstance(projected, dict) or projected.get("spec") != f"vm-specs/.generated/{name}.yml":
-        raise Refused("the Machine was recorded but not projected")
+    # One staged call records and projects the Machine: the factory publishes
+    # the record only after its spec is written, so a refusal leaves neither.
+    command.append("--project")
+    try:
+        created = cli_json(*command)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise Refused(f"the factory did not answer: {exc}") from None
+    machine = created.get("machine") if isinstance(created, dict) else None
+    if (
+        not isinstance(machine, dict)
+        or machine.get("id") != name
+        or created.get("spec") != f"vm-specs/.generated/{name}.yml"
+        or type(created.get("record_sha256")) is not str
+        or not SHA256.fullmatch(created["record_sha256"])
+    ):
+        raise Refused("the factory did not confirm the Machine and its spec")
     # The runner resolves the provisioning command itself; nothing else crosses.
     privileged("machine.provision", name)
 
