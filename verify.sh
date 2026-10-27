@@ -5,6 +5,9 @@ set -u
 cd "$(dirname "$0")" || exit 1
 
 fail=0
+# Set when level 2b ran without the privileged nft -c judge. The run is then
+# incomplete: never ALL GREEN, even when every check that ran passed.
+render_judge_missing=0
 render_password_file=""
 
 cleanup_render_password_file() {
@@ -48,6 +51,7 @@ run() {
 
 run_render() {
     local -a become_args=()
+    local -a render_select=()
     local attempt
     local become_password
     local password_valid=0
@@ -132,13 +136,17 @@ run_render() {
         # Non-interactive CI may use passwordless sudo.
         become_args=()
     else
-        echo "Render tests require sudo credentials. Set PRIVATESTACK_BECOME_PASSWORD_FILE or run interactively." >&2
-        fail=1
-        return
+        # No credential at all: run every render invariant that needs no root
+        # and report the nft -c judge as missing. Only this branch may skip
+        # it; an unreadable supplied file or a failed credential never lands
+        # here.
+        echo "Render tests require sudo credentials for the nft -c judge. Set PRIVATESTACK_BECOME_PASSWORD_FILE or run interactively. Running the other render invariants with --skip-tags privileged." >&2
+        render_select=(--skip-tags privileged)
+        render_judge_missing=1
     fi
 
     if [ -t 1 ]; then
-        if ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
+        if ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml "${render_select[@]}" \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'; then
             echo "   OK"
         else
@@ -146,8 +154,11 @@ run_render() {
             fail=1
         fi
     else
-        run ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml \
+        run ansible-playbook "${become_args[@]}" -i inventory.ini tests/render.yml "${render_select[@]}" \
             --extra-vars '{"hardware_profiles":{"nitro-3060":{"vfio_ids":["10de:2520","10de:228e"]}}}'
+    fi
+    if [ "${render_judge_missing}" -eq 1 ]; then
+        echo "   NOT RUN - the privileged nft -c judge of tests/render.yml (no sudo credentials)"
     fi
 
     cleanup_render_password_file
@@ -224,11 +235,20 @@ if ls tests/*.bats >/dev/null 2>&1; then
     run bats tests/*.bats
 fi
 
+# A failure always wins over the missing judge, so a broken invariant is
+# never reported as a credentials gap.
 printf '\n'
-if [ "${fail}" -eq 0 ]; then
+if [ "${fail}" -eq 0 ] && [ "${render_judge_missing}" -eq 0 ]; then
     echo "ALL GREEN - ready to commit."
     echo "(level 4 - the real world - runs on the host: --check --diff, run, changed=0)"
+elif [ "${fail}" -eq 0 ]; then
+    echo "VERIFICATION INCOMPLETE - every check that ran passed, but the privileged nft -c judge did not run."
+    echo "Not a commit or release result: run ./verify.sh again with sudo credentials."
+    exit 1
 else
     echo "VERIFICATION FAILED - read above. No commit until this is green."
+    if [ "${render_judge_missing}" -eq 1 ]; then
+        echo "The privileged nft -c judge did not run either (no sudo credentials)."
+    fi
     exit 1
 fi

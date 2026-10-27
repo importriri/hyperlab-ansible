@@ -8,6 +8,11 @@
 # findings paid for with real bugs become executable assertions.
 #
 #   ansible-playbook -i inventory.ini tests/render.yml
+#
+# Without sudo, the second form runs every other task. It is a partial
+# result: the nft -c judge is unverified until the first form passes.
+#
+#   ansible-playbook -i inventory.ini tests/render.yml --skip-tags privileged
 # ============================================================================
 
 - name: Validate brick files against their invariants
@@ -331,10 +336,11 @@
         dest: "{{ render_ws.path }}/lab-isolation.nft"
         mode: "0644"
 
-    # The one task in this suite that needs root. verify.sh always runs it;
-    # the tag exists so the unprivileged remainder can still be validated in
-    # an environment without sudo, never so the judge can be skipped in a
-    # real verification run.
+    # The one task in this suite that needs root. verify.sh runs it whenever
+    # it has a sudo credential (a password file, the interactive prompt or
+    # passwordless sudo). With none, it skips only this tag, reports the
+    # judge as not run and ends VERIFICATION INCOMPLETE, never ALL GREEN:
+    # release qualification still needs a complete run with this judge.
     - name: The real judge - nft -c on the rendered ruleset
       become: true
       ansible.builtin.command: nft -c -f {{ render_ws.path }}/lab-isolation.nft

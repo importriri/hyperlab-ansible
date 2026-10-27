@@ -28,6 +28,17 @@ ansible-playbook -K playbooks/lab.yml
 The last run must report `changed=0`. A successful CI run is a software result;
 hardware support is recorded separately in `arch-hypervisor-lab`.
 
+Level 2b of `./verify.sh` runs `tests/render.yml` with a sudo credential:
+`PRIVATESTACK_BECOME_PASSWORD_FILE` (passed by filename; an unreadable file is
+a failure), the interactive prompt, or passwordless sudo. With none of them it
+still runs every render invariant except the root-only `nft -c` judge
+(`--skip-tags privileged`), reports that judge as `NOT RUN` and ends with
+`VERIFICATION INCOMPLETE` and exit status 1. A failing check in such a run
+still ends `VERIFICATION FAILED`. An incomplete run is not a commit or release
+result: release qualification needs a complete run that ends `ALL GREEN`.
+`python tests/verify_render_selection_contract.py` runs the verifier with
+recording stubs, sudo included, and checks each of these paths.
+
 The required CI validation job also runs the shell structure suite and all five
 palette/choices checks from `verify.sh` levels 0f and 0g. Run
 `python tests/ci_verify_parity_contract.py` to check their execution parity:
