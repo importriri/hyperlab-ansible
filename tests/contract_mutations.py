@@ -14,6 +14,7 @@ import yaml
 
 from ci_verify_parity_contract import collect_errors as parity_errors
 from static_contract import collect_errors
+from verify_render_selection_contract import collect_errors as render_selection_errors
 
 ROOT = Path(__file__).resolve().parents[1]
 CI = ".github/workflows/ci.yml"
@@ -564,6 +565,136 @@ class CiVerifyParityMutationTests(unittest.TestCase):
                 f"run {PALETTE_AND_CHOICES[4]}\nrun python3 tools/palette/verify_output.py\n",
             ),
             "CI and verify.sh run different tool checks",
+        )
+
+
+
+class VerifyRenderSelectionMutationTests(unittest.TestCase):
+    """Each break edits a copy of verify.sh and must turn the render selection contract red."""
+
+    replace_once = staticmethod(CiVerifyParityMutationTests.replace_once)
+
+    def assert_selection_fails(self, mutation: Callable[[Path], None], expected: str) -> None:
+        with tempfile.TemporaryDirectory(prefix="privatestack-render-selection-") as tmp:
+            copy = Path(tmp)
+            shutil.copy2(ROOT / "verify.sh", copy / "verify.sh")
+            mutation(copy)
+            errors = render_selection_errors(copy)
+        self.assertTrue(errors, "mutation unexpectedly passed")
+        self.assertTrue(
+            any(expected in error for error in errors),
+            f"expected {expected!r}; got:\n" + "\n".join(errors),
+        )
+
+    def test_baseline_is_green(self) -> None:
+        self.assertEqual([], render_selection_errors(ROOT))
+
+    def test_no_credentials_returns_before_the_render_suite(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                "        render_select=(--skip-tags privileged)\n        render_judge_missing=1\n",
+                "        fail=1\n        return\n",
+            ),
+            "partial success (pipe): render suite ran [], expected",
+        )
+
+    def test_partial_run_must_skip_only_the_privileged_tag(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                "        render_select=(--skip-tags privileged)\n",
+                "        render_select=()\n",
+            ),
+            "partial success (pipe): render suite ran "
+            "['ansible-playbook -i inventory.ini tests/render.yml --extra-vars",
+        )
+
+    def test_full_runs_may_not_skip_the_judge(self) -> None:
+        breaks = (
+            (
+                "local -a render_select=()\n",
+                "local -a render_select=(--skip-tags privileged)\n",
+                "full success with a supplied file (pipe): render suite ran",
+            ),
+            (
+                'become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")\n',
+                'become_args=(--become-password-file "${PRIVATESTACK_BECOME_PASSWORD_FILE}")\n'
+                "        render_select=(--skip-tags privileged)\n",
+                "full success with a supplied file (pipe): render suite ran",
+            ),
+            (
+                "        become_args=()\n",
+                "        become_args=()\n        render_select=(--skip-tags privileged)\n",
+                "passwordless full success (pipe): render suite ran",
+            ),
+        )
+        for old, new, expected in breaks:
+            with self.subTest(new=new):
+                self.assert_selection_fails(
+                    lambda root, old=old, new=new: self.replace_once(root / "verify.sh", old, new),
+                    expected,
+                )
+
+    def test_partial_render_failure_may_not_be_swallowed(self) -> None:
+        breaks = (
+            (
+                '        run ansible-playbook "${become_args[@]}"',
+                '        ansible-playbook "${become_args[@]}"',
+                "partial render failure (pipe): verdict ['VERIFICATION INCOMPLETE",
+            ),
+            (
+                '            echo "   FAIL"\n            fail=1\n',
+                '            echo "   FAIL"\n',
+                "partial render failure (terminal): verdict ['VERIFICATION INCOMPLETE",
+            ),
+        )
+        for old, new, expected in breaks:
+            with self.subTest(old=old):
+                self.assert_selection_fails(
+                    lambda root, old=old, new=new: self.replace_once(root / "verify.sh", old, new),
+                    expected,
+                )
+
+    def test_partial_success_may_not_print_all_green(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                'if [ "${fail}" -eq 0 ] && [ "${render_judge_missing}" -eq 0 ]; then\n',
+                'if [ "${fail}" -eq 0 ]; then\n',
+            ),
+            "partial success (pipe): verdict ['ALL GREEN - ready to commit.']",
+        )
+
+    def test_failure_may_not_be_reported_as_the_missing_judge(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                'elif [ "${fail}" -eq 0 ]; then\n',
+                'elif [ "${render_judge_missing}" -eq 1 ]; then\n',
+            ),
+            "partial run with a lint failure (pipe): verdict ['VERIFICATION INCOMPLETE",
+        )
+
+    def test_partial_run_must_name_the_missing_judge(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                '        echo "   NOT RUN - the privileged nft -c judge of tests/render.yml (no sudo credentials)"\n',
+                "        :\n",
+            ),
+            "partial success (pipe): level 2b reports the nft -c judge as not run 0 times",
+        )
+
+    def test_unreadable_supplied_file_may_not_fall_back(self) -> None:
+        self.assert_selection_fails(
+            lambda root: self.replace_once(
+                root / "verify.sh",
+                'if [ -n "${PRIVATESTACK_BECOME_PASSWORD_FILE:-}" ]; then\n',
+                'if [ -r "${PRIVATESTACK_BECOME_PASSWORD_FILE:-}" ]; then\n',
+            ),
+            "supplied file missing (pipe): render suite ran "
+            "['ansible-playbook -i inventory.ini tests/render.yml --skip-tags privileged",
         )
 
 

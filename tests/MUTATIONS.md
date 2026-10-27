@@ -1409,3 +1409,37 @@ skipped all six, and moving the steps right after the toolchain turned that
 check green. The earlier committed CI
 workflow, with only its toolchain id added for the fixture, was also observed
 red for all six missing invocations, then green after restoring the new steps.
+
+### verify.sh runs the unprivileged render invariants without sudo
+
+`python tests/verify_render_selection_contract.py` is the red check below. It
+runs the shipped `verify.sh` in a temporary checkout where every tool it calls,
+`sudo` included, is a recording stub, with stdin redirected and stdout either a
+pipe or a terminal, since the render suite is invoked from one place for each.
+Its cases are a run without any credential (passing, with a failing render
+suite, with a failing `ruff`), a supplied password file (passing, failing),
+passwordless sudo (passing, failing) and a supplied file that is missing or,
+when not run as root, mode 0. Run
+`python tests/contract_mutations.py VerifyRenderSelectionMutationTests` to
+replay the breaks automatically on a temporary copy of `verify.sh`; append the
+method name to that prefix to replay one. The stubs do not certify the render
+suite itself: `ansible-playbook -i inventory.ini tests/render.yml` still has to
+pass with credentials.
+
+| Test method | Break in the temporary copy | Required red diagnostic |
+| --- | --- | --- |
+| `test_no_credentials_returns_before_the_render_suite` | Put back `fail=1` and `return` in place of the partial selection. | `partial success (pipe): render suite ran [], expected` the `--skip-tags privileged` argv |
+| `test_partial_run_must_skip_only_the_privileged_tag` | Set `render_select=()` in the no-credential branch. | `partial success (pipe): render suite ran` the argv without `--skip-tags privileged` |
+| `test_full_runs_may_not_skip_the_judge` | Default `render_select` to `--skip-tags privileged`, or add it to the password-file or the passwordless branch only. | `full success with a supplied file` or `passwordless full success` `render suite ran` an argv with `--skip-tags privileged` |
+| `test_partial_render_failure_may_not_be_swallowed` | Call the pipe-mode render suite without `run`, or drop `fail=1` after the terminal-mode `FAIL`. | `partial render failure (pipe)` or `(terminal)`: `verdict ['VERIFICATION INCOMPLETE ...']` |
+| `test_partial_success_may_not_print_all_green` | Drop `render_judge_missing` from the ALL GREEN condition. | `partial success (pipe): verdict ['ALL GREEN - ready to commit.']`, with `verify.sh exited 0, expected 1` |
+| `test_failure_may_not_be_reported_as_the_missing_judge` | Test `render_judge_missing` before `fail` in the verdict. | `partial run with a lint failure (pipe): verdict ['VERIFICATION INCOMPLETE ...']` |
+| `test_partial_run_must_name_the_missing_judge` | Drop the `NOT RUN` line of level 2b. | `partial success (pipe): level 2b reports the nft -c judge as not run 0 times, expected 1` |
+| `test_unreadable_supplied_file_may_not_fall_back` | Test the configured file with `-r` instead of `-n`, so an unreadable one falls through. | `supplied file missing (pipe): render suite ran` the `--skip-tags privileged` argv, and `sudo ran ['sudo -n true'], expected []` |
+
+All listed breaks were also made by hand on `verify.sh` from a saved copy:
+each turned the contract red with the diagnostic above (between 4 and 20
+errors), and restoring the copy turned it green. Before the change, the
+contract was red only for the three no-credential cases, in both stdout modes:
+the render suite was not run, the verdict was `VERIFICATION FAILED` and no
+`NOT RUN` line was printed. Every full-credential case was already green.
