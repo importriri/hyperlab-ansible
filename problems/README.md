@@ -55,6 +55,10 @@ proof.
 - [`emergency-key-active-before-acceptance.md`](emergency-key-active-before-acceptance.md):
   the proposed emergency key was already bound and advertised; it is now
   unbound while the explicit CLI, status and confirmed Restore remain usable.
+
+- [`disposable-boot-access.md`](disposable-boot-access.md): disposable
+  restarts discarded the agent restriction and SSH host key; the seed now
+  restores the restriction and managed starts refresh the owner's strict pin.
 - [`machine-create-kept-record-after-projection-refused.md`](machine-create-kept-record-after-projection-refused.md):
   a creation refused by `project` kept the record `create` wrote, so a
   retry said "already exists"; the shell now creates in one staged step

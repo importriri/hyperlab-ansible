@@ -394,9 +394,11 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       libvirt transient disk over the lifecycle overlay; server Templates
       offer them ([ADR 0018](adr/0018-disposable-discards-on-stop.md),
       accepted by the operator on 2026-11-05; software-verified)
-- [ ] a disposable Machine closed again at every later boot: the agent
-      allowlist restored and the host key re-pinned after each start (not
-      built: the managed start runs neither step, ADR 0018 Limits)
+  - [x] disposable Linux seeds restore and activate the canonical agent
+        restriction on each boot; Start waits for cloud-init and proves
+        exec disabled, then Start and Power Cycle refresh the owner's
+        strict SSH pin and runtime inventory (ADR 0018 amendment proposed,
+        software-verified)
 - [ ] a disposable Machine proven on Nitro: a file written in the guest is
       gone after a stop and start, and no temporary overlay is left behind
 - [x] Create view in the shell: Template, name, network and resources

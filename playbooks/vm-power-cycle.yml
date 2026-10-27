@@ -11,3 +11,7 @@
       vars:
         brick_guard_brick: guest
     - guest
+
+- name: Refresh the SSH identity of the new disposable boot as its owner
+  ansible.builtin.import_playbook: vm-guest-inventory.yml
+  when: guest_start_new_disposable_boot | default(false) | bool

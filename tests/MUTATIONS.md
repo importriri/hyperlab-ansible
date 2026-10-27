@@ -4560,3 +4560,360 @@ strict checkout refusal before the fix.
 | V51 | In `provenance_resolver`, use the resolved resolver returned by `provenance_source()` and set `checkout = resolver.parent.parent` for argv matching | symlinked checkout | `literal symlinked checkout observer rejected` |
 | V52 | Remove `include(resolver, str(resolver))` from `source_generation` | symlinked checkout | `symlinked checkout resolver omitted from installed generation` |
 | V53 | Remove the `resolver.resolve(strict=True) != resolver` refusal | symlinked checkout | `redirected checkout tools directory accepted` |
+
+## Disposable boot access and SSH identity (ADR 0018)
+
+All eleven mutations below were observed red (exit 1), restored from plain
+copies, and observed green (exit 0). These fixtures prove software behavior;
+real cloud-init activation and transient-disk cleanup still require Nitro.
+
+Before replaying any one mutation, keep copies below the checkout with a
+`.saved` suffix so lint does not discover them as additional task files:
+
+```bash
+export MUTATION_BACKUP="$(mktemp -d "$PWD/tests/fixtures/boot-access.XXXXXX")"
+python - <<'PY'
+import os
+from pathlib import Path
+import shutil
+
+backup = Path(os.environ["MUTATION_BACKUP"])
+for relative in ['playbooks/vm-guest-inventory.yml', 'playbooks/vm-start.yml', 'roles/guest/defaults/main.yml', 'roles/guest/tasks/main.yml', 'roles/guest/tasks/start.yml', 'roles/guest/templates/user-data.j2']:
+    target = backup / (relative + ".saved")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(relative, target)
+PY
+```
+
+For each case run its Break, then Check (must fail with the stated reason),
+then Restore and the same Check (must pass). Do not combine mutations.
+
+### M1. Omit the disposable seed restriction
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/templates/user-data.j2')
+s = p.read_text()
+old = '  - path: /etc/qemu/qemu-ga.conf\n    owner: root:root\n    permissions: "0644"\n    content: {{ guest_disposable_agent_conf | to_json }}\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_seed()'
+```
+
+Observed red: `disposable seed has no agent restriction`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/templates/user-data.j2.saved" roles/guest/templates/user-data.j2
+```
+
+### M2. Omit activation of the seed restriction
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/templates/user-data.j2')
+s = p.read_text()
+old = '  - [systemctl, restart, qemu-guest-agent.service]\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_seed()'
+```
+
+Observed red: `restriction is never activated`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/templates/user-data.j2.saved" roles/guest/templates/user-data.j2
+```
+
+### M3. Accept every nonzero exec probe result
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = "guest_start_exec_probe.rc == 0 or\n        'guest-exec has been disabled' not in (guest_start_exec_probe.stderr | lower)"
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'guest_start_exec_probe.rc == 0', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `agent unavailable at the probe: the start succeeded`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M4. Keep the first pin when runtime inventory already exists
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-guest-inventory.yml')
+s = p.read_text()
+old = '    - name: Pin the guest SSH host key for strict checking\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, "    - name: Pin the guest SSH host key for strict checking\n      when: lookup('ansible.builtin.fileglob', guest_inventory_runtime_path ~ '/' ~ guest_inventory_plan.name ~ '.ini') | length == 0\n", 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `second boot was not pinned`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-guest-inventory.yml.saved" playbooks/vm-guest-inventory.yml
+```
+
+### M5. Run the boot action on an already-running target
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = "guest_domain_state == 'shut off'\n         and not ansible_check_mode"
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'not ansible_check_mode', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `already running:`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M6. Run the boot action in check mode
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = '         and not ansible_check_mode\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `check mode:`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M7. Skip this boot's cloud-init completion wait
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+a = s.index("    - name: Wait for this boot's cloud-init")
+b = s.index("    - name: Wait until the new boot's agent")
+p.write_text(s[:a] + s[b:])
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `restricted base agent can pass readiness`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M8. Copy the RPC policy into the seed defaults
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/defaults/main.yml')
+s = p.read_text()
+old = "guest_disposable_agent_rpcs: >-\n  {{ (lookup('ansible.builtin.file', guest_disposable_agent_policy_file)\n      | from_yaml).guest_access_close_agent_rpcs }}\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'guest_disposable_agent_rpcs: ["guest-sync-delimited", "guest-sync", "guest-ping", "guest-info", "guest-get-host-name", "guest-network-get-interfaces", "guest-shutdown", "guest-file-open", "guest-file-read", "guest-file-close"]\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_seed()'
+```
+
+Observed red: `seed keeps an allowlist of its own`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/defaults/main.yml.saved" roles/guest/defaults/main.yml
+```
+
+### M9. Permit a widened or narrowed seed policy
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/main.yml')
+s = p.read_text()
+old = "      - >-\n        guest_disposable_agent_rpcs ==\n        (lookup('ansible.builtin.file', guest_disposable_agent_policy_file)\n         | from_yaml).guest_access_close_agent_rpcs\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.check_allowlist_gate(t.close_role_agent_conf()[0])'
+```
+
+Observed red: `gate let these allowlists reach a seed: ['widened', 'narrowed']`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/main.yml.saved" roles/guest/tasks/main.yml
+```
+
+### M10. Duplicate write_files in the vault seed
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/templates/user-data.j2')
+s = p.read_text()
+old = 'runcmd:\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '{% if vault %}\nwrite_files: []\n{% endif %}\nruncmd:\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import vault_guest_contract as t; t.check_disposable_vault_seed()'
+```
+
+Observed red: `duplicate YAML key`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/templates/user-data.j2.saved" roles/guest/templates/user-data.j2
+```
+
+### M11. Omit the public Start inventory publisher
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-start.yml')
+s = p.read_text()
+old = '\n- name: Refresh the SSH identity of the new disposable boot as its owner\n  ansible.builtin.import_playbook: vm-guest-inventory.yml\n  when: guest_start_new_disposable_boot | default(false) | bool\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `vm-start.yml:`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-start.yml.saved" playbooks/vm-start.yml
+```

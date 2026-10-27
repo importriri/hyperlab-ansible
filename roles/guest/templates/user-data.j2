@@ -16,7 +16,14 @@ users:
       - {{ key | to_json }}
 {% endfor %}
 package_update: false
-{% if guest_plan.key_vault | default(none) == 'vault' %}
+{# ADR 0018: a disposable Machine boots from its sealed base every time, so
+    the agent restriction guest_access_close wrote is gone at every start.
+    The seed writes the same file in cloud-init's init stage and restarts the
+    agent first thing in its final stage; the managed start waits for that
+    and proves guest-exec refused before it reports the Machine started. #}
+{% set agent_closed_at_boot = guest_plan.lifecycle == 'disposable' and guest_plan.qemu_guest_agent | bool %}
+{% set vault = guest_plan.key_vault | default(none) == 'vault' %}
+{% if vault %}
 {#- ADR 0048: the vault is configured here and nowhere else; nothing reaches
     it after this but its vsock port. Its key is made on the first boot and
     never leaves: a client reads the public half with ssh-add -L. #}
@@ -54,7 +61,16 @@ PrivateTmp=yes
 [Install]
 WantedBy=multi-user.target
 {% endset %}
+{% endif %}
+{% if agent_closed_at_boot or vault %}
 write_files:
+{% if agent_closed_at_boot %}
+  - path: /etc/qemu/qemu-ga.conf
+    owner: root:root
+    permissions: "0644"
+    content: {{ guest_disposable_agent_conf | to_json }}
+{% endif %}
+{% if vault %}
   - path: /usr/local/bin/hyperlab-vault-listen
     owner: root:root
     permissions: "0755"
@@ -67,7 +83,13 @@ write_files:
     owner: root:root
     permissions: "0644"
     content: {{ vault_listen_unit | to_json }}
+{% endif %}
 runcmd:
+{% if agent_closed_at_boot %}
+  - [systemctl, restart, qemu-guest-agent.service]
+{% endif %}
+{% if vault %}
   - [systemctl, daemon-reload]
   - [systemctl, enable, --now, hyperlab-vault-agent.service, hyperlab-vault-listen.service]
+{% endif %}
 {% endif %}

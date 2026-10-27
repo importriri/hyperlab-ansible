@@ -17,6 +17,7 @@
       {{ guest_inventory_repository_root }}/group_vars/all/vm-resource-profiles.yml
     guest_inventory_python_bin: /usr/bin/python
     guest_inventory_virsh_bin: /usr/bin/virsh
+    guest_inventory_runtime_path: "/run/user/{{ guest_inventory_operator_uid }}"
   tasks:
     - name: Refuse a missing guest selector
       ansible.builtin.assert:
@@ -103,7 +104,7 @@
 
     - name: Inspect the private runtime directory
       ansible.builtin.stat:
-        path: "/run/user/{{ guest_inventory_operator_uid }}"
+        path: "{{ guest_inventory_runtime_path }}"
       register: guest_inventory_runtime_dir
 
     - name: Inspect strict SSH controller inputs
@@ -150,10 +151,10 @@
       changed_when: false
       check_mode: false
 
-    # A new Machine generates its SSH host keys on first boot. The key is read
-    # over the hypervisor's QEMU Guest Agent channel, never accepted from the
-    # network, and pinned to the address just resolved; a stale key for a
-    # reused address is replaced.
+    # Every disposable boot generates new SSH host keys, as does a new Machine.
+    # The key is read over the hypervisor's QEMU Guest Agent channel, never
+    # accepted from the network, and pinned to the address just resolved;
+    # a stale key for a reused address is replaced.
     - name: Read the guest SSH host key through QEMU Guest Agent
       ansible.builtin.command:
         argv:
@@ -201,6 +202,6 @@
           [workstations]
           {{ guest_inventory_host_record }}
         dest: >-
-          /run/user/{{ guest_inventory_operator_uid }}/{{ guest_inventory_plan.name }}.ini
+          {{ guest_inventory_runtime_path }}/{{ guest_inventory_plan.name }}.ini
         owner: "{{ guest_inventory_plan.owner }}"
         mode: '0600'

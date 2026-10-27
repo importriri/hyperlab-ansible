@@ -239,6 +239,38 @@
       public keys in guest_cloud_init_ssh_public_keys. Passwords, private
       keys and malformed key material are never accepted.
 
+# ADR 0018: the seed of a disposable Machine with the agent carries the
+# allowlist guest_access_close reviews. A missing, malformed, duplicated or
+# widened list is refused here, before any host write.
+- name: Refuse a disposable seed without the canonical agent allowlist
+  when:
+    - guest_operation in ['create', 'reset']
+    - guest_plan.cloud_init
+    - guest_plan.lifecycle == 'disposable'
+    - guest_plan.qemu_guest_agent
+  ansible.builtin.assert:
+    that:
+      - guest_disposable_agent_rpcs is sequence
+      - guest_disposable_agent_rpcs is not string
+      - guest_disposable_agent_rpcs is not mapping
+      - guest_disposable_agent_rpcs | length > 0
+      - >-
+        guest_disposable_agent_rpcs
+        | select('string')
+        | select('match', '^guest-[a-z]+(-[a-z]+)*$')
+        | list | length == guest_disposable_agent_rpcs | length
+      - guest_disposable_agent_rpcs | unique | length == guest_disposable_agent_rpcs | length
+      - "'guest-exec' not in guest_disposable_agent_rpcs"
+      - "'guest-exec-status' not in guest_disposable_agent_rpcs"
+      - >-
+        guest_disposable_agent_rpcs ==
+        (lookup('ansible.builtin.file', guest_disposable_agent_policy_file)
+         | from_yaml).guest_access_close_agent_rpcs
+    fail_msg: >-
+      The QEMU Guest Agent allowlist for {{ guest_plan.name }}'s disposable
+      seed must be guest_access_close_agent_rpcs: a non-empty list of
+      distinct guest-* calls without guest-exec. Refusing to write the seed.
+
 - name: Rebuild the live VFIO contract for hardware-sensitive operations
   when:
     - guest_plan.device_profile == 'vfio'

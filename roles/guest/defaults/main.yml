@@ -64,6 +64,25 @@ guest_ssh_public_key_pattern: >-
   sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)
   \x20[A-Za-z0-9+/]+={0,3}(?:\x20[^\r\n]+)?$
 
+# ADR 0018: a disposable Machine discards the agent restriction that
+# guest_access_close wrote at every stop, so its seed writes the same file on
+# every boot. The allowlist is read from that role, never copied here, and
+# the file is the one that role writes, so a later close changes nothing.
+guest_disposable_agent_policy_file: >-
+  {{ guest_repository_root }}/roles/guest_access_close/defaults/main.yml
+guest_disposable_agent_rpcs: >-
+  {{ (lookup('ansible.builtin.file', guest_disposable_agent_policy_file)
+      | from_yaml).guest_access_close_agent_rpcs }}
+guest_disposable_agent_conf: |
+  # Managed by hyperlab-ansible (guest_access_close). Needs qemu-ga 8.1+.
+  [general]
+  allow-rpcs={{ guest_disposable_agent_rpcs | join(',') }}
+# A new disposable boot is reported started only after the host saw its
+# agent list guest-exec as disabled and refuse it. One agent call may take
+# this long; the retry budget uses guest_qga_timeout_seconds and this interval.
+guest_agent_call_timeout_seconds: 10
+guest_disposable_agent_poll_seconds: 5
+
 # The key vault's listener and port inside the vault Machine (ADR 0048).
 guest_vault_port: 7401
 guest_vault_listener: "{{ lookup('ansible.builtin.file', 'hyperlab-vault-listen.py') }}"

@@ -10,6 +10,19 @@
       {{ guest_plan.name }} is {{ guest_domain_state }}. Start accepts only a
       managed shut-off domain or an already-running idempotent target.
 
+# ADR 0018: starting a shut-off disposable Machine is a first boot from its
+# sealed base, without the agent restriction and the SSH host keys of the last
+# one. Only a QEMU start made here is such a boot: an already-running target
+# and check mode are not proved, and their pin is not replaced.
+- name: Decide whether this start makes a new disposable boot
+  ansible.builtin.set_fact:
+    guest_start_new_disposable_boot: >-
+      {{ guest_domain_state == 'shut off'
+         and not ansible_check_mode
+         and guest_plan.lifecycle == 'disposable'
+         and guest_plan.cloud_init | bool
+         and guest_plan.qemu_guest_agent | bool }}
+
 - name: Reconcile GPU policy before a managed Machine may start
   when:
     - guest_domain_state == 'shut off'
@@ -138,3 +151,96 @@
   retries: "{{ [guest_qga_timeout_seconds | int // 5, 1] | max }}"
   delay: 5
   until: guest_qga_ready.rc == 0
+
+# The seed restarts the agent on its restricted configuration (user-data.j2).
+# guest-info only reads: it lists guest-exec as disabled once the restricted
+# agent answers, so guest-exec is never tried on an agent that would run it.
+# Then guest-exec must be refused as disabled. Success, a missing agent, a
+# timeout or any other error is a failed start, never a default.
+- name: Prove a new disposable boot closed its agent before the start succeeds
+  when: guest_start_new_disposable_boot | bool
+  block:
+    # The runtime result link is published after cloud-init's final stage.
+    # Read it through the existing file RPCs, never through guest-exec.
+    - name: Wait for this boot's cloud-init to finish without errors
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_python_bin }}"
+          - -c
+          - |
+            import json
+            import os
+            from pathlib import Path
+            import subprocess
+            import sys
+
+            sys.path.insert(0, str(Path(sys.argv[1]) / "tools"))
+            from guest_host_key import read_guest_file
+
+            def run(argv: list[str]) -> str:
+                return subprocess.run(
+                    argv, check=True, capture_output=True, text=True,
+                    timeout=int(sys.argv[4]), env={**os.environ, "LC_ALL": "C"},
+                ).stdout
+
+            result = json.loads(read_guest_file(
+                run, Path(sys.argv[2]), sys.argv[3], "/run/cloud-init/result.json",
+            ))
+            if result.get("v1", {}).get("errors") != []:
+                raise ValueError("cloud-init has not completed without errors")
+          - "{{ guest_repository_root }}"
+          - "{{ guest_virsh_bin }}"
+          - "{{ guest_plan.name }}"
+          - "{{ guest_agent_call_timeout_seconds }}"
+      register: guest_start_cloud_init
+      changed_when: false
+      retries: >-
+        {{ [guest_qga_timeout_seconds | int // guest_disposable_agent_poll_seconds | int, 1] | max }}
+      delay: "{{ guest_disposable_agent_poll_seconds | int }}"
+      until: guest_start_cloud_init.rc == 0
+
+    - name: Wait until the new boot's agent lists guest-exec as disabled
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - qemu-agent-command
+          - --timeout
+          - "{{ guest_agent_call_timeout_seconds }}"
+          - "{{ guest_plan.name }}"
+          - '{"execute":"guest-info"}'
+      register: guest_start_agent_info
+      changed_when: false
+      retries: >-
+        {{ [guest_qga_timeout_seconds | int // guest_disposable_agent_poll_seconds | int, 1] | max }}
+      delay: "{{ guest_disposable_agent_poll_seconds | int }}"
+      until: >-
+        guest_start_agent_info.rc == 0 and
+        ((guest_start_agent_info.stdout | from_json).get('return', {}).get('supported_commands', [])
+         | selectattr('name', 'equalto', 'guest-exec')
+         | map(attribute='enabled') | list) == [false]
+
+    - name: Refuse the new boot unless guest-exec is refused as disabled
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_virsh_bin }}"
+          - qemu-agent-command
+          - --timeout
+          - "{{ guest_agent_call_timeout_seconds }}"
+          - "{{ guest_plan.name }}"
+          - '{"execute":"guest-exec","arguments":{"path":"/bin/true"}}'
+      register: guest_start_exec_probe
+      changed_when: false
+      failed_when: >-
+        guest_start_exec_probe.rc == 0 or
+        'guest-exec has been disabled' not in (guest_start_exec_probe.stderr | lower)
+
+  rescue:
+    - name: Fail the start of a disposable boot whose agent stayed open
+      ansible.builtin.fail:
+        msg: >-
+          {{ guest_plan.name }} is running, but its new disposable boot did
+          not prove its QEMU Guest Agent closed: cloud-init did not finish
+          without errors, the agent did not list guest-exec as disabled within
+          its retry budget, or guest-exec was not refused as disabled. A seed made
+          before the boot restriction existed never closes the agent:
+          recreate the Machine through the normal flow. Stop it before use.

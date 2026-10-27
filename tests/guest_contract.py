@@ -2,6 +2,8 @@
 """Host-independent structural and mutation tests for the M4 guest brick."""
 from __future__ import annotations
 
+import base64
+import configparser
 import hashlib
 import json
 import re
@@ -332,6 +334,480 @@ def template_env() -> Environment:
     return env
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """A YAML loader that refuses a mapping with a repeated key."""
+
+
+def _unique_mapping(loader: UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+    seen: set[Any] = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        assert key not in seen, f"duplicate YAML key {key!r} on line {key_node.start_mark.line + 1}"
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+
+UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping)
+
+
+def load_unique(text: str) -> Any:
+    return yaml.load(text, Loader=UniqueKeyLoader)  # noqa: S506 - a SafeLoader subclass
+
+
+def run_playbook(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str, Any],
+                 *options: str, inventory: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """Run one playbook with the real ansible-playbook on this host only."""
+    path = tmp / f"playbook-{len(list(tmp.glob('playbook-*.yml')))}.yml"
+    write_yaml(path, playbook)  # type: ignore[arg-type]
+    variables = tmp / f"{path.stem}-vars.json"
+    variables.write_text(json.dumps(extra_vars), encoding="utf-8")
+    environment = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "HOME": str(tmp),
+        "LC_ALL": "C.UTF-8",
+        "ANSIBLE_CONFIG": str(ROOT / "ansible.cfg"),
+        "ANSIBLE_HOME": str(tmp / "ansible-home"),
+        "ANSIBLE_LOCAL_TEMP": str(tmp / "ansible-local"),
+        "ANSIBLE_REMOTE_TEMP": str(tmp / "ansible-remote"),
+        "ANSIBLE_RETRY_FILES_ENABLED": "false",
+        "ANSIBLE_NOCOLOR": "1",
+    }
+    argv = ["ansible-playbook", "-i", str(inventory) if inventory else "localhost,",
+            "-e", f"@{variables}", *options, str(path)]
+    return subprocess.run(argv, cwd=tmp, env=environment, text=True, capture_output=True, check=False)
+
+
+CLOSE_ROLE = ROOT / "roles/guest_access_close"
+AGENT_CONF = "/etc/qemu/qemu-ga.conf"
+AGENT_RESTART = ["systemctl", "restart", "qemu-guest-agent.service"]
+
+
+def close_role_agent_conf() -> tuple[list[str], str]:
+    """The allowlist and the file guest_access_close writes, from that role."""
+    rpcs = yaml.safe_load((CLOSE_ROLE / "defaults/main.yml").read_text())["guest_access_close_agent_rpcs"]
+    tasks = yaml.safe_load((CLOSE_ROLE / "tasks/main.yml").read_text())
+    copy = next(task for task in tasks
+                if task["name"] == "Restrict the QEMU Guest Agent to the calls HyperLab uses")["ansible.builtin.copy"]
+    assert copy["dest"] == AGENT_CONF and copy["owner"] == copy["group"] == "root"
+    content = Environment(undefined=StrictUndefined, keep_trailing_newline=True).from_string(copy["content"]).render(
+        guest_access_close_agent_rpcs=rpcs)
+    return rpcs, content
+
+
+def render_seeds(cases: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Render user-data.j2 through Ansible with the guest role's own defaults."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        out = tmp / "seeds"
+        out.mkdir()
+        playbook = [{
+            "name": "Render guest seeds the way the create operation does",
+            "hosts": "localhost",
+            "connection": "local",
+            "gather_facts": False,
+            "vars_files": [str(ROOT / "roles/guest/defaults/main.yml")],
+            "vars": {"guest_repository_root": str(ROOT)},
+            "tasks": [{
+                "name": "Render one seed",
+                "ansible.builtin.copy": {
+                    "content": "{{ lookup('ansible.builtin.template', seed_template, template_vars=item.value) }}",
+                    "dest": "{{ seed_out }}/{{ item.key }}",
+                    "mode": "0600",
+                },
+                "loop": "{{ seed_cases | dict2items }}",
+            }],
+        }]
+        result = run_playbook(tmp, playbook, {
+            "seed_template": str(ROOT / "roles/guest/templates/user-data.j2"),
+            "seed_out": str(out),
+            "seed_cases": cases,
+        })
+        assert result.returncode == 0, result.stdout + result.stderr
+        return {name: (out / name).read_text(encoding="utf-8") for name in cases}
+
+
+def seed_case(changes: dict[str, Any], variant: str = "debian12") -> dict[str, Any]:
+    """Template variables for one fixture Machine, its plan built by guest_plan.py."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        spec_path, store = standard_fixture(root)
+        manifest_path = root / "images/debian.yml"
+        manifest = yaml.safe_load(manifest_path.read_text())
+        manifest["os_variant"] = variant
+        write_yaml(manifest_path, manifest)
+        spec = yaml.safe_load(spec_path.read_text())
+        spec.update(changes)
+        write_yaml(spec_path, spec)
+        plan = build_plan(root, spec_path, store)
+    groups = yaml.safe_load((ROOT / "group_vars/all/guest.yml").read_text())["guest_admin_groups"]
+    return {
+        "guest_plan": plan,
+        "guest_resolved_timezone": "Europe/Rome",
+        "guest_cloud_init_user": "sid",
+        "guest_admin_group": groups[re.sub(r"[0-9.]+$", "", variant)],
+        "guest_cloud_init_ssh_public_keys": ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGateFixture gate"],
+        "guest_vault_listener": (ROOT / "roles/guest/files/hyperlab-vault-listen.py").read_text(),
+    }
+
+
+def agent_entries(seed: dict[str, Any]) -> tuple[list[dict[str, Any]], list[Any]]:
+    files = [item for item in (seed.get("write_files") or []) if item["path"] == AGENT_CONF]
+    restarts = [command for command in (seed.get("runcmd") or []) if command == AGENT_RESTART]
+    return files, restarts
+
+
+def test_disposable_seed() -> None:
+    """ADR 0018: every disposable boot restores the agent restriction itself."""
+    rpcs, content = close_role_agent_conf()
+    cases = {
+        "arch": seed_case({}, "archlinux"),
+        "debian": seed_case({}, "debian12"),
+        "fedora": seed_case({}, "fedora44"),
+        "permanent": seed_case({"lifecycle": "permanent"}),
+        "no-agent": seed_case({"qemu_guest_agent": False}),
+    }
+    rendered = render_seeds(cases)
+    for name in ("arch", "debian", "fedora"):
+        text = rendered[name]
+        assert text.startswith("#cloud-config\n"), f"{name}: the seed lost its header"
+        seed = load_unique(text)
+        files, restarts = agent_entries(seed)
+        assert len(files) == 1, f"{name}: the disposable seed has no agent restriction"
+        entry = files[0]
+        assert entry["owner"] == "root:root" and entry["permissions"] == "0644", (
+            f"{name}: the agent configuration is not root-owned 0644: {entry}")
+        assert "defer" not in entry and "append" not in entry and "encoding" not in entry, (
+            f"{name}: the agent configuration is not written whole in the init stage: {entry}")
+        assert entry["content"] == content, (
+            f"{name}: the seed's agent configuration differs from guest_access_close's:\n{entry['content']}")
+        configuration = configparser.ConfigParser(interpolation=None, strict=True)
+        configuration.read_string(entry["content"])
+        assert configuration.sections() == ["general"]
+        allowed = [configuration["general"]["allow-rpcs"].split(",")]
+        assert allowed == [rpcs], f"{name}: the seed's allowlist differs from the close role: {allowed}"
+        assert "guest-exec" not in allowed[0] and "guest-exec-status" not in allowed[0]
+        # write_files runs in cloud-init's init stage and runcmd in its final
+        # stage, so the restart reads the file the same boot just wrote. The
+        # restart comes first: nothing else in the seed waits for it.
+        assert restarts == [AGENT_RESTART] and seed["runcmd"][0] == AGENT_RESTART, (
+            f"{name}: the restriction is never activated on this boot: {seed.get('runcmd')}")
+        assert seed["users"][0]["sudo"] == "ALL=(ALL:ALL) NOPASSWD:ALL"
+        assert seed["users"][0]["lock_passwd"] is True
+    for name in ("permanent", "no-agent"):
+        seed = load_unique(rendered[name])
+        assert "write_files" not in seed and "runcmd" not in seed, (
+            f"{name}: a Machine that is not a disposable agent Machine gained boot files")
+
+    # The canonical list is read, never copied: the seed follows the file
+    # the guest role points at, and that file is guest_access_close's.
+    defaults = yaml.safe_load((ROOT / "roles/guest/defaults/main.yml").read_text())
+    assert defaults["guest_disposable_agent_policy_file"] == (
+        "{{ guest_repository_root }}/roles/guest_access_close/defaults/main.yml"), "the seed reads another policy"
+    with tempfile.TemporaryDirectory() as td:
+        other = Path(td) / "policy.yml"
+        write_yaml(other, {"guest_access_close_agent_rpcs": ["guest-sync", "guest-ping"]})
+        moved = render_seeds({"moved": {**cases["debian"], "guest_disposable_agent_policy_file": str(other)}})
+    files, _ = agent_entries(load_unique(moved["moved"]))
+    assert files and files[0]["content"].endswith("allow-rpcs=guest-sync,guest-ping\n"), (
+        "the seed keeps an allowlist of its own instead of reading the close role's")
+    check_allowlist_gate(rpcs)
+
+
+GATE = "Refuse a disposable seed without the canonical agent allowlist"
+
+
+def check_allowlist_gate(rpcs: list[str]) -> None:
+    """create and reset refuse a seed whose allowlist is not the reviewed shape."""
+    main = yaml.safe_load((ROOT / "roles/guest/tasks/main.yml").read_text())
+    names = [task.get("name") for task in main]
+    gate = main[names.index(GATE)]
+    assert gate["when"] == ["guest_operation in ['create', 'reset']", "guest_plan.cloud_init",
+                            "guest_plan.lifecycle == 'disposable'", "guest_plan.qemu_guest_agent"]
+    assert names.index(GATE) < names.index("Install lifecycle dependencies after every read-only gate"), (
+        "the allowlist is checked after a host write")
+    candidates: dict[str, Any] = {
+        "canonical": rpcs, "widened": rpcs + ["guest-file-write"], "narrowed": rpcs[:-1],
+        "empty": [], "string": ",".join(rpcs), "missing": None,
+        "guest-exec": rpcs + ["guest-exec"], "guest-exec-status": rpcs + ["guest-exec-status"],
+        "duplicate": rpcs + [rpcs[0]], "newline": rpcs + ["guest-ping\nallow-rpcs=guest-exec"],
+        "comma": rpcs + ["guest-ping,guest-exec"], "mapping": {"guest-ping": True},
+    }
+    check = {key: value for key, value in gate.items() if key != "when"}
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        plays = []
+        for label, candidate in candidates.items():
+            plays.append({
+                "name": f"Gate {label}", "hosts": "localhost", "connection": "local", "gather_facts": False,
+                "vars": {"guest_plan": {"name": "srv-fix-01"},
+                         "guest_repository_root": str(ROOT),
+                         "guest_disposable_agent_policy_file": str(CLOSE_ROLE / "defaults/main.yml"),
+                         **({} if candidate is None else {"guest_disposable_agent_rpcs": candidate})},
+                "tasks": [{"name": "Try the gate", "block": [check, {
+                    "name": "Record acceptance", "ansible.builtin.copy": {
+                        "content": "accepted", "dest": str(tmp / label), "mode": "0600"}}],
+                    "rescue": [{"name": "Record refusal", "ansible.builtin.copy": {
+                        "content": "refused", "dest": str(tmp / label), "mode": "0600"}}]}],
+            })
+        result = run_playbook(tmp, plays, {})
+        assert result.returncode == 0, result.stdout + result.stderr
+        outcome = {label: (tmp / label).read_text() for label in candidates}
+    assert outcome.pop("canonical") == "accepted", "the canonical allowlist is refused"
+    accepted = [label for label, verdict in outcome.items() if verdict != "refused"]
+    assert not accepted, f"the gate let these allowlists reach a seed: {accepted}"
+
+
+STUB_VIRSH = '''#!{python} -I
+"""A virsh stand-in: answers from scenario.json, logs every argv."""
+import json
+import sys
+from pathlib import Path
+
+here = Path(__file__).resolve().parent
+argv = sys.argv[1:]
+with (here / "calls.jsonl").open("a", encoding="utf-8") as log:
+    log.write(json.dumps(argv) + "\\n")
+if "qemu-agent-command" in argv:
+    key = json.loads(argv[-1])["execute"]
+elif "domifaddr" in argv:
+    key = "domifaddr"
+else:
+    key = argv[0]
+scenario = json.loads((here / "scenario.json").read_text(encoding="utf-8"))
+answers = scenario.get(key) or [{{"rc": 1, "stderr": "error: unexpected call " + key}}]
+counter = here / ("count-" + key)
+used = int(counter.read_text()) if counter.exists() else 0
+counter.write_text(str(used + 1))
+answer = answers[min(used, len(answers) - 1)]
+sys.stdout.write(answer.get("stdout", ""))
+sys.stderr.write(answer.get("stderr", ""))
+sys.exit(answer.get("rc", 0))
+'''
+
+
+def write_stub_virsh(directory: Path, scenario: dict[str, list[dict[str, Any]]]) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "virsh"
+    stub.write_text(STUB_VIRSH.format(python=sys.executable), encoding="utf-8")
+    stub.chmod(0o700)
+    (directory / "scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
+    for old in list(directory.glob("count-*")) + list(directory.glob("calls.jsonl")):
+        old.unlink()
+    return stub
+
+
+def stub_calls(directory: Path) -> list[list[str]]:
+    log = directory / "calls.jsonl"
+    if not log.exists():
+        return []
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
+def agent_info(exec_enabled: bool) -> dict[str, Any]:
+    commands = [{"name": name, "enabled": True, "success-response": True}
+                for name in ("guest-sync-delimited", "guest-ping", "guest-info", "guest-file-open")]
+    commands.append({"name": "guest-exec", "enabled": exec_enabled, "success-response": True})
+    return {"rc": 0, "stdout": json.dumps({"return": {"version": "9.2.0", "supported_commands": commands}})}
+
+
+AGENT_DOWN = {"rc": 1, "stderr": "error: Guest agent is not responding: QEMU guest agent is not connected\n"}
+EXEC_DISABLED = {"rc": 1, "stderr": "error: internal error: unable to execute QEMU agent command 'guest-exec': "
+                                    "Command guest-exec has been disabled\n"}
+def boot_result(content: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    if content is None:
+        content = json.dumps({"v1": {"datasource": "DataSourceNoCloud", "errors": []}})
+    return {
+        "guest-file-open": [{"rc": 1, "stderr": "file not found"}, {"stdout": '{"return":5}'}],
+        "guest-file-read": [{"stdout": json.dumps({"return": {
+            "count": len(content), "eof": True, "buf-b64": base64.b64encode(content.encode()).decode()}})}],
+        "guest-file-close": [{"stdout": '{"return":{}}'}],
+    }
+
+
+START_TASKS = ROOT / "roles/guest/tasks/start.yml"
+DECIDE = "Decide whether this start makes a new disposable boot"
+PROVE = "Prove a new disposable boot closed its agent before the start succeeds"
+
+
+def walk_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    found = []
+    for task in tasks:
+        found.append(task)
+        for section in ("block", "rescue", "always"):
+            found.extend(walk_tasks(task.get(section, [])))
+    return found
+
+
+def start_tasks() -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    tasks = yaml.safe_load(START_TASKS.read_text(encoding="utf-8"))
+    by_name = {task.get("name"): task for task in tasks}
+    return tasks, by_name[DECIDE], by_name[PROVE]
+
+
+def disposable_start_plan(**changes: Any) -> dict[str, Any]:
+    return {"name": "srv-fix-01", "lifecycle": "disposable", "cloud_init": True,
+            "qemu_guest_agent": True, **changes}
+
+
+def run_start_proofs(tmp: Path, cases: dict[str, dict[str, Any]], *options: str,
+                     ) -> dict[str, tuple[list[list[str]], str | None, str | None]]:
+    """Run start.yml's own decision and proof tasks, one play per case, against stub virsh.
+
+    Each case gives a stub scenario and optionally the domain state and plan.
+    The result per case is the stub's calls, the recorded decision (None when
+    the proof failed) and the failure message (None when it passed).
+    """
+    _, decide, prove = start_tasks()
+    defaults = yaml.safe_load((ROOT / "roles/guest/defaults/main.yml").read_text())
+    plays = []
+    for label, case in cases.items():
+        out = tmp / label
+        out.mkdir()
+        stub = write_stub_virsh(out / "stub", {**boot_result(), **case["scenario"]})
+        plays.append({
+            "name": f"Exercise the managed start's disposable proof: {label}",
+            "hosts": "localhost",
+            "connection": "local",
+            "gather_facts": False,
+            "vars": {
+                **defaults,
+                "guest_repository_root": str(ROOT),
+                "guest_python_bin": sys.executable,
+                "guest_plan": case.get("plan", disposable_start_plan()),
+                "guest_domain_state": case.get("state", "shut off"),
+                "guest_virsh_bin": str(stub),
+                "guest_qga_timeout_seconds": 2,
+                "guest_disposable_agent_poll_seconds": 1,
+            },
+            "tasks": [{
+                "name": "Run the start's proof",
+                "block": [decide, prove, {
+                    "name": "Record the decision",
+                    "check_mode": False,
+                    "ansible.builtin.copy": {"content": "{{ guest_start_new_disposable_boot | bool }}",
+                                             "dest": str(out / "decision"), "mode": "0600"},
+                }],
+                "rescue": [{
+                    "name": "Record the failure",
+                    "check_mode": False,
+                    "ansible.builtin.copy": {"content": "{{ ansible_failed_result.msg | default('') }}",
+                                             "dest": str(out / "failure"), "mode": "0600"},
+                }],
+            }],
+        })
+    result = run_playbook(tmp, plays, {}, *options)
+    assert result.returncode == 0, result.stdout + result.stderr
+    outcome = {}
+    for label in cases:
+        out = tmp / label
+        decision = out / "decision"
+        failure = out / "failure"
+        outcome[label] = (stub_calls(out / "stub"), decision.read_text() if decision.exists() else None,
+                          failure.read_text() if failure.exists() else None)
+    return outcome
+
+
+def agent_calls(calls: list[list[str]]) -> list[str]:
+    return [json.loads(argv[-1])["execute"] for argv in calls if "qemu-agent-command" in argv]
+
+
+def test_disposable_start_proof() -> None:
+    """A new disposable boot is started only once its agent proves guest-exec closed."""
+    tasks, decide, prove = start_tasks()
+    names = [task.get("name") for task in tasks]
+    gate = next(task for task in tasks if task.get("name") == "Gate and start the shut-off domain atomically against other starts")
+    assert names.index(DECIDE) < names.index(gate["name"]), "the boot is decided after QEMU started"
+    assert names.index("Wait for QEMU Guest Agent readiness") < names.index(PROVE) == len(names) - 1, (
+        "something reports the start after the disposable proof, or the proof precedes agent readiness")
+    assert prove["when"] == "guest_start_new_disposable_boot | bool"
+    boot_wait = prove["block"][0]
+    assert boot_wait["name"] == "Wait for this boot's cloud-init to finish without errors", (
+        "a restricted base agent can pass readiness before this boot's configuration finishes")
+    probes = [task for task in prove["block"] if "ansible.builtin.command" in task
+              and "qemu-agent-command" in task["ansible.builtin.command"]["argv"]]
+    for task in probes:
+        argv = task["ansible.builtin.command"]["argv"]
+        assert argv[1:4] == ["qemu-agent-command", "--timeout", "{{ guest_agent_call_timeout_seconds }}"], (
+            f"an agent call can block forever: {argv}")
+    executes = [json.loads(task["ansible.builtin.command"]["argv"][-1])["execute"] for task in probes]
+    assert executes == ["guest-info", "guest-exec"], f"the proof calls {executes}"
+    exec_call = json.loads(probes[1]["ansible.builtin.command"]["argv"][-1])
+    assert exec_call == {"execute": "guest-exec", "arguments": {"path": "/bin/true"}}, (
+        "the probe runs something in the guest")
+    power = yaml.safe_load((ROOT / "roles/guest/tasks/power-cycle.yml").read_text())
+    assert power[-1]["ansible.builtin.include_tasks"] == "start.yml", "power cycle starts outside the shared path"
+    create = [task for task in walk_tasks(yaml.safe_load((ROOT / "roles/guest/tasks/create.yml").read_text()))
+              if task.get("name") == "Start after create only when explicitly requested"]
+    assert [task["ansible.builtin.include_tasks"] for task in create] == ["start.yml"], (
+        "create starts outside the shared path")
+
+    closed = "did not prove its QEMU Guest Agent closed"
+    cases: dict[str, dict[str, Any]] = {
+        # The restricted agent comes up after one restart: open, then gone,
+        # then listed with guest-exec disabled.
+        "restarted": {"scenario": {"guest-info": [agent_info(True), AGENT_DOWN, agent_info(False)],
+                                   "guest-exec": [EXEC_DISABLED]}},
+        "guest-exec ran": {"scenario": {"guest-info": [agent_info(False)],
+                                        "guest-exec": [{"rc": 0, "stdout": '{"return":{"pid":7}}'}]}},
+        "agent unavailable at the probe": {"scenario": {"guest-info": [agent_info(False)], "guest-exec": [AGENT_DOWN]}},
+        "probe timed out": {"scenario": {"guest-info": [agent_info(False)], "guest-exec": [{
+            "rc": 1, "stderr": "error: Guest agent is not responding: Guest agent not available for now\n"}]}},
+        "unrelated RPC error": {"scenario": {"guest-info": [agent_info(False)], "guest-exec": [{
+            "rc": 1, "stderr": "error: internal error: unable to execute QEMU agent command 'guest-exec': "
+                               "Invalid parameter 'path'\n"}]}},
+        "unrelated disabled message": {"scenario": {"guest-info": [agent_info(False)], "guest-exec": [{
+            "rc": 1, "stderr": "error: argument unsupported: QEMU guest agent is disabled\n"}]}},
+        # Without the restriction on this boot (a seed from before it) or
+        # without an agent, guest-exec is never even tried.
+        "cloud-init failed": {"scenario": boot_result('{"v1":{"errors":["runcmd failed"]}}')},
+        "cloud-init malformed": {"scenario": boot_result('not JSON')},
+        "cloud-init missing errors": {"scenario": boot_result('{"v1":{}}')},
+        "cloud-init unfinished": {"scenario": {"guest-file-open": [AGENT_DOWN]}},
+        "cloud-init unreadable": {"scenario": {"guest-file-read": [AGENT_DOWN]}},
+        "old seed": {"scenario": {"guest-info": [agent_info(True)]}},
+        "agent never answers": {"scenario": {"guest-info": [AGENT_DOWN]}},
+        "no supported_commands": {"scenario": {"guest-info": [{"rc": 0, "stdout": '{"return":{}}'}]}},
+        "not JSON": {"scenario": {"guest-info": [{"rc": 0, "stdout": "guest-exec disabled"}]}},
+        # Not a new disposable boot: nothing is asked of the agent.
+        "already running": {"state": "running", "scenario": {}},
+        "permanent": {"plan": disposable_start_plan(lifecycle="permanent"), "scenario": {}},
+        "no cloud-init": {"plan": disposable_start_plan(cloud_init=False), "scenario": {}},
+        "no agent": {"plan": disposable_start_plan(qemu_guest_agent=False), "scenario": {}},
+    }
+    with tempfile.TemporaryDirectory() as td:
+        outcome = run_start_proofs(Path(td), cases)
+    with tempfile.TemporaryDirectory() as td:
+        checked = run_start_proofs(Path(td), {"check mode": {"scenario": {}}}, "--check")
+
+    for case_calls, _, _ in outcome.values():
+        for argv in case_calls:
+            if "qemu-agent-command" in argv:
+                command = json.loads(argv[-1])
+                if command["execute"] == "guest-file-open":
+                    assert command["arguments"] == {"path": "/run/cloud-init/result.json", "mode": "r"}
+
+    calls, decided, failure = outcome.pop("restarted")
+    assert failure is None and decided == "True", f"a new disposable boot did not start: {failure} {decided}"
+    assert agent_calls(calls) == ["guest-file-open", "guest-file-open", "guest-file-read", "guest-file-close",
+                                  "guest-info", "guest-info", "guest-info", "guest-exec"], calls
+    for label in ("guest-exec ran", "agent unavailable at the probe", "probe timed out", "unrelated RPC error",
+                  "unrelated disabled message"):
+        calls, decided, failure = outcome.pop(label)
+        assert decided is None and failure and closed in failure, f"{label}: the start succeeded ({failure})"
+        assert agent_calls(calls)[-1] == "guest-exec", f"{label}: {calls}"
+    for label in ("old seed", "agent never answers", "no supported_commands", "not JSON",
+                  "cloud-init failed", "cloud-init malformed", "cloud-init missing errors",
+                  "cloud-init unfinished", "cloud-init unreadable"):
+        calls, decided, failure = outcome.pop(label)
+        assert decided is None and failure and closed in failure, f"{label}: the start succeeded ({failure})"
+        assert "guest-exec" not in agent_calls(calls), f"{label}: guest-exec was tried: {calls}"
+        if label.startswith("cloud-init"):
+            assert "guest-info" not in agent_calls(calls), f"{label}: readiness ran before cloud-init finished"
+    for label, (calls, decided, failure) in {**outcome, **checked}.items():
+        assert failure is None, f"{label}: {failure}"
+        assert decided == "False" and calls == [], f"{label}: treated as a new disposable boot ({decided}, {calls})"
+
+
 def test_domain_templates() -> None:
     env = template_env()
     with tempfile.TemporaryDirectory() as td:
@@ -385,6 +861,7 @@ def test_domain_templates() -> None:
             guest_cloud_init_ssh_public_keys=public_keys,
             guest_resolved_timezone="Europe/Rome",
             guest_admin_group="wheel",
+            guest_disposable_agent_conf=close_role_agent_conf()[1],
         ))
         assert user_data["timezone"] == "Europe/Rome"
         assert user_data["users"][0]["groups"] == ["wheel"]
@@ -951,6 +1428,8 @@ def main() -> int:
         test_standard_plan,
         test_vfio_plan,
         test_domain_templates,
+        test_disposable_seed,
+        test_disposable_start_proof,
         test_state_guard,
         test_memory,
         test_vfio_registry,

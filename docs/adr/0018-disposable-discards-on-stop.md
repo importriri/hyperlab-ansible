@@ -8,8 +8,9 @@ session step 11 at 19:28. The operator accepted the design read at `main`
 commit `1e42308a863180590fc9b2a209b41227978b8a4f`: only disposable Machines
 discard their disk writes on every stop; permanent Machines keep their data.
 Readiness still requires protected access on every boot and the Nitro
-tests. The transient disk is built and software-verified; closing access
-and re-pinning the host key at every later boot are not built (see Limits).
+tests. At acceptance, the transient disk was built and software-verified;
+closing access and re-pinning the host key at every later boot were not built.
+The amendment below now implements those software prerequisites (see Limits).
 This records design acceptance without adding hardware evidence.
 
 ## Context
@@ -76,20 +77,66 @@ start begins from the sealed base exactly as the first boot did.
   `guest` role (`playbooks/vm-create.yml`, which the provisioner runs)
   gets the transient disk, and the server Templates allow the disposable
   lifecycle.
-- Not built: what every later boot needs. The managed start,
-  `playbooks/vm-start.yml`, runs only the `guest` role. It runs neither
-  `vm-guest-inventory.yml` nor `guest-close-access.yml`. The agent
-  allowlist that `guest-close-access.yml` writes to `/etc/qemu/qemu-ga.conf`
-  is a write to the discarded layer, like any other. The seed's cloud-init
-  grants the account `NOPASSWD` sudo again at every first boot. After the
-  first stop, then, a disposable Machine runs its agent without the
-  allowlist, and its strict SSH pin no longer matches its host key, until
-  the two playbooks are run again by hand.
+- Built and software-verified: the amendment below restores the agent
+  allowlist from the seed and re-pins the SSH host key after each new
+  managed Start or Power Cycle. Existing seeds need recreation, and
+  passwordless server accounts still receive passwordless sudo.
 - Not proven on hardware: no disposable Machine has been started, stopped
   and started again on Nitro. Normal and forced stops still need evidence
   of discarded writes and temporary-overlay cleanup; host-crash recovery
   remains a separate physical test (see Consequences).
-- Readiness prerequisites: the software that closes access and re-pins the
-  host key at every boot ([ADR 0025](0025-host-key-without-agent-file-reads.md)
-  shapes the pin), then the Nitro tests. Accepting the design completes
-  neither prerequisite.
+- Readiness prerequisites: the software amendment below, then the Nitro
+  tests. [ADR 0025](0025-host-key-without-agent-file-reads.md) still proposes
+  a different pin source. Accepting the design does not prove hardware readiness.
+
+## Amendment: restore access policy and SSH identity on every boot
+
+Status: Proposed.
+
+A provisioning-time change on the transient disk disappears on stop too.
+The disposable Linux cloud-init seed therefore writes root-owned
+`/etc/qemu/qemu-ga.conf` on every new boot and restarts
+`qemu-guest-agent.service` from `runcmd` to activate it. It reads the exact
+`guest_access_close_agent_rpcs` allowlist from the access-closing role's
+defaults; there is no second RPC policy in the seed. Permanent Machines and
+Machines without cloud-init or the agent keep their existing behavior.
+The vault's existing boot files and commands share the same YAML lists.
+
+The shared managed start path (including create-with-start and Power Cycle)
+waits for this boot's `/run/cloud-init/result.json` through the existing
+read-only agent file calls and requires `v1.errors` to be an empty list.
+cloud-init publishes that runtime link after its final stage. This prevents
+an already-restricted agent in a base from satisfying readiness before the
+new boot's configuration and SSH key generation finish. The host then waits
+for `guest-info` to report exactly one disabled `guest-exec` entry and
+requires the negative exec probe to fail specifically because `guest-exec`
+is disabled. Success, unavailable agent, timeout, malformed reply and other
+RPC errors fail the operation. The probe never provisions anything.
+See the [cloud-init final stage](https://docs.cloud-init.io/en/latest/explanation/boot.html)
+and its [result publication](https://github.com/canonical/cloud-init/blob/main/cloudinit/cmd/main.py),
+and the [QEMU agent protocol](https://www.qemu.org/docs/master/interop/qemu-ga-ref.html).
+
+After the new boot passes, public managed Start and Power Cycle import the
+existing inventory publisher as the Machine owner, with `become: false`.
+It discovers the address and public host key through the agent, replaces
+the strict host-owned SSH pin and publishes the runtime inventory. Discovery
+or pinning failure fails the operation; an old pin never means the new boot
+is usable. No network key is accepted. An already-running Start and check
+mode do not run the boot action or republish inventory. Create's existing
+separate inventory/provisioning steps stay in place.
+
+Existing seed images are immutable lifecycle artifacts: updating host code
+cannot add these contents to them. Recreate a throwaway acceptance Machine
+through the normal Template flow before testing this change. An old seed
+that leaves the agent open fails managed start; stop that Machine before
+use. There is no automatic seed rewrite or in-guest repair through exec.
+
+Passwordless server accounts still retain cloud-init's passwordless sudo.
+Removing it would remove their administration path and needs a separate
+administration decision. This amendment closes agent execution and refreshes
+SSH identity; it does not remove the existing agent file-open authority
+([ADR 0025](0025-host-key-without-agent-file-reads.md)). The transient flag,
+sealed-base digest verification and lifecycle overlay remain unchanged.
+Software contracts cover boot ordering, refused readiness and two distinct
+SSH keys. Transient file cleanup and the complete guest boot still need
+Nitro acceptance.

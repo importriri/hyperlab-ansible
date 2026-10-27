@@ -12,7 +12,9 @@ The last provisioning step, playbooks/guest-close-access.yml, must:
      sudo with that password, as the last task that uses become, and then
      prove sudo asks for the password;
   3. prove from the host that guest-exec is disabled and that the SSH host
-     key read through the agent still matches the pinned one.
+     key read through the agent still matches the pinned one;
+  4. be the one source of the agent restriction a disposable Machine's seed
+     writes on every boot (ADR 0018): the same file, from this allowlist.
 """
 
 from __future__ import annotations
@@ -31,6 +33,10 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+import guest_contract  # noqa: E402
+
 ROLE = ROOT / "roles/guest_access_close"
 EXPECTED_RPCS = [
     "guest-sync-delimited", "guest-sync", "guest-ping", "guest-info", "guest-get-host-name",
@@ -324,6 +330,15 @@ def main() -> int:
     require(any("ssh-keygen" in task.get("ansible.builtin.command", {}).get("argv", [""])[0]
                 for task in host_tasks), "the re-read key is not compared with the pinned one")
     check_condition_mutations(ROOT)
+
+
+    # ADR 0018: a disposable boot writes this role's file from this list.
+    rendered_rpcs, content = guest_contract.close_role_agent_conf()
+    require(rendered_rpcs == rpcs, "the close role's list was read differently")
+    seed = guest_contract.load_unique(guest_contract.render_seeds({"seed": guest_contract.seed_case({})})["seed"])
+    files, restarts = guest_contract.agent_entries(seed)
+    require([item["content"] for item in files] == [content] and restarts == [guest_contract.AGENT_RESTART],
+            "a disposable seed does not restore this role's agent restriction")
     print("Guest access close contract: OK")
     return 0
 

@@ -43,8 +43,9 @@ entered the pipeline.
 18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
     — accepted: a disposable Machine's disk is a libvirt transient disk, so
     every stop discards its writes (operator's decision, 2026-11-05).
-    Protected access and the host-key pin at every later boot are not built;
-    Nitro evidence remains open (see the record's Limits).
+    A proposed amendment restores the agent restriction and refreshes
+    the strict SSH pin on every managed disposable boot; software-verified,
+    with Nitro evidence still open (see the record's Limits).
 19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — accepted: a GPU-capable
     Machine chooses at each start whether this run owns the GPU; initially
     `workstation-dev-standard` only, default without the dedicated NVIDIA

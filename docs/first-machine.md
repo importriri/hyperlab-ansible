@@ -155,13 +155,43 @@ without administration.
 The inventory step pins the new host key, so plain `ssh` to the address it
 wrote works with strict checking too.
 
+## Restarting a disposable server
+
 `--lifecycle disposable` makes a server Machine that forgets everything it
 wrote whenever it stops ([ADR 0018](adr/0018-disposable-discards-on-stop.md)).
-Every start is a first boot with new SSH host keys, so run the inventory
-step again after each start to pin the new key.
-The managed start does not yet restore the agent restriction or re-pin the
-key. The software condition proof above does not close that gap: disposable
-access closure after repeated boots remains open in ADR 0018.
+Every start is a first boot with new SSH host keys. Its seed restores the
+same agent allowlist as `guest-close-access.yml` and restarts the agent on
+it. The shared start path waits for cloud-init to finish without errors,
+then requires the agent to list and refuse `guest-exec` as disabled. An
+unreachable agent or a different RPC error fails readiness.
+
+After a new disposable boot, managed Start and Power Cycle automatically run
+the inventory step as the Machine owner without become, refreshing both the
+strict SSH pin and the runtime inventory. Run them as that owner; `-K`
+applies to the host lifecycle play only:
+
+```bash
+ansible-playbook -K playbooks/vm-start.yml \
+  -e guest_spec=vm-specs/.generated/srv-01.yml
+ansible-playbook -K playbooks/vm-power-cycle.yml \
+  -e guest_spec=vm-specs/.generated/srv-01.yml \
+  -e guest_confirm_power_cycle=srv-01
+```
+
+A failed discovery or pin update fails the operation. An already-running
+Start and check mode do not repin or run the boot action. Creation still
+uses the explicit inventory step above before further provisioning. A
+passwordless disposable server keeps passwordless sudo after every boot,
+just as a passwordless permanent server does.
+
+**Migration:** an existing seed does not gain new contents from a host code
+update. Recreate a throwaway acceptance Machine through the normal Template
+flow with `--lifecycle disposable`. Do not treat the first provisioning of
+an old Machine as proof of later starts. An old seed whose agent stays open
+fails managed start even though QEMU is running; stop it before use. A real
+Fedora acceptance must prove strict SSH with each refreshed pin, disabled
+exec, marker loss and transient-overlay cleanup after both normal shutdown
+and forced stop. Those physical checks remain open.
 
 ## 4. Looking at it
 

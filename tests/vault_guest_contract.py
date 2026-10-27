@@ -12,7 +12,10 @@
      listener uses) and its listener unit, with shell dollars escaped from
      systemd; the ports agree between the vault, the host relay and the
      client.
-  4. A client keeps its own default agent unless the vault is asked for.
+  4. The vault is never disposable; if its plan were, its seed would keep
+     all of that and gain only the agent's boot restriction, in the same
+     write_files and runcmd lists.
+  5. A client keeps its own default agent unless the vault is asked for.
 """
 
 from __future__ import annotations
@@ -175,6 +178,42 @@ def check_cloud_init() -> None:
             "the relay's port differs between the client and the host")
 
 
+def check_disposable_vault_seed() -> None:
+    """A disposable vault with the agent would get the agent's boot
+    restriction in the same write_files and runcmd lists, nothing else.
+
+    The planner refuses a disposable vault, so the template is given a plan
+    changed after planning: the seed must stay one valid document even for
+    a combination no Machine can have today.
+    """
+    vault = {"key_vault": "vault", "network_profile": "none", "qemu_guest_agent": False}
+    try:
+        guest_contract.seed_case({**vault, "lifecycle": "disposable"})
+    except AssertionError as refused:
+        require("the key vault is permanent" in str(refused), f"the planner refused for another reason: {refused}")
+    else:
+        raise AssertionError("the planner accepted a disposable vault")
+    permanent_case = guest_contract.seed_case({**vault, "lifecycle": "permanent"})
+    disposable_case = {**permanent_case, "guest_plan": {
+        **permanent_case["guest_plan"], "lifecycle": "disposable", "qemu_guest_agent": True}}
+    seeds = guest_contract.render_seeds({"permanent": permanent_case, "disposable": disposable_case})
+    # A repeated write_files or runcmd key would silently drop the vault's
+    # files or the agent's restriction; the strict loader refuses it.
+    permanent = guest_contract.load_unique(seeds["permanent"])
+    disposable = guest_contract.load_unique(seeds["disposable"])
+    files, restarts = guest_contract.agent_entries(disposable)
+    require(len(files) == 1 and restarts == [guest_contract.AGENT_RESTART],
+            "the disposable vault lost the agent's boot restriction")
+    require(disposable["write_files"][0] == files[0] and disposable["runcmd"][0] == restarts[0],
+            "the agent's restriction is not the first boot file and command")
+    require(disposable["write_files"][1:] == permanent["write_files"]
+            and disposable["runcmd"][1:] == permanent["runcmd"],
+            "the vault's own files or commands changed with the agent's restriction")
+    rest = {key: value for key, value in disposable.items() if key not in ("write_files", "runcmd")}
+    require(rest == {key: value for key, value in permanent.items() if key not in ("write_files", "runcmd")},
+            "the disposable vault's seed differs beyond the agent's restriction")
+
+
 def check_client_default() -> None:
     defaults = yaml.safe_load((ROOT / "roles/guest_vault_client/defaults/main.yml").read_text())
     require(defaults["guest_vault_client_default_agent"] is False, "the vault replaces a Machine's agent by default")
@@ -190,6 +229,7 @@ def main() -> int:
     check_listener()
     check_agent()
     check_cloud_init()
+    check_disposable_vault_seed()
     check_client_default()
     print("Key vault guest contract: OK")
     return 0

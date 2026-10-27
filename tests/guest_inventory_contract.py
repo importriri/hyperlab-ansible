@@ -1,17 +1,41 @@
 #!/usr/bin/env python3
-"""Host-independent contract for managed guest runtime inventory."""
+"""Host-independent contract for managed guest runtime inventory.
+
+ADR 0018: every new boot of a disposable Machine has new SSH host keys. The
+public managed Start and Power Cycle playbooks run the inventory publisher
+after such a boot, as the owner without become, so the pin and the runtime
+inventory follow the boot that is running; an already-running target and
+check mode publish nothing. Exercised with the real playbooks, a stub virsh
+and real strict SSH over a pipe to `sshd -i` (no listening socket).
+"""
 from __future__ import annotations
 
 import base64
+import getpass
 import importlib.util
 import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+import guest_contract  # noqa: E402
+
 TOOL_PATH = ROOT / "tools" / "guest_agent_address.py"
+PUBLISHER = ROOT / "playbooks" / "vm-guest-inventory.yml"
+NEW_BOOT = "guest_start_new_disposable_boot | default(false) | bool"
+MACHINE = "srv-fix-01"
+MAC = "52:54:00:6a:01:31"
 
 
 def load_tool():
@@ -66,6 +90,227 @@ def check_host_key_tool() -> None:
 
     content = tool.read_guest_file(agent, Path("/usr/bin/virsh"), "dev-01", tool.HOST_KEY_PATH)
     assert content == line and calls == ["guest-file-open", "guest-file-read", "guest-file-close"]
+
+
+def entry_playbook(name: str, tmp: Path) -> list[dict[str, Any]]:
+    """Run the public lifecycle and publisher with fixture hardware discovery."""
+    source = yaml.safe_load((ROOT / "playbooks" / name).read_text(encoding="utf-8"))
+    assert isinstance(source, list) and len(source) == 2, f"{name}: {source}"
+    lifecycle, publish = source
+    assert lifecycle["become"] is True and lifecycle["roles"][-1] == "guest", f"{name} lost its guest play"
+    assert set(publish) == {"name", "ansible.builtin.import_playbook", "when"}, f"{name} changes how the publisher runs: {publish}"
+    assert publish["ansible.builtin.import_playbook"] == "vm-guest-inventory.yml", f"{name} imports {publish['ansible.builtin.import_playbook']}"
+    assert publish["when"] == NEW_BOOT, f"{name} publishes on {publish['when']!r}"
+    # Run the real shared start tasks, including start/domstate, locks and
+    # readiness. Hardware inspection and capacity discovery are fixtures;
+    # their own contracts cover them. Every libvirt argv goes to the stub.
+    task_dir = tmp / "lifecycle"
+    task_dir.mkdir(exist_ok=True)
+    for filename in ("start.yml", "power-cycle.yml"):
+        shutil.copy(ROOT / "roles/guest/tasks" / filename, task_dir / filename)
+    guest_contract.write_yaml(task_dir / "validate.yml", [{
+        "name": "Use the validated fixture domain", "ansible.builtin.assert": {
+            "that": ["guest_plan.device_profile == 'standard'"]}}])
+    guest_contract.write_yaml(task_dir / "memory.yml", [{
+        "name": "Use the fixture capacity", "ansible.builtin.debug": {"msg": "capacity available"}}])
+    guest_contract.write_yaml(task_dir / "inspect.yml", [{
+        "name": "Observe the stopped fixture", "ansible.builtin.set_fact": {"guest_domain_state": "shut off"}}])
+    operation = lifecycle["vars"]["guest_operation"]
+    return [
+        {"name": lifecycle["name"], "hosts": lifecycle["hosts"], "gather_facts": False,
+         "vars_files": [str(ROOT / "roles/guest/defaults/main.yml")],
+         "tasks": [{"name": "Exercise the lifecycle", "ansible.builtin.include_tasks":
+                    str(task_dir / ("start.yml" if operation == "start" else "power-cycle.yml"))}]},
+        {**publish, "ansible.builtin.import_playbook": str(PUBLISHER)},
+    ]
+
+
+def boot_scenario(address: str, host_key: str) -> dict[str, list[dict[str, Any]]]:
+    evidence = (" Name       MAC address          Protocol     Address\n"
+                "-------------------------------------------------------------------------------\n"
+                " lo         00:00:00:00:00:00    ipv4         127.0.0.1/8\n"
+                f" enp1s0     {MAC}    ipv4         {address}/24\n")
+    read = {"count": len(host_key), "eof": True, "buf-b64": base64.b64encode(host_key.encode()).decode()}
+    return {
+        "domifaddr": [{"stdout": evidence}],
+        "guest-file-open": [{"stdout": json.dumps({"return": 5})}],
+        "guest-file-read": [{"stdout": json.dumps({"return": read})}],
+        "guest-file-close": [{"stdout": json.dumps({"return": {}})}],
+    }
+
+
+class Lab:
+    """One operator home, runtime directory and Machine, all in a temporary tree."""
+
+    def __init__(self, tmp: Path) -> None:
+        self.tmp = tmp
+        self.user = getpass.getuser()
+        self.home = tmp / "home"
+        (self.home / ".ssh").mkdir(parents=True, mode=0o700)
+        self.known_hosts = self.home / ".ssh/known_hosts"
+        self.known_hosts.write_text("", encoding="utf-8")
+        self.run = tmp / "run"
+        self.run.mkdir(mode=0o700)
+        self.inventory = self.run / f"{MACHINE}.ini"
+        self.stubs = tmp / "stub"
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "operator",
+                        "-f", str(self.home / ".ssh/hyperlab_ed25519")], check=True)
+        authorized = tmp / "authorized_keys"
+        shutil.copy(self.home / ".ssh/hyperlab_ed25519.pub", authorized)
+        authorized.chmod(0o600)
+        plan = {"name": MACHINE, "os_family": "linux", "cloud_init": True, "qemu_guest_agent": True,
+                "lifecycle": "disposable", "network_profile": "lab", "owner": self.user, "mac": MAC,
+                "device_profile": "standard", "capacity_lock_path": str(tmp / "capacity.lock")}
+        (tmp / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        self.plan_tool = tmp / "plan_tool.py"
+        self.plan_tool.write_text("import pathlib, sys\nsys.stdout.write((pathlib.Path(__file__).parent"
+                                  " / 'plan.json').read_text())\n", encoding="utf-8")
+        self.plan = plan
+
+    def host_key(self, boot: int) -> Path:
+        key = self.tmp / f"host-key-{boot}"
+        if not key.exists():
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"root@boot-{boot}",
+                            "-f", str(key)], check=True)
+        return key
+
+    def start(self, playbook: str, scenario: dict[str, list[dict[str, Any]]], *options: str,
+              state: str = "shut off") -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
+        scenario = {**guest_contract.boot_result(), "guestinfo": [{"stdout": "hostname: fixture"}],
+                    "guest-info": [guest_contract.agent_info(False)], "guest-exec": [guest_contract.EXEC_DISABLED],
+                    "start": [{}], "domstate": [{"stdout": "running"}], "destroy": [{}], **scenario}
+        if playbook == "vm-power-cycle.yml":
+            scenario["domstate"] = [{"stdout": "shut off"}, {"stdout": "running"}]
+        stub = guest_contract.write_stub_virsh(self.stubs, scenario)
+        plays = entry_playbook(playbook, self.tmp)
+        plays[0]["vars"] = {"guest_domain_state": state}
+        result = guest_contract.run_playbook(self.tmp, plays, {
+            "guest_spec": f"vm-specs/.generated/{MACHINE}.yml",
+            "guest_plan": self.plan,
+            "guest_cloud_init_user": self.user,
+            "guest_repository_root": str(ROOT), "guest_python_bin": sys.executable,
+            "guest_virsh_bin": str(stub), "guest_mkdir_bin": "/usr/bin/mkdir", "guest_rmdir_bin": "/usr/bin/rmdir",
+            "guest_existing_state": {"memory_mb": 2048}, "guest_confirm_power_cycle": MACHINE,
+            "guest_qga_timeout_seconds": 2, "guest_disposable_agent_poll_seconds": 1,
+            "guest_wait_for_qga": True,
+            "guest_inventory_plan_tool": str(self.plan_tool),
+            "guest_inventory_python_bin": sys.executable,
+            "guest_inventory_virsh_bin": str(stub),
+            "guest_inventory_address_tool": str(ROOT / "tools/guest_agent_address.py"),
+            "guest_inventory_host_key_tool": str(ROOT / "tools/guest_host_key.py"),
+            "guest_inventory_operator_home": str(self.home),
+            "guest_inventory_runtime_path": str(self.run),
+        }, *options, inventory=ROOT / "inventory.ini")
+        return result, guest_contract.stub_calls(self.stubs)
+
+    def boot(self, playbook: str, boot: int, address: str) -> None:
+        public = self.host_key(boot).with_suffix(".pub").read_text(encoding="utf-8")
+        scenario = boot_scenario(address, public)
+        # The cloud-init result is read before the public host key.
+        scenario["guest-file-open"] = [{"stdout": '{"return":5}'}] * 2
+        scenario["guest-file-read"] = guest_contract.boot_result()["guest-file-read"] + scenario["guest-file-read"]
+        result, calls = self.start(playbook, scenario, state="running" if playbook == "vm-power-cycle.yml" else "shut off")
+        assert result.returncode == 0, result.stdout + result.stderr
+        commands = guest_contract.agent_calls(calls)
+        assert commands == ["guest-file-open", "guest-file-read", "guest-file-close", "guest-info", "guest-exec",
+                            "guest-file-open", "guest-file-read", "guest-file-close"], calls
+        assert sum(argv[0] == "start" for argv in calls) == 1, calls
+        if playbook == "vm-power-cycle.yml":
+            assert calls[:2] == [["destroy", MACHINE], ["domstate", MACHINE]], calls
+            assert calls.index(["destroy", MACHINE]) < calls.index(["start", MACHINE]), calls
+        assert calls.index(["start", MACHINE]) < next(i for i, argv in enumerate(calls) if "guestinfo" in argv), calls
+        assert any(argv[1:3] == ["qemu:///system", "domifaddr"] for argv in calls), calls
+
+    def pins(self) -> dict[str, list[str]]:
+        pins: dict[str, list[str]] = {}
+        for line in self.known_hosts.read_text(encoding="utf-8").splitlines():
+            host, kind, key = line.split()[:3]
+            pins.setdefault(host, []).append(f"{kind} {key}")
+        return pins
+
+    def record(self) -> dict[str, str]:
+        lines = self.inventory.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "[workstations]" and len(lines) == 2, lines
+        fields = shlex.split(lines[1])
+        assert fields[0] == MACHINE, fields
+        return dict(field.split("=", 1) for field in fields[1:])
+
+    def ssh(self, boot: int) -> subprocess.CompletedProcess[str]:
+        """Strict SSH with the published inventory's own arguments, to a
+        server that holds the given boot's host key."""
+        sshd = shutil.which("sshd", path="/usr/sbin:/usr/bin:/sbin:/bin")
+        assert sshd, "the strict-SSH proof needs OpenSSH's sshd (it serves one connection on a pipe)"
+        config = self.tmp / f"sshd-{boot}.conf"
+        config.write_text("\n".join([
+            f"HostKey {self.host_key(boot)}", f"AuthorizedKeysFile {self.tmp / 'authorized_keys'}",
+            "StrictModes no", "PasswordAuthentication no", "KbdInteractiveAuthentication no",
+            "UsePAM no", "PidFile none", ""]), encoding="utf-8")
+        record = self.record()
+        argv = ["ssh", "-F", "/dev/null", *shlex.split(record["ansible_ssh_common_args"]),
+                "-o", "GlobalKnownHostsFile=/dev/null", "-i", record["ansible_ssh_private_key_file"],
+                "-o", f"ProxyCommand={sshd} -i -f {config} -E {self.tmp / 'sshd.log'}",
+                "-l", record["ansible_user"], record["ansible_host"], "true"]
+        environment = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.tmp), "LC_ALL": "C"}
+        return subprocess.run(argv, env=environment, text=True, capture_output=True, check=False, timeout=60)
+
+
+def check_disposable_repin() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        lab = Lab(Path(td))
+
+        def public(boot: int) -> str:
+            return " ".join(lab.host_key(boot).with_suffix(".pub").read_text().split()[:2])
+
+        lab.boot("vm-start.yml", 1, "10.10.4.31")
+        assert lab.pins() == {"10.10.4.31": [public(1)]}, lab.pins()
+        assert lab.ssh(1).returncode == 0, lab.ssh(1).stderr
+
+        # The second start of the same Machine: same address, new host key.
+        lab.boot("vm-start.yml", 2, "10.10.4.31")
+        assert lab.pins() == {"10.10.4.31": [public(2)]}, f"the second boot was not pinned: {lab.pins()}"
+        record = lab.record()
+        assert record["ansible_host"] == "10.10.4.31" and "StrictHostKeyChecking=yes" in record["ansible_ssh_common_args"]
+        assert lab.ssh(2).returncode == 0, f"strict SSH to the second boot failed: {lab.ssh(2).stderr}"
+        stale = lab.ssh(1)
+        assert stale.returncode == 255 and "Host key verification failed" in stale.stderr, (
+            f"strict SSH accepted the first boot's key: {stale.returncode} {stale.stderr}")
+
+        # A power cycle is a new boot too; here its lease moved.
+        lab.boot("vm-power-cycle.yml", 3, "10.10.4.32")
+        assert lab.pins()["10.10.4.32"] == [public(3)], f"the power-cycled boot was not pinned: {lab.pins()}"
+        assert lab.record()["ansible_host"] == "10.10.4.32", "the inventory names the earlier boot's address"
+        assert lab.ssh(3).returncode == 0, lab.ssh(3).stderr
+        assert lab.ssh(2).returncode == 255, "strict SSH accepted the second boot's key after the power cycle"
+
+        before = (lab.known_hosts.read_text(), lab.inventory.read_text())
+        # A boot whose key cannot be read through the agent fails the start
+        # and leaves the pin alone; nothing reads a key from the network.
+        failing = boot_scenario("10.10.4.32", "")
+        failing["guest-file-open"] = [{"stdout": '{"return":5}'},
+                                      {"rc": 1, "stderr": "error: Guest agent is not responding\n"}]
+        failing["guest-file-read"] = guest_contract.boot_result()["guest-file-read"]
+        result, _ = lab.start("vm-start.yml", failing)
+        assert result.returncode != 0, "a start whose host key could not be pinned succeeded"
+        assert "Read the guest SSH host key through QEMU Guest Agent" in result.stdout, result.stdout
+        assert (lab.known_hosts.read_text(), lab.inventory.read_text()) == before, "a failed pin changed the pin"
+
+        failing["domifaddr"] = [{"stdout": "no managed IPv4 address"}]
+        result, _ = lab.start("vm-start.yml", failing)
+        assert result.returncode != 0, "a start whose address could not be discovered succeeded"
+        assert "Resolve the unique managed guest address through QEMU Guest Agent" in result.stdout
+        assert (lab.known_hosts.read_text(), lab.inventory.read_text()) == before, "failed discovery changed the pin"
+
+        # Not a new boot: no discovery, no pin, no inventory.
+        for label, playbook, options, state in (
+            ("already running", "vm-start.yml", (), "running"),
+            ("check mode", "vm-start.yml", ("--check",), "shut off"),
+            ("check mode", "vm-power-cycle.yml", ("--check",), "running"),
+        ):
+            result, calls = lab.start(playbook, boot_scenario("10.10.4.33", public(4)), *options, state=state)
+            assert result.returncode == 0, f"{label} {playbook}: {result.stdout}{result.stderr}"
+            assert not any("qemu-agent-command" in argv or "domifaddr" in argv or argv[0] in ("start", "destroy")
+                           for argv in calls), f"{label} {playbook}: boot or publisher ran ({calls})"
+        assert (lab.known_hosts.read_text(), lab.inventory.read_text()) == before, "a start that made no boot repinned"
 
 
 def main() -> int:
@@ -231,6 +476,7 @@ def main() -> int:
     assert '"privileged": False' in inventory_action
     assert '"requires": None' in inventory_action
 
+    check_disposable_repin()
     print("managed guest inventory contract: OK")
     return 0
 
