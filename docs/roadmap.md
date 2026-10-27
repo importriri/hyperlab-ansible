@@ -4,6 +4,16 @@ Software verification and hardware evidence are separate. CI can prove that a
 repository contract holds; only a named machine can prove that the hardware path
 works.
 
+A checked box that reports a hardware observation names its evidence in one
+of two forms: `evidence:` and a link to an acceptance receipt in `docs/`, or
+the words *operator-observed, unpublished* when the operator saw the result
+and no sanitized record of it is published. Either form keeps the date and
+the scope of that one observation. Neither is a replay of frozen release
+commits or a full-pipeline acceptance; milestone 14 qualifies those.
+`tests/docs_contract.py` checks that every such box carries one of the two
+forms. It cannot check that the observation happened, or that a receipt is
+enough for the claim.
+
 ## Current state
 
 - **Encrypted Arch bootstrap:** validated on Nitro; the frozen release replay is
@@ -38,6 +48,53 @@ works.
 7. publish Predator evidence separately;
 8. start reusable workstation or golden-image work only after the host release is
    coherent.
+
+## v1 scope and evidence status
+
+v1 keeps milestones 1, 4 (with the two SSH server Templates, `server-debian`
+and `server-fedora`), 5, 5b and the Showcase. Each part below is stated at
+the level its evidence reaches today. A design, the name of a checked-in test
+or work that is not on `main` does not raise it.
+
+- **Reference workstation (1):** the repeated `changed=0` runs and the Guest
+  Workspace Shell on `arch-dev-vfio` are operator-observed, unpublished
+  (Nitro, 2026-10-03). The pre-login and input gate and the physical audio
+  proof are open.
+- **Server Templates (4):** `server-fedora` is ready on the sealed upstream
+  Fedora 44 image. `server-debian` is a draft until `debian-server`, the
+  Debian image with QEMU Guest Agent, is prepared and sealed. A ready
+  Template is not an SSH observation: neither server's SSH observation is
+  recorded, and both stay open.
+- **Plan and Intent (5):** software-verified. `create-plan` reports what the
+  factory allows, and one staged `machine create --project` publishes the
+  Machine record only after its projection is written
+  ([ADR 0017](adr/0017-shell-machine-creation.md) and
+  [ADR 0053](adr/0053-withdraw-machine-intent.md), both proposed).
+- **Create view (5):** implemented in the shell and software-verified
+  offscreen. No creation from the shell has been accepted on hardware.
+- **Provisioning (5):** the runner, the check of the whole plan before the
+  first step and the removal of the password hash file are software-verified
+  against inert fixture playbooks. That validation and cleanup end at the
+  limits ADR 0017 lists: a writer of the checkout after the checks, SIGKILL.
+  A real unit stop, a real `ansible-playbook` run and a Machine provisioned
+  from the shell are not observed.
+- **Disposable Machines (5):** the libvirt transient disk that discards the
+  writes at every stop is software-verified
+  ([ADR 0018](adr/0018-disposable-discards-on-stop.md), proposed). Access at
+  every later boot is not closed: the managed start does not restrict the
+  agent again or re-pin the host key. No disposable Machine has been proven
+  on hardware.
+- **GPU lease (5b):** proposed in [ADR 0019](adr/0019-gpu-lease.md), not
+  decided and not built. What it builds on, the shared definition, the
+  ladder and GPU-capable services, is software-verified.
+- **Showcase:** the storyboard is written and the read-only demo script is
+  software-verified; the lease shot waits for ADR 0019, and the recording and
+  its privacy review are open.
+- **Qualification gap:** the checked-in release order of milestone 14
+  (`release/acceptance.v2.yml`) was written before this scope. It has no
+  gate for a Machine created from the shell, the disposable discard, the two
+  SSH servers, the GPU lease or the Showcase take, so a campaign sealed on it
+  does not qualify those parts. What replaces it is not decided yet.
 
 ## Security rules every milestone keeps
 
@@ -95,10 +152,13 @@ then accepted on Nitro; Predator replays the frozen result.
 - [x] canonical ADR: Image Factory, Golden Image, Template and Machine
       lifecycle; empty Machines on a fresh install; Machine, Desk and Project
       ([ADR 0021](adr/0021-product-lifecycle.md))
-- [x] ADR: network trust versus GPU transition policy, GPU-capable SERVICES
-      and the boot-scoped GPU lease
-      ([ADR 0022](adr/0022-network-trust-and-gpu-policy.md),
-      [ADR 0019](adr/0019-gpu-lease.md))
+- [x] ADR recorded: network trust versus GPU transition policy and
+      GPU-capable SERVICES ([ADR 0022](adr/0022-network-trust-and-gpu-policy.md),
+      proposed; the policy it records is built and software-verified, see 5b
+      and C10)
+- [x] the boot-scoped GPU lease recorded as a proposal
+      ([ADR 0019](adr/0019-gpu-lease.md), proposed; not decided and not
+      built, see 5b)
 - [x] ADR: no separate PLAY identity; `gaming-clean`, `gaming-dirty` and
       `gaming-offline` on clean, dirty and lab
       ([ADR 0023](adr/0023-gaming-identities.md), accepted)
@@ -113,11 +173,14 @@ then accepted on Nitro; Predator replays the frozen result.
 - [ ] pre-login display recovery and input isolation accepted
 - [ ] physical audio proof
 - [x] idempotence: repeated runs of `guest-arch-dev-vfio.yml` report
-      `changed=0` (Nitro, 2026-10-03)
+      `changed=0` (Nitro, 2026-10-03; operator-observed, unpublished; an
+      earlier second pass with `changed=0`, Nitro, 2026-08-31, has a
+      receipt, evidence: [`nitro-arch-dev-vfio-acceptance-2026-08-31.md`](nitro-arch-dev-vfio-acceptance-2026-08-31.md))
 - [x] guest package installs run as one full Arch transaction
       (software-verified)
 - [x] Guest Workspace Shell on the guest: Desks, tiling, theme, identity
-      wallpaper and key sheet (Nitro, 2026-10-03)
+      wallpaper and key sheet (Nitro, 2026-10-03; operator-observed,
+      unpublished)
 - [x] the workstation behaviour lives in the shared roles: `arch-dev` is
       the shared roles plus `dev_ide`, and the accelerated playbooks add only
       the GPU, its telemetry and Looking Glass through a closed set of
@@ -129,7 +192,7 @@ then accepted on Nitro; Predator replays the frozen result.
 Details and status: [Guest Workspace Shell](#guest-workspace-shell).
 
 - [x] physical acceptance of the shell, Desk keys, tiling and theme
-      (Nitro, 2026-10-03)
+      (Nitro, 2026-10-03; operator-observed, unpublished)
 - [ ] physical acceptance of the launcher, Desks overview, lock and the
       Waybar fallback, one by one
 - [x] layer blur behind the islands and panels, through the reviewed Lua
@@ -174,7 +237,8 @@ Procedure: [`golden-image-workbench.md`](golden-image-workbench.md).
 - [x] digest and a local-import manifest for the existing image factory
       (software-verified)
 - [x] the first real seal of `arch-dev-vfio` on Nitro, imported and validated
-      as `arch-dev-20261003` (Nitro-verified)
+      as `arch-dev-20261003` (Nitro-verified: operator-observed, unpublished;
+      the manifest `images/arch-dev-20261003.yml` records the digest)
 - [x] **Workbench** section in the shell: start, stop, open and seal a
       candidate, never shown as a product Machine; a product Machine is
       refused at adoption and seal (software-verified)
@@ -211,8 +275,10 @@ Machine. Every Template still pins one sealed image:
 | services | `svc-*` | `svc-*` | | per Template | no |
 | disposable | `browser-disposable` | | | no | minimal |
 
-Server Templates need no Workbench capture: they use the sealed upstream
-cloud images with cloud-init. At creation the operator chooses name, network
+`server-arch` and `server-fedora` need no Workbench capture: they use the
+sealed upstream cloud images with cloud-init. `server-debian` does: the
+upstream Debian image has no QEMU Guest Agent, so it waits, as a draft, for
+the `debian-server` capture. At creation the operator chooses name, network
 and resources (profile or custom RAM, vCPUs and disk) within what the
 Template allows.
 
@@ -224,7 +290,8 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
       `arch-dev-20261003` (software-verified)
 - [x] first Machine, `dev-01`, created from `workstation-dev` on Nitro, the
       rice applied by the dev profile playbook, second pass `changed=0`,
-      Looking Glass, Desks, host provenance and trust colours (Nitro-verified)
+      Looking Glass, Desks, host provenance and trust colours (Nitro-verified:
+      operator-observed, unpublished)
 - [x] `ALT+SHIFT+W` in the guest changes only the wallpaper, with a short
       fade, instead of reloading the session (software-verified)
 - [x] Arch rice profiles `dev`, `gaming-clean` and `gaming-dirty` on one set
@@ -232,12 +299,15 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [x] `server-arch`: SSH-only Machines from the sealed upstream Arch image,
       standard device, dev, services or lab network (software-verified)
 - [x] `srv-01` from `server-arch` created and reached over SSH on Nitro
-      (Nitro-verified)
+      (Nitro-verified: operator-observed, unpublished)
 - [x] Debian 13 and Fedora 44 cloud images pinned from downloads verified on
       Nitro against the official checksums; `server-debian` and
-      `server-fedora` published as drafts
+      `server-fedora` published as drafts (recorded 2026-10-04;
+      operator-observed, unpublished)
 - [x] Debian 13 and Fedora 44 images prepared, validated and sealed on
-      Nitro; `server-debian` and `server-fedora` ready
+      Nitro (recorded 2026-10-04; operator-observed, unpublished); at that
+      point both server Templates were marked ready. Only `server-fedora`
+      is ready now: the next item returned `server-debian` to a draft
 - [x] a manifest's QEMU Guest Agent claim is checked inside the image,
       read-only, before it is sealed or validated; the upstream Debian
       genericcloud has no agent, so `server-debian` is a draft again
@@ -293,13 +363,17 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [x] disposable Machines discard their writable layer on every stop: a
       libvirt transient disk over the lifecycle overlay; server Templates
       offer them ([ADR 0018](adr/0018-disposable-discards-on-stop.md),
-      software-verified)
+      proposed; software-verified)
+- [ ] a disposable Machine closed again at every later boot: the agent
+      allowlist restored and the host key re-pinned after each start (not
+      built: the managed start runs neither step, ADR 0018 Limits)
 - [ ] a disposable Machine proven on Nitro: a file written in the guest is
       gone after a stop and start, and no temporary overlay is left behind
 - [x] Create view in the shell: Template, name, network and resources
       within the Template's limits, provisioned as one durable operation;
       password and become prompt only in the operation window
-      ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
+      ([ADR 0017](adr/0017-shell-machine-creation.md), proposed;
+      software-verified)
   - [x] a refused creation leaves no record: one staged `machine create
         --project` under the registry lock, a failure after the record's
         publication undone record first, and the manual `machine withdraw`
@@ -315,7 +389,8 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
         failure, SIGINT, SIGTERM and SIGHUP, also when the runner is
         stopped while a playbook is slow to end, ignores SIGTERM or is
         still being started, only after that playbook is stopped and reaped
-        ([ADR 0017](adr/0017-shell-machine-creation.md), software-verified)
+        ([ADR 0017](adr/0017-shell-machine-creation.md), proposed;
+        software-verified within the limits that ADR lists)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell
 
@@ -328,10 +403,11 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [ ] a Machine declares `gpu_capable`; owning the GPU is a host-owned lease
       for one run, so a dev Machine can start without the GPU and restart
       with it for Blender or CUDA
-- [x] the lease decided in [ADR 0019](adr/0019-gpu-lease.md) (proposed:
-      it waits for an image with a session on both shapes, a Nitro test of
-      define-then-start and the choice of Templates; it comes after
-      `workstation-dev-standard` and the Create view proven on Nitro)
+- [ ] the lease decided: [ADR 0019](adr/0019-gpu-lease.md) is proposed and
+      nothing of it is built (it waits for an image with a session on both
+      shapes, a hardware test of define-then-start and the choice of
+      Templates; it comes after `workstation-dev-standard` and the Create
+      view accepted on hardware, both open)
 - [x] SERVICES Machines may be GPU-capable through a reviewed handoff
       profile; the static rule that excludes them is replaced: a service spec
       names `gpu_handoff_profile` (null by default) and its VM spec must match
@@ -622,14 +698,16 @@ Measured with the complete security plane active.
       profile proposal to review (`hyperlabctl doctor --hardware [--profile
       NAME]`, [ADR 0050](adr/0050-hardware-readiness-and-profile.md),
       proposed; `tools/hyperlabctl/tests/test_hardware.py`; run read-only on
-      the Nitro: every check ok)
+      the Nitro on 2026-10-06: every check ok, operator-observed,
+      unpublished)
 - [ ] the same on the Predator and in the lab host
 - [ ] release qualification: idempotence, reboot, cold start, recovery and
       hardware gates, in the checked-in order: repository-software,
       bootstrap-dry-run, bootstrap-clean-install, storage-handoff,
       host-idempotence, network-isolation, standard-vm-lifecycle,
       vfio-trust-lifecycle, looking-glass, jellyfin-service, service-recovery,
-      sanitized-publication
+      sanitized-publication (this order does not cover the v1 additions:
+      see [v1 scope and evidence status](#v1-scope-and-evidence-status))
   - [x] a passed gate needs every reviewed boolean exactly true on record,
         status and seal; `spice_socket_private` is a typed boolean
         ([`problems/release-pass-with-false-booleans.md`](../problems/release-pass-with-false-booleans.md),
@@ -682,7 +760,8 @@ Open before C10 can be used as a product path:
 - [x] a captured, generalized and sealed workstation Golden Image, the first
       published Template pinned to it, and a Machine created, projected,
       defined and started from it on Nitro: `arch-dev-20261003`,
-      `workstation-dev` and `dev-01` (milestones 3 and 4, Nitro-verified)
+      `workstation-dev` and `dev-01` (milestones 3 and 4, Nitro-verified:
+      operator-observed, unpublished)
 - [ ] the managed `domains.d` policy of a Machine created from a Template
       read back on Nitro and matched by the hook at its start
 - [ ] physical proof that the hook refuses an unmapped domain with PCI
@@ -739,8 +818,10 @@ work explicitly requires it.
 <!-- HYPERLAB_QUICKSHELL_READONLY_CORE_V1 -->
 ### HyperLab Shell Phase 2B — read-only core
 
-- [x] physical Quickshell per-screen panel creation
-- [x] 37px exclusive-zone acceptance on Hyprland
+- [x] physical Quickshell per-screen panel creation (operator-observed,
+      unpublished)
+- [x] 37px exclusive zone accepted in the physical Hyprland session
+      (operator-observed, unpublished)
 - [x] event-driven trust transport
 - [x] slow RAM/GPU/VM status surface
 - [x] native Quickshell clock
@@ -762,9 +843,11 @@ work explicitly requires it.
 - [x] one shared target-bound confirmation for destructive operations
 - [x] HyperLab Platform identity: one circular symbol from rail to lock
 - [x] physical screenshot and interaction acceptance on Nitro
+      (operator-observed, unpublished)
 - [x] reviewed focused-surface provenance resolver wired live into the shell
       (software-verified)
 - [x] physical Nitro acceptance of live focused-surface provenance
+      (operator-observed, unpublished)
 - [x] reviewed desktop-entry catalogue and app-launch bridge (milestone 8;
       Rofi stays on `SUPER + D` for applications outside the catalogue)
 - [ ] reviewed focused-window targeting (fullscreen/opacity stay compositor
