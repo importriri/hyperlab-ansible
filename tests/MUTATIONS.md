@@ -4563,8 +4563,8 @@ strict checkout refusal before the fix.
 
 ## Disposable boot access and SSH identity (ADR 0018)
 
-All eighteen mutations below were observed red (exit 1), restored from plain
-copies, and observed green (exit 0). These fixtures prove software behavior;
+All twenty-three mutations below were observed red (exit 1), restored from
+plain copies, and observed green (exit 0). These fixtures prove software behavior;
 real cloud-init activation and transient-disk cleanup still require Nitro.
 
 Before replaying any one mutation, keep copies below the checkout with a
@@ -5126,4 +5126,154 @@ Restore:
 
 ```bash
 cp "$MUTATION_BACKUP/playbooks/vm-reset.yml.saved" playbooks/vm-reset.yml
+```
+
+### M19. Release the publication lock before the publisher runs
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/main.yml')
+s = p.read_text()
+old = '    - name: Hand the publication lock to the owner\'s inventory publisher\n      when:\n        - guest_identity_lock_wanted | bool\n        - guest_start_new_disposable_boot | default(false) | bool\n      ansible.builtin.set_fact:\n        guest_identity_lock_handover: "{{ guest_identity_lock_path }}"\n\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `a power cycle ran while another start was still pinning`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/main.yml.saved" roles/guest/tasks/main.yml
+```
+
+### M20. Start a new boot while another is still being published
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/main.yml')
+s = p.read_text()
+old = '    - name: Refuse a new boot while the last one is still being published\n      when: guest_identity_lock_wanted | bool\n      ansible.builtin.assert:\n        that:\n          - guest_identity_lock_acquire.rc == 0\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    - name: Refuse a new boot while the last one is still being published\n      when: guest_identity_lock_wanted | bool\n      ansible.builtin.assert:\n        that:\n          - true\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `a power cycle ran while another start was still pinning`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/main.yml.saved" roles/guest/tasks/main.yml
+```
+
+### M21. Leave the publication lock behind when publication fails
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-guest-inventory.yml')
+s = p.read_text()
+old = '  force_handlers: true\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `left a lock behind`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-guest-inventory.yml.saved" playbooks/vm-guest-inventory.yml
+```
+
+### M22. Ignore a failed pin replacement
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-guest-inventory.yml')
+s = p.read_text()
+old = '        hash_host: false\n        state: present\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        hash_host: false\n        state: present\n      failed_when: false\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `a start whose pin could not be replaced succeeded`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-guest-inventory.yml.saved" playbooks/vm-guest-inventory.yml
+```
+
+### M23. Publish on its own while a start holds the lock
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-guest-inventory.yml')
+s = p.read_text()
+old = '        that:\n          - guest_inventory_lock_acquire.rc == 0\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        that:\n          - true\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `the publisher ran on its own while a start held the lock`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-guest-inventory.yml.saved" playbooks/vm-guest-inventory.yml
 ```

@@ -372,8 +372,57 @@
       - "{{ guest_plan.lock_path }}"
   changed_when: true
 
+# ADR 0018: a Start or Power Cycle of a disposable Machine makes a new boot
+# whose SSH identity the owner's publisher pins after this play, when the
+# per-VM lock is gone. The owner's publication lock spans both: it is taken
+# here before the boot, handed to the publisher on success and released here
+# otherwise. It lives in the owner's runtime directory, as the owner, so the
+# publisher can release it without privilege; a held lock refuses the start.
 - name: Execute the selected operation under the lifecycle locks
+  vars:
+    guest_identity_lock_wanted: >-
+      {{ guest_operation in ['start', 'power-cycle']
+         and not ansible_check_mode
+         and guest_plan.lifecycle == 'disposable'
+         and guest_plan.cloud_init | bool
+         and guest_plan.qemu_guest_agent | bool
+         and (guest_operation == 'power-cycle' or guest_domain_state == 'shut off') }}
   block:
+    - name: Resolve the Machine owner for its publication lock
+      when: guest_identity_lock_wanted | bool
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ guest_plan.owner }}"
+        split: ':'
+
+    - name: Publish the owner's publication lock path
+      when: guest_identity_lock_wanted | bool
+      ansible.builtin.set_fact:
+        guest_identity_lock_path: >-
+          {{ guest_identity_lock_root }}/{{ guest_plan.name }}.inventory.lock
+
+    - name: Acquire the owner's publication lock before the new boot
+      when: guest_identity_lock_wanted | bool
+      become: false
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_mkdir_bin }}"
+          - "{{ guest_identity_lock_path }}"
+      register: guest_identity_lock_acquire
+      changed_when: guest_identity_lock_acquire.rc == 0
+      failed_when: false
+
+    - name: Refuse a new boot while the last one is still being published
+      when: guest_identity_lock_wanted | bool
+      ansible.builtin.assert:
+        that:
+          - guest_identity_lock_acquire.rc == 0
+        fail_msg: >-
+          {{ guest_plan.name }} is still publishing the SSH identity of an
+          earlier boot (or its publication lock {{ guest_identity_lock_path }}
+          could not be made). Retry when that Start or Power Cycle ends; inspect
+          a lock that outlives it before removing it.
+
     - name: Acquire the global guest registry lock
       when:
         - guest_operation in ['create', 'reset']
@@ -433,7 +482,29 @@
       when: guest_operation == 'destroy'
       ansible.builtin.include_tasks: destroy.yml
 
+    - name: Hand the publication lock to the owner's inventory publisher
+      when:
+        - guest_identity_lock_wanted | bool
+        - guest_start_new_disposable_boot | default(false) | bool
+      ansible.builtin.set_fact:
+        guest_identity_lock_handover: "{{ guest_identity_lock_path }}"
+
   always:
+    - name: Release the publication lock unless the publisher now holds it
+      when:
+        - guest_identity_lock_wanted | bool
+        - guest_identity_lock_acquire is defined
+        - guest_identity_lock_acquire.rc == 0
+        - guest_identity_lock_handover | default('') != guest_identity_lock_path
+      become: false
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_rmdir_bin }}"
+          - "{{ guest_identity_lock_path }}"
+      register: guest_identity_lock_release
+      changed_when: guest_identity_lock_release.rc == 0
+      failed_when: guest_identity_lock_release.rc != 0
+
     - name: Release the global guest registry lock owned by this operation
       when:
         - guest_operation in ['create', 'reset']

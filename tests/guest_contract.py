@@ -357,6 +357,13 @@ def load_unique(text: str) -> Any:
 def run_playbook(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str, Any],
                  *options: str, inventory: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run one playbook with the real ansible-playbook on this host only."""
+    argv, environment = playbook_invocation(tmp, playbook, extra_vars, *options, inventory=inventory)
+    return subprocess.run(argv, cwd=tmp, env=environment, text=True, capture_output=True, check=False)
+
+
+def playbook_invocation(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str, Any],
+                        *options: str, inventory: Path | None = None) -> tuple[list[str], dict[str, str]]:
+    """The argv and environment run_playbook uses, for a run kept in the background."""
     path = tmp / f"playbook-{len(list(tmp.glob('playbook-*.yml')))}.yml"
     write_yaml(path, playbook)  # type: ignore[arg-type]
     variables = tmp / f"{path.stem}-vars.json"
@@ -374,7 +381,7 @@ def run_playbook(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str
     }
     argv = ["ansible-playbook", "-i", str(inventory) if inventory else "localhost,",
             "-e", f"@{variables}", *options, str(path)]
-    return subprocess.run(argv, cwd=tmp, env=environment, text=True, capture_output=True, check=False)
+    return argv, environment
 
 
 CLOSE_ROLE = ROOT / "roles/guest_access_close"

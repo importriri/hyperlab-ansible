@@ -137,6 +137,21 @@ separate inventory/provisioning steps stay in place, and Reset with start
 (which starts through create) needs the same explicit inventory step: it
 proves the agent closed but does not repin.
 
+The root-owned per-VM operation lock ends with the lifecycle play, so it
+cannot cover the owner's publisher. A Start or Power Cycle that will make a
+new disposable boot therefore also takes an owner-held publication lock,
+`<name>.inventory.lock` in the owner's runtime directory, while it still
+holds the per-VM lock and before it crosses the stop/start boundary. On
+success it hands that lock to the publisher, which releases it from a forced
+handler, also when discovery or pinning fails; on failure the lifecycle play
+releases it. While the lock exists another Start or Power Cycle of the
+Machine refuses before it stops or starts anything, so an earlier boot's
+key can never be pinned over a later boot's. The publisher run on its own
+takes the same lock. A lock left by an interrupted run is never removed
+automatically: the refusal names it, and the operator removes it after
+checking that no run is active. The runtime directory is cleared when the
+owner's last session ends.
+
 Existing seed images are immutable lifecycle artifacts: updating host code
 cannot add these contents to them. Recreate a throwaway acceptance Machine
 through the normal Template flow before testing this change. An old seed

@@ -3,6 +3,8 @@
   hosts: hypervisor
   become: false
   gather_facts: false
+  # The publication lock is released by a handler, also when a task fails.
+  force_handlers: true
   environment:
     LC_ALL: C
   vars:
@@ -18,7 +20,22 @@
     guest_inventory_python_bin: /usr/bin/python
     guest_inventory_virsh_bin: /usr/bin/virsh
     guest_inventory_runtime_path: "/run/user/{{ guest_inventory_operator_uid }}"
+    guest_inventory_mkdir_bin: /usr/bin/mkdir
+    guest_inventory_rmdir_bin: /usr/bin/rmdir
+    guest_inventory_lock_path: >-
+      {{ guest_inventory_runtime_path }}/{{ guest_inventory_plan.name }}.inventory.lock
   tasks:
+    # ADR 0018: after a new disposable boot, managed Start and Power Cycle
+    # hand over the lock they took before the boot (roles/guest/tasks/main.yml).
+    # From here this play owns it, so no other start crosses a stop/start
+    # boundary until this boot's key is pinned and its inventory published.
+    - name: Take over the publication lock of the boot just started
+      when: guest_identity_lock_handover is defined
+      ansible.builtin.debug:
+        msg: "Holding {{ guest_identity_lock_handover }} until this boot is published."
+      changed_when: true
+      notify: Release the publication lock
+
     - name: Refuse a missing guest selector
       ansible.builtin.assert:
         that:
@@ -134,6 +151,52 @@
       loop_control:
         label: "{{ item.item }}"
 
+    - name: Inspect the publication lock handed over by the lifecycle
+      when: guest_identity_lock_handover is defined
+      ansible.builtin.stat:
+        path: "{{ guest_identity_lock_handover }}"
+        follow: false
+      register: guest_inventory_lock_handed
+
+    - name: Require the handed-over lock to be this Machine's
+      when: guest_identity_lock_handover is defined
+      ansible.builtin.assert:
+        that:
+          - guest_identity_lock_handover == guest_inventory_lock_path
+          - guest_inventory_lock_handed.stat.isdir | default(false)
+          - not (guest_inventory_lock_handed.stat.islnk | default(false))
+          - guest_inventory_lock_handed.stat.pw_name == guest_inventory_plan.owner
+        fail_msg: >-
+          The lifecycle handed over {{ guest_identity_lock_handover }}, not this
+          Machine's owner-held publication lock {{ guest_inventory_lock_path }}.
+
+    # Run on its own (after create or reset), this play takes the lock
+    # itself, so a managed Start or Power Cycle of the Machine waits for it.
+    - name: Acquire the publication lock for a publication on its own
+      when:
+        - guest_identity_lock_handover is not defined
+        - not ansible_check_mode
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_inventory_mkdir_bin }}"
+          - "{{ guest_inventory_lock_path }}"
+      register: guest_inventory_lock_acquire
+      changed_when: guest_inventory_lock_acquire.rc == 0
+      failed_when: false
+      notify: Release the publication lock
+
+    - name: Refuse a publication while a start or another publication runs
+      when:
+        - guest_identity_lock_handover is not defined
+        - not ansible_check_mode
+      ansible.builtin.assert:
+        that:
+          - guest_inventory_lock_acquire.rc == 0
+        fail_msg: >-
+          {{ guest_inventory_plan.name }} is being started or published right
+          now ({{ guest_inventory_lock_path }} exists). Retry when that ends;
+          inspect a lock that outlives it before removing it.
+
     - name: Resolve the unique managed guest address through QEMU Guest Agent
       ansible.builtin.command:
         argv:
@@ -205,3 +268,11 @@
           {{ guest_inventory_runtime_path }}/{{ guest_inventory_plan.name }}.ini
         owner: "{{ guest_inventory_plan.owner }}"
         mode: '0600'
+
+  handlers:
+    - name: Release the publication lock
+      ansible.builtin.command:
+        argv:
+          - "{{ guest_inventory_rmdir_bin }}"
+          - "{{ guest_identity_lock_handover | default(guest_inventory_lock_path) }}"
+      changed_when: true

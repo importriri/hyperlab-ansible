@@ -28,7 +28,10 @@ is force-stopped, so its possibly open agent does not stay running. Waiting for
 the result also prevents a restricted agent already in the base from racing
 cloud-init and SSH key generation. Start and Power Cycle then use the
 existing unprivileged owner-run inventory publisher to replace the strict
-SSH pin from the agent channel and publish the current address.
+SSH pin from the agent channel and publish the current address. An
+owner-held publication lock, taken before the boot under the per-VM lock and
+released by the publisher, keeps a second Start or Power Cycle from booting
+again while the first boot's key is still being pinned.
 
 Existing seeds must be replaced through normal throwaway Machine creation.
 Passwordless server sudo remains an explicit limitation. See
@@ -44,6 +47,7 @@ accept the second boot's key and reject the stale one. The vault regression
 refuses duplicate YAML keys and preserves the vault's original files and
 commands. The mutation catalogue records removed restriction/activation,
 cloud-init wait, widened readiness, a guest-exec-only proof, a failed proof
-left running, a redirected or overridden policy, missing repin and
-running/check-mode regressions. No physical cleanup claim follows from
+left running, a redirected or overridden policy, missing repin, a
+publication outside the lock, a suppressed pin failure and running/check-mode
+regressions. No physical cleanup claim follows from
 these fixtures.

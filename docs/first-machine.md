@@ -181,7 +181,12 @@ ansible-playbook -K playbooks/vm-power-cycle.yml \
   -e guest_confirm_power_cycle=srv-01
 ```
 
-A failed discovery or pin update fails the operation. An already-running
+A failed discovery or pin update fails the operation. Until the new boot's
+key is pinned, the Machine's publication lock
+`/run/user/$UID/srv-01.inventory.lock` exists. Another Start or Power Cycle
+of it, or a separate inventory step, then refuses before it does anything.
+Retry when the first one ends. If a killed run left the lock behind, check
+that no run is active, then remove it with `rmdir`. An already-running
 Start and check mode do not repin or run the boot action. Creation still
 uses the explicit inventory step above before further provisioning, and so
 does a reset that starts the Machine again: it proves the agent closed but

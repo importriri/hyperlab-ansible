@@ -83,6 +83,9 @@ guest_disposable_agent_conf: |
 # this long; the retry budget uses guest_qga_timeout_seconds and this interval.
 guest_agent_call_timeout_seconds: 10
 guest_disposable_agent_poll_seconds: 5
+# The owner's private runtime directory, where vm-guest-inventory.yml publishes
+# and where the publication lock of a new disposable boot lives (main.yml).
+guest_identity_lock_root: "/run/user/{{ ansible_facts.getent_passwd[guest_plan.owner][1] }}"
 
 # The key vault's listener and port inside the vault Machine (ADR 0048).
 guest_vault_port: 7401
