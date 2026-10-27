@@ -98,8 +98,11 @@ The disposable Linux cloud-init seed therefore writes root-owned
 `/etc/qemu/qemu-ga.conf` on every new boot and restarts
 `qemu-guest-agent.service` from `runcmd` to activate it. It reads the exact
 `guest_access_close_agent_rpcs` allowlist from the access-closing role's
-defaults; there is no second RPC policy in the seed. Permanent Machines and
-Machines without cloud-init or the agent keep their existing behavior.
+defaults; there is no second RPC policy in the seed. Create and reset refuse
+the seed when that path is not the role's own defaults file, or when
+inventory overrides `guest_access_close_agent_rpcs` with a different list.
+Permanent Machines and Machines without cloud-init or the agent keep their
+existing behavior.
 The vault's existing boot files and commands share the same YAML lists.
 
 The shared managed start path (including create-with-start and Power Cycle)
@@ -107,11 +110,18 @@ waits for this boot's `/run/cloud-init/result.json` through the existing
 read-only agent file calls and requires `v1.errors` to be an empty list.
 cloud-init publishes that runtime link after its final stage. This prevents
 an already-restricted agent in a base from satisfying readiness before the
-new boot's configuration and SSH key generation finish. The host then waits
-for `guest-info` to report exactly one disabled `guest-exec` entry and
-requires the negative exec probe to fail specifically because `guest-exec`
-is disabled. Success, unavailable agent, timeout, malformed reply and other
-RPC errors fail the operation. The probe never provisions anything.
+new boot's configuration and SSH key generation finish; for such a boot
+this wait replaces the generic agent readiness wait, with the same budget.
+The host then waits for `guest-info` to report exactly one disabled
+`guest-exec` entry and, as enabled, exactly the allowlist: a `guest-exec`
+blocked by something other than this seed, with other calls left open or
+allowlisted calls missing, does not pass. The negative exec probe must then
+fail specifically because `guest-exec` is disabled. Success, unavailable
+agent, timeout, malformed reply and other RPC errors fail the operation, and
+the host first force-stops that boot and waits for it to be shut off, since
+its agent may still run commands and a stop loses nothing a disposable
+Machine would keep. If even that stop fails, the failure says so. The probe
+never provisions anything.
 See the [cloud-init final stage](https://docs.cloud-init.io/en/latest/explanation/boot.html)
 and its [result publication](https://github.com/canonical/cloud-init/blob/main/cloudinit/cmd/main.py),
 and the [QEMU agent protocol](https://www.qemu.org/docs/master/interop/qemu-ga-ref.html).
@@ -123,13 +133,15 @@ the strict host-owned SSH pin and publishes the runtime inventory. Discovery
 or pinning failure fails the operation; an old pin never means the new boot
 is usable. No network key is accepted. An already-running Start and check
 mode do not run the boot action or republish inventory. Create's existing
-separate inventory/provisioning steps stay in place.
+separate inventory/provisioning steps stay in place, and Reset with start
+(which starts through create) needs the same explicit inventory step: it
+proves the agent closed but does not repin.
 
 Existing seed images are immutable lifecycle artifacts: updating host code
 cannot add these contents to them. Recreate a throwaway acceptance Machine
 through the normal Template flow before testing this change. An old seed
-that leaves the agent open fails managed start; stop that Machine before
-use. There is no automatic seed rewrite or in-guest repair through exec.
+that leaves the agent open fails managed start and is stopped by it. There
+is no automatic seed rewrite or in-guest repair through exec.
 
 Passwordless server accounts still retain cloud-init's passwordless sudo.
 Removing it would remove their administration path and needs a separate

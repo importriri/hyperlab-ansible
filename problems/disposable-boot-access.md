@@ -22,7 +22,9 @@ provisioning therefore said nothing about the next disposable boot.
 
 The disposable cloud-init seed restores the access-closing role's canonical
 allowlist and restarts the agent. Managed start waits for this boot's
-cloud-init result, then proves exec disabled before succeeding. Waiting for
+cloud-init result, then proves that the agent enables exactly the allowlist
+and refuses exec as disabled before succeeding; a boot that fails the proof
+is force-stopped, so its possibly open agent does not stay running. Waiting for
 the result also prevents a restricted agent already in the base from racing
 cloud-init and SSH key generation. Start and Power Cycle then use the
 existing unprivileged owner-run inventory publisher to replace the strict
@@ -41,5 +43,7 @@ publisher with stub libvirt commands, then uses strict SSH over a pipe to
 accept the second boot's key and reject the stale one. The vault regression
 refuses duplicate YAML keys and preserves the vault's original files and
 commands. The mutation catalogue records removed restriction/activation,
-cloud-init wait, widened readiness, missing repin and running/check-mode
-regressions. No physical cleanup claim follows from these fixtures.
+cloud-init wait, widened readiness, a guest-exec-only proof, a failed proof
+left running, a redirected or overridden policy, missing repin and
+running/check-mode regressions. No physical cleanup claim follows from
+these fixtures.

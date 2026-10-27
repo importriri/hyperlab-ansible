@@ -78,7 +78,8 @@ guest_disposable_agent_conf: |
   [general]
   allow-rpcs={{ guest_disposable_agent_rpcs | join(',') }}
 # A new disposable boot is reported started only after the host saw its
-# agent list guest-exec as disabled and refuse it. One agent call may take
+# agent enable exactly this allowlist, list guest-exec as disabled and refuse
+# it; otherwise the boot is stopped and the start fails. One agent call may take
 # this long; the retry budget uses guest_qga_timeout_seconds and this interval.
 guest_agent_call_timeout_seconds: 10
 guest_disposable_agent_poll_seconds: 5

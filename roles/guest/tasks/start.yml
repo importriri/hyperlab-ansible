@@ -135,11 +135,14 @@
       changed_when: guest_gpu_lock_release.rc == 0
       failed_when: guest_gpu_lock_release.rc != 0
 
+# A new disposable boot waits for its agent inside the proof below, with the
+# same budget, so an agent that never answers stops that boot too.
 - name: Wait for QEMU Guest Agent readiness
   when:
     - not ansible_check_mode
     - guest_plan.qemu_guest_agent
     - guest_wait_for_qga | bool
+    - not (guest_start_new_disposable_boot | bool)
   ansible.builtin.command:
     argv:
       - "{{ guest_virsh_bin }}"
@@ -153,10 +156,11 @@
   until: guest_qga_ready.rc == 0
 
 # The seed restarts the agent on its restricted configuration (user-data.j2).
-# guest-info only reads: it lists guest-exec as disabled once the restricted
-# agent answers, so guest-exec is never tried on an agent that would run it.
-# Then guest-exec must be refused as disabled. Success, a missing agent, a
-# timeout or any other error is a failed start, never a default.
+# guest-info only reads: once the restricted agent answers, the calls it lists
+# as enabled are exactly the allowlist and guest-exec is listed disabled, so
+# guest-exec is never tried on an agent that would run it. Then guest-exec
+# must be refused as disabled. Success, a missing agent, a timeout or any
+# other error is a failed start, never a default, and the boot is stopped.
 - name: Prove a new disposable boot closed its agent before the start succeeds
   when: guest_start_new_disposable_boot | bool
   block:
@@ -199,7 +203,7 @@
       delay: "{{ guest_disposable_agent_poll_seconds | int }}"
       until: guest_start_cloud_init.rc == 0
 
-    - name: Wait until the new boot's agent lists guest-exec as disabled
+    - name: Wait until the new boot's agent enables exactly the allowlist
       ansible.builtin.command:
         argv:
           - "{{ guest_virsh_bin }}"
@@ -217,7 +221,10 @@
         guest_start_agent_info.rc == 0 and
         ((guest_start_agent_info.stdout | from_json).get('return', {}).get('supported_commands', [])
          | selectattr('name', 'equalto', 'guest-exec')
-         | map(attribute='enabled') | list) == [false]
+         | map(attribute='enabled') | list) == [false] and
+        ((guest_start_agent_info.stdout | from_json).get('return', {}).get('supported_commands', [])
+         | selectattr('enabled', 'equalto', true)
+         | map(attribute='name') | sort) == (guest_disposable_agent_rpcs | sort)
 
     - name: Refuse the new boot unless guest-exec is refused as disabled
       ansible.builtin.command:
@@ -234,13 +241,52 @@
         guest_start_exec_probe.rc == 0 or
         'guest-exec has been disabled' not in (guest_start_exec_probe.stderr | lower)
 
+  # An unproved boot may still run guest-exec. Stopping it loses nothing a
+  # stop would keep (ADR 0018), so it is stopped before the start fails.
   rescue:
-    - name: Fail the start of a disposable boot whose agent stayed open
-      ansible.builtin.fail:
-        msg: >-
-          {{ guest_plan.name }} is running, but its new disposable boot did
-          not prove its QEMU Guest Agent closed: cloud-init did not finish
-          without errors, the agent did not list guest-exec as disabled within
-          its retry budget, or guest-exec was not refused as disabled. A seed made
-          before the boot restriction existed never closes the agent:
-          recreate the Machine through the normal flow. Stop it before use.
+    - name: Stop the disposable boot that did not prove its agent closed
+      block:
+        - name: Record that the unproved boot is not yet stopped
+          ansible.builtin.set_fact:
+            guest_start_unproved_stopped: false
+
+        - name: Force-stop the unproved disposable boot
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - destroy
+              - "{{ guest_plan.name }}"
+          changed_when: true
+
+        - name: Wait until the unproved disposable boot is shut off
+          ansible.builtin.command:
+            argv:
+              - "{{ guest_virsh_bin }}"
+              - domstate
+              - "{{ guest_plan.name }}"
+          register: guest_start_unproved_state
+          changed_when: false
+          retries: 20
+          delay: 1
+          until: guest_start_unproved_state.stdout | trim | lower == 'shut off'
+
+        - name: Record that the unproved boot is shut off
+          ansible.builtin.set_fact:
+            guest_start_unproved_stopped: true
+
+      always:
+        - name: Fail the start of a disposable boot whose agent stayed open
+          vars:
+            guest_start_unproved_outcome: >-
+              {{ 'It has been stopped.' if guest_start_unproved_stopped | default(false) | bool
+                 else 'Stopping it failed: it may still be running with an open agent;'
+                      ' stop it with vm-stop.yml before any use.' }}
+          ansible.builtin.fail:
+            msg: >-
+              {{ guest_plan.name }}'s new disposable boot did not prove its QEMU
+              Guest Agent closed: cloud-init did not finish without errors, the
+              agent did not enable exactly the allowlist with guest-exec
+              disabled within its retry budget, or guest-exec was not refused
+              as disabled. {{ guest_start_unproved_outcome }} A seed made before
+              the boot restriction existed never closes the agent: recreate the
+              Machine through the normal flow.

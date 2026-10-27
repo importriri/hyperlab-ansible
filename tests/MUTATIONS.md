@@ -4563,7 +4563,7 @@ strict checkout refusal before the fix.
 
 ## Disposable boot access and SSH identity (ADR 0018)
 
-All eleven mutations below were observed red (exit 1), restored from plain
+All eighteen mutations below were observed red (exit 1), restored from plain
 copies, and observed green (exit 0). These fixtures prove software behavior;
 real cloud-init activation and transient-disk cleanup still require Nitro.
 
@@ -4578,7 +4578,7 @@ from pathlib import Path
 import shutil
 
 backup = Path(os.environ["MUTATION_BACKUP"])
-for relative in ['playbooks/vm-guest-inventory.yml', 'playbooks/vm-start.yml', 'roles/guest/defaults/main.yml', 'roles/guest/tasks/main.yml', 'roles/guest/tasks/start.yml', 'roles/guest/templates/user-data.j2']:
+for relative in ['playbooks/vm-guest-inventory.yml', 'playbooks/vm-reset.yml', 'playbooks/vm-start.yml', 'roles/guest/defaults/main.yml', 'roles/guest/tasks/main.yml', 'roles/guest/tasks/start.yml', 'roles/guest/templates/user-data.j2']:
     target = backup / (relative + ".saved")
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(relative, target)
@@ -4916,4 +4916,214 @@ Restore:
 
 ```bash
 cp "$MUTATION_BACKUP/playbooks/vm-start.yml.saved" playbooks/vm-start.yml
+```
+
+### M12. Prove only guest-exec, not the whole allowlist
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = " and\n        ((guest_start_agent_info.stdout | from_json).get('return', {}).get('supported_commands', [])\n         | selectattr('enabled', 'equalto', true)\n         | map(attribute='name') | sort) == (guest_disposable_agent_rpcs | sort)\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, '\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `exec blocked elsewhere: guest-exec was tried`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M13. Leave an unproved disposable boot running
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = '        - name: Force-stop the unproved disposable boot\n          ansible.builtin.command:\n            argv:\n              - "{{ guest_virsh_bin }}"\n              - destroy\n              - "{{ guest_plan.name }}"\n          changed_when: true\n\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `the open boot was left running`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M14. Wait for a new disposable boot outside its proof
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = '    - not (guest_start_new_disposable_boot | bool)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `waited on outside its proof`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M15. Report an unproved boot stopped before it is
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/start.yml')
+s = p.read_text()
+old = '            guest_start_unproved_stopped: false\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            guest_start_unproved_stopped: true\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.test_disposable_start_proof()'
+```
+
+Observed red: `a boot that could not be stopped was reported stopped`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/start.yml.saved" roles/guest/tasks/start.yml
+```
+
+### M16. Accept a seed policy read from another file
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/main.yml')
+s = p.read_text()
+old = "      - >-\n        guest_disposable_agent_policy_file ==\n        guest_repository_root ~ '/roles/guest_access_close/defaults/main.yml'\n"
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.check_allowlist_gate(t.close_role_agent_conf()[0])'
+```
+
+Observed red: `reach a seed: ['redirected policy file']`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/main.yml.saved" roles/guest/tasks/main.yml
+```
+
+### M17. Accept an inventory override of the close policy
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('roles/guest/tasks/main.yml')
+s = p.read_text()
+old = '      - >-\n        guest_access_close_agent_rpcs is not defined or\n        guest_access_close_agent_rpcs == guest_disposable_agent_rpcs\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '', 1))
+PY
+```
+
+Check:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_contract as t; t.check_allowlist_gate(t.close_role_agent_conf()[0])'
+```
+
+Observed red: `reach a seed: ['inventory override widened', 'inventory override narrowed']`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/roles/guest/tasks/main.yml.saved" roles/guest/tasks/main.yml
+```
+
+### M18. Publish inventory from Reset
+
+Break:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+
+p = Path('playbooks/vm-reset.yml')
+s = p.read_text()
+old = '    - guest\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    - guest\n\n- name: Refresh the inventory\n  ansible.builtin.import_playbook: vm-guest-inventory.yml\n', 1))
+PY
+```
+
+Check:
+
+```bash
+python tests/guest_inventory_contract.py
+```
+
+Observed red: `vm-reset.yml imports a playbook`. Restored check: green.
+
+Restore:
+
+```bash
+cp "$MUTATION_BACKUP/playbooks/vm-reset.yml.saved" playbooks/vm-reset.yml
 ```

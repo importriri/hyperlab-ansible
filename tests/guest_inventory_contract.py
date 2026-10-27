@@ -218,7 +218,10 @@ class Lab:
         if playbook == "vm-power-cycle.yml":
             assert calls[:2] == [["destroy", MACHINE], ["domstate", MACHINE]], calls
             assert calls.index(["destroy", MACHINE]) < calls.index(["start", MACHINE]), calls
-        assert calls.index(["start", MACHINE]) < next(i for i, argv in enumerate(calls) if "guestinfo" in argv), calls
+        # The new boot's proof waits for the agent itself; nothing else does.
+        assert not any(argv[0] == "guestinfo" for argv in calls), calls
+        assert calls.index(["start", MACHINE]) < next(
+            i for i, argv in enumerate(calls) if "qemu-agent-command" in argv), calls
         assert any(argv[1:3] == ["qemu:///system", "domifaddr"] for argv in calls), calls
 
     def pins(self) -> dict[str, list[str]]:
@@ -252,6 +255,15 @@ class Lab:
                 "-l", record["ansible_user"], record["ansible_host"], "true"]
         environment = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.tmp), "LC_ALL": "C"}
         return subprocess.run(argv, env=environment, text=True, capture_output=True, check=False, timeout=60)
+
+
+def check_publisher_entries() -> None:
+    """Only Start and Power Cycle publish; Create and Reset keep the explicit inventory step."""
+    for name in ("vm-create.yml", "vm-reset.yml"):
+        plays = yaml.safe_load((ROOT / "playbooks" / name).read_text(encoding="utf-8"))
+        assert [play.get("ansible.builtin.import_playbook") for play in plays] == [None], (
+            f"{name} imports a playbook; docs/first-machine.md says it needs the inventory step")
+        assert plays[0]["roles"][-1] == "guest", f"{name} lost its guest play"
 
 
 def check_disposable_repin() -> None:
@@ -476,6 +488,7 @@ def main() -> int:
     assert '"privileged": False' in inventory_action
     assert '"requires": None' in inventory_action
 
+    check_publisher_entries()
     check_disposable_repin()
     print("managed guest inventory contract: OK")
     return 0

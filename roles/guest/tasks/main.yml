@@ -241,7 +241,9 @@
 
 # ADR 0018: the seed of a disposable Machine with the agent carries the
 # allowlist guest_access_close reviews. A missing, malformed, duplicated or
-# widened list is refused here, before any host write.
+# widened list is refused here, before any host write, and so is a policy
+# read from another file or one that inventory overrides differently for the
+# permanent Machines guest_access_close closes.
 - name: Refuse a disposable seed without the canonical agent allowlist
   when:
     - guest_operation in ['create', 'reset']
@@ -263,12 +265,19 @@
       - "'guest-exec' not in guest_disposable_agent_rpcs"
       - "'guest-exec-status' not in guest_disposable_agent_rpcs"
       - >-
+        guest_disposable_agent_policy_file ==
+        guest_repository_root ~ '/roles/guest_access_close/defaults/main.yml'
+      - >-
         guest_disposable_agent_rpcs ==
         (lookup('ansible.builtin.file', guest_disposable_agent_policy_file)
          | from_yaml).guest_access_close_agent_rpcs
+      - >-
+        guest_access_close_agent_rpcs is not defined or
+        guest_access_close_agent_rpcs == guest_disposable_agent_rpcs
     fail_msg: >-
       The QEMU Guest Agent allowlist for {{ guest_plan.name }}'s disposable
-      seed must be guest_access_close_agent_rpcs: a non-empty list of
+      seed must be guest_access_close_agent_rpcs from the guest_access_close
+      role's defaults, not overridden differently: a non-empty list of
       distinct guest-* calls without guest-exec. Refusing to write the seed.
 
 - name: Rebuild the live VFIO contract for hardware-sensitive operations

@@ -162,8 +162,11 @@ wrote whenever it stops ([ADR 0018](adr/0018-disposable-discards-on-stop.md)).
 Every start is a first boot with new SSH host keys. Its seed restores the
 same agent allowlist as `guest-close-access.yml` and restarts the agent on
 it. The shared start path waits for cloud-init to finish without errors,
-then requires the agent to list and refuse `guest-exec` as disabled. An
-unreachable agent or a different RPC error fails readiness.
+then requires the agent to enable exactly that allowlist and to list and
+refuse `guest-exec` as disabled. An unreachable agent, any other enabled or
+missing call, or a different RPC error fails readiness, and the start then
+force-stops that boot before it fails; the message says whether the stop
+worked.
 
 After a new disposable boot, managed Start and Power Cycle automatically run
 the inventory step as the Machine owner without become, refreshing both the
@@ -180,7 +183,9 @@ ansible-playbook -K playbooks/vm-power-cycle.yml \
 
 A failed discovery or pin update fails the operation. An already-running
 Start and check mode do not repin or run the boot action. Creation still
-uses the explicit inventory step above before further provisioning. A
+uses the explicit inventory step above before further provisioning, and so
+does a reset that starts the Machine again: it proves the agent closed but
+does not repin. A
 passwordless disposable server keeps passwordless sudo after every boot,
 just as a passwordless permanent server does.
 
@@ -188,7 +193,7 @@ just as a passwordless permanent server does.
 update. Recreate a throwaway acceptance Machine through the normal Template
 flow with `--lifecycle disposable`. Do not treat the first provisioning of
 an old Machine as proof of later starts. An old seed whose agent stays open
-fails managed start even though QEMU is running; stop it before use. A real
+fails managed start, which stops it. A real
 Fedora acceptance must prove strict SSH with each refreshed pin, disabled
 exec, marker loss and transient-overlay cleanup after both normal shutdown
 and forced stop. Those physical checks remain open.

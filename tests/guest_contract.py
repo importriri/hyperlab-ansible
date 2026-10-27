@@ -532,17 +532,38 @@ def check_allowlist_gate(rpcs: list[str]) -> None:
         "duplicate": rpcs + [rpcs[0]], "newline": rpcs + ["guest-ping\nallow-rpcs=guest-exec"],
         "comma": rpcs + ["guest-ping,guest-exec"], "mapping": {"guest-ping": True},
     }
+    widened = rpcs + ["guest-file-write"]
+    # Variables that point the seed away from the close role's own policy.
+    redirects: dict[str, dict[str, Any]] = {
+        # The seed reads a widened list from another file, consistently.
+        "redirected policy file": {"guest_disposable_agent_rpcs": widened, "policy": widened},
+        # Inventory gives permanent Machines another list than the seed's.
+        "inventory override widened": {"guest_disposable_agent_rpcs": rpcs,
+                                       "guest_access_close_agent_rpcs": widened},
+        "inventory override narrowed": {"guest_disposable_agent_rpcs": rpcs,
+                                        "guest_access_close_agent_rpcs": rpcs[:-1]},
+    }
+    agreeing = {"guest_disposable_agent_rpcs": rpcs, "guest_access_close_agent_rpcs": rpcs}
     check = {key: value for key, value in gate.items() if key != "when"}
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         plays = []
-        for label, candidate in candidates.items():
+        variants: dict[str, dict[str, Any]] = {
+            **{label: {} if candidate is None else {"guest_disposable_agent_rpcs": candidate}
+               for label, candidate in candidates.items()},
+            **redirects, "inventory override equal": agreeing,
+        }
+        for label, variant in variants.items():
+            policy_file = str(CLOSE_ROLE / "defaults/main.yml")
+            variant = dict(variant)
+            if "policy" in variant:
+                policy_file = str(tmp / f"{label}.yml")
+                write_yaml(Path(policy_file), {"guest_access_close_agent_rpcs": variant.pop("policy")})
             plays.append({
                 "name": f"Gate {label}", "hosts": "localhost", "connection": "local", "gather_facts": False,
                 "vars": {"guest_plan": {"name": "srv-fix-01"},
                          "guest_repository_root": str(ROOT),
-                         "guest_disposable_agent_policy_file": str(CLOSE_ROLE / "defaults/main.yml"),
-                         **({} if candidate is None else {"guest_disposable_agent_rpcs": candidate})},
+                         "guest_disposable_agent_policy_file": policy_file, **variant},
                 "tasks": [{"name": "Try the gate", "block": [check, {
                     "name": "Record acceptance", "ansible.builtin.copy": {
                         "content": "accepted", "dest": str(tmp / label), "mode": "0600"}}],
@@ -551,8 +572,9 @@ def check_allowlist_gate(rpcs: list[str]) -> None:
             })
         result = run_playbook(tmp, plays, {})
         assert result.returncode == 0, result.stdout + result.stderr
-        outcome = {label: (tmp / label).read_text() for label in candidates}
+        outcome = {label: (tmp / label).read_text() for label in variants}
     assert outcome.pop("canonical") == "accepted", "the canonical allowlist is refused"
+    assert outcome.pop("inventory override equal") == "accepted", "an override equal to the policy is refused"
     accepted = [label for label, verdict in outcome.items() if verdict != "refused"]
     assert not accepted, f"the gate let these allowlists reach a seed: {accepted}"
 
@@ -603,10 +625,21 @@ def stub_calls(directory: Path) -> list[list[str]]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
 
-def agent_info(exec_enabled: bool) -> dict[str, Any]:
-    commands = [{"name": name, "enabled": True, "success-response": True}
-                for name in ("guest-sync-delimited", "guest-ping", "guest-info", "guest-file-open")]
-    commands.append({"name": "guest-exec", "enabled": exec_enabled, "success-response": True})
+# Calls a Linux qemu-ga knows besides the close role's allowlist.
+AGENT_OTHER_RPCS = ("guest-exec", "guest-exec-status", "guest-file-write", "guest-set-user-password",
+                    "guest-fsfreeze-freeze")
+
+
+def agent_info(exec_enabled: bool, *, also_enabled: tuple[str, ...] = (), disabled: tuple[str, ...] = (),
+               missing: tuple[str, ...] = ()) -> dict[str, Any]:
+    """A guest-info reply: the restricted agent (only the allowlist enabled) or an open one.
+
+    also_enabled, disabled and missing move single calls away from that shape.
+    """
+    policy = close_role_agent_conf()[0]
+    commands = [{"name": name, "success-response": True,
+                 "enabled": exec_enabled or name in also_enabled or (name in policy and name not in disabled)}
+                for name in (*policy, *AGENT_OTHER_RPCS) if name not in missing]
     return {"rc": 0, "stdout": json.dumps({"return": {"version": "9.2.0", "supported_commands": commands}})}
 
 
@@ -626,6 +659,7 @@ def boot_result(content: str | None = None) -> dict[str, list[dict[str, Any]]]:
 
 START_TASKS = ROOT / "roles/guest/tasks/start.yml"
 DECIDE = "Decide whether this start makes a new disposable boot"
+QGA_WAIT = "Wait for QEMU Guest Agent readiness"
 PROVE = "Prove a new disposable boot closed its agent before the start succeeds"
 
 
@@ -644,6 +678,11 @@ def start_tasks() -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]
     return tasks, by_name[DECIDE], by_name[PROVE]
 
 
+def qga_wait_task() -> dict[str, Any]:
+    tasks = yaml.safe_load(START_TASKS.read_text(encoding="utf-8"))
+    return next(task for task in tasks if task.get("name") == QGA_WAIT)
+
+
 def disposable_start_plan(**changes: Any) -> dict[str, Any]:
     return {"name": "srv-fix-01", "lifecycle": "disposable", "cloud_init": True,
             "qemu_guest_agent": True, **changes}
@@ -654,16 +693,20 @@ def run_start_proofs(tmp: Path, cases: dict[str, dict[str, Any]], *options: str,
     """Run start.yml's own decision and proof tasks, one play per case, against stub virsh.
 
     Each case gives a stub scenario and optionally the domain state and plan.
+    The shared agent readiness wait runs between them, as in start.yml.
     The result per case is the stub's calls, the recorded decision (None when
     the proof failed) and the failure message (None when it passed).
     """
     _, decide, prove = start_tasks()
+    ready = qga_wait_task()
     defaults = yaml.safe_load((ROOT / "roles/guest/defaults/main.yml").read_text())
     plays = []
     for label, case in cases.items():
         out = tmp / label
         out.mkdir()
-        stub = write_stub_virsh(out / "stub", {**boot_result(), **case["scenario"]})
+        stub = write_stub_virsh(out / "stub", {
+            **boot_result(), "guestinfo": [{"stdout": "hostname: fixture"}],
+            "destroy": [{}], "domstate": [{"stdout": "shut off"}], **case["scenario"]})
         plays.append({
             "name": f"Exercise the managed start's disposable proof: {label}",
             "hosts": "localhost",
@@ -678,10 +721,11 @@ def run_start_proofs(tmp: Path, cases: dict[str, dict[str, Any]], *options: str,
                 "guest_virsh_bin": str(stub),
                 "guest_qga_timeout_seconds": 2,
                 "guest_disposable_agent_poll_seconds": 1,
+                "guest_wait_for_qga": True,
             },
             "tasks": [{
                 "name": "Run the start's proof",
-                "block": [decide, prove, {
+                "block": [decide, ready, prove, {
                     "name": "Record the decision",
                     "check_mode": False,
                     "ansible.builtin.copy": {"content": "{{ guest_start_new_disposable_boot | bool }}",
@@ -711,13 +755,20 @@ def agent_calls(calls: list[list[str]]) -> list[str]:
     return [json.loads(argv[-1])["execute"] for argv in calls if "qemu-agent-command" in argv]
 
 
+def stopped_after_agent(calls: list[list[str]]) -> bool:
+    """The domain was destroyed, and asked for its state, after the last agent call."""
+    last_agent = max((i for i, argv in enumerate(calls) if "qemu-agent-command" in argv), default=-1)
+    tail = calls[last_agent + 1:]
+    return tail[:2] == [["destroy", "srv-fix-01"], ["domstate", "srv-fix-01"]]
+
+
 def test_disposable_start_proof() -> None:
     """A new disposable boot is started only once its agent proves guest-exec closed."""
     tasks, decide, prove = start_tasks()
     names = [task.get("name") for task in tasks]
     gate = next(task for task in tasks if task.get("name") == "Gate and start the shut-off domain atomically against other starts")
     assert names.index(DECIDE) < names.index(gate["name"]), "the boot is decided after QEMU started"
-    assert names.index("Wait for QEMU Guest Agent readiness") < names.index(PROVE) == len(names) - 1, (
+    assert names.index(QGA_WAIT) < names.index(PROVE) == len(names) - 1, (
         "something reports the start after the disposable proof, or the proof precedes agent readiness")
     assert prove["when"] == "guest_start_new_disposable_boot | bool"
     boot_wait = prove["block"][0]
@@ -742,6 +793,7 @@ def test_disposable_start_proof() -> None:
         "create starts outside the shared path")
 
     closed = "did not prove its QEMU Guest Agent closed"
+    stopped = "It has been stopped"
     cases: dict[str, dict[str, Any]] = {
         # The restricted agent comes up after one restart: open, then gone,
         # then listed with guest-exec disabled.
@@ -765,9 +817,20 @@ def test_disposable_start_proof() -> None:
         "cloud-init unfinished": {"scenario": {"guest-file-open": [AGENT_DOWN]}},
         "cloud-init unreadable": {"scenario": {"guest-file-read": [AGENT_DOWN]}},
         "old seed": {"scenario": {"guest-info": [agent_info(True)]}},
+        # guest-exec is off, but not by this seed's allowlist: something else
+        # blocked it, and calls outside the policy stay open, or the policy's
+        # own calls are not the ones answering.
+        "exec blocked elsewhere": {"scenario": {"guest-info": [agent_info(False, also_enabled=("guest-file-write",))]}},
+        "allowlist call disabled": {"scenario": {"guest-info": [agent_info(False, disabled=("guest-file-read",))]}},
+        "allowlist call missing": {"scenario": {"guest-info": [agent_info(False, missing=("guest-file-read",))]}},
         "agent never answers": {"scenario": {"guest-info": [AGENT_DOWN]}},
+        "agent never comes up": {"scenario": {"guestinfo": [AGENT_DOWN], "guest-file-open": [AGENT_DOWN]}},
         "no supported_commands": {"scenario": {"guest-info": [{"rc": 0, "stdout": '{"return":{}}'}]}},
         "not JSON": {"scenario": {"guest-info": [{"rc": 0, "stdout": "guest-exec disabled"}]}},
+        # The open boot cannot be stopped: the failure must say so.
+        "stop refused": {"scenario": {"guest-info": [agent_info(True)],
+                                      "destroy": [{"rc": 1, "stderr": "error: Failed to destroy domain\n"}],
+                                      "domstate": [{"stdout": "running"}]}},
         # Not a new disposable boot: nothing is asked of the agent.
         "already running": {"state": "running", "scenario": {}},
         "permanent": {"plan": disposable_start_plan(lifecycle="permanent"), "scenario": {}},
@@ -790,22 +853,33 @@ def test_disposable_start_proof() -> None:
     assert failure is None and decided == "True", f"a new disposable boot did not start: {failure} {decided}"
     assert agent_calls(calls) == ["guest-file-open", "guest-file-open", "guest-file-read", "guest-file-close",
                                   "guest-info", "guest-info", "guest-info", "guest-exec"], calls
+    assert not any(argv[0] in ("guestinfo", "destroy") for argv in calls), (
+        f"a proved boot was stopped, or waited on outside its proof: {calls}")
     for label in ("guest-exec ran", "agent unavailable at the probe", "probe timed out", "unrelated RPC error",
                   "unrelated disabled message"):
         calls, decided, failure = outcome.pop(label)
         assert decided is None and failure and closed in failure, f"{label}: the start succeeded ({failure})"
         assert agent_calls(calls)[-1] == "guest-exec", f"{label}: {calls}"
-    for label in ("old seed", "agent never answers", "no supported_commands", "not JSON",
+        assert stopped_after_agent(calls) and stopped in failure, f"{label}: the open boot was left running: {calls}"
+    for label in ("old seed", "exec blocked elsewhere", "allowlist call disabled", "allowlist call missing",
+                  "agent never answers", "agent never comes up", "no supported_commands", "not JSON",
                   "cloud-init failed", "cloud-init malformed", "cloud-init missing errors",
                   "cloud-init unfinished", "cloud-init unreadable"):
         calls, decided, failure = outcome.pop(label)
         assert decided is None and failure and closed in failure, f"{label}: the start succeeded ({failure})"
         assert "guest-exec" not in agent_calls(calls), f"{label}: guest-exec was tried: {calls}"
-        if label.startswith("cloud-init"):
+        assert stopped_after_agent(calls) and stopped in failure, f"{label}: the open boot was left running: {calls}"
+        if label.startswith("cloud-init") or label == "agent never comes up":
             assert "guest-info" not in agent_calls(calls), f"{label}: readiness ran before cloud-init finished"
+    calls, decided, failure = outcome.pop("stop refused")
+    assert decided is None and failure and closed in failure and stopped not in failure, (
+        f"a boot that could not be stopped was reported stopped: {failure}")
+    assert "may still be running" in failure, f"stop refused: the operator is not told: {failure}"
     for label, (calls, decided, failure) in {**outcome, **checked}.items():
         assert failure is None, f"{label}: {failure}"
-        assert decided == "False" and calls == [], f"{label}: treated as a new disposable boot ({decided}, {calls})"
+        assert decided == "False" and agent_calls(calls) == [], (
+            f"{label}: treated as a new disposable boot ({decided}, {calls})")
+        assert not any(argv[0] == "destroy" for argv in calls), f"{label}: the domain was stopped: {calls}"
 
 
 def test_domain_templates() -> None:
