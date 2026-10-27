@@ -5,8 +5,9 @@ permission. It accounts for every file tracked in this repository and for
 every software source the playbooks and roles name by default, and it says
 what a future ISO or other image would have to settle first. Where the
 evidence does not settle a question, the entry stays unresolved: its
-provenance or permission is pending, and nothing unresolved is approved for
-bundling or for any distribution beyond what already exists.
+provenance or permission is pending. No unresolved entry grants permission
+for source publication, later copying or image bundling; existing public
+tracking is not evidence of permission.
 
 - Input commit: `9def5390653b95967fe7143c6195bf1ed0004609` (1302 tracked
   paths).
@@ -147,6 +148,17 @@ Two statements elsewhere in the repository are narrower than this evidence:
   it changes declares GPL-2.0-or-later (acer-wmi lineage) inside a project
   licensed GPL-3.0.
 
+There is also a separate **source-publication condition** (S3): a complete
+GPL copy is missing from the tracked repository. Two Looking Glass patches
+carry whole upstream file text and its GPL notice, but that notice and a
+link do not supply the licence itself. [GPLv2 section
+1](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html#section1)
+requires a copy with source distribution, independently of any future
+binary or ISO. This remains unresolved for the existing source publication;
+section 9 is an attribution record, not the complete GPL. The pinned
+[Looking Glass licence](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/LICENSE)
+was rechecked on 2026-10-27.
+
 ### Statements and palettes recorded in the relationship column
 
 - **Catppuccin palette.** `tools/hyperlabctl/hyperlabctl/panel/ui.py` names
@@ -229,7 +241,11 @@ Classes:
 The `{{ kernel_name }}-headers` entry of `looking_glass` resolves to
 `linux-hardened-headers` with the default `kernel_name`;
 `guest_looking_glass_linux` picks the headers of the running guest kernel
-(`linux-zen-headers` under `workstation_kernel`). Lists that only remove
+(`linux-zen-headers` under `workstation_kernel`, `linux-hardened-headers`
+when the kernel contains `-hardened`, otherwise `linux-headers`). All three
+branches are declared defaults, although the workstation flow normally
+uses Zen. These are direct dependencies, not part of the unresolved
+transitive closure. Lists that only remove
 packages (`host_desktop_sway_removed_packages`,
 `guest_desktop_hyprland_legacy_packages` and the stock-kernel fallback of
 `workstation_kernel`) install nothing and are not listed.
@@ -280,7 +296,7 @@ packages (`host_desktop_sway_removed_packages`,
 | [libvirt](https://archlinux.org/packages/extra/x86_64/libvirt/) | extra 12.8.0-1 | GPL-3.0-or-later; LGPL-2.1-or-later | H | kvm_host |
 | [libvirt-python](https://archlinux.org/packages/extra/x86_64/libvirt-python/) | extra 12.8.0-1 | LGPL-2.1-or-later | H | network_domains |
 | [libxkbcommon](https://archlinux.org/packages/extra/x86_64/libxkbcommon/) | extra 1.13.2-1 | MIT | H | looking_glass |
-| [linux-hardened-headers](https://archlinux.org/packages/extra/x86_64/linux-hardened-headers/) | extra 7.2.10.hardened1-3 | GPL-2.0-only | HO | looking_glass, nitro_sense |
+| [linux-hardened-headers](https://archlinux.org/packages/extra/x86_64/linux-hardened-headers/) | extra 7.2.10.hardened1-3 | GPL-2.0-only | HOG | looking_glass, nitro_sense, guest_looking_glass_linux |
 | [ly](https://archlinux.org/packages/extra/x86_64/ly/) | extra 1.4.1-1 | WTFPL | HG | host_desktop_sway, guest_desktop_hyprland |
 | [make](https://archlinux.org/packages/core/x86_64/make/) | core 4.4.1-3 | GPL3 | HOG | looking_glass, nitro_sense, guest_looking_glass_linux |
 | [mako](https://archlinux.org/packages/extra/x86_64/mako/) | extra 1.11.0-1 | MIT | HG | host_desktop_sway, guest_desktop_hyprland |
@@ -372,6 +388,7 @@ packages (`host_desktop_sway_removed_packages`,
 | [lib32-mangohud](https://archlinux.org/packages/multilib/x86_64/lib32-mangohud/) | multilib 0.8.4-1 | MIT | G | guest_desktop_hyprland (gaming-clean), guest_desktop_hyprland (gaming-dirty) |
 | [lib32-nvidia-utils](https://archlinux.org/packages/multilib/x86_64/lib32-nvidia-utils/) | multilib 615.78.08-1 | custom | G | guest_desktop_hyprland (gaming-clean), guest_desktop_hyprland (gaming-dirty) |
 | [libpipewire](https://archlinux.org/packages/extra/x86_64/libpipewire/) | extra 1.6.10-1 | MIT | G | guest_looking_glass_linux |
+| [linux-headers](https://archlinux.org/packages/core/x86_64/linux-headers/) | core 7.2.11.arch1-1 | GPL-2.0-only | G | guest_looking_glass_linux (other running Arch kernels) |
 | [linux-zen](https://archlinux.org/packages/extra/x86_64/linux-zen/) | extra 7.2.11.zen1-1 | GPL-2.0-only | G | workstation_kernel |
 | [linux-zen-headers](https://archlinux.org/packages/extra/x86_64/linux-zen-headers/) | extra 7.2.11.zen1-1 | GPL-2.0-only | G | workstation_kernel, guest_looking_glass_linux |
 | [lua](https://archlinux.org/packages/extra/x86_64/lua/) | extra 5.5.1-1 | MIT | G | guest_desktop_hyprland |
@@ -402,6 +419,24 @@ packages (`host_desktop_sway_removed_packages`,
 core `iptables` 1.8.13-1 provides and replaces it. This is a package-name
 finding, not a licence one ([section 11](#11-findings-outside-licensing)).
 
+### Debian conditional default
+
+[`guest_safe_documents`](../roles/guest_safe_documents/defaults/main.yml)
+selects a package by OS family: Archlinux uses `poppler` above; Debian uses
+`poppler-utils` for `pdftoppm` inside the disposable conversion Machine.
+The role installs it with `ansible.builtin.package`, `state: present`,
+without a version pin; the configured APT repositories resolve the version
+at apply time. This is a guest dependency as well as a CI tool.
+
+| Package | Official record on 2026-10-27 | Licence evidence | Installed by | Distribution obligations |
+| --- | --- | --- | --- | --- |
+| [poppler-utils](https://packages.debian.org/trixie/poppler-utils) | Debian trixie 25.03.0-5+deb13u4 (observed, not pinned) | Debian [copyright file](https://metadata.ftp-master.debian.org/changelogs/main/p/poppler/stable_copyright): Poppler core GPL-2 or GPL-3, contributions GPL-2+; the source also names an Apache-2.0 fuzzing-test exception | guest_safe_documents, Debian branch | no package bytes in this repository; later APT installation uses Debian's distribution; an image must retain copyright and full licence texts and deliver corresponding source for the shipped GPL binaries, including patches; resolved Debian dependencies remain S7 |
+
+The added `linux-headers` record above is GPL-2.0-only. An image carrying
+that package must likewise retain its notices and full GPL text and meet
+the source obligations of its exact contents. Neither header selection nor
+the Debian branch grants image clearance.
+
 ## 3. Pinned upstream sources built on a target
 
 ### Looking Glass
@@ -419,7 +454,7 @@ clone [gnif/LookingGlass](https://github.com/gnif/LookingGlass) recursively at
 - the **Linux sender** (`host/`) in VFIO guests, after applying the two
   PipeWire patches.
 
-The repository's root `LICENSE` at the pin is the GPL-2.0 text (sha256
+Looking Glass's root `LICENSE` at the pin is the GPL-2.0 text (sha256
 `8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643`); the source
 headers read (the three patched files and `kvmfr.c`) state GPL-2.0-or-later.
 Outside the submodules, the tree at the pin (564 entries) has no other file
@@ -438,16 +473,70 @@ these submodules at the revisions the pin records:
 | `repos/wayland-protocols` ([quantum5/wayland-protocols](https://github.com/quantum5/wayland-protocols)) | `02e63e74a807afed95bc25a386173110afef24e3` | MIT text with the Wayland protocol copyright holders |
 
 Revisions were read from the GitHub contents API and the licence files from
-each repository at those revisions on 2026-10-27. Which of these the client
-or the sender actually compiles in was not established from the build files;
-an image that ships either binary has to establish it (S7). Per-file headers
-other than the four named above were not read.
+each repository at those revisions on 2026-10-27. Source archives at these
+same pins were then inspected, including CMake inputs, shader includes,
+resource inputs and third-party markers in source headers. This establishes
+the following build relationships without running a build:
+
+- [`client/CMakeLists.txt`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/CMakeLists.txt)
+  links LGMP, PureSpice and static cimgui/Dear ImGui. `overlay_utils.c`
+  instantiates NanoSVG's parser and rasteriser. The Wayland protocol build
+  consumes XML from the pinned `repos/wayland-protocols` checkout, rather
+  than establishing a source pin through the separately installed Arch
+  package of the same name.
+- [`host/CMakeLists.txt`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/host/CMakeLists.txt)
+  links LGMP and common/platform code for the Linux sender; the role sets
+  `USE_XCB=OFF` and `USE_PIPEWIRE=ON`. LGMP's `lgmp/CMakeLists.txt` does not
+  include relacy. PureSpice's root CMake library does not include `test/ADL`.
+  Both nested dependencies are fetched for their test trees, not selected
+  by these Linux library targets. kvmfr builds from `module/` separately.
+- The client role sets Wayland/libdecor on and X11 off. Upstream leaves
+  EGL and legacy OpenGL on. The EGL build preprocesses and embeds shaders,
+  including FidelityFX and the HDR conversion below, irrespective of which
+  filter a user later enables. An actual binary's linked system libraries,
+  build configuration and notices still need recording in S7.
+
+#### Bundled build inputs and notices
+
+Paths below are relative to the Looking Glass checkout. Its pin and the
+submodule pins above identify the exact bytes; links point to those
+revisions. The catalogue includes material embedded in ordinary source
+files, not just directories named `vendor` or separate licence files.
+
+| Component | Files at the recorded pin | Build use | Terms, notices and unresolved evidence |
+| --- | --- | --- | --- |
+| FidelityFX portability 1.20210629 | [`client/renderers/EGL/shader/ffx_a.h`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/renderers/EGL/shader/ffx_a.h) | client EGL shaders and filter setup | two MIT notices: Advanced Micro Devices, Inc. (2021) and Michal Drobot (2014, float approximations); preserve both copyright and permission notices and disclaimers in source and binary distributions |
+| FidelityFX CAS 1.20190610 | [`client/renderers/EGL/shader/ffx_cas.h`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/renderers/EGL/shader/ffx_cas.h) | client EGL sharpening | MIT, Advanced Micro Devices, Inc. (2017–2019); retain the complete notice with source or binary copies |
+| FidelityFX FSR1 v1.20210629 | [`client/renderers/EGL/shader/ffx_fsr1.h`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/renderers/EGL/shader/ffx_fsr1.h) | client EGL upscaling and sharpening | MIT, Advanced Micro Devices, Inc. (2021); retain the complete notice with source or binary copies |
+| Cinema Shader Pack translation | [`client/renderers/EGL/shader/hdr.h`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/renderers/EGL/shader/hdr.h) | included by `desktop_rgb.frag`, embedded in client | names VoidXH/Cinema-Shader-Pack as original source, without a source revision or licence text; original version, terms and any additional notices unresolved (S7), not cleared by the Looking Glass root GPL |
+| Remaining EGL shaders | `client/renderers/EGL/shader/*.frag`, `client/renderers/EGL/shader/*.vert`, `client/renderers/EGL/shader/compat.h`, `client/renderers/EGL/shader/color_blind.h` ([build inputs](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/client/renderers/EGL/CMakeLists.txt)) | client, including FidelityFX wrapper shaders | no separate per-file licence notices; the upstream root GPL is a declaration, with no independently documented origin for these files, including colour-transform constants; confirmation remains S7 |
+| Client logo, status icons and cursors | `resources/lg-logo.svg`, `resources/status/recording.svg`, `resources/status/spice.svg`, `resources/no-input-cursor/16.xcur`, `resources/no-input-cursor/32.xcur` ([resource build](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/resources/CMakeLists.txt)) | embedded in client; logo also installed as desktop icon | no per-asset rights record established; root GPL declaration alone, origin and additional notices unresolved (S7) |
+| NetBSD/MINIX getopt | [`vendor/getopt/getopt.c`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/vendor/getopt/getopt.c), `vendor/getopt/getopt.h` | fetched vendor files; no selection found in the reviewed build files | C file: BSD-3-Clause, Regents of the University of California (1987, 1993, 1994), NetBSD revision 1.29; preserve source notice and reproduce it with binaries, no endorsement. Header has no notice; its original revision/terms remain unresolved (S7) |
+| DirectX generated headers | `vendor/directx/d3d12.h`, `vendor/directx/d3d12sdklayers.h` ([pinned directory](https://github.com/gnif/LookingGlass/tree/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/vendor/directx)) | Windows D12/DXGI capture; not the Linux targets | WIDL output marker, no embedded licence; source IDL revisions and terms unresolved (S7) |
+| IVSHMEM Windows interface | [`vendor/ivshmem/ivshmem.h`](https://github.com/gnif/LookingGlass/blob/0140a3f6fb616c5636d6c430eb71b8a7d5338e39/vendor/ivshmem/ivshmem.h) | Windows common/platform code; not the Linux targets | no per-file notice or source revision; terms unresolved (S7) |
+| FreeTDS-derived OAEP | [`repos/PureSpice/src/rsa.c`](https://github.com/gnif/PureSpice/blob/8177f993b04fd3193d3437c53fcc2fcd97bb938f/src/rsa.c) | PureSpice library in client, `USE_NETTLE` branch | PureSpice GPL-2.0-or-later header plus explicit FreeTDS derivation; original FreeTDS revision and inherited notices not established (S7) |
+| Dear ImGui stb libraries | `repos/cimgui/imgui/imstb_rectpack.h`, `repos/cimgui/imgui/imstb_textedit.h`, `repos/cimgui/imgui/imstb_truetype.h` ([pinned source](https://github.com/ocornut/imgui/tree/dbb5eeaadffb6a3ba6a60de1290312e5802dba5a)) | cimgui/Dear ImGui client code | versions 1.01, 1.14, 1.26 with local ImGui changes; MIT or public-domain alternative. Preserve the MIT branch, Sean Barrett (2017), and ImGui change notices when distributing copies |
+| Dear ImGui stb.h decompressor | [`repos/cimgui/imgui/imgui_draw.cpp`](https://github.com/ocornut/imgui/blob/dbb5eeaadffb6a3ba6a60de1290312e5802dba5a/imgui_draw.cpp) | built-in font decompression | identifies Sean Barrett and a public-domain declaration; retain that attribution with the corresponding source |
+| Dear ImGui ProggyClean font | [`repos/cimgui/imgui/imgui_draw.cpp`](https://github.com/ocornut/imgui/blob/dbb5eeaadffb6a3ba6a60de1290312e5802dba5a/imgui_draw.cpp) | font bytes embedded in client source | Tristan Grimmer (2004, 2005), MIT according to this file and pinned `docs/FONTS.md`; full font-specific MIT notice still to collect for binary delivery (S7), not replaced by Omar Cornut's notice |
+| Dear ImGui glyph ranges | [`repos/cimgui/imgui/imgui_draw.cpp`](https://github.com/ocornut/imgui/blob/dbb5eeaadffb6a3ba6a60de1290312e5802dba5a/imgui_draw.cpp) | Chinese and Japanese ranges in compiled source; retained sections depend on final linking | references Wiktionary and Japanese government lists, with a CC BY 4.0 statement for the Japanese data; original data versions, attribution and applicable terms still unresolved (S7) |
+| Dear ImGui OpenGL loader | [`repos/cimgui/imgui/backends/imgui_impl_opengl3_loader.h`](https://github.com/ocornut/imgui/blob/dbb5eeaadffb6a3ba6a60de1290312e5802dba5a/backends/imgui_impl_opengl3_loader.h) | fetched in checkout; EGL defines `IMGUI_IMPL_OPENGL_ES3` and selects system GLES3 headers instead | imgl3w public-domain text plus Khronos Group (2013–2020), SPDX MIT; retain both notices if a different build includes it |
+| NanoSVG inherited code | `repos/nanosvg/src/nanosvg.h`, `repos/nanosvg/src/nanosvgrast.h` ([pinned headers](https://github.com/memononen/nanosvg/tree/cb0ae54e6b147ccdf85401ef3ef20f2c761252c0/src)) | parser and rasteriser instantiated in client | zlib notices, Mikko Mononen (2013–14); parser credits Anti-Grain Geometry 2.4 SVG example, Maxim Shemanarev (2002–2004), canvg arc code and a bounding-box reference; rasteriser credits Sean Barrett. Preserve all headers and mark alterations; inherited source versions/terms beyond the header declaration remain S7 |
+
+Other read C/C++ source headers in the main checkout name The Looking Glass
+Authors and GPL-2.0-or-later; that is upstream evidence, not an independent
+authorship proof. Optional Dear ImGui FreeType integration, unrelated
+backends/examples and extra fonts in `misc/fonts/` are fetched but not
+selected by the reviewed client configuration (`IMGUI_FREETYPE` defaults
+off). Their full notices were not reviewed; redistributing the recursive
+source checkout or changing build options needs that review too (S7).
 
 The build happens on the target from upstream source; nothing built is
 redistributed by this repository. Shipping a built client, sender or kvmfr
 module would mean distributing GPL-2.0-or-later binaries with their
-corresponding source, including the patches, and the notices of the
-submodules that are compiled in.
+corresponding source, including the patches, and the notices of all bundled
+code and data that are included. The unresolved cases above block that
+image payload even when a component is bundled upstream or a filter is
+disabled at runtime.
 
 ### Linuwu-Sense (optional)
 
@@ -518,11 +607,11 @@ from MELPA (section 6).
 | --- | --- | --- | --- | --- |
 | Ansible collections `community.general`, `community.libvirt` ([`collections/requirements.yml`](../collections/requirements.yml)) | controller, from Ansible Galaxy | **none**: the newest release is installed (13.5.0 and 2.4.0 on Galaxy) | `COPYING` is GPL-3.0 in both at those tags; `community.general` also ships `LICENSES/BSD-2-Clause.txt` and `LICENSES/MIT.txt` | controller tool, not installed on a target |
 | npm `vscode-langservers-extracted`, `@ansible/ansible-language-server` | dev guests, global | **none** (4.10.0 and 26.6.0 latest) | registry `license`: MIT for both; their dependency trees not read | G |
-| Emacs packages `nerd-icons`, `doom-modeline`, `vertico`, `orderless`, `marginalia`, `consult`, `corfu`, `yaml-mode`, `magit`, `eat` | dev guests, `package-install` | **none** | the role adds MELPA to Emacs's default GNU and NonGNU ELPA archives; `eat` is not on MELPA and is published on NonGNU ELPA (0.9.4); the others are on MELPA with date versions, and five are also on GNU ELPA; which archive serves each was not observed; per-package licences and dependencies not read | G |
+| Emacs packages `nerd-icons`, `doom-modeline`, `vertico`, `orderless`, `marginalia`, `consult`, `corfu`, `yaml-mode`, `magit`, `eat` | dev guests, `dev_ide`, `package-install` | **none** | the role adds MELPA to Emacs's default GNU and NonGNU ELPA archives; `eat` is not on MELPA and is published on NonGNU ELPA (0.9.4); the others are on MELPA with date versions, and five are also on GNU ELPA; which archive serves each was not observed; per-package licences and dependencies not read | G |
 | Flathub `com.heroicgameslauncher.hgl` | `gaming-clean` guests | **none** (v2.22.4 listed) | Flathub `project_license`: GPL-3.0; its runtime not read | G |
 | Jellyfin APT repository through `extrepo` (`https://repo.jellyfin.org/debian`) | `svc-jellyfin` service VM (Debian 13) | **none** | upstream `LICENSE` of [jellyfin/jellyfin](https://github.com/jellyfin/jellyfin) is GPL-2.0; the `jellyfin` package's dependencies (server, web client, its FFmpeg build) not read; `extrepo` 0.14 and `ca-certificates` 20250419 are Debian trixie packages whose `copyright` files were not read | service VM |
 | Official cloud images (`images/arch.yml`, `images/debian.yml`, `images/fedora.yml`) | host image store, `image_factory` | version, URL and sha256 pinned in each manifest | each is an operating-system image aggregating many packages under their own terms; contents not inventoried; the manifests' `licensing.redistributable: true` is the manifest's own statement, not a result of this audit | M |
-| Private guest wallpaper bundle (`guest_visual_assets`) | guests, from an operator-supplied URL | sha256 required; the default URL is empty | operator-owned media; not in the repository and not audited | operator input |
+| Private guest wallpaper bundle (`guest_visual_assets`) | guests, from an operator-supplied URL | sha256 required; the default URL is empty | operator-supplied media; not in the repository; source and permission not audited | operator input |
 | Local and Windows images (`images/arch-*`, `images/win11*`, `images/parrot.yml`, `images/debian-server.yml`) | host image store | local imports | Windows images are `private: true` and `licensing.redistributable: false`; their contents (Windows, NVIDIA Windows driver, the Looking Glass Windows host, a virtual display driver) are operator-installed and outside this audit | operator input |
 
 ## 7. Build and verification tools (not shipped)
@@ -543,10 +632,10 @@ renders in section 1.
 | --- | --- | --- | --- |
 | First-party files (`declared`) | published under the root MIT declaration | copied to the host and guests | not admitted: awaits the maintainer's confirmation (S4) and an audited payload |
 | Generated files (`documented`) | published; reproducible from tracked generators | copied to the host | not admitted: same as above |
-| The four patches | published; GPL-2.0-or-later, not MIT (S3) | applied to upstream source on the target | only with the full corresponding source, the upstream notices and the GPL text |
+| The four patches | published as GPL-2.0-or-later source; complete GPL copy is missing: unresolved source-publication condition, independently of an ISO (S3) | applied to upstream source on the target | only with the full corresponding source, the upstream notices and the GPL text |
 | The 105 images without provenance | already public; provenance/permission pending (S1, S2) | 94 installed by `host_desktop_sway`; trust-v2 images also copied into guests | **blocked** until their provenance and permission are recorded |
-| Arch packages | not in the repository | fetched from the mirrors on each apply | **blocked** pending the resolved closure, its notices and corresponding source (S7) |
-| Looking Glass, Linuwu-Sense, JDT LS | not in the repository; pinned URL and revision | cloned or downloaded and built on the target | **blocked** pending source delivery and the compiled-in submodules (S7) |
+| Arch packages and Debian poppler-utils | not in the repository | fetched from the configured package repositories on each apply | **blocked** pending the resolved closure, its notices and corresponding source (S7) |
+| Looking Glass, Linuwu-Sense, JDT LS | not in the repository; pinned URL and revision | cloned or downloaded and built on the target | **blocked** pending source delivery, full bundled-code notices and the named unresolved inputs in section 3 (S7) |
 | NVIDIA userspace and firmware | not in the repository | inside VFIO guests only | **blocked**: driver licence terms not read (S5) |
 | Steam, JDK, custom and unversioned licences | not in the repository | inside guests | **blocked** pending the terms (S6) |
 | Collections, npm, Emacs, Flathub, Jellyfin APT | not in the repository; unpinned | controller, guests or the service VM | not admitted: no pinned version to audit (S8) |
@@ -560,7 +649,23 @@ completing this inventory is not ISO clearance.
 ## 9. Third-party notices
 
 The following attributions are supported by the evidence above. The
-patches keep their upstream notices in the repository unchanged.
+patches keep their upstream notices in the repository unchanged. The short
+GPL notice below is not the complete licence; its missing copy is S3's
+source-publication condition, not only a future image obligation.
+
+For a future Looking Glass distribution, section 3 also records these
+separate notices: AMD and Michal Drobot (FidelityFX, MIT); the Regents of the
+University of California (getopt, BSD-3-Clause, fetched vendor source);
+Stephan Dilly and Omar Cornut (cimgui/Dear ImGui, MIT); Sean Barrett (stb, MIT alternative
+and the decompressor's public-domain declaration); Tristan Grimmer
+(ProggyClean, MIT declaration, full notice pending); the Khronos Group
+(OpenGL loader, MIT, conditional); and Mikko Mononen and the inherited
+credits in NanoSVG's headers (zlib declaration, inherited terms pending).
+The pinned files linked there are the notice sources. A distributor must
+carry the full applicable permission notices and disclaimers; this roster
+does not supply the missing font, data or inherited-code evidence. The
+Wayland XML inputs likewise retain their individual copyright/licence
+blocks when protocol code and corresponding source are delivered.
 
 **Looking Glass** (the three Looking Glass patches modify its files):
 
@@ -626,11 +731,11 @@ here declares an infringement or grants a permission.
 | --- | --- | --- | --- |
 | S1 | the 22 images of `themes/assets/hyperlab-symbols-v1/` and `themes/assets/hyperlab-trust-v2/` | source, rights holder, terms and permission for each file | these files in any image, their attribution, and closing the licence review |
 | S2 | the 83 legacy images: `roles/host_desktop_sway/files/wallpapers/{blue,green,red,violet}/01..20.png`, `wallpaper-desktop.png`, `wallpaper-lockscreen.png`, `wallpaper.png` | same as S1 | the same, for the legacy pools the host default still installs |
-| S3 | the four GPL-2.0-or-later patches in a repository whose `README.md` and `LICENSE` name MIT only; the narrower licence statement in `nitro-sense.md` | a decision on where the exception is stated | an accurate licence statement for the repository |
+| S3 | the four GPL-2.0-or-later patches in a repository whose `README.md` and `LICENSE` name MIT only; the narrower licence statement in `nitro-sense.md` | a decision on where the exception is stated; complete GPL copy is missing from the tracked source, required by GPLv2 section 1 | resolving the existing source-publication condition and an accurate licence statement for the repository; separately, GPL source/notices/licence delivery for any image |
 | S4 | the 1135 `declared` rows, including the seven SVG files and the "written from scratch" statement | the maintainer's confirmation of authorship, or the source and terms of any exception | final attributions and the admission of first-party files into an image |
 | S5 | NVIDIA userspace and GSP firmware (`nvidia-utils`, `lib32-nvidia-utils`) | the driver licence's terms for copying into an image | any NVIDIA userspace or firmware in an image |
-| S6 | `steam` (subscriber agreement), `jdk-openjdk` (`LicenseRef-Java`), `custom` records (`ttf-dejavu`, `ttf-ibm-plex`, `lib32-nvidia-utils`, `libglvnd`, `libva-utils`), `imagemagick` (`ImageMagick`), unversioned records (`shellcheck`, `virt-viewer` "GPL", `make`, `cliphist` "GPL3", `papirus-icon-theme`, `libsamplerate` "BSD") | the text of each licence for the exact version | those packages in an image |
-| S7 | dependency closures: Arch packages, the Looking Glass build (compiled-in submodules), JDT LS bundles, collection contents, npm and Emacs dependency trees, the Flathub runtime, the Jellyfin APT closure | a resolved closure with versions, licence texts, notices and corresponding source | any image that carries them |
+| S6 | `steam` (subscriber agreement), `jdk-openjdk` (`LicenseRef-Java`), `custom` records (`ttf-dejavu`, `ttf-ibm-plex`, `lib32-nvidia-utils`, `libglvnd`, `libva-utils`), `imagemagick` (`ImageMagick`), unversioned records (`shellcheck`, `virt-viewer` "GPL", `make`, `cliphist` "GPL3", `papirus-icon-theme`, `libsamplerate` "BSD"); merged glyph sets in `ttf-jetbrains-mono-nerd` 3.5.1-2; Debian `extrepo` 0.14 and `ca-certificates` 20250419 | the text of each licence for the exact version; every Nerd Font glyph-set notice; both Debian copyright files | those packages, including the merged glyphs, in an image |
+| S7 | dependency closures: Arch packages and Debian poppler-utils dependencies, the Looking Glass build, JDT LS bundles, collection contents, npm and Emacs dependency trees, the Flathub runtime, the Jellyfin APT closure; Looking Glass inputs: `hdr.h` (Cinema Shader Pack), `color_blind.h`, `compat.h` and remaining EGL shaders, `resources/`, `vendor/getopt/getopt.h`, `vendor/directx/`, `vendor/ivshmem/ivshmem.h`, FreeTDS-derived OAEP, ProggyClean, Dear ImGui glyph ranges and NanoSVG inherited code; optional ImGui FreeType/backends/examples and extra fonts | a resolved closure with versions, licence texts, notices and corresponding source; the named input origins/terms, full ProggyClean notice and data attributions in section 3; notice review for optional checkout material before source redistribution or build-option changes | any image that carries them; redistribution of a recursive Looking Glass source checkout until its named unknowns are resolved |
 | S8 | unpinned sources: Galaxy collections, npm, Emacs archives, Flathub, Jellyfin APT, and Arch itself | a pinned version to audit | admitting the audited version as the shipped one |
 | S9 | cloud images and private images | the content inventory of the cloud images; private images are not redistributable by their manifests | any redistribution of an image |
 
