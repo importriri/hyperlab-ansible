@@ -1390,6 +1390,7 @@ manual break and restore those copies afterward.
 | `test_ci_discards_a_failed_child_status` | Background the shell check and discard `wait`'s result. | `CI succeeded while sh tools/shell-tests/run.sh failed` |
 | `test_ci_pipe_to_tee_hides_a_failure` | Pipe the shell check to `tee` under the default shell without pipefail. | Same masked shell failure |
 | `test_ci_later_success_hides_a_failure` | Use `set +e` before the palette check and append `echo done` after the last command. | `CI succeeded while` the palette check `failed` |
+| `test_ci_six_checks_after_a_failing_step_are_skipped` | Move the shell and palette/choices steps back after the discovered structural contracts step. | `CI skipped` the six checks `when python 'tests/*_contract.py' failed` |
 | `test_verify_discarded_status_hides_a_failure` | Replace `run python3 tools/choices/choices.py check` with an unchecked command and discarded status. | `verify.sh exited 0 while` that check `failed` |
 | `test_verify_drops_the_shell_check` | Remove the local shell check. | `CI and verify.sh run different tool checks` |
 | `test_verify_gains_a_check_ci_does_not_run` | Add a stubbed invocation of a nonexistent extra palette script locally. | Same divergent execution diagnostic |
@@ -1401,6 +1402,10 @@ manual break and restore those copies afterward.
 All listed breaks were observed red on temporary copies and restored green.
 Before the input validation fix, duplicate keys, duplicate step ids and both
 redirected files stayed green, and the malformed shell raised TypeError; the
-new mutation tests exposed these gaps and now pass. The earlier committed CI
+new mutation tests exposed these gaps and now pass. The six steps first sat
+after the structural contracts step: with every other stub made to fail in
+turn, `ruff`, `ansible-lint`, the syntax check and the contract loop each
+skipped all six, and moving the steps right after the toolchain turned that
+check green. The earlier committed CI
 workflow, with only its toolchain id added for the fixture, was also observed
 red for all six missing invocations, then green after restoring the new steps.

@@ -24,6 +24,12 @@ They use the job's default fail-on-error shell, without `continue-on-error` or
 event guards. Existing discovery, the cross-repository job and failure
 diagnostic uploads remain in place.
 
+The steps come right after the toolchain step. A step without `if` runs only
+while every earlier step has succeeded, so placed after the discovered
+contracts they would be skipped whenever any contract, lint or syntax check
+failed, while `verify.sh` still ran them. The two steps still stop at the
+first failure among themselves; the job is red either way.
+
 ## Regression proof
 
 `python tests/ci_verify_parity_contract.py` parses the workflow and executes
@@ -31,7 +37,8 @@ the validation run blocks and the whole local verifier in a temporary checkout.
 Recording command stubs provide the observed argv. A separate fixed list of six
 expected invocations prevents a matching mistake in both entrypoints from
 passing. Every command runs once on the successful path. Each stub then fails
-independently, and both entrypoints must return failure.
+independently, and both entrypoints must return failure. Every other command
+CI runs is also made to fail in turn, and CI must still run all six.
 
 The toolchain step has an explicit id so the fixture can exclude installation.
 Its restricted PATH contains recording stubs and file utilities only. Render

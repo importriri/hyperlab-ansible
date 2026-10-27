@@ -349,6 +349,18 @@ def collect_errors(root: Path = ROOT) -> list[str]:
                 f"only CI {only_ci}, only verify.sh {only_verify}"
             )
 
+        # Another failing step must not keep CI from running the six: verify.sh
+        # runs them whatever its other levels report. Only the toolchain step,
+        # which the fixture leaves out, may come before them.
+        for other in dict.fromkeys(r for r in ci_records if r not in EXPECTED):
+            try:
+                _, other_records = fixture.run_ci(steps, other)
+            except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                return [*errors, f"the fixture could not run: {exc}"]
+            skipped = [show(c) for c in EXPECTED if c not in other_records]
+            if skipped:
+                errors.append(f"CI skipped {skipped} when {show(other)} failed")
+
         for command in EXPECTED:
             try:
                 failed, ci_records = fixture.run_ci(steps, command)

@@ -36,6 +36,21 @@ jobs:
           pip install --user ansible ansible-lint ruff
           ansible-galaxy collection install -r collections/requirements.yml
 
+      # The same commands as verify.sh levels 0f and 0g, with the same
+      # arguments; tests/ci_verify_parity_contract.py runs both files and
+      # compares what they execute. They come right after the toolchain so
+      # that a failure in any later step cannot skip them.
+      - name: Shell structure (no display required)
+        run: sh tools/shell-tests/run.sh
+
+      - name: Palette and open choices
+        run: |
+          python3 tools/palette/audit_palette.py tools/palette/palette.yml
+          python3 tools/palette/verify_surfaces.py roles/host_desktop_sway/files/palette
+          python3 tools/choices/choices.py check
+          python3 tools/choices/test_choices.py
+          python3 tools/choices/test_consistency.py
+
       - name: Lint every Python file (repo ruleset)
         run: ruff check .
 
@@ -80,20 +95,6 @@ jobs:
           path: structural-contracts.log
           if-no-files-found: error
           retention-days: 3
-
-      # The same commands as verify.sh levels 0f and 0g, with the same
-      # arguments; tests/ci_verify_parity_contract.py runs both files and
-      # compares what they execute.
-      - name: Shell structure (no display required)
-        run: sh tools/shell-tests/run.sh
-
-      - name: Palette and open choices
-        run: |
-          python3 tools/palette/audit_palette.py tools/palette/palette.yml
-          python3 tools/palette/verify_surfaces.py roles/host_desktop_sway/files/palette
-          python3 tools/choices/choices.py check
-          python3 tools/choices/test_choices.py
-          python3 tools/choices/test_consistency.py
 
       - name: Refusal suites (discovered)
         run: |

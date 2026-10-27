@@ -33,8 +33,10 @@ palette/choices checks from `verify.sh` levels 0f and 0g. Run
 `python tests/ci_verify_parity_contract.py` to check their execution parity:
 it parses the workflow, executes its run blocks and the local verifier with
 recording stubs, compares their arguments, and forces each check to fail in
-turn. This fixture needs no package installation, network or sudo; the actual
-suites still run separately in CI and `./verify.sh`.
+turn. It also fails every other CI command in turn and requires the six
+checks to run anyway, so they stay ahead of the later steps. This fixture
+needs no package installation, network or sudo; the actual suites still run
+separately in CI and `./verify.sh`.
 
 For a complete Nitro walkthrough, including images, workloads, VFIO and Looking
 Glass, follow the `arch-hypervisor-lab/SETUP.md` guide.

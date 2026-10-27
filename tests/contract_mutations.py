@@ -522,6 +522,23 @@ class CiVerifyParityMutationTests(unittest.TestCase):
 
         self.assert_parity_fails(mutation, f"CI succeeded while {command} failed")
 
+    def test_ci_six_checks_after_a_failing_step_are_skipped(self) -> None:
+        def mutation(root: Path) -> None:
+            source = (root / CI).read_text(encoding="utf-8")
+            start = source.index("      # The same commands as verify.sh levels 0f and 0g")
+            end = source.index("      - name: Lint every Python file (repo ruleset)\n")
+            block = source[start:end]
+            self.replace_once(root / CI, block, "")
+            self.replace_once(
+                root / CI,
+                "      - name: Refusal suites (discovered)\n",
+                block + "      - name: Refusal suites (discovered)\n",
+            )
+
+        self.assert_parity_fails(
+            mutation, "when python 'tests/*_contract.py' failed"
+        )
+
     def test_verify_discarded_status_hides_a_failure(self) -> None:
         command = PALETTE_AND_CHOICES[2]
         self.assert_parity_fails(
