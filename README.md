@@ -192,3 +192,7 @@ the named laptop, the exact repository commits and the matching evidence gate.
 ## License
 
 [MIT](LICENSE)
+
+File origins, third-party licences and the items whose provenance or
+permission is still pending:
+[`docs/third-party-licences.md`](docs/third-party-licences.md).
