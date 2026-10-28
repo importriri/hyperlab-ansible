@@ -124,6 +124,13 @@ commits that pass Nitro are replayed on Predator.
 
 Current evidence belongs in `arch-hypervisor-lab`, not in role defaults.
 
+## Release status
+
+No version has been released. [`CHANGELOG.md`](CHANGELOG.md) lists the
+unreleased changes across the three repositories, and the
+[draft v1 release notes](docs/release-notes-v1.md) say what v1 is meant to
+include, what can be installed today and what must happen before a release.
+
 ## Repository map
 
 - `playbooks/`: broad targets and explicit lifecycle transactions;
