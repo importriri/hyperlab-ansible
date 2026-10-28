@@ -30,6 +30,15 @@ none is a replay of frozen release commits.
   second disk can be dedicated, encrypted, to virtual machine storage.
 - A dry run is the default. A real run erases each disk you confirm by
   typing its full path again; the live medium cannot be selected.
+  Confirming the right disk does not protect the others: the installer
+  reaches its new partitions by their GPT labels (`ARCH_ESP`, `ARCH_ROOT`,
+  `ARCH_VM`), and another attached disk that already carries one of those
+  labels can be destroyed instead. Before a real run, disconnect disks you
+  are not installing to, check the labels on every remaining disk and stop
+  on any conflict; the
+  [bootstrap threat model](https://github.com/importriri/arch-bootstrap/blob/main/docs/threat-model.md#partition-labels-are-global)
+  gives the exact stop conditions. The dry run does not detect this hazard,
+  and duplicate labels are not covered by tests.
 - The installer finishes by writing a small storage hand-off file,
   `/etc/privatestack/bootstrap-storage.yml`, that says where virtual machine
   disks live. If that file cannot be written, the installation stops and
@@ -96,9 +105,19 @@ virtual machine does not become a Machine, because it exists.
   project` writes the virtual machine definition derived from it. The
   shell's Create view performs the same steps and runs the provisioning
   playbooks in one operation window, where the password prompts appear.
-- A creation that fails no longer leaves a half-made Machine behind, and
-  `hyperlabctl machine withdraw` removes an unused record only when its
-  definition is intact and no libvirt domain exists for it.
+- Staged creation writes the Machine definition first and publishes the
+  record last. If this intent stage is refused, its new files are removed
+  when cleanup succeeds. Otherwise, the refusal says "cleanup incomplete"
+  and names what stays. A process killed between the two writes can leave
+  a definition that keeps the name taken. Failed provisioning retains the
+  record, the definition and any libvirt domain already defined; see
+  [ADR 0053](docs/adr/0053-withdraw-machine-intent.md) (proposed) for the
+  cleanup and recovery limits.
+- In the manual `create` and `project` path, `hyperlabctl machine withdraw`
+  removes a record only when its bytes match the supplied SHA-256 digest,
+  no generated definition matches the record's projection and no libvirt
+  domain has that name. A stale, well-formed definition is kept; unreadable
+  or unsafe inputs are refused.
 - Server Machines (`server-arch`, `server-fedora`) are reached over SSH
   only. Their SSH host key is read through the QEMU guest agent and pinned,
   so the first connection never trusts a key offered on the network.

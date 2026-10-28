@@ -80,7 +80,8 @@ walks through:
 
 1. Boot the upstream Arch Linux installation medium, after verifying its
    signature, and run `arch-bootstrap`. A dry run is the default; a real run
-   erases each disk you confirm.
+   erases each disk you confirm, and can erase another attached disk too
+   (see [Security and data warnings](#security-and-data-warnings)).
 2. After the first boots, clone this repository and run
    `playbooks/preflight.yml`, then `playbooks/lab.yml` twice. The second run
    must report `changed=0`. This builds KVM and libvirt, the GPU
@@ -131,9 +132,9 @@ them is accepted on hardware as part of a frozen release.
 | --- | --- |
 | Reference workstation (`arch-dev-vfio`) | Repeated runs of its playbook with `changed=0` and the Guest Workspace Shell seen by the maintainer on the Nitro on 2026-10-03, unpublished. Pre-login display recovery, input isolation and the physical audio check are open. |
 | SSH server Templates | `server-fedora` is ready on the sealed Fedora 44 image; `server-debian` is a draft. Neither has been reached over SSH on hardware. (An Arch server, `srv-01`, was, as the maintainer observed without publishing it, but `server-arch` is not one of the two v1 server Templates.) |
-| Plan and Intent | Software-verified on `main`: the creation plan reports what a Template allows, and one staged creation publishes a Machine record only after its definition is written. A refused creation leaves nothing behind. The decisions behind it, [ADR 0017](adr/0017-shell-machine-creation.md) and [ADR 0053](adr/0053-withdraw-machine-intent.md), are still proposals. |
+| Plan and Intent | Software-verified on `main`: the creation plan reports what a Template allows, and staged intent publishes a Machine record only after its definition is written. A refused intent leaves no new files only when cleanup succeeds; otherwise it reports "cleanup incomplete" and names what stays. Process death can leave files that keep the name taken. The decisions behind it, [ADR 0017](adr/0017-shell-machine-creation.md) and [ADR 0053](adr/0053-withdraw-machine-intent.md), are still proposals; ADR 0053 describes the recovery limits. |
 | Create view | Built in the shell and software-verified offscreen. No Machine has been created from the shell on hardware. |
-| Provisioning | The runner and its checks are software-verified against inert test playbooks, within the limits [ADR 0017](adr/0017-shell-machine-creation.md) lists. A real provisioning run from the shell has not been observed. |
+| Provisioning | The runner and its checks are software-verified against inert test playbooks, within the limits [ADR 0017](adr/0017-shell-machine-creation.md) lists. A failed provisioning step retains the Machine record, its definition and any libvirt domain already defined. A real provisioning run from the shell has not been observed. |
 | Disposable Machines | The disk that discards every write at stop is software-verified. Closing the guest agent again and re-pinning the SSH host key after each later start are not built ([ADR 0018](adr/0018-disposable-discards-on-stop.md)). No disposable Machine has been tried on hardware. |
 | GPU lease | Part of v1. A Machine that holds the GPU only for one run is a proposal, [ADR 0019](adr/0019-gpu-lease.md), not decided and not built. What it builds on, one GPU shared by several definitions and the trust ladder, is software-verified. |
 | Showcase | Part of v1. The storyboard and a read-only demo script exist ([showcase](showcase.md)); the lease shot waits for the lease, and the recording and its privacy review have not been done. |
@@ -176,6 +177,17 @@ those gates stay is part of the undecided v1 order.
 - **The installer erases disks.** A real `arch-bootstrap` run erases every
   disk you confirm, including other operating systems and their boot
   entries. There is no rollback and no dual boot.
+- **It can also erase a disk you did not confirm.** The installer reaches
+  its new partitions through their GPT labels, `ARCH_ESP`, `ARCH_ROOT` and
+  `ARCH_VM`, not through the disk you confirmed. If another attached disk
+  already carries one of those labels, an external disk from an earlier
+  installation for example, it can be formatted instead; the dry run does
+  not look for this. Before a real run, disconnect disks you are not
+  installing to and inspect the partition labels on every remaining disk.
+  Stop if `ARCH_ESP` or `ARCH_ROOT` appears outside the primary target
+  (even on the optional VM disk), or `ARCH_VM` appears outside the primary
+  target and optional VM disk; see the
+  [bootstrap threat model](https://github.com/importriri/arch-bootstrap/blob/main/docs/threat-model.md#partition-labels-are-global).
 - **Back up first, and keep backing up.** Machine snapshots and Machine
   backups are not built. Only offline service backup and restore
   playbooks exist, and their hardware campaign is incomplete. No general
