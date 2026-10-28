@@ -185,6 +185,10 @@ what an Ansible module already says.
 A change is not finished because a static test passes. Hardware claims require
 the named laptop, the exact repository commits and the matching evidence gate.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) explains how to prepare a machine for the
+checks, run them, keep a change small and refusal-first, and what evidence to
+give the maintainer.
+
 ## Author
 
 [importriri](https://github.com/importriri) is the author and maintainer.
