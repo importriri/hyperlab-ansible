@@ -52,8 +52,10 @@ what the playbooks own; the ADR index is
 
 4. Run one focused check for the area you will touch, for example
    `python tests/docs_contract.py` (see [Focused checks](#focused-checks)).
-5. Run the complete battery, `./verify.sh`, before you change anything, so
-   that you know what your machine reports on an unchanged tree.
+5. Run the complete battery before you change anything, so that you know
+   what your machine reports on an unchanged tree: `./verify.sh` with a
+   sudo credential, or `./verify.sh </dev/null` without one (see
+   [Level 2b and sudo](#level-2b-and-sudo)).
 6. Make the change, rerun the focused check, then `./verify.sh` again.
 
 Every command above runs as your normal user. Level 2b of `./verify.sh` is
@@ -122,7 +124,16 @@ Package names were checked against the official package search,
 <https://archlinux.org/packages/>; look a name up there again if `pacman`
 does not find it. `ansible-galaxy collection install` fetches
 `community.general` and `community.libvirt` from Ansible Galaxy, so that
-step needs the network; the checks themselves do not fetch anything.
+step needs the network.
+
+The battery is not guaranteed to run offline either. Level 0i calls plain
+`ansible-lint`, and `.ansible-lint` sets only its profile. Unless it runs
+in offline mode, ansible-lint installs the `requirements.yml` files it
+recognizes, `collections/requirements.yml` among them, and refreshes its
+schemas; `--offline` disables both
+([ansible-lint usage](https://docs.ansible.com/projects/lint/usage/)).
+The verifier does not pass that option. The contracts and the other levels
+do not download anything.
 
 An optional tool widens a check instead of failing it when it is absent:
 `apparmor_parser` compiles the QEMU AppArmor profile in
@@ -200,15 +211,31 @@ verifier looks for a credential in this order:
 With none of them it runs every other render invariant with
 `--skip-tags privileged`, prints
 `NOT RUN - the privileged nft -c judge of tests/render.yml (no sudo credentials)`
-and ends `VERIFICATION INCOMPLETE`. `tests/verify_render_selection_contract.py`
-checks each of these paths with recording stubs.
+and ends `VERIFICATION INCOMPLETE`.
+
+Run from a terminal without a password file, the verifier always takes the
+second path. If you have no sudo credential there, three answers that sudo
+does not accept (an empty answer counts as one), end of input or a missing
+private runtime directory end the run `VERIFICATION FAILED` without any
+render check. A failed credential never falls back to the partial run. To
+get the partial run, give the verifier no terminal on its input and no
+password file:
+
+```bash
+env -u PRIVATESTACK_BECOME_PASSWORD_FILE ./verify.sh </dev/null
+```
+
+`tests/verify_render_selection_contract.py` runs the shipped verifier with
+recording stubs and stdin redirected. It checks the supplied-file,
+unreadable-file, passwordless and missing-credential paths; it does not
+execute the interactive prompt, its retries or its password validation.
 
 Two results must not be confused:
 
 - **The unprivileged diagnostic run.** Without sudo you can still run the
-  whole battery and learn whether anything else fails. That run is
-  incomplete: report it with its `NOT RUN` line and exit status 1, never
-  as green. The missing judge is the only gap this run may have.
+  whole battery, with the command above, and learn whether anything else
+  fails. That run is incomplete: report it with its `NOT RUN` line and exit
+  status 1, never as green. The missing judge is the only gap this run may have.
 - **The full qualification run.** A change is qualified only by a run that
   ends `ALL GREEN`, with the judge executed. If you cannot produce one, say
   so; the maintainer runs it.
