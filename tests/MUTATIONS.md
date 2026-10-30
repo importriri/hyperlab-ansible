@@ -829,6 +829,30 @@ they are red under dash as under Bash.
   Red: "client PID: '12\n' was read 2 times, not once".
 - Restore: `git checkout -- tests/showcase_contract.py`.
 
+Permission-denied read regression (observed on a disposable copy of
+`tests/showcase_contract.py`, with unchanged copies of `tools/showcase/demo.sh`,
+`docs/showcase.md` and
+`roles/host_desktop_common/files/quickshell/hyperlab/ShellIpc.qml`):
+
+- Break: change only `except (FileNotFoundError, ProcessLookupError):` to
+  `except (FileNotFoundError, ProcessLookupError, PermissionError):` in
+  `exited()` (insert the 17 bytes `, PermissionError`). Run
+  `python tests/showcase_contract.py` from the disposable fixture root.
+  Before this regression, that mutation stayed green: exit 0,
+  "Showcase contract: OK"; the directory-read refusal did not catch it.
+  With the regression, red (exit 1): "exit predicate: a denied stat read
+  returned True instead of propagating PermissionError". The real
+  `self/stat` file was present and the double had recorded exactly the
+  intended PID stat read before that assertion failed. The new case
+  requires the injected exception itself, rather than any refusal or a
+  boolean result, and the double is passed only to that call.
+- Restore: copy the saved intact contract over the disposable fixture's
+  `tests/showcase_contract.py`, confirm the bytes with `cmp`, then rerun
+  `python tests/showcase_contract.py`: green (exit 0), "Showcase contract:
+  OK". The whole contract passes, including missing-PID, directory-read,
+  malformed-line, live/zombie/reaped, single-read PID and walkthrough
+  controls. The working predicate and production files were never changed.
+
 ### The showcase take keeps the chosen Machine
 
 `tests/showcase_contract.py` completes the take twice: for `demo-01`

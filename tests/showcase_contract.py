@@ -606,6 +606,34 @@ def check_exit_predicate() -> None:
         require(exited(7, proc), "exit predicate: a missing PID counts as running")
         entry = proc / "7"
         entry.mkdir()
+        denied_stat = entry / "stat"
+        denied_stat.write_text(stat_line("7", "sh", "S"))
+        denied_error = PermissionError("deliberately denied PID stat read")
+        denied_reads: list[Path] = []
+
+        class DeniedStatPath(Path):
+            """Deny only this fixture's PID stat read, even when run as root."""
+
+            def read_text(self, *args, **kwargs) -> str:
+                if self == denied_stat:
+                    denied_reads.append(self)
+                    raise denied_error
+                return super().read_text(*args, **kwargs)
+
+        require((proc / "self" / "stat").is_file(),
+                "exit predicate: the denied-read fixture has no self/stat")
+        denied_result: bool | None = None
+        denied_exception: PermissionError | None = None
+        try:
+            denied_result = exited(7, DeniedStatPath(proc))
+        except PermissionError as exc:
+            denied_exception = exc
+        require(denied_reads == [denied_stat],
+                "exit predicate: the denied PID stat read was not attempted exactly once")
+        require(denied_exception is denied_error,
+                f"exit predicate: a denied stat read returned {denied_result!r} "
+                "instead of propagating PermissionError")
+
         # The command name is in parentheses and may hold ") " itself.
         for stat, ended in ((stat_line("7", "sh", "S"), False), (stat_line("7", "sh", "Z"), True),
                             (stat_line("7", "a) Z (b", "S"), False), (stat_line("7", "a) S (b", "Z"), True),
