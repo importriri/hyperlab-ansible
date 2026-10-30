@@ -229,6 +229,104 @@ Scope {
         }
     }
 
+    // --------------------------------------------------------- diagnostics
+
+    // Independent of short capability/dispatch traffic and open connections.
+    // The collector has 660 s; allow short identity reads and cleanup as well.
+    readonly property int diagnosticsTimeoutMs: 750000
+    property int diagnosticsSerial: 0
+    property var diagnosticsRunner: null
+    readonly property bool diagnosticsBusy: machineActions.diagnosticsRunner !== null
+    signal diagnosticsRequested(string requestId, string machine)
+    signal diagnosticsAnswered(string requestId, string machine, string raw, int exitCode, string detail)
+
+    function collectDiagnostics(machine) {
+        const name = String(machine);
+        if (machineActions.diagnosticsBusy || !/^[a-z0-9][a-z0-9-]{1,30}$/.test(name))
+            return false;
+        machineActions.diagnosticsSerial += 1;
+        const requestId = "diagnostics-" + machineActions.diagnosticsSerial;
+        const runner = diagnosticsComponent.createObject(machineActions, {
+            "requestId": requestId, "machine": name,
+            "command": [machineActions.bridge, "diagnostics", name, requestId]
+        });
+        machineActions.diagnosticsRequested(requestId, name);
+        if (runner === null) {
+            machineActions.diagnosticsAnswered(requestId, name, "", -1,
+                "Diagnostics could not be started");
+            return false;
+        }
+        machineActions.diagnosticsRunner = runner;
+        runner.deadline.start();
+        runner.running = true;
+        return true;
+    }
+
+    function finishDiagnostics(runner, exitCode, exitStatus) {
+        if (machineActions.diagnosticsRunner !== runner)
+            return;
+        runner.deadline.stop();
+        runner.killDeadline.stop();
+        machineActions.diagnosticsRunner = null;
+        if (!runner.answered) {
+            runner.answered = true;
+            const interrupted = exitStatus !== 0;
+            machineActions.diagnosticsAnswered(runner.requestId, runner.machine,
+                exitCode === 0 && !interrupted ? runner.buffer : "",
+                interrupted ? -1 : exitCode,
+                interrupted ? "Diagnostics collection was interrupted"
+                : exitCode !== 0 ? "Diagnostics could not be collected" : "");
+        }
+        runner.destroy();
+    }
+
+    function expireDiagnostics(runner) {
+        if (machineActions.diagnosticsRunner !== runner || runner.answered)
+            return;
+        runner.answered = true;
+        machineActions.diagnosticsAnswered(runner.requestId, runner.machine, "", -1,
+            "Diagnostics collection timed out");
+        if (runner.running) {
+            // The bridge terminates and reaps its collector's process group.
+            runner.signal(15);
+            runner.killDeadline.start();
+        } else {
+            machineActions.finishDiagnostics(runner, -1, 0);
+        }
+    }
+
+    Component {
+        id: diagnosticsComponent
+        Process {
+            id: collectionRunner
+            // Set once at creation. Selection never changes these fields.
+            property string requestId: ""
+            property string machine: ""
+            property string buffer: ""
+            property bool answered: false
+            stdout: StdioCollector {
+                onStreamFinished: collectionRunner.buffer = String(this.text)
+            }
+            // No stderr or raw collector contents reach a presentation signal.
+            stderr: StdioCollector {}
+            onExited: (exitCode, exitStatus) =>
+                machineActions.finishDiagnostics(collectionRunner, exitCode, exitStatus)
+            property Timer deadline: Timer {
+                id: collectionDeadline
+                interval: machineActions.diagnosticsTimeoutMs
+                onTriggered: machineActions.expireDiagnostics(collectionRunner)
+            }
+            property Timer killDeadline: Timer {
+                id: collectionKill
+                interval: 5000
+                onTriggered: {
+                    collectionRunner.signal(9);
+                    machineActions.finishDiagnostics(collectionRunner, -1, 1);
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------- stream health
 
     // Read only, one runner per request, each with its own serial: ShellState

@@ -51,6 +51,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -60,6 +61,10 @@ from typing import Any
 HYPERLABCTL = "/usr/local/bin/hyperlabctl"
 OPERATION = "/usr/local/bin/privatestack-operation"
 CHECKOUT_POINTER = Path("/etc/hyperlabctl/checkout")
+DIAGNOSTICS_OUTPUT = Path.home() / "hyperlab-evidence" / "diagnostics"
+# Five host commands (5*30), inventory recovery (35), resolution (5),
+# SSH readiness (up to 32), six guest commands (6*60), plus publication.
+DIAGNOSTICS_TIMEOUT = 660
 
 VERBS = (
     "start",
@@ -70,6 +75,7 @@ VERBS = (
     "looking-glass",
     "restart-capture",
     "force-stop",
+    "diagnostics",
 )
 
 # Operations that hand the guest a signal it cannot negotiate. The shell
@@ -168,6 +174,8 @@ def resolve(
         "vm.looking-glass-restart",
         "vm.start",
         "vm.stop",
+        "machine.diagnostics",
+        "machine.diagnostics-host",
     }:
         args += ["--domain", name]
     else:
@@ -257,6 +265,9 @@ def choose_action(
     state = str(machine.get("state") or "unknown").lower()
     running = state == "running"
 
+    if verb == "diagnostics":
+        return diagnostics_action(name, machine, spec_row)
+
     if verb == "start":
         if running:
             raise Refused("machine is already running")
@@ -345,6 +356,177 @@ def choose_action(
         return "vm.force-stop"
 
     raise Refused("unsupported machine operation")
+
+
+def diagnostics_action(
+    name: str, machine: dict[str, Any], spec_row: dict[str, Any] | None,
+) -> str:
+    """Product membership, checked spec and current live identity must all agree."""
+    if not MACHINE_ID.fullmatch(name) or not managed_identity(machine, spec_row):
+        raise Refused("diagnostics require a registered product Machine")
+    spec = spec_row.get("spec") if spec_row else None
+    if not isinstance(spec, dict) or spec.get("name") != name or not isinstance(spec.get("image"), str):
+        raise Refused("the checked Machine spec is unavailable")
+    try:
+        payload = cli_json("machine", "inventory")
+    except (Refused, OSError, subprocess.TimeoutExpired):
+        raise Refused("the product Machine inventory is unavailable") from None
+    if (not isinstance(payload, dict) or payload.get("machines_available") is not True
+            or payload.get("runtime_available") is not True
+            or not isinstance(payload.get("machines"), list)):
+        raise Refused("the product Machine inventory is unavailable")
+    matches = [row for row in payload["machines"] if isinstance(row, dict) and row.get("name") == name]
+    if len(matches) != 1:
+        raise Refused("diagnostics require one uniquely registered product Machine")
+    row = matches[0]
+    if (row.get("product_managed") is not True or row.get("managed") is not True
+            or row.get("runtime_present") is not True or row.get("runtime_drift") is not False
+            or machine.get("product_managed") is not True):
+        raise Refused("the Machine's managed runtime identity is unavailable or drifting")
+    image = row.get("image")
+    if (not isinstance(image, dict) or not isinstance(image.get("id"), str)
+            or not isinstance(image.get("sha256"), str) or not SHA256.fullmatch(image["sha256"])):
+        raise Refused("the Machine's registered image identity is unavailable")
+    identity = {
+        "image": image["id"], "lifecycle": row.get("lifecycle"),
+        "device_profile": row.get("device_capability"), "network_profile": row.get("network_profile"),
+        "gpu_handoff_profile": row.get("gpu_handoff_profile"),
+    }
+    if (identity["lifecycle"] not in ("permanent", "disposable")
+            or identity["device_profile"] not in ("standard", "vfio")
+            or not isinstance(identity["network_profile"], str)
+            or any(spec.get(key) != value for key, value in identity.items())):
+        raise Refused("the checked spec and product Machine identity disagree")
+    live_identity = {**identity, "trust_profile": identity["network_profile"],
+                     "image_sha256": image["sha256"]}
+    del live_identity["network_profile"]
+    if any(machine.get(key) != value for key, value in live_identity.items()):
+        raise Refused("the live and registered Machine identity disagree")
+    vfio = identity["device_profile"] == "vfio"
+    if (machine.get("vfio") is not vfio
+            or machine.get("gpu_policy_state") != ("verified" if vfio else "not-required")
+            or (vfio and machine.get("gpu_trust_profile") != identity["gpu_handoff_profile"])):
+        raise Refused("the live Machine device identity disagrees")
+    state = machine.get("state")
+    if state != row.get("state") or state not in ("running", "shut off"):
+        raise Refused("diagnostics require a consistently running or shut-off Machine")
+    return "machine.diagnostics" if state == "running" else "machine.diagnostics-host"
+
+
+def diagnostics_directory() -> set[str]:
+    """Refuse redirected output, including a redirected parent, before any collection."""
+    directory = DIAGNOSTICS_OUTPUT
+    for path in (*reversed(directory.parents), directory):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISDIR(info.st_mode):
+            raise Refused("the diagnostics directory is redirected or unavailable")
+    if not directory.exists():
+        return set()
+    if directory.stat().st_uid != os.getuid():
+        raise Refused("the diagnostics directory has the wrong owner")
+    return {path.name for path in directory.iterdir()}
+
+
+def diagnostics_result(payload: Any, name: str, request_id: str, scope: str,
+                       previous: set[str]) -> dict[str, Any]:
+    """Only newly published private archives and manifest counts reach the pane."""
+    if (not isinstance(payload, dict) or payload.get("machine") != name
+            or payload.get("scope") != scope
+            or not isinstance(payload.get("collected_at"), str)
+            or not re.fullmatch(r"[0-9]{8}T[0-9]{6}", payload["collected_at"])
+            or not isinstance(payload.get("files"), dict) or not payload["files"]
+            or not isinstance(payload.get("missing"), dict)
+            or payload["files"].keys() & payload["missing"].keys()):
+        raise Refused("invalid diagnostics result")
+    for source, entry in payload["files"].items():
+        if (not isinstance(source, str) or not isinstance(entry, dict)
+                or any(type(entry.get(key)) is not int or entry[key] < 0 for key in ("bytes", "redactions"))
+                or type(entry.get("truncated")) is not bool):
+            raise Refused("invalid diagnostics counts")
+    if any(not isinstance(error, str) for error in payload["missing"].values()):
+        raise Refused("invalid unavailable diagnostics sources")
+    for source in (*payload["files"], *payload["missing"]):
+        if (not source.startswith(("host/", "guest/")) or ".." in Path(source).parts
+                or (scope == "host-only" and not source.startswith("host/"))):
+            raise Refused("invalid diagnostics scope")
+    expected = DIAGNOSTICS_OUTPUT / f"{name}-{payload['collected_at']}.tar.gz"
+    if payload.get("archive") != str(expected) or expected.name in previous:
+        raise Refused("diagnostics did not publish a new archive")
+    diagnostics_directory()
+    if stat.S_IMODE(DIAGNOSTICS_OUTPUT.stat().st_mode) != 0o700:
+        raise Refused("the diagnostics directory is not private")
+    fd = os.open(expected, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size == 0
+                or info.st_nlink != 1):
+            raise Refused("the diagnostics archive is not a private regular file")
+    finally:
+        os.close(fd)
+    return {"phase": "diagnostics", "request_id": request_id, "machine": name, "scope": scope,
+            "archive": str(expected), "collected": len(payload["files"]),
+            "unavailable": len(payload["missing"]),
+            "redactions": sum(entry["redactions"] for entry in payload["files"].values())}
+
+
+def unique_json(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise Refused("duplicate diagnostics JSON field")
+        result[key] = value
+    return result
+
+
+def collect_diagnostics(name: str, request_id: str) -> dict[str, Any]:
+    if not MACHINE_ID.fullmatch(name) or not TOKEN.fullmatch(request_id):
+        raise Refused("invalid diagnostics request")
+    # Capabilities are advisory. Re-read every authority for this execution.
+    machine = live_machine(name)
+    spec_row = managed_spec(name)
+    action_id = diagnostics_action(name, machine, spec_row)
+    argv = resolve(action_id, name, spec_row)
+    scope = "host-only" if action_id == "machine.diagnostics-host" else "host-and-guest"
+    previous = diagnostics_directory()
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
+    completed = False
+
+    def interrupted(signum: int, frame: Any) -> None:
+        raise Refused("diagnostics collection was interrupted")
+
+    handlers = {sig: signal.signal(sig, interrupted)
+                for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+    try:
+        raw, _ = process.communicate(timeout=DIAGNOSTICS_TIMEOUT)
+        completed = True
+        if process.returncode != 0:
+            raise Refused("diagnostics collection failed; no saved result was confirmed")
+        try:
+            payload = json.loads(raw, object_pairs_hook=unique_json)
+        except (ValueError, TypeError):
+            raise Refused("invalid diagnostics JSON") from None
+        return diagnostics_result(payload, name, request_id, scope, previous)
+    except subprocess.TimeoutExpired:
+        raise Refused("diagnostics collection timed out") from None
+    finally:
+        try:
+            if not completed:
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    process.communicate(timeout=3)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.communicate()
+                except ProcessLookupError:
+                    pass
+        finally:
+            for sig, handler in handlers.items():
+                signal.signal(sig, handler)
 
 
 def detached(action_id: str) -> bool:
@@ -710,6 +892,14 @@ def main() -> int:
     if len(sys.argv) >= 2 and sys.argv[1] == "create":
         create(sys.argv[2:])
         return 127
+    if len(sys.argv) == 4 and sys.argv[1] == "diagnostics":
+        try:
+            emit(collect_diagnostics(sys.argv[2], sys.argv[3]))
+        except (Refused, OSError, subprocess.TimeoutExpired):
+            # Neither collector stderr nor inventory errors enter presentation.
+            emit({"phase": "refused", "reason": "Diagnostics could not be collected"})
+            return 2
+        return 0
     if len(sys.argv) != 3:
         raise Refused("usage: machine-action {capabilities|VERB} MACHINE")
 
@@ -721,6 +911,9 @@ def main() -> int:
     if verb == "capabilities":
         emit(capabilities(name))
         return 0
+
+    if verb == "diagnostics":
+        raise Refused("diagnostics require a request id")
 
     if verb == "stream-health":
         # Read only: the same checks as restarting the capture, then the

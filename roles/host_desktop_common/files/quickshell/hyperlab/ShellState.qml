@@ -897,7 +897,8 @@ Scope {
         "ssh",
         "looking-glass",
         "restart-capture",
-        "force-stop"
+        "force-stop",
+        "diagnostics"
     ]
 
     property var capabilityRequest: ({
@@ -1046,6 +1047,59 @@ Scope {
             "detail": "",
             "observedAt": Date.now()
         };
+        return true;
+    }
+
+    // --------------------------------------------------------- diagnostics
+
+    // Local results belong to the captured Machine and request, never general
+    // activity. A selection change neither cancels nor redirects a collection.
+    property var diagnosticsRequest: null
+    property var diagnosticsResults: ({})
+
+    function diagnosticsFor(machine) {
+        return state.diagnosticsResults[String(machine)] || {
+            "state": "idle", "archive": "", "detail": ""
+        };
+    }
+
+    function setDiagnostics(machine, result) {
+        const updated = Object.assign({}, state.diagnosticsResults);
+        updated[String(machine)] = result;
+        state.diagnosticsResults = updated;
+    }
+
+    function beginDiagnostics(requestId, machine) {
+        state.diagnosticsRequest = { "id": String(requestId), "machine": String(machine) };
+        state.setDiagnostics(machine, { "state": "collecting", "archive": "", "detail": "Collecting diagnostics…" });
+    }
+
+    function applyDiagnostics(requestId, machine, raw, exitCode, detail) {
+        const request = state.diagnosticsRequest;
+        if (request === null || request.id !== requestId || request.machine !== machine)
+            return false;
+        // Spend the request before publishing any result; late replies cannot
+        // overwrite it, and retry gets a distinct id.
+        state.diagnosticsRequest = null;
+        const result = exitCode === 0 ? state.parseJson(raw) : null;
+        const count = value => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+        if (result === null || typeof result !== "object" || Array.isArray(result)
+            || result.phase !== "diagnostics" || result.request_id !== request.id
+            || result.machine !== request.machine
+            || ["host-only", "host-and-guest"].indexOf(result.scope) < 0
+            || typeof result.archive !== "string" || result.archive[0] !== "/"
+            || result.archive.length > 4096 || /[\x00-\x1f\x7f]/.test(result.archive)
+            || !count(result.collected) || result.collected === 0
+            || !count(result.unavailable) || !count(result.redactions)) {
+            const reasons = ["Diagnostics collection timed out", "Diagnostics collection was interrupted",
+                "Diagnostics could not be started", "Diagnostics could not be collected"];
+            state.setDiagnostics(machine, { "state": "failed", "archive": "",
+                "detail": reasons.indexOf(detail) >= 0 ? detail : "Diagnostics did not return a valid saved archive" });
+            return false;
+        }
+        state.setDiagnostics(machine, { "state": result.unavailable > 0 ? "partial" : "saved",
+            "archive": result.archive, "scope": result.scope, "collected": result.collected,
+            "unavailable": result.unavailable, "redactions": result.redactions, "detail": "" });
         return true;
     }
 

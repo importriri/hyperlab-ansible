@@ -146,6 +146,10 @@ entered the pipeline.
     the record last; a record is withdrawn only by its digest, under the
     registry lock, and never while a projection or a domain follows from it.
 
+54. [`0054-private-machine-diagnostics.md`](0054-private-machine-diagnostics.md) —
+    proposed, software built: supervise one private diagnostics collection
+    through the typed bridge; managed lifecycle stays with the durable runner.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.

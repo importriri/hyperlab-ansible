@@ -137,6 +137,13 @@ ShellRoot {
 
         onCapabilitiesCleared: sharedState.clearCapabilities()
 
+        onDiagnosticsRequested: (requestId, machine) => {
+            sharedState.beginDiagnostics(requestId, machine);
+        }
+        onDiagnosticsAnswered: (requestId, machine, raw, exitCode, detail) => {
+            sharedState.applyDiagnostics(requestId, machine, raw, exitCode, detail);
+        }
+
         onStreamHealthRequested: (serial, machine) => {
             sharedState.beginStreamHealth(serial, machine);
         }

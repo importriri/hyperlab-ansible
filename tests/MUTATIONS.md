@@ -1633,3 +1633,114 @@ strings when serializing these manual fixtures: changing their YAML quoting
 can trip an older configuration text check before the intended order check.
 This condition proof does not retire other source-text checks, observe live
 access or close the disposable Machine's later boots.
+
+## Selected Machine private diagnostics
+
+These mutations execute the real bridge/collector boundary or the real QML
+pane, state and production transport handlers with inert process I/O. They
+never collect host logs or contact a Machine. The script copies the target
+into a disposable fixture, backs it up before breaking it, runs the named
+behavioral check red, restores the copy, and runs the same check green. Run
+from the repository root; Qt 6 qmlscene is required. No Git restoration is
+used and production files are never mutated.
+
+Expected failures:
+
+| Mutation | Predicted behavioral failure |
+| --- | --- |
+| `execution-recheck` | `execution recheck allowed a stale capability for external` (and changed identities) |
+| `foreign-request` | `foreign diagnostics id was accepted` in the pane/state selection scenario |
+| `archive-validation` | `invalid collector result succeeded` for missing, symlink and public archives |
+| `partial-count` | `partial collection was hidden` and the unreachable-guest assertion |
+| `duplicate-request` | `production diagnostics duplicate guard allowed another launch` |
+| `timeout-settlement` | `production timeout left diagnostics permanently busy` |
+| `output-redirection` | `redirected output directory reached the collector` |
+| `lifecycle-subprocess` | `managed dispatch spawned a child` before any external command runs |
+
+Exact mutations and checks (every restored run must exit zero):
+
+```bash
+python - <<'PY'
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path.cwd()
+bridge = Path('roles/host_desktop_common/files/privatestack-machine-actions.py')
+qml = Path('roles/host_desktop_common/files/quickshell/hyperlab')
+archive_start = '    fd = os.open(expected, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)\n'
+bridge_text = (root / bridge).read_text()
+archive_block = bridge_text[bridge_text.index(archive_start):bridge_text.index('    return {"phase": "diagnostics"')]
+cases = [
+    ('execution-recheck', bridge,
+     '    action_id = diagnostics_action(name, machine, spec_row)\n',
+     '    action_id = "machine.diagnostics"\n', 'bridge'),
+    ('foreign-request', qml / 'ShellState.qml',
+     'request === null || request.id !== requestId || request.machine !== machine',
+     'request === null || request.machine !== machine', 'pane'),
+    ('archive-validation', bridge, archive_block, '', 'bridge'),
+    ('partial-count', bridge,
+     '"unavailable": len(payload["missing"])', '"unavailable": 0', 'bridge'),
+    ('duplicate-request', qml / 'MachineActions.qml',
+     'machineActions.diagnosticsBusy || !/^[a-z0-9]', 'false || !/^[a-z0-9]', 'transport'),
+    ('timeout-settlement', qml / 'MachineActions.qml',
+     '                    machineActions.finishDiagnostics(collectionRunner, -1, 1);',
+     '                    return;', 'transport'),
+    ('output-redirection', bridge,
+     '        if not stat.S_ISDIR(info.st_mode):',
+     '        if False:', 'bridge'),
+    ('lifecycle-subprocess', bridge,
+     '        privileged(action_id, name)\n',
+     '        subprocess.Popen(argv)\n        privileged(action_id, name)\n', 'operation'),
+]
+with tempfile.TemporaryDirectory(prefix='hyperlab-diagnostics-mutations-') as temporary:
+    fixture = Path(temporary)
+    shutil.copytree(root / qml, fixture / qml)
+    (fixture / bridge).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(root / bridge, fixture / bridge)
+    for name, relative, old, new, check in cases:
+        target = fixture / relative
+        backup = fixture / (name + '.backup')
+        shutil.copy2(target, backup)
+        original = target.read_text()
+        assert original.count(old) == 1, (name, 'mutation anchor is not unique')
+        if check == 'operation':
+            code = ('import host_operation_integration_contract as t; '
+                    f't.FILES = __import__("pathlib").Path({str((fixture / bridge).parent)!r}); '
+                    't.main()')
+        elif check == 'bridge':
+            code = ('import host_machine_actions_bridge_contract as t; '
+                    f't.BRIDGE = __import__("pathlib").Path({str(fixture / bridge)!r}); '
+                    'raise SystemExit(t.main())')
+        else:
+            code = ('import host_quickshell_runtime_contract as r; '
+                    f'r.QML = __import__("pathlib").Path({str(fixture / qml)!r}); ')
+            if check == 'transport':
+                code += 'import host_operation_qml_contract as t; t.main()'
+            else:
+                code += ('p = r.stage(); '
+                         's, m = r.scenario_source(1920, 1080, r.machines(6), r.MACHINE_DIAGNOSTICS); '
+                         'r.run("/usr/lib/qt6/bin/qmlscene", p, "machine-diagnostics", s, m); '
+                         '__import__("shutil").rmtree(p)')
+        env = {**os.environ, 'PYTHONPATH': str(root / 'tests'), 'HYPERLAB_REQUIRE_QML_RUNTIME': '1'}
+        try:
+            target.write_text(original.replace(old, new))
+            red = subprocess.run([sys.executable, '-c', code], env=env, check=False)
+            print(name, 'mutated exit', red.returncode, flush=True)
+            assert red.returncode != 0, (name, 'mutation stayed green')
+        finally:
+            shutil.copy2(backup, target)
+        green = subprocess.run([sys.executable, '-c', code], env=env, check=False)
+        print(name, 'restored exit', green.returncode, flush=True)
+        assert green.returncode == 0, (name, 'restoration failed')
+PY
+```
+
+The malformed/foreign JSON, zero-exit-without-result and interruption cases
+are also executed by the normally discovered bridge and production transport
+contracts. The archive-validation mutation specifically proves that exit
+zero and a plausible manifest cannot substitute for a real private archive.
+Fixtures prove no installed-shell or Nitro/Predator observation.

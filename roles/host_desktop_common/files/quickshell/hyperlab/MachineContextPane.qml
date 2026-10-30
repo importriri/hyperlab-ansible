@@ -57,6 +57,17 @@ Item {
     readonly property var operation:
         pane.shellState.latestOperationFor(pane.identifier)
 
+    readonly property var diagnostics: pane.shellState.diagnosticsFor(pane.identifier)
+    readonly property string diagnosticsSummary: {
+        const result = pane.diagnostics;
+        if (result.state === "idle") return "No diagnostics collected in this session";
+        if (result.state === "collecting" || result.state === "failed") return result.detail;
+        return (result.state === "partial" ? "Partial archive" : "Saved archive")
+            + " · " + (result.scope === "host-only" ? "host only" : "host and guest")
+            + " · " + result.collected + " collected · " + result.unavailable
+            + " unavailable · " + result.redactions + " redactions";
+    }
+
     // Presentation never decides availability; ShellState applies the
     // bridge's answer and the currency of every fact it depends on.
     function capability(verb) {
@@ -146,6 +157,11 @@ Item {
 
         if (!entry.available)
             return;
+
+        if (verb === "diagnostics") {
+            pane.machineActions.collectDiagnostics(pane.identifier);
+            return;
+        }
 
         if (!pane.machineActions.destructive(verb)) {
             pane.machineActions.invoke(verb, pane.identifier);
@@ -545,6 +561,66 @@ Item {
                 vertical: false
                 tokens: pane.tokens
                 theme: pane.theme
+            }
+
+            // Diagnostics are explicit and local. Selection and refresh only
+            // read capability advice; neither starts collection.
+            SectionHeader {
+                width: parent.width
+                tokens: pane.tokens
+                theme: pane.theme
+                label: "Private diagnostics"
+                description: "Running: host and guest sources · shut off: host only"
+            }
+
+            PanelRow {
+                objectName: "machine-collect-diagnostics"
+                readonly property var entry: pane.capability("diagnostics")
+                width: parent.width
+                tokens: pane.tokens
+                theme: pane.theme
+                glyph: pane.icons.consoleTransport
+                title: "Collect diagnostics"
+                interactive: true
+                enabled: pane.present && entry.available && !pane.machineActions.diagnosticsBusy
+                busy: pane.machineActions.diagnosticsBusy
+                disabledReason: pane.machineActions.diagnosticsBusy
+                    ? "A diagnostics collection is already running" : entry.reason
+                hint: "up to 12½ minutes"
+                onActivated: pane.request("diagnostics")
+            }
+
+            ShellLabel {
+                objectName: "machine-diagnostics-summary"
+                width: parent.width
+                tokens: pane.tokens
+                role: "body"
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: pane.diagnosticsSummary
+                color: pane.theme.textPrimary
+            }
+
+            ShellLabel {
+                objectName: "machine-diagnostics-path"
+                width: parent.width
+                tokens: pane.tokens
+                role: "mono"
+                wrapMode: Text.WrapAnywhere
+                textFormat: Text.PlainText
+                text: pane.diagnostics.archive
+                visible: text.length > 0
+                color: pane.theme.textPrimary
+            }
+
+            ShellLabel {
+                width: parent.width
+                tokens: pane.tokens
+                role: "meta"
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: "The archive stays local. Review it before sharing; redaction is not publication clearance. Guest logs remain untrusted content."
+                color: pane.theme.textQuiet
             }
 
             // Details.

@@ -18,6 +18,24 @@ from .errors import ContractError, Unavailable
 
 ACTIONS = [
     {
+        "id": "machine.diagnostics",
+        "label": "Collect private Machine diagnostics",
+        "command": ["hyperlabctl", "diagnostics", "collect", "{domain}", "--json"],
+        "privileged": False,
+        "destructive": False,
+        "target": "domain",
+        "requires": None,
+    },
+    {
+        "id": "machine.diagnostics-host",
+        "label": "Collect private host-only Machine diagnostics",
+        "command": ["hyperlabctl", "diagnostics", "collect", "{domain}", "--host-only", "--json"],
+        "privileged": False,
+        "destructive": False,
+        "target": "domain",
+        "requires": None,
+    },
+    {
         "id": "status.show",
         "label": "Show lab status",
         "command": ["hyperlabctl", "status"],
@@ -522,6 +540,9 @@ def resolve(action_id, repo_root=None, domain=None, spec=None, manifest=None,
         if domain is None and spec is not None:
             domain = Path(values["spec"]).stem
         values["domain"] = _safe_scalar(domain, "domain")
+        if action_id in ("machine.diagnostics", "machine.diagnostics-host") and not re.fullmatch(
+                r"[a-z0-9][a-z0-9-]{1,30}", values["domain"]):
+            raise ContractError("invalid Machine name for diagnostics")
 
     try:
         return [token.format_map(values) for token in action["command"]]

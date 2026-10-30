@@ -9,6 +9,30 @@ from hyperlabctl.commands import REGISTRY as COMMANDS
 ALL = {"include_unavailable": True}
 
 
+def test_diagnostics_routes_are_fixed_json_commands():
+    import io
+    import json
+    from contextlib import redirect_stdout
+    from hyperlabctl.cli import main
+
+    ctx = world.build(trust=None)
+    for action_id, suffix in (("machine.diagnostics", []),
+                              ("machine.diagnostics-host", ["--host-only"])):
+        action = registry.by_id(action_id)
+        check("diagnostics_route_exists", action is not None)
+        if action is None:
+            continue
+        equals("diagnostics_unprivileged", action["privileged"], False)
+        equals("diagnostics_non_destructive", action["destructive"], False)
+        argv = ["hyperlabctl", "diagnostics", "collect", "dev-01", *suffix, "--json"]
+        equals("diagnostics_fixed_argv", registry.resolve(action_id, domain="dev-01"), argv)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["actions", "--resolve", action_id, "--domain", "dev-01", "--json"], ctx=ctx)
+        equals("diagnostics_resolve_exit", code, 0)
+        equals("diagnostics_resolve_json", json.loads(output.getvalue()), argv)
+
+
 def test_action_ids_are_unique():
     ids = [action["id"] for action in registry.actions(**ALL)]
     equals("unique_action_ids", len(ids), len(set(ids)))

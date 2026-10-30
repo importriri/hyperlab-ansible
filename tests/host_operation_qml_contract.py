@@ -322,6 +322,92 @@ BODY = r'''
                   && lifecycle.usbState === "empty", "no USB devices was not empty");
 
 
+            // The production diagnostics component, including stdout/exit and
+            // both deadline handlers, runs with inert process I/O below.
+            check(lifecycle.collectDiagnostics("dev-01"), "diagnostics request was refused");
+            let diagnostic = lifecycle.diagnosticsRunner;
+            check(diagnostic !== null && diagnostic.running
+                  && JSON.stringify(diagnostic.command) === JSON.stringify([
+                      lifecycle.bridge, "diagnostics", "dev-01", "diagnostics-1"]),
+                  "production diagnostics did not bind the reviewed request argv");
+            check(diagnostic.deadline.interval === 750000 && diagnostic.deadline.running,
+                  "diagnostics did not arm its own overall deadline before spawn");
+            check(!lifecycle.collectDiagnostics("other-02") && lifecycle.diagnosticsRunner === diagnostic,
+                  "production diagnostics duplicate guard allowed another launch");
+            if (window.firstFailure >= 0) { Qt.exit(40 + window.firstFailure); return; }
+            check(lifecycle.probe("other-02", 1), "diagnostics blocked capability/inventory requests");
+            check(lifecycle.openConnection("ssh", "other-02"), "diagnostics blocked SSH connections");
+            function diagnosticsAnswer(request, changes) {
+                return JSON.stringify(Object.assign({phase: "diagnostics", request_id: request.requestId,
+                    machine: request.machine, scope: "host-and-guest", archive: "/private/result.tar.gz",
+                    collected: 12, unavailable: 0, redactions: 4}, changes || {}));
+            }
+            function exitDiagnostics(request, raw, code, status) {
+                request.stdout.text = raw;
+                request.stdout.streamFinished();
+                request.stderr.text = "UNREVIEWED_STDERR";
+                request.stderr.streamFinished();
+                request.running = false;
+                request.exited(code, status || 0);
+            }
+            sharedSurfaces.selectMachine("fixture-002");
+            exitDiagnostics(diagnostic, diagnosticsAnswer(diagnostic), 0, 0);
+            check(!lifecycle.diagnosticsBusy && sharedState.diagnosticsFor("dev-01").state === "saved"
+                  && sharedState.diagnosticsFor("fixture-002").state === "idle",
+                  "production completion moved to the selected Machine or stayed busy");
+            check(lifecycle.collectDiagnostics("dev-01"), "diagnostics could not retry after completion");
+            diagnostic = lifecycle.diagnosticsRunner;
+            exitDiagnostics(diagnostic, diagnosticsAnswer(diagnostic, {unavailable: 2}), 0, 0);
+            check(sharedState.diagnosticsFor("dev-01").state === "partial"
+                  && sharedState.diagnosticsFor("dev-01").unavailable === 2,
+                  "production partial result was hidden");
+            for (const bad of ["", "{}", "not JSON"]) {
+                lifecycle.collectDiagnostics("dev-01");
+                diagnostic = lifecycle.diagnosticsRunner;
+                exitDiagnostics(diagnostic, bad, 0, 0);
+                check(!lifecycle.diagnosticsBusy && sharedState.diagnosticsFor("dev-01").state === "failed"
+                      && sharedState.diagnosticsFor("dev-01").archive === "",
+                      "rc zero without valid metadata invented diagnostics success");
+            }
+            for (const changes of [{request_id: "foreign-id"}, {machine: "other-02"}, {collected: -1},
+                                   {unavailable: false}, {archive: "relative.tar.gz"}, {scope: "guessed"}]) {
+                lifecycle.collectDiagnostics("dev-01");
+                diagnostic = lifecycle.diagnosticsRunner;
+                exitDiagnostics(diagnostic, diagnosticsAnswer(diagnostic, changes), 0, 0);
+                check(sharedState.diagnosticsFor("dev-01").state === "failed",
+                      "foreign/malformed production diagnostics result was accepted");
+            }
+            for (const outcome of [[2, 0], [0, 1]]) {
+                lifecycle.collectDiagnostics("dev-01");
+                diagnostic = lifecycle.diagnosticsRunner;
+                exitDiagnostics(diagnostic, diagnosticsAnswer(diagnostic), outcome[0], outcome[1]);
+                check(sharedState.diagnosticsFor("dev-01").state === "failed"
+                      && sharedState.diagnosticsFor("dev-01").archive === ""
+                      && sharedState.diagnosticsFor("dev-01").detail.indexOf("UNREVIEWED") < 0,
+                      "failed/interrupted production diagnostics exposed stderr or claimed success");
+            }
+            lifecycle.collectDiagnostics("dev-01");
+            diagnostic = lifecycle.diagnosticsRunner;
+            diagnostic.deadline.triggered();
+            check(sharedState.diagnosticsFor("dev-01").state === "failed"
+                  && sharedState.diagnosticsFor("dev-01").detail.indexOf("timed out") >= 0
+                  && diagnostic.signals.indexOf(15) >= 0 && diagnostic.killDeadline.running,
+                  "production deadline did not visibly settle and terminate diagnostics");
+            check(!lifecycle.collectDiagnostics("dev-01"), "timeout cleanup allowed a duplicate collector");
+            diagnostic.killDeadline.triggered();
+            check(!lifecycle.diagnosticsBusy && diagnostic.signals.indexOf(9) >= 0,
+                  "production timeout left diagnostics permanently busy");
+            if (window.firstFailure >= 0) { Qt.exit(40 + window.firstFailure); return; }
+            check(lifecycle.collectDiagnostics("other-02"), "production timeout prevented retry");
+            const retry = lifecycle.diagnosticsRunner;
+            diagnostic.exited(0, 0);
+            check(lifecycle.diagnosticsRunner === retry && lifecycle.diagnosticsBusy,
+                  "late exit ended a newer diagnostics request");
+            retry.running = false; // Failed-to-start need not emit exited.
+            retry.deadline.triggered();
+            check(!lifecycle.diagnosticsBusy && sharedState.diagnosticsFor("other-02").state === "failed",
+                  "failed-to-start diagnostics never settled");
+
 '''
 
 
@@ -331,6 +417,10 @@ def main():
         raise SystemExit('Qt runtime required for lifecycle contract')
     directory = runtime.stage()
     try:
+        root = (runtime.QML / 'shell.qml').read_text()
+        wiring_start = root.index('        onDiagnosticsRequested:')
+        wiring_end = root.index('        onStreamHealthRequested:', wiring_start)
+        diagnostics_wiring = root[wiring_start:wiring_end]
         source = (runtime.QML / 'MachineActions.qml').read_text()
         source = source.replace('import Quickshell\nimport Quickshell.Io\n', '')
         source = source.replace('Scope {', 'Item {', 1)
@@ -339,7 +429,38 @@ def main():
         start = source.index('        onExited:', source.index('id: operationRunner'))
         end = source.index('\n    }', start)
         exit_handler = source[start:end]
+        diagnostic_start = source.index('    // --------------------------------------------------------- diagnostics')
+        diagnostic_end = source.index('    // ------------------------------------------------------- stream health', diagnostic_start)
+        diagnostics = source[diagnostic_start:diagnostic_end]
+        source = source[:diagnostic_start] + source[diagnostic_end:]
         source = runtime.strip_blocks(source, 'Component', 'Process', 'Timer')
+        diagnostics = diagnostics.replace('Process {', 'FixtureProcess {').replace('StdioCollector {', 'FixtureCollector {')
+        source = source.replace('    id: machineActions', '    id: machineActions\n' + diagnostics, 1)
+        # Capability/connection request handlers stay real; their runners only
+        # record argv and return inert objects.
+        source = source.replace('    id: machineActions', '''    id: machineActions
+    QtObject {
+        id: capabilityComponent
+        function createObject(parent, values) { return {running: false}; }
+    }
+    QtObject {
+        id: connectionComponent
+        function createObject(parent, values) { return {running: false}; }
+    }''', 1)
+        (directory / 'FixtureCollector.qml').write_text('''import QtQuick
+QtObject { property string text: ""; signal streamFinished() }
+''')
+        (directory / 'FixtureProcess.qml').write_text('''import QtQuick
+Item {
+    property var command: []
+    property bool running: false
+    property var stdout
+    property var stderr
+    property var signals: []
+    signal exited(int exitCode, int exitStatus)
+    function signal(code) { signals = signals.concat([code]); }
+}
+''')
         source = source.replace('    id: machineActions', '''    id: machineActions
     property alias trackerFixture: operationState
     property alias runnerFixture: operationRunner
@@ -354,8 +475,11 @@ def main():
         (directory / 'MachineActions.qml').write_text(source)
         source, messages = runtime.scenario_source(1920, 1080, runtime.machines(3), BODY)
         source = source.replace('    ShellState { id: sharedState }', '''    ShellState { id: sharedState }
-    MachineActions { id: lifecycle }
+    MachineActions { id: lifecycle
+    @@DIAGNOSTICS_WIRING@@
+    }
     OperationTracker { id: recovery }''')
+        source = source.replace('@@DIAGNOSTICS_WIRING@@', diagnostics_wiring)
         runtime.run(runner, directory, 'operation-lifecycle', source, messages)
     finally:
         shutil.rmtree(directory)

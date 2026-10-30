@@ -140,7 +140,8 @@ def collect(ctx, name, run=subprocess.run, output=OUTPUT, now=None, with_guest=T
     sources["host/operations.json"] = operation_records(name)
     if with_guest:
         sources.update(guest_sources(ctx, name, run))
-    manifest = {"machine": name, "collected_at": stamp, "files": {}, "missing": {}}
+    manifest = {"machine": name, "scope": "host-and-guest" if with_guest else "host-only",
+                "collected_at": stamp, "files": {}, "missing": {}}
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
         for path, (text, error) in sorted(sources.items()):

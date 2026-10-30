@@ -164,6 +164,50 @@ Destructive operations stop at the shared confirmation and require the exact
 machine name. That is an interaction safeguard, not a privilege boundary: the
 reviewed backend remains the enforcement layer.
 
+**Collect diagnostics**, under **Private diagnostics**, explicitly collects
+one local archive for the selected product Machine. Selection, inventory
+refresh and capability replies never collect anything. The bridge requires
+one registered Machine, its checked spec and a consistent live managed
+identity, and rechecks them at execution. External domains, Workbench
+candidates and missing, ambiguous or drifting identities are refused.
+
+A running Machine uses the existing host and guest sources through pinned
+SSH; a shut-off Machine uses `diagnostics collect NAME --host-only`. The
+registry resolves both to fixed JSON CLI argv. Unreachable SSH leaves a
+useful **Partial archive**, without changing host-key checks or the guest.
+The pane shows the actual new path under
+`~/hyperlab-evidence/diagnostics/`, scope, collected and unavailable counts,
+and redaction count. Any unavailable source makes the result partial,
+including when the collector exits zero. The bridge validates the result
+and requires a new, non-symlink, user-owned regular archive with mode 0600
+in the private mode-0700 directory; a collision or write failure is a
+failure, never a saved result.
+
+Only one collection runs at a time, on its own asynchronous transport.
+The collector gets 660 seconds: five host commands at 30 seconds each,
+up to 35 seconds for SSH inventory recovery, 5 for resolution, about 32
+for bounded SSH readiness, six guest sources at 60 seconds each, and
+publication margin. The shell deadline is 750 seconds (12½ minutes),
+including identity reads. Timeout settles visibly, asks the bridge to
+terminate and reap the collector's process group, then forces bridge
+termination after another 5 seconds if needed. Failure and interruption
+never claim an archive. A failed start also reaches that deadline. Retry
+is enabled when cleanup ends. Capability reads, inventory, selection and
+console/SSH/Looking Glass connections remain independent.
+
+The immutable request id and Machine bind every result; selecting another
+Machine cannot redirect it. Results remain on their Machine for this shell
+session, separately from general activity. The pane renders metadata and
+paths as plain text. Logs, source contents and collector stderr never enter
+the pane, notifications or activity history. The archive stays local and
+still needs private review before sharing: redaction is not publication
+clearance, and guest logs remain untrusted diagnostic content. There is no
+automatic opening, clipboard copy or upload. Behavioral fixtures verify the
+software path; installed-shell and physical Nitro/Predator collection remain
+separate acceptance gates.
+The bounded subprocess and retained lifecycle boundary are proposed in
+[ADR 0054](adr/0054-private-machine-diagnostics.md).
+
 ### Creating a Machine
 
 **New Machine** in the Machines header replaces the inventory with the

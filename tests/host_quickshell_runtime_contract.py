@@ -367,6 +367,21 @@ Window {
         property int serial: 0
         property var connections: []
         property bool busy: false
+        property bool diagnosticsBusy: false
+        property var diagnosticsCalls: []
+        function collectDiagnostics(machine) {
+            if (diagnosticsBusy) return false;
+            const id = "diagnostics-" + (diagnosticsCalls.length + 1);
+            diagnosticsBusy = true;
+            diagnosticsCalls = diagnosticsCalls.concat([{id: id, machine: String(machine)}]);
+            sharedState.beginDiagnostics(id, String(machine));
+            return true;
+        }
+        function finishDiagnostics(raw, code, detail) {
+            const request = diagnosticsCalls[diagnosticsCalls.length - 1];
+            diagnosticsBusy = false;
+            sharedState.applyDiagnostics(request.id, request.machine, raw, code, detail || "");
+        }
 
         readonly property var verbs: ["start", "shutdown", "reboot",
             "console", "ssh", "looking-glass", "restart-capture", "force-stop"]
@@ -760,6 +775,7 @@ def scenario_source(
             "reason": "only a Linux Looking Glass capture can be restarted",
         },
         "force-stop": {"available": True, "reason": ""},
+        "diagnostics": {"available": True, "reason": ""},
     })
 
     exit_call = (
@@ -2670,6 +2686,81 @@ CONFIRM_OPEN = """
 # is pinned here: keyboard/IPC transients resolve through the observed focused
 # output, capability replies go through ShellState's correlation, and only the
 # result of the action an OSD reports on can settle it.
+MACHINE_DIAGNOSTICS = r'''
+            sharedSurfaces.openWorkspace("machines");
+            sharedSurfaces.selectMachine("fixture-001");
+            let collect = find(workspaceSurface, "machine-collect-diagnostics");
+            check(collect !== null, "Machine diagnostics action is absent");
+            if (collect === null) { Qt.exit(40 + window.firstFailure); return; }
+            check(sharedMachineActions.diagnosticsCalls.length === 0,
+                  "selection or capabilities started collection");
+            check(collect.enabled && collect.title === "Collect diagnostics",
+                  "bridge availability did not enable diagnostics");
+            collect.activate();
+            collect.activate();
+            check(sharedMachineActions.diagnosticsCalls.length === 1
+                  && sharedMachineActions.diagnosticsCalls[0].machine === "fixture-001",
+                  "one diagnostics click did not bind exactly one immutable target");
+            check(!collect.enabled && collect.busy && collect.disabledReason.length > 0,
+                  "collection did not disable duplicate clicks with a reason");
+            sharedSurfaces.selectMachine("fixture-002");
+            check(find(workspaceSurface, "machine-diagnostics-path").text === "",
+                  "selection switch inherited an archive path");
+            const result = {phase: "diagnostics", request_id: "diagnostics-1",
+                machine: "fixture-001", scope: "host-and-guest", archive: "/private/<b>diagnostics.tar.gz",
+                collected: 12, unavailable: 0, redactions: 3};
+            check(!sharedState.applyDiagnostics("foreign-id", "fixture-001", JSON.stringify(result), 0, ""),
+                  "foreign diagnostics id was accepted");
+            check(sharedState.diagnosticsFor("fixture-001").state === "collecting",
+                  "foreign response settled the current collection");
+            sharedMachineActions.finishDiagnostics(JSON.stringify(result), 0, "");
+            check(find(workspaceSurface, "machine-diagnostics-path").text === "",
+                  "completed diagnostics was reassigned to current selection");
+            sharedSurfaces.selectMachine("fixture-001");
+            let path = find(workspaceSurface, "machine-diagnostics-path");
+            let summary = find(workspaceSurface, "machine-diagnostics-summary");
+            check(path.text === result.archive && path.textFormat === Text.PlainText,
+                  "actual archive path was lost or treated as rich text");
+            check(summary.text.indexOf("Saved") >= 0 && summary.text.indexOf("12 collected") >= 0
+                  && summary.text.indexOf("0 unavailable") >= 0 && summary.text.indexOf("3 redactions") >= 0,
+                  "complete archive counts were not presented");
+            check(!sharedState.applyDiagnostics("diagnostics-1", "fixture-001", "{}", 0, ""),
+                  "late diagnostics reply replaced a settled result");
+            collect = find(workspaceSurface, "machine-collect-diagnostics");
+            collect.activate();
+            const partial = Object.assign({}, result, {request_id: "diagnostics-2", scope: "host-only",
+                collected: 5, unavailable: 1, redactions: 2});
+            sharedMachineActions.finishDiagnostics(JSON.stringify(partial), 0, "");
+            check(summary.text.indexOf("Partial") >= 0 && summary.text.indexOf("host only") >= 0
+                  && summary.text.indexOf("1 unavailable") >= 0,
+                  "partial/host-only diagnostics result was hidden");
+            check(sharedState.operations.every(r => String(r.detail).indexOf("/private/") < 0),
+                  "private archive path entered general activity");
+            collect.activate();
+            sharedMachineActions.finishDiagnostics("", -1, "Diagnostics collection timed out");
+            check(path.text === "" && summary.text.indexOf("timed out") >= 0 && collect.enabled,
+                  "timeout invented an archive or prevented retry");
+            collect.activate();
+            sharedMachineActions.finishDiagnostics("{}", 0, "UNREVIEWED_STDERR");
+            check(path.text === "" && sharedState.diagnosticsFor("fixture-001").state === "failed"
+                  && summary.text.indexOf("UNREVIEWED") < 0,
+                  "malformed rc-zero result invented success or displayed stderr");
+            for (const observation of [
+                {state: "loading"}, {state: "unavailable", detail: "Diagnostics refused"},
+                {generation: -1}, {verbs: {}},
+                {verbs: {diagnostics: {available: false, reason: "Requires a product Machine"}}}]) {
+                sharedMachineActions.probe("fixture-001", sharedState.machinesGeneration);
+                sharedState.machineCapabilities = Object.assign({}, sharedState.machineCapabilities, observation);
+                check(!collect.enabled && collect.disabledReason.length > 0,
+                      "loading, refused, stale or missing capability enabled diagnostics");
+            }
+            sharedMachineActions.probe("fixture-001", sharedState.machinesGeneration);
+            sharedState.machinesSourceState = "unavailable";
+            check(!collect.enabled && collect.disabledReason.length > 0,
+                  "unavailable inventory left diagnostics enabled");
+'''
+
+
 ROOT_WIRING = (
     "activeOutput: {",
     "const focused = sharedState.focusedOutput;",
@@ -2731,6 +2822,7 @@ def main() -> int:
             ("idle", 1920, 1080, populated, IDLE),
             ("destinations", 1920, 1080, populated, DESTINATIONS),
             ("selection", 1920, 1080, populated, SELECTION),
+            ("machine-diagnostics", 1920, 1080, populated, MACHINE_DIAGNOSTICS),
             ("confirmation", 1920, 1080, populated, CONFIRMATION),
             ("launcher", 1920, 1080, populated, LAUNCHER),
             ("transients", 1920, 1080, populated, TRANSIENTS),

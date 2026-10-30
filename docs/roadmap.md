@@ -527,6 +527,14 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       collect`, `tools/hyperlabctl/tests/test_diagnostics.py`,
       software-verified)
 - [ ] the same as an action on the Machine pane, and run once on Nitro
+      (the **Collect diagnostics** pane action is software-verified through
+      the registry, typed bridge, real collector with synthetic sources,
+      offscreen pane/state and production transport handlers:
+      `tests/host_machine_actions_bridge_contract.py`,
+      `tests/host_quickshell_runtime_contract.py`,
+      `tests/host_operation_qml_contract.py`; running and host-only scope,
+      private local archive path and honest partial counts; the installed
+      Nitro observation is still pending)
 
 ### 9. Network security topology
 

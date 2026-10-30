@@ -9,6 +9,7 @@ only thing replaced. The stopped cases run that provisioner under a
 test-only observer which records, from outside its code, each started
 process, each reap and the removal of the hash file.
 """
+import ast
 import contextlib
 import ctypes
 import importlib.util
@@ -647,8 +648,6 @@ def main():
         observed.append((executable, argv))
         raise ExecObserved()
 
-    bridge.live_machine = lambda name: {'name': name, 'managed': True,
-                                        'state': 'shut off', 'vfio': True}
     bridge.managed_spec = lambda name: {'path': 'vm-specs/one.yml', 'spec': {'name': name}}
     bridge.resolve = lambda *args: ['ansible-playbook', 'reviewed-command']
     bridge.cli_json = lambda *args: {'devices': [
@@ -656,13 +655,21 @@ def main():
          'interfaces': ['08'], 'hid': False}]}
     for args, expected in (
         (['start', 'one'], ['launch', 'vm.managed-start', 'one']),
+        (['shutdown', 'one'], ['launch', 'vm.managed-shutdown', 'one']),
+        (['reboot', 'one'], ['launch', 'vm.managed-reboot', 'one']),
+        (['force-stop', 'one'], ['launch', 'vm.force-stop', 'one']),
         (['usb-allow', '1-2', 'permanent', '0781:5581'],
          ['launch', 'usb.allow', 'usb:1-2:permanent:0781:5581']),
         (['operation', 'a' * 32], ['operation', 'a' * 32]),
         (['operations'], ['operations']),
         (['operation-view', 'a' * 32], ['view', 'a' * 32]),
     ):
-        with patch.object(sys, 'argv', ['bridge', *args]), patch.object(bridge.os, 'execv', execv):
+        bridge.live_machine = lambda name, state='shut off' if args[0] == 'start' else 'running': {
+                                            'name': name, 'managed': True, 'state': state,
+                                            'vfio': True}
+        with patch.object(sys, 'argv', ['bridge', *args]), patch.object(bridge.os, 'execv', execv), \
+                patch.object(bridge.subprocess, 'Popen', side_effect=AssertionError('managed dispatch spawned a child')), \
+                patch.object(bridge.os, 'execvp', side_effect=AssertionError('managed dispatch escaped the runner')):
             try:
                 bridge.main()
             except ExecObserved:
@@ -670,7 +677,14 @@ def main():
         assert observed[-1] == (bridge.OPERATION, [bridge.OPERATION, *expected])
 
     source = path.read_text()
-    assert 'subprocess.Popen' not in source and 'json.dumps(argv)' not in source
+    tree = ast.parse(source)
+    spawners = [function.name for function in tree.body if isinstance(function, ast.FunctionDef)
+                for node in ast.walk(function) if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name) and node.func.value.id == 'subprocess'
+                and node.func.attr == 'Popen']
+    assert spawners == ['collect_diagnostics'], spawners
+    assert 'json.dumps(argv)' not in source
     assert 'os.execvp(argv[0], argv)' in source
     assert bridge.CONNECTION_VERBS == ('console', 'ssh', 'looking-glass')
     tasks = (ROOT / 'roles/host_desktop_common/tasks/main.yml').read_text()

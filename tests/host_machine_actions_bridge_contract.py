@@ -26,9 +26,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py"
@@ -36,7 +40,9 @@ BRIDGE = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py
 sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
 
 from hyperlabctl.commands import open as open_command  # noqa: E402
+from hyperlabctl.commands import diagnostics as collector  # noqa: E402
 from hyperlabctl.errors import Unavailable  # noqa: E402
+from hyperlabctl.registry import resolve as registry_resolve  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -664,6 +670,213 @@ def panic_cases(bridge) -> None:
           "the bridge can engage the emergency stop; only the host key may")
 
 
+def diagnostics_cases() -> None:
+    """Real registry, entrypoints and collector; every external source is synthetic."""
+    bridge = load_bridge()
+    if "diagnostics" not in bridge.VERBS:
+        check(False, "diagnostics capability/entrypoint is absent")
+        return
+    with tempfile.TemporaryDirectory(prefix="hyperlab-diagnostics-") as temporary:
+        output = Path(temporary) / "diagnostics"
+        live = {"name": "dev-01", "state": "running", "managed": True,
+                "product_managed": True, "vfio": False, "image": "base",
+                "image_sha256": "a" * 64, "lifecycle": "permanent",
+                "device_profile": "standard", "trust_profile": "dev",
+                "gpu_handoff_profile": None, "gpu_policy_state": "not-required"}
+        product = {"name": "dev-01", "state": "running", "managed": True,
+                   "product_managed": True, "runtime_present": True, "runtime_drift": False,
+                   "image": {"id": "base", "sha256": "a" * 64}, "lifecycle": "permanent",
+                   "device_capability": "standard", "network_profile": "dev",
+                   "gpu_handoff_profile": None}
+        spec = {"path": "vm-specs/.generated/dev-01.yml", "spec": {
+            "name": "dev-01", "image": "base", "lifecycle": "permanent",
+            "device_profile": "standard", "network_profile": "dev", "gpu_handoff_profile": None}}
+        inventories = {"live": [live], "product": [product], "spec": [spec]}
+        calls, launches, answers = [], [], []
+        behavior = {}
+        stamp = 0
+
+        def cli(*args, **kwargs):
+            calls.append(args)
+            if args == ("vm", "list"):
+                return inventories["live"]
+            if args == ("compose", "list"):
+                return inventories["spec"]
+            if args == ("machine", "inventory"):
+                return {"machines_available": True, "runtime_available": True,
+                        "machines": inventories["product"]}
+            if args[:2] == ("actions", "--resolve"):
+                # Other capabilities use inert argv; diagnostics must use the registry.
+                if args[2].startswith("machine.diagnostics"):
+                    return registry_resolve(args[2], domain=args[4])
+                return ["hyperlabctl", "status"]
+            raise AssertionError("unexpected diagnostics CLI request: %r" % (args,))
+
+        def source_run(argv, **kwargs):
+            if argv[0] == "ssh":
+                check("StrictHostKeyChecking=yes" in argv,
+                      "collector changed the pinned synthetic SSH argv")
+            if "dominfo" in argv and behavior.get("partial"):
+                return SimpleNamespace(returncode=1, stdout="", stderr="token=SYNTHETIC_SECRET")
+            if argv[:2] == ["hyperlabctl", "--json"]:
+                text = json.dumps({"machines": [product]})
+            else:
+                text = "source password=SYNTHETIC_SECRET person@example.org\n"
+            return SimpleNamespace(returncode=0, stdout=text, stderr="")
+
+        class Process:
+            pid = 123456789
+            returncode = 0
+
+            def __init__(self, argv, **kwargs):
+                nonlocal stamp
+                launches.append((argv, kwargs))
+                check(kwargs.get("start_new_session") is True,
+                      "collector does not own a separately terminable process group")
+                suffix = ["--host-only"] if product["state"] == "shut off" else []
+                check(argv == ["hyperlabctl", "diagnostics", "collect", "dev-01", *suffix, "--json"],
+                      "diagnostics did not use the resolved fixed argv: %r" % argv)
+                stamp += 1
+                with patch.object(collector, "operation_records", return_value=("[]\n", "")), \
+                        patch.object(collector, "_ssh_argv", return_value=["ssh", "-o", "StrictHostKeyChecking=yes", "fixture@dev-01"]), \
+                        patch.object(collector, "_wait_for_ssh_ready", side_effect=(Unavailable("synthetic unreachable") if behavior.get("unreachable") else None)):
+                    try:
+                        path, manifest = collector.collect(None, "dev-01", run=source_run,
+                            output=output, now=0 if behavior.get("collision") else stamp,
+                            with_guest=not suffix)
+                        self.stdout = json.dumps({"archive": str(path), **manifest})
+                    except OSError:
+                        self.stdout, self.returncode = "", 2
+                if behavior.get("change"):
+                    payload = json.loads(self.stdout)
+                    payload.update(behavior["change"])
+                    self.stdout = json.dumps(payload)
+                if behavior.get("malformed"):
+                    self.stdout = "<b>unreviewed log</b>"
+                if behavior.get("duplicate_json"):
+                    self.stdout = self.stdout[:-1] + ', "machine": "dev-01"}'
+                if behavior.get("missing"):
+                    path.unlink()
+                if behavior.get("symlink"):
+                    target = path.with_suffix(".other")
+                    path.rename(target)
+                    path.symlink_to(target)
+                if behavior.get("public"):
+                    path.chmod(0o644)
+                if behavior.get("nonzero"):
+                    self.returncode = 1
+
+            def communicate(self, timeout=None):
+                check(timeout == bridge.DIAGNOSTICS_TIMEOUT or timeout == 3,
+                      "collector did not get its own bounded lifetime")
+                if behavior.get("timeout") and timeout != 3:
+                    raise bridge.subprocess.TimeoutExpired([], timeout)
+                return self.stdout, "SYNTHETIC_UNREVIEWED_STDERR"
+
+        def execute(**changes):
+            behavior.clear()
+            behavior.update(changes)
+            answers.clear()
+            try:
+                with patch.object(sys, "argv", [str(BRIDGE), "diagnostics", "dev-01", "diagnostics-1"]):
+                    rc = bridge.main()
+                return answers[-1] if rc == 0 and answers else None
+            except (bridge.Refused, OSError):
+                return None
+
+        with patch.object(bridge, "cli_json", cli), patch.object(bridge, "DIAGNOSTICS_OUTPUT", output), \
+                patch.object(bridge.subprocess, "Popen", Process), patch.object(bridge, "emit", answers.append), \
+                patch.object(bridge.os, "killpg"), patch.object(bridge, "runtime_ssh_problem", return_value=None):
+            def offered():
+                return bridge.capabilities("dev-01")["verbs"]["diagnostics"]
+
+            check(offered()["available"], "running product Machine cannot collect diagnostics")
+            for state, scope in (("running", "host-and-guest"), ("shut off", "host-only")):
+                live["state"] = product["state"] = state
+                check(offered()["available"], "shut-off product Machine cannot collect host diagnostics")
+                result = execute()
+                check(result is not None, "valid diagnostics did not return saved metadata")
+                if result is None:
+                    continue
+                path = Path(result["archive"])
+                check(set(result) == {"phase", "request_id", "machine", "scope", "archive", "collected", "unavailable", "redactions"},
+                      "unreviewed collector fields crossed the bridge")
+                check(result["machine"] == "dev-01" and result["request_id"] == "diagnostics-1"
+                      and result["scope"] == scope, "diagnostics correlation or scope lost")
+                check(stat.S_IMODE(path.lstat().st_mode) == 0o600 and path.stat().st_uid == os.getuid()
+                      and stat.S_IMODE(output.stat().st_mode) == 0o700, "diagnostics output is not private")
+                with tarfile.open(path) as archive:
+                    members = archive.getmembers()
+                    check(all(m.isfile() and m.mode == 0o600 for m in members), "archive members are not private files")
+                    contents = {m.name.split("/", 1)[1]: archive.extractfile(m).read().decode() for m in members}
+                manifest = json.loads(contents["manifest.json"])
+                check(manifest["machine"] == "dev-01" and manifest["scope"] == scope,
+                      "real archive manifest target/scope mismatch")
+                check(result["collected"] == len(manifest["files"])
+                      and result["unavailable"] == len(manifest["missing"])
+                      and result["redactions"] == sum(f["redactions"] for f in manifest["files"].values()),
+                      "saved counts do not match the actual manifest")
+                check(not any("SYNTHETIC_SECRET" in text or "person@example.org" in text for text in contents.values()),
+                      "real collector archive retained synthetic secrets")
+                check(any(k.startswith("guest/") for k in manifest["files"]) == (state == "running"),
+                      "host-only collection reached the guest")
+
+            live["state"] = product["state"] = "running"
+            result = execute(partial=True)
+            check(result is not None and result["unavailable"] == 1, "partial collection was hidden")
+            result = execute(unreachable=True)
+            check(result is not None and result["unavailable"] == len(collector.GUEST_SOURCES),
+                  "unreachable guest did not produce an honest partial archive")
+
+            for label, key, value in (
+                ("external", "live", [{**live, "managed": False, "product_managed": False}]),
+                ("Workbench", "product", []), ("missing", "live", []),
+                ("duplicate live", "live", [live, live]), ("duplicate product", "product", [product, product]),
+                ("duplicate spec", "spec", [spec, spec]), ("missing spec", "spec", []),
+                ("drifting product", "product", [{**product, "runtime_drift": True}]),
+                ("drifting live", "live", [{**live, "image_sha256": "b" * 64}]),
+                ("drifting spec", "spec", [{**spec, "spec": {**spec["spec"], "image": "foreign"}}]),
+                ("paused", "live", [{**live, "state": "paused"}]),
+            ):
+                old = inventories[key]
+                inventories[key] = value
+                before = len(launches)
+                try:
+                    check(not offered()["available"], label + " target was offered diagnostics")
+                except bridge.Refused:
+                    pass
+                check(execute() is None and len(launches) == before,
+                      "execution recheck allowed a stale capability for " + label)
+                inventories[key] = old
+
+            # A state change after capability is read selects host-only at execution.
+            check(offered()["available"], "fixture capability not ready")
+            live["state"] = product["state"] = "shut off"
+            result = execute()
+            check(result is not None and result["scope"] == "host-only", "execution reused stale running scope")
+            live["state"] = product["state"] = "running"
+            for changes in ({"malformed": True}, {"missing": True}, {"nonzero": True},
+                            {"symlink": True}, {"public": True}, {"timeout": True}, {"duplicate_json": True},
+                            {"change": {"machine": "foreign"}}, {"change": {"files": []}},
+                            {"change": {"files": {"host/fake": {"bytes": 0, "redactions": True, "truncated": False}}}},
+                            {"change": {"missing": []}},
+                            {"change": {"scope": "host-only"}}, {"change": {"archive": "/foreign.tar.gz"}}):
+                check(execute(**changes) is None, "invalid collector result succeeded: %r" % changes)
+            check(execute(collision=True) is not None, "first exclusive archive was refused")
+            check(execute(collision=True) is None, "archive collision was treated as success")
+            with patch.object(collector.os, "open", side_effect=PermissionError("synthetic denied write")):
+                check(execute() is None, "denied write was treated as success")
+            before = len(launches)
+            redirected = Path(temporary) / "redirected"
+            redirected.symlink_to(output, target_is_directory=True)
+            with patch.object(bridge, "DIAGNOSTICS_OUTPUT", redirected):
+                check(execute() is None and len(launches) == before,
+                      "redirected output directory reached the collector")
+            with patch.object(bridge, "DIAGNOSTICS_OUTPUT", output / ".." / "redirected" / "child"):
+                check(execute() is None and len(launches) == before,
+                      "redirected output parent reached the collector")
+
+
 def main() -> int:
     bridge = load_bridge()
     choose_action_cases(bridge)
@@ -674,6 +887,7 @@ def main() -> int:
     workbench_cases(bridge)
     usb_cases(bridge)
     panic_cases(bridge)
+    diagnostics_cases()
 
     if FAILURES:
         for failure in FAILURES:
