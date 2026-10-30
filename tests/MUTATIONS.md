@@ -1494,3 +1494,79 @@ turned the full documentation contract red with the diagnostics above;
 restoring each file from its saved copy, checking identical bytes, and
 rerunning the contract was green. Neither mutation stayed green. These
 formatting checks add no observation or hardware evidence.
+
+### Rollback keeps a replacement spec with identical bytes
+
+`tests/c10_machine_create_plan_contract.py` runs the real staged creation
+through the bridge and CLI. The `copy-spec` fault runs after the real
+`os.link` publication, before the injected directory-fsync failure. It
+allocates the replacement while the original still exists and records
+both files independently with `lstat`, exact bytes and SHA-256. The case
+requires different device/inode identities, identical bytes and digests,
+removal of this creation's record under the registry lock, preservation of
+the replacement's identity and original bytes, `cleanup incomplete`, no
+operation launch and unchanged unrelated state. The ordinary fsync failure
+still removes the record and unmodified spec; the different-bytes spec
+replacement and identical-bytes record replacement cases remain covered.
+
+Break only `_remove_staged_spec` in a disposable copy: compare the digest
+component instead of the full device/inode/digest tuple. Run the contract
+through its normal main entrypoint. From the repository root, these
+commands copy only fixture inputs and code, back up the production file,
+apply that single mutation, require the specific preservation failure,
+restore from the backup and run the same entrypoint green:
+
+```bash
+HL_SPEC_TEST_ROOT=$(mktemp -d) || exit 1
+python - "$HL_SPEC_TEST_ROOT/repo" "$HL_SPEC_TEST_ROOT/machine.py.intact" <<'PY' || exit 1
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+source = Path.cwd()
+fixture, backup = (Path(value).resolve() for value in sys.argv[1:])
+fixture.mkdir()
+for relative in ("tests", "tools", "images", "templates"):
+    shutil.copytree(source / relative, fixture / relative,
+                    ignore=shutil.ignore_patterns("__pycache__", ".ruff_cache"))
+bridge = Path("roles/host_desktop_common/files/privatestack-machine-actions.py")
+(fixture / bridge).parent.mkdir(parents=True)
+shutil.copy2(source / bridge, fixture / bridge)
+target = fixture / "tools/hyperlabctl/hyperlabctl/commands/machine.py"
+backup.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(target, backup)
+old = "if _identify(\n            path\n        ) != staged:"
+new = "if _identify(\n            path\n        )[2] != staged[2]:"
+intact = target.read_text()
+assert intact.count(old) == 1
+command = [sys.executable, "tests/c10_machine_create_plan_contract.py"]
+env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+try:
+    target.write_text(intact.replace(old, new))
+    red = subprocess.run(command, cwd=fixture, env=env, text=True,
+                         capture_output=True, check=False)
+    print(f"Digest-only mutation exit: {red.returncode}", flush=True)
+    print(red.stdout + red.stderr, flush=True)
+    assert red.returncode != 0
+    assert "['fsync', 'copy-spec']: the same-bytes replacement spec was removed" in red.stderr
+finally:
+    shutil.copy2(backup, target)
+assert target.read_bytes() == (source / target.relative_to(fixture)).read_bytes()
+green = subprocess.run(command, cwd=fixture, env=env, text=True,
+                       capture_output=True, check=False)
+print(f"Restored full identity exit: {green.returncode}", flush=True)
+print(green.stdout + green.stderr, flush=True)
+assert green.returncode == 0
+PY
+rm -r -- "$HL_SPEC_TEST_ROOT" || exit 1
+```
+
+Observed red: exit 1, after the fixture's different-inode and equal-byte
+and digest assertions passed:
+`AssertionError: ['fsync', 'copy-spec']: the same-bytes replacement spec was removed: refused: hyperlabctl: Machine record directory durability is uncertain`.
+Restored full tuple comparison: exit 0,
+`C10 Machine create-plan and intent contract: OK`.
+The working production source was never changed. These are temporary
+software fixtures, with no fault injection into an installed registry.

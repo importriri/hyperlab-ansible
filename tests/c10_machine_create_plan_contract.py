@@ -19,7 +19,8 @@ halves to the factory that writes the Machine record:
     right after os.link, at the inspection or at the sync) undoes the
     record and then the spec under
     the lock, and an undo that cannot finish says so and keeps what is not
-    this creation's, and the spec while the record stays;
+    this creation's (including a different inode with identical bytes), and
+    the spec while the record stays;
   * `machine withdraw` removes only the record whose digest it is given, and
     keeps it while its projection exists, while a libvirt domain has its
     name or the domain list cannot be read, while the registry is locked,
@@ -41,6 +42,7 @@ import importlib.util
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -72,7 +74,7 @@ PRIVATE = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----E
 # the fault saw, so a case proves the record had been published by the real
 # os.link before the failure, and that every removal ran under the lock.
 FAULTS = """
-import errno, fcntl, json, os, pathlib
+import errno, fcntl, hashlib, json, os, pathlib
 
 from hyperlabctl import machine_registry
 from hyperlabctl.commands import machine as command
@@ -119,6 +121,12 @@ def install(config_path):
         other.chmod(0o600)
         os.replace(other, path)
 
+    def observe(path):
+        info = path.lstat()
+        data = path.read_bytes()
+        return {"identity": [info.st_dev, info.st_ino], "mode": info.st_mode,
+                "bytes": data.hex(), "sha256": hashlib.sha256(data).hexdigest()}
+
     real_fsync = machine_registry._fsync_directory
 
     def fsync(directory):
@@ -135,6 +143,16 @@ def install(config_path):
                 replace(record, record.read_bytes())
             if once("replace-spec"):
                 replace(spec)
+            if once("copy-spec"):
+                other = spec.with_name(".replacement")
+                other.write_bytes(spec.read_bytes())
+                other.chmod(0o600)
+                # Observe both while the original still exists: its inode
+                # cannot be reused for the replacement we just allocated.
+                observed = {"original": observe(spec), "replacement": observe(other),
+                            "lock_held": lock_held()}
+                os.replace(other, spec)
+                pathlib.Path(config["copy_spec"]).write_text(json.dumps(observed))
             raise OSError(errno.EIO, "injected directory fsync failure")
         if fired and once("fsync-again"):
             raise OSError(errno.EIO, "injected second directory fsync failure")
@@ -294,8 +312,10 @@ class Lab:
     def arm(self, faults: list[str], name: str) -> None:
         self.wrapper()
         self.fault_log.write_text("")
+        (self.root / "copy-spec.json").write_text("null")
         (self.root / "fault.json").write_text(json.dumps({
             "faults": faults, "name": name, "log": str(self.fault_log),
+            "copy_spec": str(self.root / "copy-spec.json"),
             "registry": str(self.state / "hyperlab/machines"),
             "specs": str(self.repo / "vm-specs/.generated")}))
 
@@ -633,6 +653,7 @@ def check_publication_faults(lab: Lab) -> None:
         (["fsync", "rewrite-record"], "with the record published", b"rewritten: true\n", "staged"),
         (["fsync", "fsync-again"], "with no record", None, "staged"),
         (["fsync", "replace-spec"], "with the record published", None, replaced),
+        (["fsync", "copy-spec"], "with the record published", None, "copy"),
         (["fsync", "unlink-spec"], "with no record", None, "staged"),
         (["interrupt-fsync", "unlink-record"], "with the record published", "published", "staged"),
         (["interrupt-inspect", "fsync-again"], "with no record", None, "staged"),
@@ -642,6 +663,28 @@ def check_publication_faults(lab: Lab) -> None:
         events = lab.events()
         expected = [f"{faults[0]} with the record published", f"{faults[1]} {then}"]
         require(sorted(events) == sorted(expected), f"fixture: {faults} struck as {events}")
+        if spec_left == "copy":
+            observed = json.loads((lab.root / "copy-spec.json").read_text())
+            original, replacement = observed["original"], observed["replacement"]
+            require(original["identity"] != replacement["identity"]
+                    and stat.S_ISREG(original["mode"]) and stat.S_ISREG(replacement["mode"]),
+                    f"fixture: copy-spec did not replace a regular file with another inode: {observed}")
+            original_bytes = bytes.fromhex(original["bytes"])
+            require(original_bytes == bytes.fromhex(replacement["bytes"])
+                    and original["sha256"] == replacement["sha256"]
+                    == hashlib.sha256(original_bytes).hexdigest(),
+                    f"fixture: copy-spec did not preserve the exact staged bytes and digest: {observed}")
+            require(observed["lock_held"] is True, "fixture: copy-spec ran without the registry lock")
+            # Check preservation before the refusal wording, so digest-only
+            # cleanup fails for deleting the replacement, even if it reports
+            # the original fsync failure without an incomplete cleanup.
+            require(staged.is_file() and not staged.is_symlink(),
+                    f"{faults}: the same-bytes replacement spec was removed: {result}")
+            kept = staged.lstat()
+            require([kept.st_dev, kept.st_ino] == replacement["identity"]
+                    and staged.read_bytes() == original_bytes
+                    and hashlib.sha256(staged.read_bytes()).hexdigest() == replacement["sha256"],
+                    f"{faults}: the same-bytes replacement spec changed after rollback")
         require(result.startswith("refused") and "cleanup incomplete" in result and not launched,
                 f"{faults}: an unfinished undo was not reported as such: {result}")
         if record_left is None:
