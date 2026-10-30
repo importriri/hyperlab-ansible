@@ -1,8 +1,9 @@
-# ADR 0047 - One host key pauses every Machine and cuts its network
+# ADR 0047 - A proposed host key for the explicit emergency stop
 
-Status: proposed. The software is built and checked by tests and contracts;
-the key itself is a proposal pending the operator (open question 22 of the
-test plan), and the Nitro test below decides the rest.
+Status: Proposed. The explicit CLI, status observation and confirmed Restore
+are implemented and software-verified. No emergency-stop key is bound or
+advertised in the host key sheet. The key choice remains the operator's
+(open question 22 of the test plan); the physical campaign below is pending.
 
 ## Context
 
@@ -32,11 +33,11 @@ directory): when it was engaged, and per domain the links it set down and
 whether it paused it. The record is written before the first change and after
 every one, so a crash never loses what there is to restore. One failing domain
 never stops the others; every failure is reported and makes the command exit
-non-zero. Engaging again keeps the record and adds to it, so a second press
+non-zero. Engaging again keeps the record and adds to it, so a second invocation
 never forgets what the first one changed. The stop never waits on its
 record: a record that cannot be read is left as it is and one that cannot be
 written is reported, and every running Machine is still cut and paused; the
-output then says Restore cannot undo that press
+output then says Restore cannot undo that invocation
 (`problems/emergency-stop-blocked-by-its-record.md`).
 
 `hyperlabctl panic restore --confirm` sets up the links the record set down,
@@ -50,9 +51,15 @@ states remain recorded, report failure and leave that domain untouched for
 retry. What could not be restored stays recorded, and restoring again retries
 only that.
 
-The host key is `SUPER+SHIFT+Escape` in the Hyprland session (proposed; the
-test plan also proposes `SUPER+SHIFT+Pause` if Nitro has the key). While a
-record exists, the top rail shows "Emergency stop" and the workspace shows,
+The proposed `SUPER+SHIFT+Escape` binding and its sheet row have been removed
+pending the operator's key choice. Neither the Hyprland nor Sway host
+configuration binds an emergency stop. Engage explicitly with
+`hyperlabctl panic engage`; inspect the record with `hyperlabctl panic status`.
+A later, separately authorized binding must also add its matching host key
+sheet row and pass binding/sheet parity checks.
+
+While a record exists, including one created from the CLI, the top rail
+shows "Emergency stop" and the workspace shows,
 above every destination, "Emergency stop: Machines paused, networks cut" with
 what was changed and a **Restore** action. Restore goes through the shared
 confirmation with the word `restore` typed, and the machine bridge runs
@@ -85,26 +92,38 @@ undo is exact and deliberate.
   not stopped.
 - Machines that are not running at engage time are not touched, including
   one the operator had paused: resuming it later by hand brings its network
-  up with it. A Machine started after the press is not stopped; press again.
-- The key works where Hyprland sees it: while Looking Glass holds the
-  keyboard, release it first (Right CTRL). The Sway recovery session has no
-  binding. The key is not active on the lock screen.
-- The shell reads the record every 5 seconds, so the banner can lag the key
+  up with it. A Machine started after engagement is not stopped; engage again.
+- A future Hyprland key would work only where Hyprland sees it: while
+  Looking Glass holds the keyboard, release it first (Right CTRL). Its
+  lock-screen behavior would need verification with the chosen binding.
+- The shell reads the record every 5 seconds, so the banner can lag engagement
   by that much; the stop itself does not wait for the shell.
 
 ## Hardware test
 
-On Nitro, with at least two Machines running and one paused by hand:
+This campaign is pending; software tests do not establish a hardware result.
 
-1. `SUPER+SHIFT+Escape`: within 5 seconds the rail shows "Emergency stop";
+1. The operator chooses whether to have an emergency key and which chord to
+   use, then reviews the fixtures, including running, previously paused,
+   shut-off and VFIO Machines. Before any key-press test, a separately
+   authorized change must install the chosen binding and matching sheet row
+   and pass the software checks. Start a fresh managed Hyprland session on
+   Nitro with those reviewed fixtures.
+2. Press the chosen key: within 5 seconds the rail shows "Emergency stop";
    `virsh list` shows the running Machines paused, the hand-paused one still
    paused, and `virsh domif-getlink` shows their links down.
-2. From inside a paused Machine nothing answers; after the restore below,
+3. From inside a paused Machine nothing answers; after the restore below,
    a ping from it to its gateway works again.
-3. Press the key twice; `hyperlabctl panic status` still lists every Machine
-   from the first press.
-4. Restore from the workspace: the dialog needs `restore` typed; afterwards
+4. Press the chosen key twice; `hyperlabctl panic status` still lists every
+   Machine from the first press.
+5. Restore from the workspace: the dialog needs `restore` typed; afterwards
    the paused Machines run again with their links up, the hand-paused one is
    still paused, and the rail no longer shows the stop.
-5. `hyperlabctl panic restore` without `--confirm` refuses and changes
+6. `hyperlabctl panic restore` without `--confirm` refuses and changes
    nothing.
+
+Before a key is chosen, the separate absence check uses all domains inactive
+and no emergency record: inspect the installed configuration and key sheet,
+press the former chord, and confirm status stays disengaged while ordinary
+lock and key-sheet access work. Repeat on Predator with the same candidate.
+That check does not prove stop/restore with running or VFIO Machines.

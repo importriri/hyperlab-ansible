@@ -685,11 +685,14 @@ Suricata on bridge mirrors, logs shipped off the host).
 Proposed: [ADR 0047](adr/0047-emergency-stop.md) (the key is the operator's
 to decide).
 
-- [x] one host key cuts every running Machine's network links and then
-      pauses it, recording exactly what it changed; the shell shows the stop
-      and restores exactly that after a typed confirmation
+- [x] explicit `hyperlabctl panic engage` cuts every running Machine's
+      network links and then pauses it, recording exactly what it changed;
+      the shell shows the stop and restores exactly that after a typed confirmation
       (`hyperlabctl panic`, `tools/hyperlabctl/tests/test_panic.py`,
       `tests/host_quickshell_runtime_contract.py`, software-verified)
+- [x] the proposed emergency key is unbound and absent from the host key
+      sheet pending the operator's choice; ordinary lock and key-sheet
+      access remain (`tests/host_key_sheet_contract.py`, software-verified)
 - [ ] the emergency stop pressed and restored on Nitro, with running, paused
       and VFIO Machines (ADR 0047 hardware test)
 

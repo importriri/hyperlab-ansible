@@ -368,11 +368,16 @@ shows that device authorized at that port.
 
 ## Emergency stop
 
-`SUPER+SHIFT+Escape` runs `hyperlabctl panic engage`
-([ADR 0047](adr/0047-emergency-stop.md), proposed; the key is the
-operator's to confirm): every running Machine has its network links set
-down, then is paused, and what was changed is recorded privately. The shell
-reads that record through the machine bridge's `panic-status` every 5
+Engage explicitly from the host CLI with `hyperlabctl panic engage`
+([ADR 0047](adr/0047-emergency-stop.md), Proposed): every running Machine has
+its network links set down, then is paused, and what was changed is recorded
+privately. Inspect it with `hyperlabctl panic status`. No emergency shortcut
+is bound in Hyprland or Sway or advertised on the host key sheet;
+`SUPER+SHIFT+Escape` is an unbound proposal pending the operator's key choice.
+A later, separately authorized binding must add its matching sheet row too.
+The physical stop/restore campaign remains open.
+
+The shell reads that record through the machine bridge's `panic-status` every 5
 seconds. While it exists, the top rail shows **Emergency stop** (it opens
 Machines) and the workspace shows, above every destination, "Emergency stop:
 Machines paused, networks cut" with how many Machines and links it changed.
@@ -381,7 +386,9 @@ confirmation, which asks for the word `restore` typed; the bridge then runs
 `hyperlabctl panic restore --confirm`, which reconnects and resumes exactly
 what the stop changed. A partial restore keeps the stop shown with what
 failed, and Restore again retries only that. The shell cannot engage the
-stop.
+stop. CLI restore is also available as `hyperlabctl panic restore --confirm`;
+without `--confirm` it refuses. Status and Restore remain available for a
+record created explicitly from the CLI, independently of any shortcut.
 
 ## Fullscreen frame
 

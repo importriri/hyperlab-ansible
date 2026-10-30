@@ -7,6 +7,9 @@ proof.
 - [`gpu-ladder-state-write-fail-open.md`](gpu-ladder-state-write-fail-open.md):
   the qemu hook ignored a failed rung write and let concurrent prepares
   overwrite a dirtier rung; it now commits under a lock by atomic rename.
+- [`emergency-key-active-before-acceptance.md`](emergency-key-active-before-acceptance.md):
+  the proposed emergency key was already bound and advertised; it is now
+  unbound while the explicit CLI, status and confirmed Restore remain usable.
 - [`machine-create-kept-record-after-projection-refused.md`](machine-create-kept-record-after-projection-refused.md):
   a creation refused by `project` kept the record `create` wrote, so a
   retry said "already exists"; the shell now creates in one staged step

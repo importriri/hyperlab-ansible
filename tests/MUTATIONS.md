@@ -1797,3 +1797,162 @@ call to its innermost enclosing function, including class methods. The CLI
 scope case imports a disposable copy of the collector and checks returned
 and archived manifests without relying on bridge coverage.
 Fixtures prove no installed-shell or Nitro/Predator observation.
+
+## Host emergency key remains unbound
+
+`tests/host_key_sheet_contract.py` renders the production Lua with independent
+fixture inputs and executes it with real Lua and inert recording dispatchers.
+It rejects panic engagement on every chord before checking sheet parity.
+Ordinary lock, key sheet and clipboard bindings are positive controls. The
+real offscreen launcher must retain those rows, offer no emergency row and
+run nothing when a key row is activated.
+
+Run the following from the repository root. All mutations happen in temporary
+copies; each original is copied before breaking it and restored from that copy.
+Every red run must exit nonzero with the named reason, and every restored run
+must pass, including the real QML runtime. No registered command runs.
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+root = Path.cwd()
+template = Path('roles/host_desktop_hyprland/templates/hyprland.lua.j2')
+sheet = Path('roles/host_desktop_common/files/quickshell/hyperlab/HostKeys.qml')
+old_bind = '''hl.bind(
+    main_mod .. " + SHIFT + Escape",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/hyperlabctl panic engage"
+    )
+)
+'''
+old_row = ('            { "keys": "SUPER+SHIFT+Escape", "does": "Emergency stop: '
+           'cut every running Machine\'s network, then pause it; Restore is in the shell" },\n')
+lock_bind = '''hl.bind(
+    main_mod .. " + Escape",
+    hl.dsp.exec_cmd(
+        "/usr/local/bin/privatestack-lock"
+    )
+)
+'''
+keys_bind = '''hl.bind(
+    main_mod .. " + F1",
+    hl.dsp.exec_cmd(
+        "/usr/bin/qs -c hyperlab ipc call launcher keys"
+    )
+)
+'''
+mutations = [
+    ('old emergency bind', template, lambda s: s + '\n' + old_bind,
+     'production Lua binds panic engage in global: SUPER + SHIFT + Escape'),
+    ('different chord', template,
+     lambda s: s + '\n' + old_bind.replace('SHIFT + Escape', 'SHIFT + F12'),
+     'production Lua binds panic engage in global: SUPER + SHIFT + F12'),
+    ('orphan sheet row', sheet,
+     lambda s: s.replace('        { "title": "Session and appearance", "keys": [\n',
+                         '        { "title": "Session and appearance", "keys": [\n' + old_row),
+     'the sheet promises SUPER+SHIFT+Escape, which is not bound'),
+    ('missing lock', template, lambda s: s.replace(lock_bind, ''),
+     'production Lua lost SUPER + Escape -> /usr/local/bin/privatestack-lock'),
+    ('retargeted lock', template,
+     lambda s: s.replace('"/usr/local/bin/privatestack-lock"', '"foot"'),
+     'production Lua lost SUPER + Escape -> /usr/local/bin/privatestack-lock'),
+    ('missing key sheet', template, lambda s: s.replace(keys_bind, ''),
+     'production Lua lost SUPER + F1 -> /usr/bin/qs -c hyperlab ipc call launcher keys'),
+    ('Lua syntax error', template, lambda s: s + '\nthis is invalid Lua !\n',
+     'production Lua did not execute'),
+]
+with tempfile.TemporaryDirectory(prefix='hyperlab-key-mutations-') as directory:
+    tree = Path(directory)
+    for path in (template, Path('tests/host_key_sheet_contract.py'),
+                 Path('tests/host_quickshell_runtime_contract.py'),
+                 Path('themes/trust-model/rendered/hyperlab-palette-quickshell.json')):
+        (tree / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / path, tree / path)
+    shutil.copytree(root / sheet.parent, tree / sheet.parent)
+    backups = tree / 'backups'
+    backups.mkdir()
+    for path in (template, sheet):
+        shutil.copy2(tree / path, backups / path.name)
+    for name, path, mutate, expected in mutations:
+        target = tree / path
+        backup = backups / path.name
+        original = backup.read_bytes()
+        try:
+            broken = mutate(original.decode())
+            assert broken.encode() != original, name
+            target.write_text(broken)
+            red = subprocess.run(
+                [sys.executable, str(tree / 'tests/host_key_sheet_contract.py')],
+                capture_output=True, text=True, check=False,
+                env={**os.environ, 'HYPERLAB_REQUIRE_QML_RUNTIME': '1'},
+            )
+            assert red.returncode != 0 and expected in red.stdout + red.stderr, (name, red)
+        finally:
+            shutil.copy2(backup, target)
+        green = subprocess.run(
+            [sys.executable, str(tree / 'tests/host_key_sheet_contract.py')],
+            capture_output=True, text=True, check=False,
+            env={**os.environ, 'HYPERLAB_REQUIRE_QML_RUNTIME': '1'},
+        )
+        assert green.returncode == 0, (name, green)
+        print(name + ': red observed; restored green')
+PY
+```
+
+Observed: all seven mutations fail with their named reason and return green
+following restoration. With only the old row restored, the real offscreen
+scenario also fails with `the real key sheet offered an emergency shortcut`
+when run independently of the earlier parity check; the original row was
+present for this test before removal. The complete host-key contract then
+passes with `HYPERLAB_REQUIRE_QML_RUNTIME=1`.
+
+To exercise the real QML rejection independently of the earlier parity check,
+restore the old row only in the staged component, then copy it back and rerun:
+
+```bash
+PYTHONPATH=tests HYPERLAB_REQUIRE_QML_RUNTIME=1 python - <<'PY'
+import shutil
+
+import host_key_sheet_contract as keys
+
+runner = shutil.which('qmlscene', path='/usr/lib/qt6/bin') or shutil.which('qmlscene6')
+assert runner, 'Qt 6 qmlscene is required'
+directory = keys.runtime.stage()
+try:
+    target = directory / 'HostKeys.qml'
+    backup = directory / 'HostKeys.original'
+    shutil.copy2(target, backup)
+    row = ('            { "keys": "SUPER+SHIFT+Escape", "does": "Emergency stop: '
+           'cut every running Machine\'s network, then pause it; Restore is in the shell" },\n')
+    original = target.read_text()
+    broken = original.replace('        { "title": "Session and appearance", "keys": [\n',
+                              '        { "title": "Session and appearance", "keys": [\n' + row)
+    assert broken != original
+    source, messages = keys.runtime.scenario_source(
+        1920, 1080, keys.runtime.machines(4), keys.SCENARIO,
+    )
+    try:
+        target.write_text(broken)
+        try:
+            keys.runtime.run(runner, directory, 'host-keys-old-row', source, messages)
+        except SystemExit as error:
+            assert 'the real key sheet offered an emergency shortcut' in str(error), error
+            print(str(error))
+        else:
+            raise AssertionError('the real QML accepted the emergency row')
+    finally:
+        shutil.copy2(backup, target)
+    keys.runtime.run(runner, directory, 'host-keys-restored', source, messages)
+finally:
+    shutil.rmtree(directory)
+PY
+```
+
+Observed: the old row fails with the named QML error; the restored component
+passes (`runtime scenario OK: host-keys-restored`).
