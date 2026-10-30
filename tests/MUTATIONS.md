@@ -1643,6 +1643,8 @@ into a disposable fixture, backs it up before breaking it, runs the named
 behavioral check red, restores the copy, and runs the same check green. Run
 from the repository root; Qt 6 qmlscene is required. No Git restoration is
 used and production files are never mutated.
+The operation fixture also carries the real runner and provisioner so its
+restored run exercises the full provisioning chain.
 
 Expected failures:
 
@@ -1701,6 +1703,8 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-diagnostics-mutations-') as te
     shutil.copytree(root / qml, fixture / qml)
     (fixture / bridge).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(root / bridge, fixture / bridge)
+    for name in ('privatestack-operation.py', 'privatestack-machine-provision.py'):
+        shutil.copy2(root / bridge.parent / name, fixture / bridge.parent / name)
     for name, relative, old, new, check in cases:
         target = fixture / relative
         backup = fixture / (name + '.backup')
