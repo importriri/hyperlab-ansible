@@ -2001,3 +2001,163 @@ PY
 
 Observed: the old row fails with the named QML error; the restored component
 passes (`runtime scenario OK: host-keys-restored`).
+
+
+## Guest fullscreen behavioral consolidation
+
+`python tools/hyperlabctl/tests/run.py` discovers the single behavioral module
+`tools/hyperlabctl/tests/test_vm_guest_fullscreen.py`. The repository contract
+`python tests/hyperlabctl_contract.py` still runs that component suite and
+propagates its failures. An injected failing fullscreen assertion was observed
+to make the repository contract exit 1; restoring the test returned exit 0.
+
+The shared fixture runs the actual embedded transaction in subprocesses with
+real temporary receipts, journals and locks. Its compositor interprets the
+actual dispatch selector/action, including an address selector for the identity
+mutation. It does not implement transaction success or recovery. Delayed
+application workers belong to the parent fixture. Context managers restore
+patches, reap children and remove files even after an assertion raises.
+
+Slow-start cases retain the 0.6 s and 1.2 s startup delays. The accumulated-stage
+case advances a controlled clock; the held-lock case keeps the real lock until
+an explicit release, after observing refusal while its holder is still alive.
+The 10 s subprocess watchdog bounds cleanup, not acceptable startup speed.
+All source fault injection uses one helper that compiles the result and refuses
+missing or ambiguous targets.
+
+The following independent mutations run the complete fullscreen module through
+the ordinary harness. Each must exit 1 with its intended assertion below, then
+exit 0 after restoring the saved bytes. Nominal on/off/toggle, maximized modes
+and no-dispatch controls run alongside the refusal cases.
+
+| Mutation | Break in disposable copy | Expected red assertion |
+| --- | --- | --- |
+| `receipt_identity` | Accept another operation id in a terminal receipt. | `terminal_receipt_wrong_operation` |
+| `terminal_redispatch` | Ignore the terminal receipt and execute the recorded id again. | `sequential_dispatches` |
+| `address_only` | Select the reused address instead of the stable window id. | `address_reuse_before_dispatch_state` |
+| `ack_as_completion` | Finalize success before obtaining post-dispatch proof. | `ack_without_proof_status` |
+| `stale_launch_budget` | Reuse the timeout from before persisting dispatching. | `persistence_launch_budget_reduced` |
+| `lost_rollback_journal` | Remove the journal when the rollback write raises. | `rollback_write_failure_barrier` |
+| `injection_uniqueness` | Disable the source-anchor cardinality guard. | `fault_target_missing` (also `fault_target_ambiguous`) |
+| `fixture_file_cleanup` | Stop closing the fixture cleanup stack. | `cleanup_files_removed` |
+| `stale_version_import` | Add a guarded import from a removed version. | `fullscreen_no_version_import` |
+| `cleanup_reaping` | Stop reaping the fixture's child processes. | `cleanup_child_reaped` |
+| `patch_restoration` | Detach the patch cleanup stack before yielding. | `patch_restored__run_fullscreen_remote` |
+| `duplicate_definition` | Append a second definition of an existing test. | `fullscreen_no_shadowed_tests` |
+| `duplicate_family` | Add another discoverable fullscreen module. | `fullscreen_single_discovery_owner` |
+
+From the repository root, run this command; it changes only disposable copies,
+backs up each target before injection, and restores it before the green run:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = Path.cwd()
+VM = Path('hyperlabctl/commands/vm.py')
+TEST = Path('tests/test_vm_guest_fullscreen.py')
+MUTATIONS = [
+    ('receipt_identity', VM, [
+        ('    if operation_id != expected_operation_id:\n', '    if False:\n'),
+    ], 'terminal_receipt_wrong_operation'),
+    ('terminal_redispatch', VM, [
+        ('    terminal = load_receipt(operation_id, requested)\n', '    terminal = None\n'),
+    ], 'sequential_dispatches'),
+    ('address_only', VM, [
+        ('f\'window = "stableid:{record["stable_id"]}" }})\'', 'f\'window = "address:{record["address"]}" }})\''),
+    ], 'address_reuse_before_dispatch_state'),
+    ('ack_as_completion', VM, [
+        ('def settle_dispatched(record, *, emit_terminal):\n',
+         'def settle_dispatched(record, *, emit_terminal):\n    finalize_success(record, 2 if record["desired"] else 0)\n'),
+    ], 'ack_without_proof_status'),
+    ('stale_launch_budget', VM, [
+        ('    record = dict(record)\n    record["phase"] = "dispatching"\n',
+         '    previous_timeout = remaining_timeout(DISPATCH_TIMEOUT_SECONDS)\n    record = dict(record)\n    record["phase"] = "dispatching"\n'),
+        ('            timeout=dispatch_timeout,\n', '            timeout=previous_timeout,\n'),
+    ], 'persistence_launch_budget_reduced'),
+    ('lost_rollback_journal', VM, [
+        ('except Exception:\n    if current_phase in ("dispatching", "dispatched"):\n        raise SystemExit(75) from None\n',
+         'except Exception:\n    if current_phase in ("dispatching", "dispatched"):\n        remove_state(operation_path)\n        raise SystemExit(75) from None\n'),
+    ], 'rollback_write_failure_barrier'),
+    ('injection_uniqueness', TEST, [
+        ('    if count != 1:\n', '    if False:\n'),
+    ], 'fault_target_missing'),
+    ('cleanup_reaping', TEST, [
+        ('            for child in reversed(self.children):\n                _reap(child)\n',
+         '            for child in reversed([]):\n                _reap(child)\n'),
+    ], 'cleanup_child_reaped'),
+    ('patch_restoration', TEST, [
+        ('        yield\n\n\ndef _invoke', '        stack.pop_all()\n        yield\n\n\ndef _invoke'),
+    ], 'patch_restored__run_fullscreen_remote'),
+    ('duplicate_definition', TEST, [], 'fullscreen_no_shadowed_tests'),
+    ('duplicate_family', TEST, [], 'fullscreen_single_discovery_owner'),
+    ('fixture_file_cleanup', TEST, [
+        ('        finally:\n            self.stack.close()\n',
+         '        finally:\n            pass\n'),
+    ], 'cleanup_files_removed'),
+    ('stale_version_import', TEST, [], 'fullscreen_no_version_import'),
+]
+RUN = 'import harness, test_vm_guest_fullscreen as tests; harness.main([tests])'
+
+def run(directory):
+    result = subprocess.run([sys.executable, '-c', RUN], cwd=directory, text=True, capture_output=True,
+                            env={'PATH': '/usr/bin:/bin', 'PYTHONDONTWRITEBYTECODE': '1',
+                                 'PYTHONPATH': str(directory / 'tests') + ':' + str(directory)}, check=False)
+    log = result.stdout + result.stderr
+    return result.returncode, log
+
+results = []
+for name, relative, changes, expected in MUTATIONS:
+    with tempfile.TemporaryDirectory(prefix='fullscreen-mutation-') as temporary:
+        directory = Path(temporary)
+        shutil.copytree(ROOT / 'tools/hyperlabctl/hyperlabctl', directory / 'hyperlabctl',
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        (directory / 'tests').mkdir()
+        for filename in ('harness.py', 'test_vm_guest_fullscreen.py'):
+            shutil.copy2(ROOT / 'tools/hyperlabctl/tests' / filename, directory / 'tests' / filename)
+        target = directory / relative
+        backup = directory / 'intact.py'
+        shutil.copy2(target, backup)
+        source = target.read_text()
+        for old, new in changes:
+            if source.count(old) != 1:
+                raise AssertionError((name, 'mutation target not unique', source.count(old), old))
+            source = source.replace(old, new, 1)
+        extra = None
+        if name == 'duplicate_definition':
+            source += '\n\ndef test_dispatch_counter_counts_independent_calls() -> None:\n    equals("duplicate_control", 2, 2)\n'
+        elif name == 'stale_version_import':
+            source += '\nif False:\n    from test_vm_guest_fullscreen_v42 import Guest\n'
+        elif name == 'duplicate_family':
+            extra = directory / 'tests/test_vm_guest_fullscreen_extra.py'
+            extra.write_text('"""Duplicate discovery control."""\n')
+        compile(source, str(target), 'exec')
+        target.write_text(source)
+        red_rc, red_log = run(directory)
+        if red_rc != 1 or 'FAIL ' + expected not in red_log:
+            raise AssertionError((name, 'intended behavior not detected; see red log', red_rc))
+        print(name + ': RED ' + expected, flush=True)
+        shutil.copy2(backup, target)
+        if extra is not None:
+            extra.unlink()
+        green_rc, green_log = run(directory)
+        if green_rc != 0:
+            raise AssertionError((name, 'restore failed', green_rc, green_log))
+        print(name + ': RESTORED ' + green_log.strip(), flush=True)
+        results.append({'mutation': name, 'expected': expected, 'red_rc': red_rc,
+                        'green_rc': green_rc, 'green': green_log.strip()})
+print(json.dumps(results, indent=2))
+PY
+```
+
+All thirteen mutations above were observed red at the named assertions. Each
+restored module reported `passed 666, failed 0`. Both missing and ambiguous
+injection targets were detected; the guarded stale import was refused by the
+AST check without executing a missing module. The original 59 test functions
+map to behavioral functions and named cases, with successful and no-dispatch
+controls retained alongside all distinct refusal and recovery observations.

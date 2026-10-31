@@ -3,7 +3,9 @@
 Author: [importriri](https://github.com/importriri).
 
 Status: corrected in the tests; covered by the slow-host cases in
-`tools/hyperlabctl/tests/test_vm_guest_fullscreen_v49.py`.
+`tools/hyperlabctl/tests/test_vm_guest_fullscreen.py`
+(`test_stages_share_deadline_even_after_slow_start` and
+`test_held_lock_uses_shared_deadline_even_after_slow_start`).
 
 ## Symptom
 
@@ -19,9 +21,9 @@ The commit did not touch the guest fullscreen transaction.
 
 ## Cause
 
-The test makes the transaction's two stages sleep 1.6 s against a 1.5 s
-budget and expects a deadline failure without a dispatch. It also ran the
-transaction under a 2.0 s subprocess timeout and required the whole run,
+The affected test made the transaction's two stages sleep 1.6 s against a
+1.5 s budget and expected a deadline failure without a dispatch. It also
+ran the transaction under a 2.0 s subprocess timeout and required the whole run,
 Python's own start included, to take under 1.9 s: about 0.3 s of margin for
 an interpreter start on a busy laptop.
 
@@ -34,14 +36,32 @@ dispatched.
 
 The meaning of both tests is in their outcome, and that is kept: a
 `TRANSACTION_DEADLINE_EXCEEDED` failure with no dispatch, and exit 75 with no
-dispatch while the lock is held. The lock holder now keeps the lock until
-the test releases it, so returning at all proves the transaction gave up on
-its budget. Subprocess timeouts are 10 s; the elapsed bounds only exclude a
-run that waited out another full budget.
+dispatch while the lock is held. The original correction made the lock
+holder keep the lock until the test releases it, so returning at all proves
+the transaction gave up on its budget. Subprocess timeouts became 10 s;
+the elapsed bounds only excluded a run that waited out another full budget.
 
 ## Regression proof
 
-New cases run both tests with a slow start injected at the top of the
-transaction (0.6 s and 1.2 s), as a loaded host does. Under the previous
-2.0 s limit the first raises the same `TimeoutExpired` as the gate; both
-pass now.
+The original regression cases ran both tests with a slow start injected at
+the top of the transaction (0.6 s and 1.2 s), as a loaded host does. Under the previous
+2.0 s limit the first raised the same `TimeoutExpired` as the gate; both
+passed after the original correction.
+
+## Current coverage
+
+The behavioral module now shares the file-backed compositor, transaction
+runner and cleanup. The accumulated-stage case advances a controlled clock
+by 0.25 s and 1.35 s against the same 1.5 s budget, while still executing
+the real embedded transaction. It requires the deadline failure and zero
+dispatches both with normal startup and with the original 0.6 s slow start.
+The lock case still uses a real lock-holder subprocess and an explicit
+ready/release handshake, with the original 1.2 s slow start. It additionally
+checks that the holder is still alive when the transaction refuses and only
+then releases and reaps it. There is no fixed-time lock release.
+
+The 10 s subprocess watchdog bounds cleanup; interpreter startup speed is
+no longer an assertion. Ordering uses a separate lock-wait handshake, and
+persistence time is checked through the timeout passed to the actual dispatch
+subprocess. These remain software fixtures, without contacting a compositor
+session or a guest.
