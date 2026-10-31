@@ -12,15 +12,20 @@ modes. Anything it cannot decide, or a mount that lets anyone but root
 write a boot entry or create one in a boot directory (dmask), is a
 refusal.
 
-This contract runs the tool on findmnt documents (the first is the Nitro's
-real one) and reads the role's tasks.
+This contract runs the tool on findmnt documents, executes the four real
+decision tasks under Ansible with synthetic observations, and reads the
+role's tasks. No mount probe or boot write reaches the host.
 """
 from __future__ import annotations
 
 import json
+import os
 import posixpath
+import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +37,50 @@ TOOL = ROOT / "tools/esp_file_mode.py"
 NITRO_OPTIONS = ("rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,"
                  "shortname=mixed,utf8,errors=remount-ro")
 MODE_FACT = "{{ vfio_boot_loader_file_mode }}"
+DECISION_NAMES = (
+    "Read the mount of every directory the boot files go into",
+    "Decide the file mode the ESP keeps",
+    "Pin the boot files' mode",
+    "Refuse a boot file mode that is not a 0NNN string",
+)
+EXPECTED_MODE_NAME = "Verify the executed ESP mode fact"
+FIXTURE_GUARD_NAME = "Verify isolated ESP fixture dependencies"
+DIRECTORIES = ("/boot/loader", "/boot/loader/entries")
+EXPECTED_CALLS = [["-J", "-T", directory, "-o", "TARGET,FSTYPE,OPTIONS"]
+                  for directory in DIRECTORIES]
+CALLBACK = '''from ansible.plugins.callback import CallbackBase
+import json
+
+
+class CallbackModule(CallbackBase):
+    CALLBACK_VERSION = 2.0
+    CALLBACK_TYPE = "stdout"
+    CALLBACK_NAME = "esp_contract"
+
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def record(self, result, status):
+        self.events.append({"task": result._task.get_name(), "status": status,
+                            "host": result._host.get_name(), "result": result._result})
+
+    def v2_runner_on_ok(self, result):
+        self.record(result, "ok")
+
+    def v2_runner_on_failed(self, result, ignore_errors=False):
+        self.record(result, "failed")
+
+    def v2_runner_on_skipped(self, result):
+        self.record(result, "skipped")
+
+    def v2_runner_on_unreachable(self, result):
+        self.record(result, "unreachable")
+
+    def v2_playbook_on_stats(self, stats):
+        print(json.dumps({"events": self.events,
+                          "stats": {host: stats.summarize(host) for host in stats.processed}}))
+'''
 
 
 def require(condition: bool, message: str) -> None:
@@ -129,6 +178,209 @@ def module_args(task: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def source_yaml(path: Path) -> Any:
+    """Refuse redirected inputs and duplicate keys before task selection."""
+    current = ROOT
+    for part in path.relative_to(ROOT).parts:
+        current /= part
+        require(not current.is_symlink(), f"redirected fixture source: {current}")
+    require(path.is_file(), f"missing fixture source: {path}")
+
+    class UniqueLoader(yaml.SafeLoader):
+        def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+            self.flatten_mapping(node)
+            pairs = self.construct_pairs(node, deep=deep)
+            keys = [key for key, _ in pairs]
+            require(len(keys) == len(set(keys)), f"duplicate YAML keys in {path}")
+            return dict(pairs)
+
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueLoader)
+
+
+def decision_tasks() -> list[dict[str, Any]]:
+    tasks = source_yaml(ROLE / "tasks/main.yml")
+    require(isinstance(tasks, list) and all(isinstance(task, dict) for task in tasks),
+            "vfio_boot tasks are not a list of task objects")
+    selected = [task for task in tasks if task.get("name") in DECISION_NAMES]
+    require([task.get("name") for task in selected] == list(DECISION_NAMES),
+            "the four decision task names are missing, duplicated or out of production order")
+    positions = [tasks.index(task) for task in selected]
+    require(positions == list(range(positions[0], positions[0] + 4)),
+            "the four decision tasks are no longer contiguous")
+    modules = ("command", "command", "set_fact", "assert")
+    # Only these two bounded command argv can execute. In particular, never
+    # include the role, cryptsetup, boot writers, handlers or the brick stamp.
+    task_keys = ({"loop", "register", "changed_when", "check_mode"},
+                 {"register", "changed_when", "check_mode"}, set(), set())
+    for task, module, extra_keys in zip(selected, modules, task_keys, strict=True):
+        key = f"ansible.builtin.{module}"
+        require(key in task and set(task) <= {"name", key} | extra_keys,
+                f"unsafe decision task selection: {task!r}")
+        require(isinstance(task[key], dict), f"invalid decision module arguments: {task!r}")
+    read, decide, publish, shape = selected
+    require(module_args(read) == {"argv": ["{{ vfio_boot_findmnt_bin }}", "-J", "-T", "{{ item }}",
+                                           "-o", "TARGET,FSTYPE,OPTIONS"]},
+            "unsafe findmnt command in the selected task")
+    loop = read.get("loop")
+    require(isinstance(loop, list) and 1 <= len(loop) <= 2
+            and all(directory in DIRECTORIES for directory in loop),
+            "findmnt loop is not restricted to the two boot directories")
+    require(set(module_args(decide)) == {"argv", "stdin"}
+            and module_args(decide)["argv"] == ["{{ vfio_boot_python_bin }}", "{{ vfio_boot_mode_tool }}",
+                                                "--wanted", "{{ vfio_boot_file_mode }}"]
+            and isinstance(module_args(decide)["stdin"], str),
+            "unsafe mode tool command in the selected task")
+    require(set(module_args(publish)) == {"vfio_boot_loader_file_mode"},
+            "the selected publication sets facts other than the boot file mode")
+    require(set(module_args(shape)) <= {"that", "fail_msg"}
+            and isinstance(module_args(shape).get("that"), list),
+            "the selected shape task is not a plain assertion")
+    defaults = source_yaml(ROLE / "defaults/main.yml")
+    require(defaults.get("vfio_boot_mode_tool")
+            == "{{ (vfio_boot_repository_root, 'tools/esp_file_mode.py') | path_join }}",
+            "the runtime fixture must execute this repository's mode tool")
+    require(TOOL.is_file() and not TOOL.is_symlink() and not TOOL.parent.is_symlink(),
+            "missing or redirected mode tool")
+    return selected
+
+
+def run_decision_play(tasks: list[dict[str, Any]], documents: list[str],
+                      expected: str, check: bool, wanted: str | None) -> tuple[int, dict[str, Any], list[Any]]:
+    executable = shutil.which("ansible-playbook")
+    require(executable is not None, "ansible-playbook is required for the runtime fixture")
+    with tempfile.TemporaryDirectory(prefix="esp-mode-contract-") as temporary:
+        workspace = Path(temporary)
+        callbacks = workspace / "callbacks"
+        callbacks.mkdir()
+        (callbacks / "esp_contract.py").write_text(CALLBACK, encoding="utf-8")
+        trace = workspace / "findmnt.jsonl"
+        fake = workspace / "findmnt"
+        fake.write_text(f'''#!{sys.executable}
+import json
+import sys
+from pathlib import Path
+
+argv = sys.argv[1:]
+with Path({str(trace)!r}).open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps(argv) + "\\n")
+if argv not in {EXPECTED_CALLS!r}:
+    sys.exit("unexpected findmnt argv")
+documents = {dict(zip(DIRECTORIES, documents, strict=True))!r}
+print(documents[argv[2]])
+''', encoding="utf-8")
+        fake.chmod(0o700)
+        configuration = workspace / "ansible.cfg"
+        configuration.write_text(f"[defaults]\nstdout_callback = esp_contract\n"
+                                 f"callback_plugins = {callbacks}\nretry_files_enabled = False\n",
+                                 encoding="utf-8")
+        variables = {"vfio_boot_repository_root": str(ROOT), "vfio_boot_python_bin": sys.executable,
+                     "vfio_boot_findmnt_bin": str(fake), "ansible_python_interpreter": sys.executable}
+        if wanted is not None:
+            variables["vfio_boot_file_mode"] = wanted
+        overrides = workspace / "overrides.json"
+        overrides.write_text(json.dumps(variables), encoding="utf-8")
+        # vars_files outrank play vars. Check the effective dependency paths
+        # under Ansible before either command can run, even if overrides break.
+        guard = {"name": FIXTURE_GUARD_NAME, "ansible.builtin.assert": {"that": [
+            f"{key} == {json.dumps(value)}" for key, value in variables.items()
+        ] + [f"vfio_boot_mode_tool == {json.dumps(str(TOOL))}"]}}
+        assertion = {"name": EXPECTED_MODE_NAME, "ansible.builtin.assert": {"that": [
+            "vfio_boot_loader_file_mode is string", f"vfio_boot_loader_file_mode == '{expected}'"]}}
+        play = [{"name": "Execute the ESP mode decision", "hosts": "localhost", "connection": "local",
+                 "gather_facts": False, "become": False,
+                 "vars_files": [str(ROLE / "defaults/main.yml")], "pre_tasks": [guard],
+                 "tasks": [*tasks, assertion]}]
+        play_path = workspace / "decision.yml"
+        play_path.write_text(yaml.safe_dump(play, sort_keys=False), encoding="utf-8")
+        # No inherited Ansible configuration, inventory, callbacks or user state.
+        environment = {"PATH": os.environ.get("PATH", os.defpath), "HOME": temporary,
+                       "TMPDIR": temporary, "ANSIBLE_HOME": str(workspace / "ansible"),
+                       "ANSIBLE_CONFIG": str(configuration), "ANSIBLE_NOCOLOR": "1",
+                       "ANSIBLE_LOCAL_TEMP": str(workspace / "local"),
+                       "ANSIBLE_REMOTE_TEMP": str(workspace / "remote"), "PYTHONDONTWRITEBYTECODE": "1"}
+        argv = [executable, "-i", "localhost,", "--connection", "local",
+                "--extra-vars", f"@{overrides}", str(play_path)]
+        if check:
+            argv.append("--check")
+        with subprocess.Popen(argv, cwd=workspace, env=environment, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                              start_new_session=True) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=45)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+                require(False, f"runtime ansible-playbook timed out: {stdout}\n{stderr}")
+        try:
+            report = json.loads(stdout)
+        except json.JSONDecodeError:
+            require(False, f"runtime ansible-playbook produced no JSON report: rc={process.returncode}\n"
+                    f"{stdout}\n{stderr}")
+        require(isinstance(report, dict), f"invalid runtime report: {report!r}")
+        calls = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()] if trace.exists() else []
+        return process.returncode, report, calls
+
+
+def check_runtime() -> None:
+    selected = decision_tasks()
+    nitro = findmnt("vfat", NITRO_OPTIONS)
+    cases = [
+        ("vfat", [nitro, nitro], "0755", None, None),
+        ("ext4-default", [findmnt("ext4", "rw,relatime")] * 2, "0644", None, None),
+        ("ext4-custom", [findmnt("ext4", "rw")] * 2, "0600", "0600", None),
+        ("unsafe-dmask", [findmnt("vfat", "rw,fmask=0022,dmask=0000")] * 2, "0755", None,
+         "esp_file_mode: directories there would read 0777: a user other than root "
+         "could create or replace a boot entry"),
+        ("different-mounts", [nitro, findmnt("vfat", NITRO_OPTIONS, "/boot/loader")],
+         "0755", None, "esp_file_mode: the directories are not on one filesystem with one set of options"),
+        ("different-options", [nitro, findmnt("vfat", "rw,fmask=0133,dmask=0022")],
+         "0755", None, "esp_file_mode: the directories are not on one filesystem with one set of options"),
+    ]
+    for check in (False, True):
+        for name, documents, expected, wanted, refusal in cases:
+            context = f"runtime {name} ({'--check' if check else 'normal'})"
+            rc, report, calls = run_decision_play(selected, documents, expected, check, wanted)
+            recorded = report.get("events", [])
+            require(recorded and recorded[0].get("task") == FIXTURE_GUARD_NAME
+                    and recorded[0].get("status") == "ok" and recorded[0].get("host") == "localhost",
+                    f"{context}: isolated dependency guard failed before commands: {recorded!r}")
+            events = recorded[1:]
+            outcomes = [{"task": event.get("task"), "status": event.get("status"),
+                         "failure": event.get("result") if event.get("status") != "ok" else None}
+                        for event in events]
+            expected_names = list(DECISION_NAMES[:2] if refusal else (*DECISION_NAMES, EXPECTED_MODE_NAME))
+            require([event.get("task") for event in events] == expected_names,
+                    f"{context}: unexpected executed tasks: {outcomes!r}")
+            require(calls == EXPECTED_CALLS,
+                    f"{context}: findmnt call trace {calls!r}, expected {EXPECTED_CALLS!r}")
+            require(all(event.get("host") == "localhost" for event in events),
+                    f"{context}: execution escaped localhost")
+            expected_statuses = ["ok", "failed"] if refusal else ["ok"] * 5
+            require([event.get("status") for event in events] == expected_statuses,
+                    f"{context}: unexpected task results: {outcomes!r}")
+            stats = report.get("stats", {})
+            require(set(stats) == {"localhost"}, f"{context}: missing localhost recap: {stats!r}")
+            summary = stats["localhost"]
+            for key, value in {"changed": 0, "unreachable": 0, "skipped": 0, "rescued": 0,
+                               "ignored": 0, "failures": int(refusal is not None),
+                               "ok": 2 if refusal else 6}.items():
+                require(summary.get(key) == value, f"{context}: recap {key} is not {value}: {summary!r}")
+            decision = events[1]["result"]
+            if refusal:
+                require(rc == 2 and decision.get("rc") == 2 and decision.get("stdout") == ""
+                        and decision.get("stderr", "").strip() == refusal,
+                        f"{context}: expected deliberate refusal at {DECISION_NAMES[1]!r}, "
+                        f"got process rc={rc}, result={decision!r}")
+            else:
+                require(rc == 0 and decision.get("rc") == 0,
+                        f"{context}: ansible-playbook did not complete successfully: {decision!r}")
+                fact = events[2]["result"].get("ansible_facts", {}).get("vfio_boot_loader_file_mode")
+                require(isinstance(fact, str) and fact == expected,
+                        f"{context}: published fact is {fact!r} ({type(fact).__name__}), expected string {expected!r}")
+            print(f"{context}: {'deliberate rc=2 refusal' if refusal else 'string ' + expected}, "
+                  "changed=0, two findmnt calls")
+
+
 def check_role() -> None:
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
@@ -200,6 +452,7 @@ def check_role() -> None:
 
 
 def main() -> int:
+    check_runtime()
     check_tool()
     check_role()
     print("vfio_boot ESP mode contract: OK")

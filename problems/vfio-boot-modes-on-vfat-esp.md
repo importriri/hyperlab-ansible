@@ -62,7 +62,7 @@ role before it writes anything under `/boot`.
 ## Regression proof
 
 `tests/vfio_boot_esp_mode_contract.py` runs the tool on findmnt documents,
-the first being Nitro's real one (`0755`), with the other vfat masks,
+the first using the reviewed Nitro mount options (`0755`), with the other vfat masks,
 `showexec`, the filesystems that keep modes and every refusal above,
 `dmask=0000`, `0002`, `0020` and a missing `dmask` among them. It requires
 every `vfio_boot` task that writes under `/boot` with a mode to use the
@@ -74,9 +74,51 @@ filesystem keeps modes is not 0644`, and with the defaults in place:
 with a fixed mode '0644', not the one the ESP keeps`. The mutations are in
 `tests/MUTATIONS.md`.
 
+The same discovered contract now executes the four parsed production
+decision tasks, in their production order, with real `ansible-playbook`
+on explicit localhost inventory and a local connection. It loads the real
+defaults and overrides only the fixture dependencies (repository root,
+Python interpreter and findmnt executable), plus the wanted mode in one
+case. A fake findmnt records its argv and returns synthetic documents;
+the real mode tool receives the real loop/stdin expression. Only the two
+read commands, the set_fact and the shape assertion are selected from the
+role, with their modules and command arguments validated before execution.
+No complete role, cryptsetup, boot writer, handler or brick stamp is included.
+
+In normal mode and `--check`, Ansible must publish a string `0755` for vfat
+with `fmask=0022,dmask=0022`, the default string `0644` for ext4, and string
+`0600` for an ext4 request of that mode. An additional Ansible assertion
+checks the fact's type and value. Every run must call findmnt exactly once
+for each directory with the reviewed `-J/-T/-o` arguments and report zero
+changed tasks. Unsafe `dmask=0000`, different mount targets and different
+mount options must each stop at `Decide the file mode the ESP keeps`, with
+the tool's deliberate diagnostic and rc 2, before publishing any fact or
+reaching the success assertion. A crash, timeout, missing tool or transport
+error fails the contract.
+
+Each subprocess has private temporary Ansible configuration and state, a
+time limit and process-group cleanup on timeout. Fixture overrides use
+extra vars because `vars_files` outrank play variables; a preceding Ansible
+assertion verifies the effective executable and repository paths before
+either command can run. Temporary plays, callbacks, programs and traces
+are removed even on failure. Runtime checks precede the existing textual
+role guards: corrupting stdin, publishing a fixed mode, skipping probes
+in check mode or omitting a directory is caught through execution first.
+The observed failures and restored passes are recorded in `tests/MUTATIONS.md`.
+
 ## Not covered
 
 The other changes in that `changed=12` run were outside `/boot` and are
 not explained here. The apply itself is to be seen on Nitro: `--check
 --diff` must list no `vfio_boot` mode change, and a second apply must
 report `changed=0`.
+
+The fixtures prove the decision wiring with synthetic observations, not
+physical ESP observations, file writes, chmod behaviour or bootability.
+The nested no-GPU apply skips these tasks, so its second `changed=0` is
+not ESP execution evidence. Full render and nested verification remain
+required, and Nitro convergence still needs check/apply/apply of the same
+accepted host target followed by actual boot-file mode readback. Predator
+must repeat that procedure with the same frozen commits and its own mount
+observations; neither synthetic filesystem fixture establishes hardware
+compatibility.

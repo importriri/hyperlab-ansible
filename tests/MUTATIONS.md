@@ -699,6 +699,111 @@ real resize.
   Red: "the tool does not read every findmnt document the role collected".
 - Restore: `git checkout -- roles/vfio_boot/tasks/main.yml tools/esp_file_mode.py`.
 
+### Execute the ESP decision wiring under Ansible
+
+The entries above preserve the original structural observations. The expanded
+`tests/vfio_boot_esp_mode_contract.py` runs the production task objects before
+its textual role guards. Runtime observations below were red, then restored
+green, using this command from the repository root. Each mutation uses a fresh
+disposable copy, backs up its target, invokes the unchanged discovered
+entrypoint, restores the saved bytes and repeats all normal/check cases.
+No production file in the source checkout is modified.
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+root = Path.cwd()
+entrypoint = 'tests/vfio_boot_esp_mode_contract.py'
+role = 'roles/vfio_boot/tasks/main.yml'
+tool = 'tools/esp_file_mode.py'
+files = [entrypoint, role, tool, 'roles/vfio_boot/defaults/main.yml']
+mutations = [
+    ('stdin-first', role, '| list | to_json', '| first',
+     'runtime vfat (normal): unexpected executed tasks'),
+    ('fixed-fact', role, '"{{ vfio_boot_esp_mode.stdout }}"', '"0644"',
+     'runtime vfat (normal): unexpected task results'),
+    ('skip-check-probes', role,
+     '  register: vfio_boot_esp_mounts\n  changed_when: false\n  check_mode: false',
+     '  register: vfio_boot_esp_mounts\n  changed_when: false',
+     'runtime vfat (--check): unexpected executed tasks'),
+    ('one-directory', role, '    - /boot/loader\n', '',
+     'runtime vfat (normal): findmnt call trace'),
+    ('missing-overrides', entrypoint,
+     '"--extra-vars", f"@{overrides}", str(play_path)]', 'str(play_path)]',
+     'isolated dependency guard failed before commands'),
+    ('crashed-refusal', tool, '        return 2\n', '        raise RuntimeError(str(exc))\n',
+     'runtime unsafe-dmask (normal): expected deliberate refusal'),
+    ('unsafe-selection', role, '  register: vfio_boot_esp_mounts\n',
+     '  notify: Unexpected handler\n  register: vfio_boot_esp_mounts\n',
+     'unsafe decision task selection'),
+    ('changed-probe', role,
+     '  register: vfio_boot_esp_mounts\n  changed_when: false\n  check_mode: false',
+     '  register: vfio_boot_esp_mounts\n  check_mode: false',
+     'runtime vfat (normal): recap changed is not 0'),
+    ('duplicate-key', 'roles/vfio_boot/defaults/main.yml',
+     'vfio_boot_file_mode: "0644"',
+     'vfio_boot_file_mode: "0644"\nvfio_boot_file_mode: "0644"',
+     'duplicate YAML keys'),
+]
+mutations = [mutation for mutation in mutations if not sys.argv[1:] or mutation[0] in sys.argv[1:]]
+assert mutations
+for name, relative, before, after, diagnostic in mutations:
+    with tempfile.TemporaryDirectory(prefix='esp-mode-mutation-') as temporary:
+        workspace = Path(temporary)
+        for relative_source in files:
+            destination = workspace / relative_source
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / relative_source, destination)
+        target = workspace / relative
+        backup = workspace / 'original'
+        shutil.copy2(target, backup)
+        original = target.read_text(encoding='utf-8')
+        assert original.count(before) == 1, name
+        try:
+            target.write_text(original.replace(before, after, 1), encoding='utf-8')
+            result = subprocess.run([sys.executable, entrypoint], cwd=workspace,
+                                    capture_output=True, text=True, timeout=180, check=False)
+            print(f'{name}: mutated exit {result.returncode}', flush=True)
+            print(result.stdout + result.stderr, flush=True)
+            assert result.returncode != 0 and diagnostic in result.stderr, name
+            if name == 'skip-check-probes':
+                assert 'runtime different-options (normal): deliberate rc=2 refusal' in result.stdout
+        finally:
+            shutil.copy2(backup, target)
+            restored = subprocess.run([sys.executable, entrypoint], cwd=workspace,
+                                      capture_output=True, text=True, timeout=180, check=False)
+            print(f'{name}: restored exit {restored.returncode}', flush=True)
+            print(restored.stdout + restored.stderr, flush=True)
+            assert restored.returncode == 0, name
+PY
+```
+
+| Mutation | Specific observed red check | Restored result |
+| --- | --- | --- |
+| `stdin-first` | Normal vfat stops at `Decide the file mode the ESP keeps`, tool rc 2, `esp_file_mode: stdin must be a non-empty JSON list`; no publication or success assertion. | Exit 0, all twelve runtime cases and original tool/role checks pass. |
+| `fixed-fact` | Normal vfat reaches `Verify the executed ESP mode fact` and fails `vfio_boot_loader_file_mode == '0755'`; the source shape assertion alone accepts the wrong string `0644`. | Exit 0, vfat publishes string `0755` in both modes. |
+| `skip-check-probes` | All six normal cases pass as the positive control. Check-mode vfat skips the real probe task, then the decision task returns rc 2, `esp_file_mode: a findmnt document is not valid JSON: Expecting value: line 1 column 1 (char 0)`. | Exit 0, both probes execute in normal and check mode. |
+| `one-directory` | Normal vfat finishes its fact assertion, but the trace has only `['-J', '-T', '/boot/loader/entries', '-o', 'TARGET,FSTYPE,OPTIONS']`, missing the `/boot/loader` call. | Exit 0, exactly both reviewed argv calls in every case. |
+| `missing-overrides` | The initial `Verify isolated ESP fixture dependencies` assertion fails on the repository root before either command runs. | Exit 0, effective paths point to the temporary fake and the real repository tool. |
+| `crashed-refusal` | `runtime unsafe-dmask (normal): expected deliberate refusal` rejects tool rc 1 and its traceback at the decision task, even though Ansible itself exits 2. | Exit 0, deliberate tool rc 2 and exact diagnostic in both modes. |
+| `unsafe-selection` | `unsafe decision task selection` refuses the added `notify` before executing Ansible. | Exit 0, only the four reviewed task objects are selected. |
+| `changed-probe` | Removing the probe's `changed_when: false` completes the fact assertion but fails `runtime vfat (normal): recap changed is not 0`, with actual changed=1. | Exit 0, changed=0 in every normal/check case. |
+| `duplicate-key` | Repeating the default mode key fails `duplicate YAML keys` before executing Ansible. | Exit 0, the unambiguous real defaults load successfully. |
+
+Every restored invocation also checks ext4 default string `0644`, ext4 custom
+string `0600`, unsafe `dmask=0000`, different targets and different options,
+in both modes. Successful cases have zero changes and six OK tasks (fixture
+path guard, four production tasks, expected-fact assertion); deliberate
+refusals have two OK tasks and one failed decision, no skipped, unreachable,
+rescued or ignored tasks. The standalone tool's original refusal helper and
+cases remain unchanged; the stricter rc/diagnostic proof applies to the new
+Ansible refusal scenarios.
+
 ### The sender-identity contract depends on the local zone
 
 `problems/acceptance-contract-depended-on-the-local-zone.md`.
