@@ -2198,3 +2198,114 @@ a clients-only probe: the clients query passes an explicit 0.5 s cap and does
 not use that default. Extending the probe to instances and active-window
 queries caught the default mutation; independently changing the explicit
 clients cap caught that separate path.
+
+
+### Palette execution preserves JSON arguments and keeps displayed commands inert
+
+`python tests/hyperlabctl_contract.py` executes the complete current Bash
+palette in temporary subprocess fixtures. Only the fixed CLI and Python
+assignments are adapted, each exactly once. Rofi and Foot are recording
+stand-ins in a private PATH; Foot executes the palette's embedded Python
+and prepared-command Bash payloads. The textual resolver points at a
+different inert child from the JSON resolver. The expected child arguments
+are chosen directly, including an empty argument, spaces, both quote
+characters, semicolon, pipe, wildcard and literal substitution/backtick
+text. Canaries can appear only under the temporary fixture directory.
+
+The 14 controls cover ordinary success, an ordinary child returning 23,
+the background panel, privileged display, cancellation and empty selection
+at the action menu and all three target menus, and both resolver refusals.
+Each checks the complete CLI/menu/terminal/child trace. Terminal completion
+is a recorded handshake after executing and waiting for the payload. A
+bounded pipe wait, a dedicated process group and temporary Linux child
+subreaper adoption permit killing and reaping descendants on success,
+assertion failure and timeout. These are software fixtures, not observations
+of an installed desktop or confinement of a trusted session. The separate
+Ansible-condition case is outside these fixtures; the wider textual-contract
+debt remains open.
+
+Observed with the command below (all old searched-for fragments remain,
+including inert comments where the executing line changes):
+
+| Temporary break | Behavioral assertion observed red |
+|---|---|
+| Ordinary `eval "$command"` instead of `run_argv` | `ordinary: textual destination executed` |
+| `subprocess.call(" ".join(argv), shell=True)` | `ordinary: shell evaluation created a canary` |
+| Panel `execvp` of Bash with a joined command | `panel: shell evaluation created a canary`, after terminal completion |
+| Ordinary `subprocess.call(argv[:-1])` | `ordinary: exact JSON child receipt differs` (no canary needed) |
+| Privileged branch falls through to JSON | `privileged display: privileged display executed the JSON destination` |
+| Prepared display payload evaluates its positional command | `privileged display: textual destination executed` |
+| Ordinary launch replaced with `:` | `ordinary: exact JSON child receipt differs` |
+| Panel launch replaced with `:` | `panel: exact JSON child receipt differs` |
+
+Every break was red for the stated assertion; restoring the temporary copy
+passed all 14 cases after each break. The normal contract then printed
+`palette argv behavior: OK`, `component suite: passed 1701, failed 0` and
+`contract: passed 53, failed 0`, exit 0. Source assertions are secondary:
+the command below invokes the same behavioral entrypoint directly, without
+using their presence or absence as the failure oracle. No production bytes
+are changed by the command. A surviving mutation raises an error.
+
+```bash
+python - <<'PY'
+import importlib.util
+from pathlib import Path
+import shutil
+import tempfile
+
+spec = importlib.util.spec_from_file_location('palette_contract', 'tests/hyperlabctl_contract.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+original = Path('roles/host_desktop_sway/files/privatestack-hyperlab-palette.sh').read_text()
+run = '    run_argv "hyperlab: ${id}" "${argv_json}"'
+panel = '        open_panel "${argv_json}"'
+privileged = '    if [[ ${privileged} == yes ]]; then'
+display = next(line for line in original.splitlines() if 'privileged - review' in line)
+mutations = {
+    'ordinary textual eval': (run, '    eval "$command"\n    # ' + run.strip(),
+                              'ordinary: textual destination executed'),
+    'ordinary joined shell': ('rc = subprocess.call(argv)',
+                              'rc = subprocess.call(" ".join(argv), shell=True)\n# subprocess.call(argv)',
+                              'ordinary: shell evaluation created a canary'),
+    'panel joined shell': ('os.execvp(argv[0], argv)',
+                           'os.execvp("/bin/bash", ["bash", "-c", " ".join(argv)])\n# os.execvp(argv[0], argv)',
+                           'panel: shell evaluation created a canary'),
+    'ordinary dropped argument': ('rc = subprocess.call(argv)',
+                                  'rc = subprocess.call(argv[:-1])\n# subprocess.call(argv)',
+                                  'ordinary: exact JSON child receipt differs'),
+    'privileged JSON fallthrough': (privileged, '    if [[ no == yes ]]; then',
+                                    'privileged display: privileged display executed the JSON destination'),
+    'evaluated prepared display': (display,
+                                   display.replace('bash -lc "', 'bash -lc "eval \\"\\$1\\"; ', 1),
+                                   'privileged display: textual destination executed'),
+    'ordinary execution bypass': (run, '    : # ' + run.strip(),
+                                   'ordinary: exact JSON child receipt differs'),
+    'panel execution bypass': (panel, '        : # ' + panel.strip(),
+                                'panel: exact JSON child receipt differs'),
+}
+with tempfile.TemporaryDirectory(prefix='hyperlab-palette-mutations-') as directory:
+    root = Path(directory)
+    backup = root / 'palette.clean'
+    backup.write_text(original)
+    script = root / 'palette.sh'
+    for name, (old, new, expected) in mutations.items():
+        assert original.count(old) == 1, (name, original.count(old))
+        shutil.copyfile(backup, script)
+        script.write_text(script.read_text().replace(old, new, 1))
+        assert 'subprocess.call(argv)' in script.read_text()
+        assert '--json "${resolve_args[@]}"' in script.read_text()
+        assert 'eval "$1"' not in script.read_text()
+        try:
+            module.palette_argv_behavior(script.read_text())
+        except AssertionError as exc:
+            message = str(exc)
+            assert message.startswith(expected), (name, message)
+            print('%s: RED: %s' % (name, message.split(': [')[0]), flush=True)
+        else:
+            raise AssertionError('%s stayed GREEN' % name)
+        finally:
+            shutil.copyfile(backup, script)
+        module.palette_argv_behavior(script.read_text())
+        print('%s: restored GREEN (14 cases)' % name, flush=True)
+PY
+```
