@@ -8,7 +8,7 @@ vfio_boot_mode_tool: "{{ (vfio_boot_repository_root, 'tools/esp_file_mode.py') |
 vfio_boot_python_bin: /usr/bin/python
 vfio_boot_findmnt_bin: /usr/bin/findmnt
 
-# The four boot profiles, ONE options line per logical group.
+# The boot profiles, ONE options line per logical group.
 #
 # Option groups are verbatim from arch-hypervisor-lab/configs/boot (the
 # published, verified entries), with the contract alignments applied by the

@@ -227,7 +227,7 @@
         suffix: .render
       register: render_ws
 
-    - name: Render the four boot entries with a pinned fake UUID
+    - name: Render the boot entries with a pinned fake UUID
       ansible.builtin.template:
         src: "{{ repo_root }}/roles/vfio_boot/templates/entry.conf.j2"
         dest: "{{ render_ws.path }}/{{ item.file }}"
