@@ -57,8 +57,15 @@ def decided(documents: list[str], wanted: str = "0644") -> str:
 
 def refused(stdin: str, reason: str, wanted: str = "0644") -> None:
     result = run_tool(stdin, wanted)
-    require(result.returncode != 0 and result.stdout == "" and result.stderr.strip(),
-            f"the tool accepted {reason}: rc={result.returncode} stdout={result.stdout!r}")
+    details = (f"{reason}: rc={result.returncode} stdout={result.stdout!r} "
+               f"stderr={result.stderr!r}")
+    require(result.returncode == 2, f"the tool did not refuse {details} with exit 2")
+    require(result.stdout == "", f"the tool wrote to stdout while refusing {details}")
+    prefix = "esp_file_mode: "
+    require(result.stderr.startswith(prefix) and result.stderr[len(prefix):].strip(),
+            f"the tool broke the refusal diagnostic protocol for {details}")
+    require("Traceback (most recent call last):" not in result.stderr,
+            f"the tool emitted a traceback while refusing {details}")
 
 
 def check_tool() -> None:

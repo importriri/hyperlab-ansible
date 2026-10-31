@@ -2309,3 +2309,56 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-palette-mutations-') as direct
         print('%s: restored GREEN (14 cases)' % name, flush=True)
 PY
 ```
+
+### ESP semantic refusals use the deliberate error protocol
+
+`python tests/vfio_boot_esp_mode_contract.py` now requires each existing
+semantic refusal to return exactly 2, write exactly empty stdout, and start
+stderr with `esp_file_mode: ` followed by a nonblank explanation. A Python
+traceback also fails, even after a valid prefix. Each failure identifies the
+input case and includes the actual return code, stdout and stderr from the
+CLI subprocess. Positive mode cases and structural role checks are retained.
+The earlier ESP entries above preserve their historical diagnostic wording;
+the messages below describe the strengthened assertions.
+
+Observed with disposable source copies containing the real tool, unchanged
+contract entrypoint and role task/default files. Each tool file was backed
+up before mutation, restored from that copy after the red run, then checked
+again. Every red below is contract exit 1 at `refused()`, and every restoration
+is exit 0 with `vfio_boot ESP mode contract: OK` and empty stderr. Production
+tool and role files are unchanged. These synthetic CLI runs do not execute
+the Ansible tasks or prove convergence of installed boot files.
+
+- Break: remove `require(value is not None, ...)` from `mask()`.
+  Before strengthening the helper, this mutation was green: the traceback
+  satisfied its loose nonzero-status check. With the new helper, red:
+  `the tool did not refuse a vfat mount without fmask: rc=1 stdout=''`,
+  ending in `with exit 2`, with actual stderr containing
+  `Traceback (most recent call last):` and
+  `TypeError: expected string or bytes-like object, got 'NoneType'`.
+  This is the first missing-mask case reached; execution stops before the
+  missing-dmask case. Restored: green.
+- Break: change the `ModeError` handler's return from 2 to 1, preserving
+  its diagnostic. Red: `the tool did not refuse fmask=0000, which lets
+  everyone write a boot entry: rc=1 stdout=''`, ending in `with exit 2`.
+  Actual stderr is `esp_file_mode: files there would read 0777: a user
+  other than root could write them` followed by a newline. Restored: green.
+- Break: remove `esp_file_mode: ` from the `ModeError` diagnostic,
+  preserving exit 2. Red: `the tool broke the refusal diagnostic protocol
+  for fmask=0000, which lets everyone write a boot entry: rc=2 stdout=''`.
+  Actual stderr is `files there would read 0777: a user other than root
+  could write them` followed by a newline. Restored: green.
+- Break: print `unexpected output` to stdout in the `ModeError` path,
+  preserving exit 2 and the original diagnostic. Red: `the tool wrote to
+  stdout while refusing fmask=0000, which lets everyone write a boot
+  entry: rc=2 stdout='unexpected output\n'`, with the prefixed diagnostic
+  still present in actual stderr. Restored: green.
+- Break: replace the `ModeError` explanation with whitespace, preserving
+  the prefix and exit 2. Red: `the tool broke the refusal diagnostic
+  protocol for fmask=0000, which lets everyone write a boot entry: rc=2
+  stdout='' stderr='esp_file_mode:   \n'`. Restored: green.
+- Break: append `Traceback (most recent call last):` and a newline to the
+  `ModeError` stderr, preserving exit 2, empty stdout and the original
+  prefixed explanation. Red: `the tool emitted a traceback while refusing
+  fmask=0000, which lets everyone write a boot entry: rc=2 stdout=''`, with
+  both the diagnostic and traceback header in actual stderr. Restored: green.
