@@ -89,9 +89,14 @@ def judge(probe: dict[str, str], want: dict[str, str], since: float, not_pid: st
         findings.append((exe == binary, f"the running executable is the stamped binary ({exe or 'unread'})"))
     started = probe.get("started", "")
     try:
-        when = datetime.fromisoformat(started).timestamp()
+        started_at = datetime.fromisoformat(started)
+        # A naive timestamp would use the checking machine's local zone.
+        if started_at.tzinfo is None or started_at.utcoffset() is None:
+            raise ValueError("the sender start line needs an explicit UTC offset")
+        when = started_at.timestamp()
     except ValueError:
-        findings.append((False, f"the log does not start with this sender's start line ({started or 'absent'})"))
+        findings.append((False, f"the log has no valid sender start line with an explicit UTC offset "
+                               f"({started or 'absent'})"))
     else:
         findings.append((when >= since, f"the log's sender started at {started}, after the test began"))
     if no_restart:

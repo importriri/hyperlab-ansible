@@ -714,6 +714,36 @@ real resize.
   machine's own (observed: "TZ=UTC0 is not in effect: +0200, not +0000").
 - Restore: `git checkout -- tests/acceptance_scripts_contract.py`.
 
+### Sender start lines need an explicit UTC offset
+
+`problems/acceptance-contract-depended-on-the-local-zone.md`, follow-up.
+
+Observed in temporary copies of `tools/acceptance/sender_identity.py`, with
+unchanged copies of its two expected-pin YAML files. Before each break,
+the source was saved with `shutil.copyfile(source, backup)`; restoration
+used `shutil.copyfile(backup, target)`. The loaded contract's `DIR` pointed
+only at that temporary fixture. No production test override was added.
+
+The checks were `check_sender_identity_timestamps()` and
+`check_sender_identity_cli()` from `tests/acceptance_scripts_contract.py`,
+with `TZ` and `time.tzset()` set to each existing `SENDER_ZONES` entry and
+the effective offset checked. Each of the following turned red in all
+four zones, then green after restoring the saved bytes (including all 88
+CLI cases through file and standard input):
+
+| Break in the temporary judge | Observed red |
+| --- | --- |
+| Replace the parse/offset-guard/conversion block with `when = datetime.fromisoformat(started).timestamp()` | `timezone-free start: expected timestamp verdict False`; CLI incorrectly exits 0. |
+| Replace the guard's `raise ValueError(...)` with `started_at = started_at.replace(tzinfo=timezone.utc)` and import `timezone` | The same timezone-free refusal fails; CLI incorrectly exits 0. |
+| Replace `when = started_at.timestamp()` with `when = started_at.replace(tzinfo=timezone.utc).timestamp()` and import `timezone` | `negative offset: expected timestamp verdict True`; CLI incorrectly exits 1. |
+| Replace `when >= since` with `when > since` | `inclusive boundary: expected timestamp verdict True`; CLI incorrectly exits 1. |
+| Replace `when >= since` with `True` | `one second stale: expected timestamp verdict False`; CLI incorrectly exits 0. |
+| Replace `except ValueError:` with `except TypeError:` (CLI check) | Exit 1 with a traceback fails `the CLI did not return ordinary findings`. |
+
+Before the fix, `TZ=UTC0 python tests/acceptance_scripts_contract.py` also
+failed on `timezone-free start` in the normal discovered zone loop. After
+the fix it printed `Acceptance scripts contract: OK`.
+
 ### The showcase script keeps host values off the take
 
 `problems/showcase-demo-showed-host-values-on-camera.md` and

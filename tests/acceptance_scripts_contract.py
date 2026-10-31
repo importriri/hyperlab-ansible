@@ -412,9 +412,66 @@ def good_probe(identity, binary="b" * 64, exe=None, pid="918", started="2026-10-
     lines += [f"stamp.{key}={value}" for key, value in want.items()]
     if binary:
         lines.append(f"stamp.binary_sha256={binary}")
-    lines += ["stamp.runtime_enabled=false", f"started={started}", f"no_usable_frame={stalls}",
-              f"capture_restarts={restarts}"]
+    lines += ["stamp.runtime_enabled=false", f"no_usable_frame={stalls}", f"capture_restarts={restarts}"]
+    if started is not None:
+        lines.append(f"started={started}")
     return "dev-01 | CHANGED | rc=0 >>\n" + "\n".join(lines) + "\n"
+
+
+# Independently specified instants: the first four starts are 1791318639,
+# 39 s after 2026-10-06T20:30:00Z (1791318600). Invalid starts use epoch 0
+# so an accidental local-time conversion cannot refuse them merely as stale.
+SENDER_TIMESTAMP_CASES = {
+    "managed offset": ("2026-10-06T22:30:39+02:00", 1791318600, True),
+    "UTC offset": ("2026-10-06T20:30:39+00:00", 1791318600, True),
+    "UTC Z": ("2026-10-06T20:30:39Z", 1791318600, True),
+    "negative offset": ("2026-10-06T10:30:39-10:00", 1791318600, True),
+    "inclusive boundary": ("2026-10-06T22:30:00+02:00", 1791318600, True),
+    "one second stale": ("2026-10-06T22:29:59+02:00", 1791318600, False),
+    "timezone-free start": ("2026-10-06T22:30:39", 0, False),
+    "date-only start": ("2026-10-06", 0, False),
+    "missing start": (None, 0, False),
+    "empty start": ("", 0, False),
+    "malformed start": ("not-a-timestamp", 0, False),
+}
+
+
+def check_sender_identity_timestamps() -> None:
+    identity = load_identity()
+    want = identity.expected()
+    for label, (started, since, accepted) in SENDER_TIMESTAMP_CASES.items():
+        probe = identity.parse(good_probe(identity, started=started))
+        findings = identity.judge(probe, want, since)
+        require(len(findings) == len(want) + 3 and all(ok for ok, _ in findings[:-1]),
+                f"{label}: a non-timestamp identity finding failed: {findings}")
+        require(findings[-1][0] is accepted,
+                f"{label}: expected timestamp verdict {accepted}: {findings[-1]}")
+
+
+def check_sender_identity_cli() -> None:
+    identity = load_identity()
+    with tempfile.TemporaryDirectory() as td:
+        probe_path = Path(td) / "probe.txt"
+        for label, (started, since, accepted) in SENDER_TIMESTAMP_CASES.items():
+            probe = good_probe(identity, started=started)
+            probe_path.write_bytes(probe.encode())
+            for transport in ("file", "stdin"):
+                argv = [sys.executable, str(DIR / "sender_identity.py"), "--since", str(since)]
+                if transport == "file":
+                    argv += ["--input", str(probe_path)]
+                result = subprocess.run(argv, input=probe if transport == "stdin" else None,
+                                        capture_output=True, text=True, check=False,
+                                        env=dict(os.environ), timeout=15)
+                context = f"{label} via {transport}"
+                require(result.returncode == (0 if accepted else 1),
+                        f"{context}: unexpected CLI exit {result.returncode}: {result.stdout} {result.stderr}")
+                require(not result.stderr and "Traceback" not in result.stdout,
+                        f"{context}: the CLI did not return ordinary findings: {result.stdout} {result.stderr}")
+                statuses = [line.split()[0] for line in result.stdout.splitlines()]
+                expected_statuses = ["ok"] * (len(identity.expected()) + 2)
+                expected_statuses.append("ok" if accepted else "WRONG")
+                require(statuses == expected_statuses,
+                        f"{context}: expected only the timestamp verdict to differ: {result.stdout}")
 
 
 def check_sender_identity() -> None:
@@ -481,6 +538,8 @@ def check_sender_identity_in_every_zone() -> None:
             require(shown == offset, f"TZ={zone} is not in effect: {shown}, not {offset}")
             try:
                 check_sender_identity()
+                check_sender_identity_timestamps()
+                check_sender_identity_cli()
             except AssertionError as error:
                 raise AssertionError(f"{error} (TZ={zone})") from error
     finally:
