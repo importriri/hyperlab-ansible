@@ -39,6 +39,16 @@ QtObject {
         "devices": ["usb"]
     })
 
+    property bool networksViewEnabled: false
+
+    onNetworksViewEnabledChanged: {
+        if (!surfaces.networksViewEnabled && surfaces.workspaceView === "controls"
+            && surfaces.subpage === "networks") {
+            surfaces.cancelConfirmation();
+            surfaces.subpage = surfaces.defaultSubpage("controls");
+        }
+    }
+
     property bool workspaceOpen: false
     property string workspaceView: "machines"
     property string subpage: "inventory"
@@ -110,6 +120,9 @@ QtObject {
     }
 
     function validSubpage(view, candidate) {
+        if (String(view) === "controls" && String(candidate) === "networks")
+            return surfaces.networksViewEnabled;
+
         const pages = surfaces.subpages[String(view)];
 
         if (pages === undefined)

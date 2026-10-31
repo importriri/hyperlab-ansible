@@ -43,10 +43,16 @@ ShellRoot {
 
     ShellState {
         id: sharedState
+
+        networksPageVisible: sharedSurfaces.workspaceOpen
+            && sharedSurfaces.workspaceView === "controls"
+            && sharedSurfaces.subpage === "networks"
     }
 
     ShellSurfaces {
         id: sharedSurfaces
+
+        networksViewEnabled: sharedState.networksViewEnabled
 
         // Where a keyboard or IPC request lands: the compositor's focused
         // output when it names a live screen, otherwise the first live

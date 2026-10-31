@@ -166,6 +166,12 @@
       Hyprland is preferred and Sway is the recovery compositor, but trust,
       themes, shell surfaces and product behavior must remain equivalent.
 
+- name: Validate the native Networks feature flag
+  ansible.builtin.assert:
+    that:
+      - host_desktop_common_networks_view_enabled is boolean
+    fail_msg: The native Networks feature flag must be a boolean.
+
 - name: Install the reviewed shared Quickshell runtime
   community.general.pacman:
     name: "{{ host_desktop_common_shell_stage.package }}"
@@ -206,6 +212,14 @@
   ansible.builtin.copy:
     src: quickshell/hyperlab/
     dest: "{{ host_desktop_common_shell_stage.config_root }}/"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the shared HyperLab runtime features
+  ansible.builtin.copy:
+    content: "{{ {'networks_view_enabled': host_desktop_common_networks_view_enabled} | to_json }}\n"
+    dest: "{{ host_desktop_common_shell_stage.config_root }}/features.json"
     owner: root
     group: root
     mode: "0644"

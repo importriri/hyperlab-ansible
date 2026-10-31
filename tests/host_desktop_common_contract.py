@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -20,11 +24,72 @@ def text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def check_networks_deployment(shared: dict) -> None:
+    flag = "host_desktop_common_networks_view_enabled"
+    require(shared.get(flag) is False, "Networks feature must default to boolean false")
+    tasks = yaml.safe_load(text("roles/host_desktop_common/tasks/main.yml"))
+    assertions = [task for task in tasks if flag + " is boolean" in
+                  task.get("ansible.builtin.assert", {}).get("that", [])]
+    require(len(assertions) == 1, "Networks flag needs one boolean validation")
+    copies = [task for task in tasks if task.get("ansible.builtin.copy", {})
+              .get("dest", "").endswith("/features.json")]
+    require(len(copies) == 1, "Networks feature document needs one installation")
+    copy = copies[0]["ansible.builtin.copy"]
+    require(copy["dest"] == "{{ host_desktop_common_shell_stage.config_root }}/features.json"
+            and copy["owner"] == "root" and copy["group"] == "root"
+            and copy["mode"] == "0644", "Networks feature document deployment changed")
+    first_install = next(i for i, task in enumerate(tasks)
+                         if "community.general.pacman" in task)
+    require(tasks.index(assertions[0]) < first_install,
+            "Networks flag validation must precede installation")
+    # Execute the actual assertion and copy content in a disposable local
+    # play. Only destination and ownership are adapted; no role is applied.
+    with tempfile.TemporaryDirectory(prefix="hyperlab-features-") as raw:
+        directory = Path(raw)
+        output = directory / "features.json"
+        task_copy = {key: value for key, value in copy.items()
+                     if key not in ("owner", "group")}
+        task_copy["dest"] = str(output)
+        play = directory / "features.yml"
+        play.write_text(yaml.safe_dump([{
+            "name": "Check feature document", "hosts": "localhost",
+            "gather_facts": False, "tasks": [assertions[0], {
+                "name": "Stage feature JSON", "ansible.builtin.copy": task_copy}]
+        }]))
+        for value in (False, True, "false", "true", 0, 1, None, [], {}):
+            output.unlink(missing_ok=True)
+            result = subprocess.run([
+                "ansible-playbook", "-i", "localhost,", "-c", "local", str(play),
+                "--extra-vars", json.dumps({flag: value})],
+                env={**os.environ, "ANSIBLE_NOCOLOR": "1"}, capture_output=True,
+                text=True, timeout=60, check=False)
+            if type(value) is bool:
+                require(result.returncode == 0 and output.is_file(),
+                        f"Networks boolean did not render: {value}: {result.stdout}")
+                document = json.loads(output.read_text())
+                require(document == {"networks_view_enabled": value}
+                        and type(document["networks_view_enabled"]) is bool
+                        and output.stat().st_mode & 0o777 == 0o644,
+                        f"Networks generated document differs: {document}")
+            else:
+                require(result.returncode != 0 and not output.exists(),
+                        f"Networks nonboolean reached installation: {value!r}")
+                marker = "FAILED! => "
+                require(marker in result.stdout,
+                        f"Networks refusal did not report its assertion: {result.stdout}")
+                failure, _ = json.JSONDecoder().raw_decode(result.stdout.split(marker, 1)[1])
+                require(failure.get("assertion") == flag + " is boolean"
+                        and failure.get("evaluated_to") is False,
+                        f"Networks refusal failed for an unrelated reason: {failure}")
+
+
 def main() -> int:
     graph = yaml.safe_load(text("group_vars/all/bricks.yml"))
     shared = yaml.safe_load(
         text("group_vars/all/host-desktop.yml")
     )
+
+    check_networks_deployment(shared)
 
     product = shared["host_desktop_common_product_contract"]
     trust = shared["host_desktop_common_trust_contract"]

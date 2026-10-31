@@ -276,7 +276,8 @@ One reusable dialog, owned by `ShellSurfaces`, living inside the workspace.
 
 ## Control Center
 
-Three sections, native, replacing the Rofi and GTK control routes entirely.
+Three standard sections and an optional read-only Networks section, native,
+replacing the Rofi and GTK control routes entirely.
 
 - **Session** — Lock and Suspend are immediate; Log out, Reboot and Power off
   go through confirmation, and the consequence text names how many machines
@@ -297,6 +298,86 @@ the Control Center itself, or a window focused after the click -- rather than
 on a captured target. They stay on `SUPER + F` / `SUPER + O` until a
 target-bound operation is reviewed, and the shell's action allowlist does not
 contain them.
+
+### Declared networks (opt-in)
+
+`host_desktop_common_networks_view_enabled` is a standalone boolean, default
+`false`. The common desktop role rejects any other type before installing
+anything and generates `/etc/xdg/quickshell/hyperlab/features.json`, owned by
+root:root with mode 0644, beneath the existing root-owned config directory:
+
+```json
+{"networks_view_enabled": false}
+```
+
+This small document contains only that boolean. Missing, unreadable,
+malformed, duplicate-key or nonboolean content disables the view. The running
+shell watches it: disabling withdraws the tab and returns an open Networks
+page to Session, invalidating pending observations. Installation starts or
+restarts no shell. The existing stage and recovery contracts still apply.
+
+When enabled, **Networks** shows every declared network from
+`hyperlabctl --json net list`: name, **Configured subnet**, **Configured
+forwarding**, and **Libvirt observation** (`active`, `inactive` or `missing`).
+Null configuration values read Unknown. Inactive and missing networks stay
+in the list; the CLI's numeric trust field is discarded. Configuration is
+intent, and an active libvirt network does not prove firewall rules, DNS
+separation, reachability, a VPN, a host trust claim or a GPU lease. Network
+isolation still needs its separate [flow checks](network-flows.md) and
+physical acceptance.
+
+`ShellState` owns the one read-only request through
+`privatestack-hyperlab network-inventory`, whose fixed command is exactly
+`hyperlabctl --json net list`. It reads on opening and on the existing
+30-second slow cadence only while that enabled page is visible. Only one
+process may be in flight. A 15-second completion deadline marks an unanswered
+or failed start unavailable and stops its owned process. Each flight keeps
+its request generation through cancellation; hiding, disabling and reopening
+cannot publish a previous flight's answer or overlap a retiring process.
+
+The complete array must validate before any row is published: object rows,
+unique valid names, the three known state words, nullable string subnet and
+forwarding fields, and bounded row/string lengths. There is no valid-prefix
+publication. A valid empty array says **No declared networks**; malformed
+JSON, an error object, a bad row, process failure or timeout says **Networks
+unavailable**. After the shared 90-second freshness boundary it says
+**Networks observation is stale** and withholds current rows. A fresh valid
+answer recovers. Read-only cards are reachable with Tab; the shared frame
+scrolls the focused card into view on a small window.
+
+Deploy the accepted candidate through the host deployment first, including
+the Sway-owned shared status bridge. Applying only `host-desktop-common.yml`
+updates the feature document and QML but does not install that bridge. Then
+explicit opt-in and restoration use the common role without changing the
+shell's activation policy:
+
+```bash
+ansible-playbook -K playbooks/host-desktop-common.yml --extra-vars '{"host_desktop_common_networks_view_enabled": true}'
+# Repeat the same command: changed=0 is required on the second pass.
+cat /etc/xdg/quickshell/hyperlab/features.json
+privatestack-hyperlab network-inventory
+hyperlabctl --json net list
+qs -c hyperlab ipc call workspace controls
+# Select Networks, compare the observations, use Tab and a small window.
+ansible-playbook -K playbooks/host-desktop-common.yml --extra-vars '{"host_desktop_common_networks_view_enabled": false}'
+# Repeat: changed=0; the Networks tab must disappear, including while open.
+```
+
+Software checks are discovered normally in
+`tests/host_desktop_common_contract.py`,
+`tests/host_quickshell_readonly_runtime_contract.py` and
+`tests/host_quickshell_runtime_contract.py`. They execute isolated Ansible
+assert/copy fixtures, the real bridge with a tracing inert CLI, and the real
+QML state, coordinator and presentation with inert transport. Require the
+Qt runtime explicitly with
+`HYPERLAB_REQUIRE_QML_RUNTIME=1 python tests/host_quickshell_runtime_contract.py`.
+The fixtures cover all three row states, empty/unavailable/stale/recovery,
+malformed and duplicate rows, failed starts, deadlines, late replies,
+disabling/reopening, keyboard focus and a small viewport. They do not prove
+installed Quickshell process ordering, compositor focus or network isolation.
+Nested default/opt-in convergence and physical acceptance on Nitro, then
+Predator with the same frozen commits, remain required. The native Nitro
+hardware view remains open.
 
 ## Diagnostics
 

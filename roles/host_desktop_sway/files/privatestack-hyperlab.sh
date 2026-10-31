@@ -34,6 +34,11 @@ once() {
             fallback "hyperlabctl Machine inventory failed"
             return 0
         fi
+    elif [[ ${field} == network-inventory ]]; then
+        if ! payload="$(${cli} --json net list 2>/dev/null)"; then
+            fallback "hyperlabctl network inventory failed"
+            return 0
+        fi
     elif [[ ${field} == diagnostics-domains ]]; then
         # Raw libvirt observation for Diagnostics. It never feeds the Machines
         # workspace: a domain is not a product Machine because it exists.

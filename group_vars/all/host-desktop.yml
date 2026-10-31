@@ -281,6 +281,10 @@ host_desktop_common_shell_stage:
     hyprland: quickshell
     sway: recovery
 
+# Read-only declared networks in Control Center. Installation never activates
+# the shell; the runtime document is watched by the existing session.
+host_desktop_common_networks_view_enabled: false
+
 # V447-C7 composition tokens.
 #
 # One reviewed geometry scale for every host surface. Hyprland consumes these

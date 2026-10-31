@@ -187,6 +187,145 @@ Scope {
         return out;
     }
 
+    // ------------------------------------------------------------ networks
+
+    property bool networksViewEnabled: false
+    // Injected once by the root, independent of presentation instances.
+    property bool networksPageVisible: false
+    readonly property bool networksReadable:
+        state.networksViewEnabled && state.networksPageVisible
+
+    readonly property int networksTimeoutMs: 15000
+    property int networksGeneration: 0
+    property int networksFlightGeneration: -1
+    property bool networksInFlight: false
+    property bool networksPending: false
+    property bool networksRefreshQueued: false
+    property string networksSourceState: "loading"
+    property real networksObservedAt: 0
+    property var networksObserved: []
+
+    readonly property string networksStatus: {
+        const health = state.sourceState(state.networksSourceState, state.networksObservedAt);
+        return health === "ok" ? (state.networksObserved.length ? "ready" : "empty") : health;
+    }
+    // Old rows never look current, including during a failure or after hiding.
+    readonly property var networksRows:
+        state.networksReadable && state.networksStatus === "ready"
+        ? state.networksObserved : []
+
+    function applyFeatures(raw) {
+        // This small document has one boolean. Reject duplicates, additional
+        // keys and nonbooleans as well as malformed or unreadable content.
+        const source = String(raw).trim();
+        const parsed = state.parseJson(source);
+        state.networksViewEnabled =
+            /^\{\s*"networks_view_enabled"\s*:\s*(true|false)\s*\}$/.test(source)
+            && parsed !== null && parsed.networks_view_enabled === true;
+    }
+
+    onNetworksReadableChanged: {
+        if (state.networksReadable) {
+            state.networksRefreshQueued = state.networksInFlight;
+            state.requestNetworks();
+        } else {
+            state.networksGeneration += 1;
+            state.networksPending = false;
+            state.networksRefreshQueued = false;
+            state.networksObserved = [];
+            state.networksObservedAt = 0;
+            state.networksSourceState = "loading";
+            // The generation is cancelled immediately; its process retains
+            // its own generation until exit, so reopening cannot reuse it.
+            if (networksProcess.running)
+                networksProcess.signal(9);
+        }
+    }
+
+    function requestNetworks() {
+        if (!state.networksReadable || state.networksInFlight)
+            return false;
+
+        state.networksGeneration += 1;
+        state.networksFlightGeneration = state.networksGeneration;
+        state.networksInFlight = true;
+        state.networksPending = true;
+        networksProcess.generation = state.networksFlightGeneration;
+        networksProcess.buffer = "";
+        networksDeadline.restart();
+        networksProcess.running = true;
+        return true;
+    }
+
+    function validNetworks(parsed) {
+        if (!Array.isArray(parsed) || parsed.length > 512)
+            return null;
+
+        const rows = [];
+        const names = [];
+        for (const row of parsed) {
+            if (row === null || typeof row !== "object" || Array.isArray(row)
+                || typeof row.name !== "string"
+                || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/.test(row.name)
+                || names.indexOf(row.name) >= 0
+                || ["active", "inactive", "missing"].indexOf(row.state) < 0
+                || !(row.subnet === null || (typeof row.subnet === "string"
+                    && row.subnet.length > 0 && row.subnet.length <= 128
+                    && !/[\x00-\x1f\x7f]/.test(row.subnet)))
+                || !(row.forward === null || (typeof row.forward === "string"
+                    && /^[a-z][a-z0-9-]{0,31}$/.test(row.forward))))
+                return null;
+
+            names.push(row.name);
+            rows.push({"name": row.name, "state": row.state,
+                       "subnet": row.subnet, "forward": row.forward});
+        }
+        return rows;
+    }
+
+    function finishNetworks(generation, raw, exitCode) {
+        // A retired runner can neither consume nor release a newer flight.
+        if (!state.networksInFlight || generation !== state.networksFlightGeneration)
+            return false;
+
+        const current = state.networksPending && state.networksReadable
+            && generation === state.networksGeneration;
+        state.networksPending = false;
+        state.networksInFlight = false;
+        networksDeadline.stop();
+        let accepted = false;
+        if (current) {
+            const rows = exitCode === 0 ? state.validNetworks(state.parseJson(raw)) : null;
+            state.networksObserved = rows === null ? [] : rows;
+            state.networksSourceState = rows === null ? "unavailable" : "ok";
+            state.networksObservedAt = rows === null ? 0 : Date.now();
+            accepted = rows !== null;
+        }
+        if (state.networksRefreshQueued && state.networksReadable) {
+            state.networksRefreshQueued = false;
+            state.requestNetworks();
+        }
+        return accepted;
+    }
+
+    function networksTimedOut() {
+        if (!state.networksInFlight)
+            return false;
+
+        state.networksPending = false;
+        if (state.networksReadable) {
+            state.networksSourceState = "unavailable";
+            state.networksObserved = [];
+            state.networksObservedAt = 0;
+        }
+        if (networksProcess.running)
+            networksProcess.signal(9);
+        else
+            // A failed start need not emit exited; it has the same deadline.
+            state.finishNetworks(state.networksFlightGeneration, "", -1);
+        return true;
+    }
+
     // ---------------------------------------------------------- compositor
 
     property var workspacePayload: ({
@@ -2197,6 +2336,7 @@ Scope {
         state.startPoll(vmProcess);
         state.startPoll(outsideDomainsProcess);
         state.startPoll(telemetryProcess);
+        state.requestNetworks();
     }
 
     function refreshTelemetry() {
@@ -2246,6 +2386,40 @@ Scope {
         state.applyWallpaperMode(wallpaperModeStateFile.text());
         state.applyRgbMode(rgbModeStateFile.text());
         state.applyReducedMotion(reducedMotionStateFile.text());
+    }
+
+    FileView {
+        id: featuresFile
+        path: "/etc/xdg/quickshell/hyperlab/features.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: {
+            state.applyFeatures("");
+            reload();
+        }
+        onLoadFailed: state.applyFeatures("")
+        onLoaded: state.applyFeatures(this.text())
+    }
+
+    Process {
+        id: networksProcess
+        // Immutable for the life of this flight, including cancellation.
+        property int generation: -1
+        property string buffer: ""
+        command: [state.statusBridge, "network-inventory"]
+        stdout: StdioCollector {
+            onStreamFinished: networksProcess.buffer = String(this.text)
+        }
+        onExited: (exitCode, exitStatus) => {
+            state.finishNetworks(networksProcess.generation, networksProcess.buffer, exitCode);
+        }
+    }
+
+    Timer {
+        id: networksDeadline
+        interval: state.networksTimeoutMs
+        repeat: false
+        onTriggered: state.networksTimedOut()
     }
 
     SystemClock {

@@ -149,6 +149,12 @@ def adapt_state(source: str) -> str:
     """Keep every truth rule; remove only the process and file transport."""
     source = source.replace("import Quickshell\nimport Quickshell.Io\n", "")
     source = source.replace("Scope {", "Item {", 1)
+    network_process = re.search(r"    Process \{\n        id: networksProcess\n.*?^    \}\n",
+                                source, re.M | re.S)
+    features_file = re.search(r"    FileView \{\n        id: featuresFile\n.*?^    \}\n",
+                              source, re.M | re.S)
+    network_deadline = re.search(r"    Timer \{\n        id: networksDeadline\n.*?^    \}\n",
+                                source, re.M | re.S)
     source = strip_blocks(source, "Process", "FileView", "SystemClock", "Timer")
     source = source.replace(
         "    readonly property alias clock: shellClock\n",
@@ -167,6 +173,63 @@ def adapt_state(source: str) -> str:
         "",
         source,
     )
+    if network_process and features_file and network_deadline:
+        process = network_process[0].replace("Process {", "QtObject {", 1)
+        process = process.replace("        id: networksProcess\n", """        id: networksProcess
+        property var command
+        property bool running: false
+        property QtObject stdout
+        property var launches: []
+        property var signals: []
+        signal exited(int code, int status)
+        function signal(number) { signals = signals.concat([number]); }
+        function complete(raw, code) {
+            stdout.text = raw;
+            stdout.streamFinished();
+            running = false;
+            exited(code, 0);
+        }
+        onRunningChanged: if (running) launches = launches.concat([command.slice()]);
+""")
+        process = process.replace("StdioCollector {", "QtObject {\n"
+                                  "            property string text: \"\"\n"
+                                  "            signal streamFinished()", 1)
+        features = features_file[0].replace("FileView {", "QtObject {", 1)
+        features = features.replace("        id: featuresFile\n", """        id: featuresFile
+        property string path
+        property bool watchChanges
+        property bool printErrors
+        property string contents: ""
+        signal fileChanged()
+        signal loadFailed()
+        signal loaded()
+        signal textChanged()
+        function reload() {}
+        function text() { return contents; }
+""")
+        sources = ""
+        for identifier in ("ramProcess", "gpuProcess", "vmProcess",
+                           "outsideDomainsProcess", "telemetryProcess"):
+            sources += ("    QtObject { id: " + identifier
+                        + "; property bool running: false; property real startedAt: 0 }\n")
+        source = source.replace("    id: state\n", "    id: state\n" + sources + process + features + """
+    QtObject { id: networksDeadline; function restart() {} function stop() {} }
+    readonly property var networkFixtureLaunches: networksProcess.launches
+    readonly property var networkFixtureSignals: networksProcess.signals
+    function networkFixtureComplete(raw, code) { networksProcess.complete(raw, code); }
+    function networkFixtureLoad(raw) { featuresFile.contents = raw; featuresFile.textChanged(); featuresFile.loaded(); }
+    function networkFixtureUnreadable() { featuresFile.loadFailed(); }
+    function networkFixtureChanged() { featuresFile.fileChanged(); }
+    function networkFixtureLoadedWithoutTextChange() { featuresFile.loaded(); }
+    function networkFixtureFailedStart() { networksProcess.running = false; }
+    readonly property int networkFixtureDeadline: networksDeadline.interval
+    readonly property string networkFixturePath: featuresFile.path
+    function networkFixtureTimeout() { networksDeadline.triggered(); }
+""", 1)
+        source = source.replace(
+            "    QtObject { id: networksDeadline; function restart() {} function stop() {} }",
+            network_deadline[0], 1,
+        )
     return source
 
 
@@ -283,6 +346,15 @@ Window {
         return null;
     }
 
+    function visibleText(item, text) {
+        if (!item || item.visible === false)
+            return false;
+        if (item.text !== undefined && String(item.text) === text)
+            return true;
+        const children = item.children || [];
+        return children.some(child => visibleText(child, text));
+    }
+
     Tokens { id: sharedTokens }
     Icons { id: sharedIcons }
 
@@ -301,6 +373,7 @@ Window {
     ShellSurfaces {
         id: sharedSurfaces
 
+        networksViewEnabled: sharedState.networksViewEnabled
         liveOutputs: ["eDP-1", "HDMI-A-1"]
         activeOutput: {
             const focused = sharedState.focusedOutput;
@@ -312,7 +385,13 @@ Window {
                     : "");
         }
     }
+    // Other executed contracts inject their objects beside this declaration.
     ShellState { id: sharedState }
+    readonly property bool networksFixturePageVisible: sharedSurfaces.workspaceOpen
+        && sharedSurfaces.workspaceView === "controls"
+        && sharedSurfaces.subpage === "networks"
+    onNetworksFixturePageVisibleChanged:
+        sharedState.networksPageVisible = networksFixturePageVisible
 
     // Transport fixtures. They record intent and perform nothing.
     QtObject {
@@ -915,6 +994,239 @@ def run(
         )
 
     print(f"  runtime scenario OK: {name}")
+
+
+NETWORK_ROWS = [
+    {"name": "fixture-up", "state": "active", "subnet": "192.0.2.0/26",
+     "forward": "nat", "trust": 3},
+    {"name": "fixture-down", "state": "inactive", "subnet": None,
+     "forward": None, "trust": None},
+    {"name": "fixture-absent", "state": "missing", "subnet": "198.51.100.0/24",
+     "forward": "isolated", "trust": 0},
+]
+
+NETWORKS_DISABLED = r"""
+            sharedSurfaces.openWorkspace("controls");
+            check(!sharedState.networksViewEnabled, "Networks starts enabled");
+            check(sharedState.networkFixtureDeadline === 15000,
+                  "Networks completion deadline differs from its documented bound");
+            check(sharedState.networkFixturePath === "/etc/xdg/quickshell/hyperlab/features.json",
+                  "Networks feature file path differs from deployment");
+            check(!sharedSurfaces.openSubpage("networks"), "disabled direct Networks navigation succeeded");
+            check(find(workspaceSurface, "section-networks") === null
+                  && find(workspaceSurface, "chip-networks") === null,
+                  "disabled Networks tab exists");
+            check(!sharedState.requestNetworks(), "disabled Networks read accepted");
+            check(sharedState.networkFixtureLaunches.length === 0,
+                  "disabled Networks page launched a request");
+            for (const raw of ["", "{", "null", "[]", '{}',
+                              '{"networks_view_enabled":"false"}',
+                              '{"networks_view_enabled":1}',
+                              '{"networks_view_enabled":null}',
+                              '{"networks_view_enabled":true,"networks_view_enabled":false}',
+                              '{"networks_view_enabled":false,"networks_view_enabled":true}',
+                              '{"networks_view_enabled":true,"extra":false}']) {
+                sharedState.applyFeatures('{"networks_view_enabled":true}');
+                sharedState.applyFeatures(raw);
+                check(!sharedState.networksViewEnabled, "invalid feature document enabled Networks");
+                check(!sharedSurfaces.openSubpage("networks"), "invalid feature permitted direct navigation");
+            }
+            sharedState.networkFixtureLoad('{"networks_view_enabled":true}');
+            sharedState.networkFixtureUnreadable();
+            check(!sharedState.networksViewEnabled, "unreadable feature document kept Networks enabled");
+            sharedState.networkFixtureLoad('{"networks_view_enabled":true}');
+            sharedState.networkFixtureChanged();
+            check(!sharedState.networksViewEnabled, "changed feature document kept cached enablement");
+            sharedState.networkFixtureLoadedWithoutTextChange();
+            check(sharedState.networksViewEnabled, "successful unchanged feature reload did not restore enablement");
+            sharedState.applyFeatures('{"networks_view_enabled":false}');
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            check(sharedSurfaces.subpage === "session", "disabled page opened by workspace navigation");
+            check(sharedState.networkFixtureLaunches.length === 0,
+                  "invalid features launched network inventory");
+"""
+
+NETWORKS = r"""
+            const rows = @@NETWORK_ROWS@@;
+            sharedState.applyFeatures('{"networks_view_enabled":true}');
+            check(sharedState.networksViewEnabled, "boolean true did not enable Networks");
+            check(sharedState.networkFixtureLaunches.length === 0,
+                  "enabled hidden Networks page polled");
+            sharedSurfaces.openWorkspace("controls");
+            check(sharedSurfaces.openSubpage("networks"), "enabled Networks navigation refused");
+            const generation = sharedState.networksFlightGeneration;
+            check(JSON.stringify(sharedState.networkFixtureLaunches[0])
+                  === JSON.stringify(["/usr/local/bin/privatestack-hyperlab", "network-inventory"]),
+                  "Networks transport command differs");
+            check(sharedState.networkFixtureLaunches.length === 1,
+                  "opening Networks did not request once");
+            sharedState.refreshSlowMetrics();
+            check(!sharedState.requestNetworks(), "overlapping Networks read accepted");
+            check(sharedState.networkFixtureLaunches.length === 1,
+                  "overlapping Networks process launched");
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksStatus === "ready", "valid Networks result rejected");
+            check(sharedState.networksRows.length === 3, "Networks row count changed");
+            check(sharedState.networksRows[1].state === "inactive",
+                  "inactive network normalized to active");
+            check(sharedState.networksRows[2].state === "missing",
+                  "missing network normalized to active");
+            check(!Object.prototype.hasOwnProperty.call(sharedState.networksRows[0], "trust"),
+                  "numeric network trust published for presentation");
+            // Allow repeaters and layout to settle before inspecting real labels.
+            settleTimer.callback = function() {
+                const sidebarTab = find(workspaceSurface, "section-networks");
+                const tab = sidebarTab && sidebarTab.visible ? sidebarTab
+                    : find(workspaceSurface, "chip-networks");
+                check(tab !== null && tab.visible, "enabled Networks tab invisible");
+                check(visibleText(workspaceSurface, "fixture-up")
+                      && visibleText(workspaceSurface, "fixture-down")
+                      && visibleText(workspaceSurface, "fixture-absent"),
+                      "Networks names not visible");
+                check(visibleText(workspaceSurface, "Libvirt observation: active")
+                      && visibleText(workspaceSurface, "Libvirt observation: inactive")
+                      && visibleText(workspaceSurface, "Libvirt observation: missing"),
+                      "Networks observed state labels changed");
+                check(visibleText(workspaceSurface, "Configured subnet: 192.0.2.0/26")
+                      && visibleText(workspaceSurface, "Configured forwarding: isolated")
+                      && visibleText(workspaceSurface, "Configured subnet: Unknown"),
+                      "Networks configuration labels changed");
+                check(visibleText(workspaceSurface, "Libvirt state does not prove firewall rules, DNS separation, reachability, VPN or host trust."),
+                      "Networks isolation limits not visible");
+                check(sharedState.networksRows[0].subnet === rows[0].subnet,
+                      "Networks configured subnet changed");
+                const page = find(workspaceSurface, "networks-page");
+                check(page && page.width > 0 && page.width <= workspaceSurface.width,
+                      "Networks page escapes small viewport");
+                tab.forceActiveFocus();
+                check(tab.activeFocus && tab.activeFocusOnTab, "Networks tab cannot take keyboard focus");
+                const next = tab.nextItemInFocusChain(true);
+                check(next && next !== tab, "Networks keyboard navigation is trapped");
+                const last = find(workspaceSurface, "network-row-fixture-absent");
+                check(last && last.activeFocusOnTab, "Network rows cannot be reached with Tab");
+                last.forceActiveFocus();
+                check(last.activeFocus, "Network row did not take keyboard focus");
+                const point = last.mapToItem(window.contentItem, 0, 0);
+                check(point.x >= 0 && point.x + last.width <= window.width
+                      && point.y >= 0 && point.y + last.height <= window.height,
+                      "focused Network row remains outside small viewport");
+                sharedSurfaces.openSubpage("session");
+                tab.activate();
+                check(sharedSurfaces.subpage === "networks", "Networks keyboard control failed to navigate");
+                sharedState.applyFeatures('{"networks_view_enabled":false}');
+                check(sharedSurfaces.subpage === "session", "disabling Networks failed to withdraw page");
+                check(!visibleText(workspaceSurface, "fixture-up"), "disabled Networks content stays visible");
+                Qt.exit(window.firstFailure < 0 ? 0 : 40 + window.firstFailure);
+            };
+            settleTimer.restart();
+            return;
+"""
+
+NETWORKS_FAILURES = r"""
+            const rows = @@NETWORK_ROWS@@;
+            sharedState.applyFeatures('{"networks_view_enabled":true}');
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            function answer(raw, code) {
+                if (!sharedState.networksInFlight)
+                    sharedState.requestNetworks();
+                sharedState.networkFixtureComplete(raw, code);
+                return sharedState.networksStatus === "ready" || sharedState.networksStatus === "empty";
+            }
+            check(answer("[]", 0), "empty network array rejected");
+            check(sharedState.networksStatus === "empty", "empty network array not explicitly empty");
+            check(visibleText(workspaceSurface, "No declared networks"), "empty Networks label missing");
+            for (const raw of ["", "{", "null", '{}', '{"class":"error"}',
+                              JSON.stringify([rows[0], rows[0]]),
+                              JSON.stringify([rows[0], null]),
+                              JSON.stringify([rows[0], []]),
+                              JSON.stringify([rows[0], Object.assign({}, rows[1], {state: "up"})]),
+                              JSON.stringify([rows[0], Object.assign({}, rows[1], {name: "../bad"})]),
+                              JSON.stringify([rows[0], Object.assign({}, rows[1], {subnet: 3})]),
+                              JSON.stringify([rows[0], Object.assign({}, rows[1], {forward: false})]),
+                              JSON.stringify([rows[0], {name: "bad", state: "active"}]),
+                              JSON.stringify([Object.assign({}, rows[0], {subnet: "bad\nvalue"})]),
+                              JSON.stringify([Object.assign({}, rows[0], {subnet: ""})]),
+                              JSON.stringify([Object.assign({}, rows[0], {subnet: "x".repeat(129)})]),
+                              JSON.stringify([Object.assign({}, rows[0], {forward: "bad value"})]),
+                              JSON.stringify([Object.assign({}, rows[0], {forward: "x".repeat(33)})]),
+                              JSON.stringify([Object.assign({}, rows[0], {name: "x".repeat(64)})]),
+                              JSON.stringify(Array.from({length: 513}, (_, index) =>
+                                  Object.assign({}, rows[0], {name: "net-" + index})))]) {
+                check(!answer(raw, 0), "malformed Networks inventory accepted");
+                check(sharedState.networksStatus === "unavailable" && sharedState.networksRows.length === 0,
+                      "bad Networks inventory published an empty result or valid prefix");
+                check(visibleText(workspaceSurface, "Networks unavailable"),
+                      "unavailable Networks label missing");
+                check(answer(JSON.stringify(rows), 0), "Networks did not recover after malformed result");
+            }
+            check(!answer(JSON.stringify(rows), 1) && sharedState.networksStatus === "unavailable",
+                  "failed Networks process published rows");
+            check(answer(JSON.stringify(rows), 0), "Networks process failure did not recover");
+            sharedState.observationNow = sharedState.networksObservedAt + 90000;
+            check(sharedState.networksStatus === "ready", "Networks expired before shared freshness boundary");
+            sharedState.observationNow = sharedState.networksObservedAt + 90001;
+            check(sharedState.networksStatus === "stale" && sharedState.networksRows.length === 0,
+                  "stale Networks observation appears current");
+            check(visibleText(workspaceSurface, "Networks observation is stale"),
+                  "stale Networks label missing");
+            sharedState.observationNow = Date.now();
+            check(answer(JSON.stringify(rows), 0) && sharedState.networksStatus === "ready",
+                  "fresh Networks answer did not recover from stale");
+            sharedState.requestNetworks();
+            sharedState.networkFixtureTimeout();
+            check(sharedState.networksStatus === "unavailable", "Networks timeout did not become unavailable");
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksStatus === "unavailable",
+                  "late answer after Networks timeout was published");
+            check(sharedState.networkFixtureSignals.indexOf(9) >= 0,
+                  "Networks timeout did not stop its owned process");
+            check(answer(JSON.stringify(rows), 0), "Networks timeout did not recover");
+            sharedState.refreshSlowMetrics();
+            check(sharedState.networksInFlight, "slow cadence failed to request visible Networks");
+            sharedState.networkFixtureFailedStart();
+            sharedState.networkFixtureTimeout();
+            check(sharedState.networksStatus === "unavailable" && !sharedState.networksInFlight,
+                  "Networks failed start did not settle within its deadline");
+            check(answer(JSON.stringify(rows), 0), "Networks failed start did not recover");
+"""
+
+NETWORKS_LATE = r"""
+            const rows = @@NETWORK_ROWS@@;
+            sharedState.applyFeatures('{"networks_view_enabled":true}');
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            const old = sharedState.networksFlightGeneration;
+            sharedSurfaces.closeWorkspace();
+            check(!sharedState.networksPending, "hiding Networks kept a pending observation");
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            check(sharedState.networkFixtureLaunches.length === 1,
+                  "reopening Networks overlapped a retiring process");
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksRows.length === 0,
+                  "hidden Networks answer published on reopen");
+            const next = sharedState.networksFlightGeneration;
+            check(next !== old && sharedState.networkFixtureLaunches.length === 2,
+                  "reopened Networks did not launch a new generation");
+            check(!sharedState.finishNetworks(old, JSON.stringify(rows), 0),
+                  "old Networks generation replaced outstanding new request");
+            check(sharedState.networksPending && sharedState.networksRows.length === 0,
+                  "old Networks answer consumed the new request");
+            sharedState.applyFeatures('{"networks_view_enabled":false}');
+            check(sharedSurfaces.subpage === "session", "disabled Networks subpage retained");
+            sharedState.applyFeatures('{"networks_view_enabled":true}');
+            sharedSurfaces.openSubpage("networks");
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksRows.length === 0,
+                  "disabled and re-enabled Networks accepted late answer");
+            const current = sharedState.networksFlightGeneration;
+            check(current !== next, "Networks disable/re-enable reused request generation");
+            check(sharedState.finishNetworks(current, JSON.stringify(rows), 0)
+                  && sharedState.networksStatus === "ready", "current Networks reply did not recover");
+            sharedSurfaces.openSubpage("audio");
+            const launches = sharedState.networkFixtureLaunches.length;
+            sharedState.refreshSlowMetrics();
+            check(!sharedState.requestNetworks() && sharedState.networkFixtureLaunches.length === launches,
+                  "hidden Networks page polled");
+"""
 
 
 IDLE = """
@@ -2762,6 +3074,10 @@ MACHINE_DIAGNOSTICS = r'''
 
 
 ROOT_WIRING = (
+    "networksViewEnabled: sharedState.networksViewEnabled",
+    "networksPageVisible: sharedSurfaces.workspaceOpen",
+    '&& sharedSurfaces.workspaceView === "controls"',
+    '&& sharedSurfaces.subpage === "networks"',
     "activeOutput: {",
     "const focused = sharedState.focusedOutput;",
     "liveOutputs: Quickshell.screens.map(screen => String(screen.name))",
@@ -2819,6 +3135,15 @@ def main() -> int:
         populated = machines(6)
 
         cases = [
+            ("networks-disabled", 800, 600, populated, NETWORKS_DISABLED),
+            ("networks", 1920, 1080, populated,
+             NETWORKS.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
+            ("networks-small", 800, 600, populated,
+             NETWORKS.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
+            ("networks-failures", 800, 600, populated,
+             NETWORKS_FAILURES.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
+            ("networks-late", 800, 600, populated,
+             NETWORKS_LATE.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
             ("idle", 1920, 1080, populated, IDLE),
             ("destinations", 1920, 1080, populated, DESTINATIONS),
             ("selection", 1920, 1080, populated, SELECTION),

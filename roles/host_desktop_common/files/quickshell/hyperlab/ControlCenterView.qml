@@ -1,7 +1,8 @@
 // HyperLab Control Center (V447-C9.3).
 //
 // The host's own settings, native, in three sections an operator can name:
-// Session, Audio and network, Input and appearance. It replaces the old Rofi
+// Session, Audio and network, Input and appearance; an opt-in read-only
+// Networks page shows declared configuration and libvirt state. It replaces the old Rofi
 // and GTK control routes entirely — nothing here opens a legacy surface —
 // and it uses the same rows, cards and confirmation as the rest of the
 // product.
@@ -33,7 +34,8 @@ Item {
         { "id": "session", "label": "Session" },
         { "id": "audio", "label": "Audio and network" },
         { "id": "appearance", "label": "Input and appearance" }
-    ]
+    ].concat(view.shellState.networksViewEnabled
+             ? [{ "id": "networks", "label": "Networks" }] : [])
 
     readonly property string section: view.shellSurfaces.subpage
 
@@ -110,6 +112,97 @@ Item {
         Column {
             width: frame.bodyWidth
             spacing: view.tokens.spaceLg
+
+            Column {
+                objectName: "networks-page"
+                width: parent.width
+                spacing: view.tokens.spaceMd
+                visible: view.section === "networks" && view.shellState.networksViewEnabled
+
+                SectionHeader {
+                    width: parent.width
+                    tokens: view.tokens
+                    theme: view.theme
+                    label: "Declared networks"
+                    description: "Configured policy and observed libvirt state"
+                }
+                ShellLabel {
+                    width: parent.width
+                    tokens: view.tokens
+                    role: "body"
+                    wrapMode: Text.WordWrap
+                    text: "Libvirt state does not prove firewall rules, DNS separation, reachability, VPN or host trust."
+                    color: view.theme.textSecondary
+                }
+                EmptyState {
+                    width: parent.width
+                    visible: view.shellState.networksStatus !== "ready"
+                    tokens: view.tokens
+                    theme: view.theme
+                    kind: view.shellState.networksStatus === "unavailable" ? "unavailable" : "loading"
+                    title: {
+                        switch (view.shellState.networksStatus) {
+                        case "empty": return "No declared networks";
+                        case "unavailable": return "Networks unavailable";
+                        case "stale": return "Networks observation is stale";
+                        default: return "Reading declared networks";
+                        }
+                    }
+                    description: view.shellState.networksStatus === "empty"
+                        ? "The inventory returned an empty list."
+                        : "Only a fresh, valid inventory can show network state."
+                }
+                Repeater {
+                    model: view.shellState.networksRows
+                    delegate: ShellCard {
+                        required property var modelData
+                        objectName: "network-row-" + modelData.name
+                        width: parent.width
+                        activeFocusOnTab: true
+                        accessibleName: modelData.name + ". Configured subnet: "
+                            + (modelData.subnet === null ? "Unknown" : modelData.subnet)
+                            + ". Configured forwarding: "
+                            + (modelData.forward === null ? "Unknown" : modelData.forward)
+                            + ". Libvirt observation: " + modelData.state
+                        tokens: view.tokens
+                        theme: view.theme
+                        Column {
+                            width: parent.width
+                            spacing: view.tokens.spaceSm
+                            ShellLabel {
+                                width: parent.width
+                                tokens: view.tokens
+                                role: "section"
+                                text: modelData.name
+                                color: view.theme.textPrimary
+                            }
+                            ShellLabel {
+                                width: parent.width
+                                tokens: view.tokens
+                                role: "body"
+                                wrapMode: Text.WordWrap
+                                text: "Configured subnet: " + (modelData.subnet === null ? "Unknown" : modelData.subnet)
+                                color: view.theme.textSecondary
+                            }
+                            ShellLabel {
+                                width: parent.width
+                                tokens: view.tokens
+                                role: "body"
+                                wrapMode: Text.WordWrap
+                                text: "Configured forwarding: " + (modelData.forward === null ? "Unknown" : modelData.forward)
+                                color: view.theme.textSecondary
+                            }
+                            ShellLabel {
+                                width: parent.width
+                                tokens: view.tokens
+                                role: "body"
+                                text: "Libvirt observation: " + modelData.state
+                                color: view.theme.textPrimary
+                            }
+                        }
+                    }
+                }
+            }
 
             // ------------------------------------------------- Session
 
