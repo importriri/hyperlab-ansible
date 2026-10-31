@@ -2362,3 +2362,64 @@ the Ansible tasks or prove convergence of installed boot files.
   prefixed explanation. Red: `the tool emitted a traceback while refusing
   fmask=0000, which lets everyone write a boot entry: rc=2 stdout=''`, with
   both the diagnostic and traceback header in actual stderr. Restored: green.
+
+### Native Networks stays gated, read-only and observational
+
+The deployment contract executes the role's actual boolean assertion and copy
+content against a disposable destination, parsing the generated JSON. The
+read-only runtime contract executes the real bridge in a disposable copy with
+an inert tracing CLI. The offscreen runtime contract instantiates the real
+state, coordinator, Control Center and shared frame; its Networks scenarios
+keep production completion and feature-file handlers with inert transport.
+The real deadline Timer remains instantiated; timeout scenarios emit its
+triggered signal without waiting for the interval.
+Each source was copied before breaking it, restored from that copy and the
+same predicted check rerun. All reds below were behavioral or deployment
+assertions, with no syntax error or missing tool.
+
+| Mutation | Check | Observed red assertion |
+| --- | --- | --- |
+| M1: Default on | `host_desktop_common_contract.py` | Networks feature must default to boolean false |
+| M2: Accept string false as enabled | QML Networks disabled-page | invalid feature document enabled Networks |
+| M3: Remove navigation gate | QML Networks disabled-page | disabled direct Networks navigation succeeded |
+| M4: Normalize inactive to active | QML Networks rows/small viewport | inactive network normalized to active |
+| M5: Normalize missing to active | QML Networks rows/small viewport | missing network normalized to active |
+| M6: Treat error object as empty | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M7: Publish valid prefix of duplicate or bad row | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M8: Remove freshness guard | QML Networks failures/freshness | stale Networks observation appears current |
+| M9b: Remove flight-generation admission guard | QML Networks late-answer | old Networks answer consumed the new request |
+| M10: Start network instead of listing | `host_quickshell_readonly_runtime_contract.py` | network inventory exact read-only argv changed: [['net', 'start', 'lab']] |
+| M11: Remove single flight admission guard | QML Networks rows/small viewport | overlapping Networks read accepted |
+| M12: Leave timed-out request current | QML Networks failures/freshness | late answer after Networks timeout was published |
+| M13: Remove array bound | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M14: Remove typed subnet check | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M15: Remove typed forwarding check | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M16: Make read-only cards unreachable with Tab | QML Networks rows/small viewport | Network rows cannot be reached with Tab |
+| M17: Serialize a string instead of a boolean | `host_desktop_common_contract.py` | Networks generated document differs: {'networks_view_enabled': 'False'} |
+| M18: Change installed feature mode | `host_desktop_common_contract.py` | Networks feature document deployment changed |
+| M19: Accept duplicate or extra feature keys | QML Networks disabled-page | invalid feature document enabled Networks |
+| M20: Remove subnet length bound | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M21: Remove forwarding length bound | QML Networks failures/freshness | malformed Networks inventory accepted |
+| M22: Ignore a successful unchanged feature reload | QML Networks disabled-page | successful unchanged feature reload did not restore enablement |
+| M23: Remove the keyboard session watcher | `host_quickshell_workspace_theme_contract.py` | session FileView watcher policy changed |
+| M24: Remove the feature document watcher | `host_quickshell_workspace_theme_contract.py` | session FileView watcher policy changed |
+| M25: Add an appearance theme watcher | `host_quickshell_workspace_theme_contract.py` | session FileView watcher policy changed |
+| M26: Remove the feature document path | QML Networks disabled-page | Networks feature file path differs from deployment |
+| M27: Disconnect the request completion deadline | QML Networks failures/deadline | Networks timeout did not become unavailable |
+| M28: Extend the documented completion deadline | QML Networks disabled-page | Networks completion deadline differs from its documented bound |
+
+Every row above was red and then restored green (exit 0). M9b is the
+flight-generation admission guard: an old callback must not consume a newer
+request even when it cannot publish its own rows.
+
+One additional mutation, M9, **stayed green**: removing only the second
+`generation === state.networksGeneration` comparison in `finishNetworks`.
+The late-answer scenario still passed because hiding had already cleared
+`networksPending`, and the flight-generation admission guard still rejected
+callbacks belonging to a different runner. The comparison was restored and
+the same scenario passed again. This redundant guard's survival is recorded;
+M9b independently proved the essential correlation boundary.
+
+The bridge's M10 mutation executed only the inert CLI. Its recorded argv was
+`["net", "start", "lab"]`; the contract required exactly
+`["--json", "net", "list"]`. No real network action was invoked.
