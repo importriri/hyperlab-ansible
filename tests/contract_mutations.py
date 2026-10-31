@@ -12,6 +12,7 @@ from typing import Callable
 
 import yaml
 
+import guest_access_close_contract as access
 from ci_verify_parity_contract import collect_errors as parity_errors
 from static_contract import collect_errors
 from verify_render_selection_contract import collect_errors as render_selection_errors
@@ -291,6 +292,127 @@ class ContractMutationTests(unittest.TestCase):
                 "runtime guest inventory must disable SSH pseudo-TTY allocation",
                 output,
             )
+
+
+class GuestAccessConditionMutationTests(unittest.TestCase):
+    """The discovered access contract and these tests share one evaluator."""
+
+    @staticmethod
+    def mutate_task(root: Path, group: str, change: Callable[[dict], None]) -> None:
+        relative = access.ROLE_TASKS if group == "sudo" else access.PLAYBOOK
+        path = root / relative
+        data = yaml.safe_load(path.read_text())
+        if group == "sudo":
+            block = access.named_task(data, "End passwordless sudo once the account has a password")
+            task = access.named_task(block["block"], access.SUDO_NAME)
+        else:
+            play = access.named_task(data, "Prove the agent restriction from the host")
+            task = access.named_task(play["tasks"], access.EXEC_NAME if group == "guest-exec" else access.PIN_NAME)
+        change(task)
+        path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+    def assert_input_rejected(self, change: Callable[[Path], None], expected: str) -> None:
+        with tempfile.TemporaryDirectory(prefix="hyperlab-access-input-") as tmp:
+            root = Path(tmp)
+            for relative in (access.PLAYBOOK, access.ROLE_TASKS):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, target)
+            self.assertEqual([], access.collect_condition_errors(root))
+            change(root)
+            errors = access.collect_condition_errors(root)
+            self.assertTrue(any(expected in error for error in errors),
+                            f"expected {expected!r}; got {errors}")
+        self.assertEqual([], access.collect_condition_errors(ROOT))
+
+    def test_baseline_is_green(self) -> None:
+        self.assertEqual([], access.collect_condition_errors(ROOT))
+
+    def test_guest_exec_or_changed_to_and(self) -> None:
+        access.check_condition_mutations(ROOT, "or to and")
+
+    def test_guest_exec_constant_false(self) -> None:
+        access.check_condition_mutations(ROOT, "constant false")
+
+    def test_guest_exec_omits_stderr(self) -> None:
+        access.check_condition_mutations(ROOT, "omitted stderr")
+
+    def test_guest_exec_constant_true(self) -> None:
+        access.check_condition_mutations(ROOT, "constant true")
+
+    def test_sudo_comparison_reversed(self) -> None:
+        access.check_condition_mutations(ROOT, "reversed sudo")
+
+    def test_pinned_lookup_rc_omitted(self) -> None:
+        access.check_condition_mutations(ROOT, "omitted lookup rc")
+
+    def test_missing_or_duplicate_named_task_is_rejected(self) -> None:
+        for group in ("guest-exec", "sudo", "pinned key"):
+            with self.subTest(group=group, mutation="missing"):
+                self.assert_input_rejected(
+                    lambda root, group=group: self.mutate_task(root, group, lambda task: task.pop("name")),
+                    "expected exactly one named task, got 0",
+                )
+        for relative, name in ((access.PLAYBOOK, access.EXEC_NAME), (access.ROLE_TASKS, access.SUDO_NAME)):
+            def duplicate(root: Path, relative: Path = relative, name: str = name) -> None:
+                path = root / relative
+                data = yaml.safe_load(path.read_text())
+                if relative == access.PLAYBOOK:
+                    tasks = data[1]["tasks"]
+                else:
+                    tasks = access.named_task(data, "End passwordless sudo once the account has a password")["block"]
+                tasks.append(dict(access.named_task(tasks, name)))
+                path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+            with self.subTest(name=name, mutation="duplicate"):
+                self.assert_input_rejected(duplicate, "expected exactly one named task, got 2")
+
+    def test_missing_guard_or_registered_result_is_rejected(self) -> None:
+        for group in ("guest-exec", "sudo", "pinned key"):
+            for field, expected in (("failed_when", "missing failed_when"), ("register", "registered result changed")):
+                with self.subTest(group=group, field=field):
+                    self.assert_input_rejected(
+                        lambda root, group=group, field=field: self.mutate_task(root, group, lambda task: task.pop(field)), expected,
+                    )
+
+    def test_malformed_guard_is_rejected(self) -> None:
+        for guard in (None, "", [], {"condition": False}):
+            with self.subTest(guard=guard):
+                self.assert_input_rejected(
+                    lambda root, guard=guard: self.mutate_task(root, "guest-exec", lambda task: task.update(failed_when=guard)),
+                    "malformed failed_when",
+                )
+
+    def test_evaluation_error_does_not_pass_valid_controls(self) -> None:
+        self.assert_input_rejected(
+            lambda root: self.mutate_task(root, "pinned key", lambda task: task.update(failed_when="(")),
+            "pinned key / matching key: Ansible rejected a valid control",
+        )
+
+    def test_missing_unreadable_or_redirected_input_is_rejected(self) -> None:
+        for relative in (access.PLAYBOOK, access.ROLE_TASKS):
+            with self.subTest(relative=relative, mutation="missing"):
+                self.assert_input_rejected(lambda root, relative=relative: (root / relative).unlink(), "condition input rejected")
+            with self.subTest(relative=relative, mutation="unreadable"):
+                self.assert_input_rejected(lambda root, relative=relative: (root / relative).chmod(0), "readable regular file")
+            with self.subTest(relative=relative, mutation="redirected"):
+                def redirect(root: Path, relative: Path = relative) -> None:
+                    path = root / relative
+                    target = path.with_suffix(".original")
+                    path.rename(target)
+                    path.symlink_to(target.name)
+
+                self.assert_input_rejected(redirect, "must not be redirected")
+
+    def test_duplicate_yaml_guard_is_rejected(self) -> None:
+        def duplicate(root: Path) -> None:
+            path = root / access.PLAYBOOK
+            source = path.read_text()
+            marker = "      failed_when: >-\n"
+            self.assertEqual(source.count(marker), 2)
+            path.write_text(source.replace(marker, "      failed_when: false\n" + marker, 1))
+
+        self.assert_input_rejected(duplicate, "duplicate YAML key 'failed_when'")
 
 
 class CiVerifyParityMutationTests(unittest.TestCase):

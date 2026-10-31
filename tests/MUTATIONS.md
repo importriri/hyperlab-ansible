@@ -1494,3 +1494,66 @@ turned the full documentation contract red with the diagnostics above;
 restoring each file from its saved copy, checking identical bytes, and
 rerunning the contract was green. Neither mutation stayed green. These
 formatting checks add no observation or hardware evidence.
+
+### Guest-access refusal uses the actual Ansible conditions
+
+`python tests/guest_access_close_contract.py` evaluates the real named tasks'
+`failed_when` with Ansible's `Templar.evaluate_conditional`, using independent
+registered-result fixtures. Only playbook source is trusted as a template;
+fixture results remain data. The twenty rows cover guest-exec (including mixed
+case and disabled text only in stdout), sudo and the pinned host key. A valid
+control must return the expected boolean; missing, truncated or null key data
+must instead raise an explicit Ansible error. An evaluation error on a valid
+control is a failure, not a refusal control passing.
+
+That discovered contract also runs the six mutations below on temporary copies
+of the actual YAML inputs. Clean controls pass before and after each break;
+the temporary input is restored from its saved bytes, and the production bytes
+must remain identical. `python tests/contract_mutations.py
+GuestAccessConditionMutationTests` replays them individually with the same
+evaluator. Append the method name below to select one test.
+
+| Test method | Break in temporary YAML | Observed red assertion |
+| --- | --- | --- |
+| `test_guest_exec_or_changed_to_and` | Replace the guest-exec `or` with `and`. | `guest-exec / successful execution with disabled stderr: expected refusal, got success` and `guest-exec / unavailable agent: expected refusal, got success` |
+| `test_guest_exec_constant_false` | Set the guest-exec condition to YAML `false`. | `guest-exec / successful execution: expected refusal, got success` and the unavailable-agent row |
+| `test_guest_exec_omits_stderr` | Keep only the guest-exec rc comparison. | `guest-exec / unavailable agent: expected refusal, got success` |
+| `test_guest_exec_constant_true` | Set the guest-exec condition to YAML `true`. | `guest-exec / disabled stderr: expected success, got refusal` (also the mixed-case row) |
+| `test_sudo_comparison_reversed` | Reverse the sudo rc equality. | `sudo / passwordless success: expected refusal, got success` and `sudo / password required: expected success, got refusal` |
+| `test_pinned_lookup_rc_omitted` | Remove the pinned-key lookup rc term. | `pinned key / failed lookup with matching output: expected refusal, got success` |
+
+The or-to-and regression was first observed red against the old contract:
+`AssertionError not raised`. The old substring oracle accepted that weakened
+input. After replacing only the condition oracles, every listed mutation was
+also made in a separate temporary checkout and checked by
+`python tests/guest_access_close_contract.py`: exit 1 at the rows above, then
+`Guest access close contract: OK` after restoring the saved copy. No mutation
+stayed green. Both false success and false refusal are tested.
+
+A further manual break kept only the pinned-key rc comparison. It was red
+for `pinned key / mismatched key: expected refusal, got success` and for
+`pinned key / missing host-key stdout: expected Ansible rejection, got False`
+(also the truncated, null and malformed key-result rows). Restoring the saved
+YAML made the contract green. A boolean success cannot replace rejection of
+unusable key data.
+
+The same mutation class refuses missing or duplicated named tasks, missing
+guards or registers, empty or malformed guards, expression evaluation errors,
+missing or unreadable input files, symlinks and duplicate YAML guard keys.
+Manual breaks were also observed red for each of these kinds of input, then
+restored green. The diagnostics were respectively `expected exactly one named
+task, got 0` or `got 2`, `missing failed_when`, `registered result changed`,
+`malformed failed_when`, `Ansible rejected a valid control`, `condition input
+rejected`, `readable regular file`, `must not be redirected` and `duplicate
+YAML key 'failed_when'`.
+
+The existing policy and order checks remain. Separate temporary-copy breaks
+of the password-bearing-account guard, visudo validation and become after
+NOPASSWD removal were observed red at `NOPASSWD is removed even when the
+account has no password`, `the password rule is not validated before NOPASSWD
+goes` and `a task after the NOPASSWD removal still needs passwordless become`;
+each restored control was green. Preserve literal multiline configuration
+strings when serializing these manual fixtures: changing their YAML quoting
+can trip an older configuration text check before the intended order check.
+This condition proof does not retire other source-text checks, observe live
+access or close the disposable Machine's later boots.

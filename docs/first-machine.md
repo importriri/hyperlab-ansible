@@ -109,6 +109,17 @@ later profile passes need `-K` and the Machine account's password. The step
 proves from the host that `guest-exec` is refused and that the host key read
 through the agent is still the pinned one.
 
+`python tests/guest_access_close_contract.py` software-verifies the actual
+Ansible `failed_when` conditions against independent result fixtures, and
+checks that weakened conditions in temporary YAML copies fail those controls.
+Successful execution, an unavailable agent, a timeout, unrelated errors and
+`disabled` only in stdout must all fail the closure proof; only a nonzero
+result with `disabled` in stderr passes it. The sudo and pinned-key controls
+include both success and refusal, and malformed key results require explicit
+Ansible rejection. These tests run no guest command. The real step still
+needs an answering agent, the specifically disabled response and a re-read
+host key matching the pin; fixture results are no observation of a Machine.
+
 The inventory step also reads the new Machine's SSH host key through QEMU
 Guest Agent and pins it in `~/.ssh/known_hosts` for its address, so the
 strict SSH check never trusts a key shown on the network.
@@ -148,6 +159,9 @@ wrote works with strict checking too.
 wrote whenever it stops ([ADR 0018](adr/0018-disposable-discards-on-stop.md)).
 Every start is a first boot with new SSH host keys, so run the inventory
 step again after each start to pin the new key.
+The managed start does not yet restore the agent restriction or re-pin the
+key. The software condition proof above does not close that gap: disposable
+access closure after repeated boots remains open in ADR 0018.
 
 ## 4. Looking at it
 

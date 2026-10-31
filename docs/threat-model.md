@@ -34,13 +34,25 @@ not provide.
 | A dirtier workload running on the GPU before a cleaner one in the same boot | the qemu hook enforces the ladder clean → dev → dirty → lab; services use a reviewed class | [ADR 0022](adr/0022-network-trust-and-gpu-policy.md), `tests/hook.bats` |
 | A changed or unsealed image becoming a Machine | sealed images are pinned by digest and receipt and verified at every use | `tests/sealed_base_use_contract.py` |
 | Trusting an SSH host key shown on the network | the first key is read through the QEMU Guest Agent and pinned | `tools/guest_host_key.py` |
-| A guest running commands through the guest agent | after provisioning the agent answers only the calls HyperLab uses; `guest-exec` is refused and proven refused | `tests/guest_access_close_contract.py` |
+| A guest running commands through the guest agent | provisioning ends by restricting the agent and checking that `guest-exec` is specifically disabled | `tests/guest_access_close_contract.py` software-verifies the real Ansible conditions on fixtures; the live proof is still required |
 | Data leaving or entering a guest silently | no SPICE agent channel, no shared folders, no USB devices or redirection, no SPICE file transfer; host-to-guest clipboard is one explicit action to one Machine | `tests/media_input_contract.py`, [ADR 0020](adr/0020-host-to-guest-clipboard.md) |
 | A guest's display and input reachable from the network | SPICE listens only on a UNIX socket or loopback; the domain XML guard refuses any display server elsewhere, and any second one | `tests/graphics_exposure_contract.py` |
 | A guest listening to the room | guests have a playback-only sound card and the Looking Glass client denies the microphone | `tests/media_input_contract.py` |
 | A product Machine captured into a Golden Image | the Workbench refuses a domain with a Machine projection | `tests/workbench_contract.py` |
 | A Template offering what its class forbids | the review gate at catalogue load and in CI | [ADR 0029](adr/0029-template-review-gate.md) |
 | Guest data on an unencrypted disk | the VM store must be a dm-crypt mapping; host swap must be zram or dm-crypt | `tests/bootstrap_storage_contract.py`, `tests/host_swap_contract.py` |
+
+The guest-access contract evaluates the playbook's actual `failed_when`
+conditions with Ansible, using independent guest-exec, sudo and pinned-key
+results. Both success and refusal controls must evaluate correctly; missing
+or malformed key results must be explicitly rejected by Ansible. Normal
+contract discovery also tries weakened conditions in isolated YAML copies.
+This proves refusal logic in software, not a guest's access state: the live
+closure step must observe an available agent, guest-exec specifically
+disabled and the re-read host key matching the pin. An unavailable agent or
+timeout fails that proof. It does not close access after a disposable
+Machine's later boots: restoring the restriction and re-pinning on managed
+start remain unbuilt ([ADR 0018](adr/0018-disposable-discards-on-stop.md)).
 
 ## What HyperLab does not protect against
 
