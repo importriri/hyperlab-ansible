@@ -369,5 +369,83 @@ shell backdrop and lock surface carry no trust colour at all.
 
 The theme picker and wallpaper picker are staged: the command surface
 exposes `theme-cycle` and `wallpaper-mode-toggle` with the current state, and
-a visual browser will follow once the registry exports one reviewed palette
-summary per selectable theme.
+a visual browser remains pending. The source preview interface below supplies
+the palette data for review before that browser can consume it.
+
+## Source runtime palette summaries
+
+From a source checkout, run:
+
+```bash
+python tools/theme_registry.py --repo . palette-summaries --json
+```
+
+This read-only command describes the source palette artifacts that
+`roles/host_desktop_sway/tasks/palette.yml` installs. It does not inspect the
+installed palette pool, active user files or the running session. It cannot
+select a theme or change wallpapers, keyboard RGB or compositor state.
+
+The two catalogues remain distinct. Runtime choices currently allow `blue`,
+`green`, `red`, `trust-model` and `violet`. The declarative registry still
+contains only `trust-model`, with status `scaffold` and selector visibility
+`false`; the legacy appearances are not plugin manifests. `validate` and
+`list --json` retain that declarative meaning. A runtime preview confers no
+acceptance, installation, activation, plugin eligibility or redistribution
+rights. Asset provenance remains a separate review.
+
+Successful stdout contains exactly one JSON document followed by a newline:
+
+| Field | Version 1 meaning |
+| --- | --- |
+| `version` | Integer `1` |
+| `scope` | `source-runtime-presets` |
+| `presets` | Rows sorted lexically by `id` |
+| Row `id`, `label` | Runtime option id and its source label |
+| Row `source_kind` | `legacy` or `declarative` |
+| Row `manifest_status`, `manifest_visible` | Both `null` for legacy rows; validated manifest status and selector boolean for declarative rows |
+| Row `appearance` | Exactly `base`, `mantle`, `surface`, `overlay`, `text`, `subtext`, `accent`, `accent2`, `ok`, `warn`, `bad` |
+
+Each appearance value is a six-digit `#RRGGBB` string. Source letter case is
+preserved. There are no other row fields: commands, paths, URLs, current
+selection and trust identities are absent. Repeated runs over the same
+inputs produce identical bytes, independent of runtime option ordering.
+
+The requested ids come from `desktop_palette.options` within
+`tools/choices/choices.yml`, checked for set agreement with
+`desktop_palette_options` in `group_vars/all/choices.yml`. Neither a directory
+scan nor the current default adds a preset. Missing data never falls back to
+another appearance.
+
+| Source | Used for |
+| --- | --- |
+| `tools/palette/palette.yml` | Legacy `variants.<id>.label` and the canonical six `domains` values |
+| `roles/host_desktop_sway/files/palette/<id>/hyperlab-palette-quickshell.json` | Green, Violet, Blue and Red appearance values |
+| `themes/trust-model/theme.yml` | Trust Model label, status and selector visibility, through the existing manifest validator |
+| `themes/trust-model/rendered/hyperlab-palette-quickshell.json` | Trust Model appearance values |
+
+These JSON artifacts map to `/usr/share/hyperlab/palettes/<id>/` when the
+desktop role installs them. The export reads the artifacts above, rather
+than reconstructing colours from renderer source. Every full JSON palette
+must have its own `name`, exactly the eleven appearance and six `dom_*`
+keys, valid colour strings, and domain values equal to `palette.yml`.
+Domain colours are validated and then omitted from the preview; appearance
+never becomes provenance authority.
+
+All inputs are validated before success bytes are printed. Invalid or
+duplicate ids, disagreeing option sets, duplicate YAML/JSON mapping keys,
+YAML aliases, malformed documents, invalid labels/manifests, missing,
+unreadable or non-regular files and symlinked input descendants are refusals.
+The supplied repository root is resolved once; the command accepts a root
+alias, but opens input descendants without following symlinks, including
+directory components. Files with no read permission bits are refused even
+when the caller could bypass those permissions. Ordinary input failures
+return exit `1`, empty stdout and a diagnostic beginning
+`HyperLab theme registry:` on stderr. Argument errors retain exit `2`.
+
+`python tests/theme_registry_contract.py` exercises the real CLI with
+temporary independent inputs, per-preset expectations, an unlisted manifest,
+malformed inputs and byte/entry snapshots proving no writes in those runs.
+The palette-export prerequisite requires successful verification and review;
+it does not close the roadmap's visual theme and wallpaper browser checkbox.
+The native browser, its interactions and Nitro/Predator acceptance remain
+future work.

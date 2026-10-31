@@ -2440,3 +2440,66 @@ M9b independently proved the essential correlation boundary.
 The bridge's M10 mutation executed only the inert CLI. Its recorded argv was
 `["net", "start", "lab"]`; the contract required exactly
 `["--json", "net", "list"]`. No real network action was invoked.
+
+### Source runtime palette previews preserve the separate theme catalogues
+
+Run `python tests/theme_registry_contract.py`. The contract executes the real
+`palette-summaries --json` CLI with independent temporary source trees, isolated
+HOME/XDG directories and bytecode disabled. Expected rows come from the input
+YAML/JSON files, without importing exporter helpers. Existing declarative
+registry assertions remain in the same discovered contract.
+
+The following exporter breaks were made separately in a disposable source copy
+containing the unchanged contract, tool and its nine input files. The tool was
+saved before each break; restoring identical bytes and rerunning the contract
+returned exit 0 and both OK lines after every row below. Each red result was
+exit 1 with the stated assertion, without a syntax error, timeout, missing tool
+or unrelated registry failure. The invalid-final-row fixture runs first so an
+incremental printer fails specifically for partial stdout.
+
+For the diagnostics below, **exact rows** means `preview differs from exact
+per-preset sources/metadata`; **unexpected stdout** means `refusal leaked
+successful stdout`, qualified by the fixture named in the table.
+
+| Mutation | Break in `tools/theme_registry.py` in the disposable copy | Observed red diagnostic |
+| --- | --- | --- |
+| P1 | After validation, replace Violet's appearance with Green's JSON values while retaining Violet's id. | Exact rows |
+| P2 | Change `sorted(options)` to `sorted(options)[1:]`, dropping Blue. | Exact rows |
+| P3 | Iterate the union of runtime options and every `themes/*/theme.yml` parent id. | Exact rows when the valid unlisted ready/visible manifest appears |
+| P4 | Replace exported declarative metadata with `ready` and `true`, leaving the real manifest unchanged. | Exact rows |
+| P5 | Bypass `unique_json`'s duplicate-key guard. | `duplicate JSON blue`: unexpected stdout |
+| P6 | Bypass the `palette["name"] == theme_id` guard. | `invalid blue name`: unexpected stdout |
+| P7 | Bypass the comparison of all six domain values with `palette.yml`. | `changed blue dom_host`: unexpected stdout |
+| P8 | Remove `os.O_NOFOLLOW` from the input open flags. | `external symlink tools/choices/choices.yml`: unexpected stdout |
+| P9 | Print `json.dumps(rows[-1])` after each row is appended. | `invalid last row`: unexpected stdout |
+| P10 | Bypass `PreviewLoader`'s duplicate-key guard. | `duplicate YAML tools/choices/choices.yml`: unexpected stdout |
+| P11 | Bypass the source/generated option-set equality check. | `option disagreement`: unexpected stdout |
+| P12 | Make `valid_colour` accept every value. | `invalid last row`: unexpected stdout |
+| P13 | Write `preview-cache` under the requested root before reading inputs. | `palette preview wrote to the input tree or HOME/XDG` |
+| P14 | Permit YAML aliases in `PreviewLoader.compose_node`. | `recursive YAML alias`: unexpected stdout |
+| P15 | Clear `os.O_NOFOLLOW` only when opening descendant directories. | `redirected palette ancestor`: unexpected stdout |
+| P16 | Filter unexpected palette keys out before checking the exact key set. | `extra key blue`: unexpected stdout |
+| P17 | Bypass the repeated-runtime-id guard in `valid_ids`. | `duplicate generated id`: unexpected stdout |
+
+P18 removed only the explicit read-permission-bit guard. This mutation
+**stayed green** (exit 0), as did its restoration: the unprivileged caller's
+kernel still refuses mode-0 inputs at `os.open`. The explicit guard is kept so
+that even a caller able to bypass those permissions refuses the same input.
+That elevated-caller mutation was not run here.
+
+The normal fixture matrix additionally covers every prescribed file missing,
+unreadable, malformed, invalidly encoded, non-mapping and externally symlinked;
+invalid/duplicate ids, disagreeing options, missing/extra keys, wrong names,
+non-string/invalid colours, all six domain values in every preset, invalid
+labels/manifests, redirected ancestors and non-regular inputs. Every refusal
+requires exit 1, empty stdout and the registry diagnostic prefix without a
+traceback. Byte, entry, mode and symlink-target snapshots remain unchanged on
+success and refusal, including external targets and HOME/XDG directories.
+
+Positive controls change only Blue's valid appearance colour, change source
+labels and valid manifest metadata, reorder generated options, and remove Blue
+from both option catalogues along with its palette file. A complete valid
+unlisted manifest adds no row; even malformed unlisted input is not read.
+Repeated accepted-source runs emit stable bytes and exactly five distinct
+source appearances. None of these checks switches an actual theme or proves
+installed state, asset rights, browser behavior or hardware acceptance.
