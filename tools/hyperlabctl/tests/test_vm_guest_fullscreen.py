@@ -78,6 +78,8 @@ class _FixtureClock:
     now = 100.0
     def monotonic(self):
         return self.now
+    def sleep(self, seconds):
+        self.now += seconds
     def __getattr__(self, name):
         return getattr(_real_time, name)
 _real_time = time
@@ -611,11 +613,16 @@ def test_sequential_replay_dispatches_once() -> None:
         equals("sequential_state", int(guest.read("state")), 2)
 
 
-def _concurrent_case(same_id: bool) -> None:
+def _concurrent_case(same_id: bool, slow_start: float = 0.0) -> None:
     with Guest(behavior="hold_sync") as guest:
         first_id = "f" * 32
         second_id = first_id if same_id else "1" * 32
-        first = guest.launch(first_id, "toggle" if same_id else "on")
+        # Ordering depends on the release handshake, including when starting
+        # the second interpreter takes longer than the production dispatch cap.
+        source = _inject(_source(),
+                         "DISPATCH_TIMEOUT_SECONDS = 2.0\nTRANSACTION_BUDGET_SECONDS = 8.0",
+                         "DISPATCH_TIMEOUT_SECONDS = 60.0\nTRANSACTION_BUDGET_SECONDS = 120.0")
+        first = guest.launch(first_id, "toggle" if same_id else "on", source)
         guest.wait("dispatch-ready")
         # Visible convergence alone must not let an opposite request overtake
         # a compositor call that is still outstanding.
@@ -624,6 +631,7 @@ def _concurrent_case(same_id: bool) -> None:
         guest.write("behavior", "normal")
         source = _at(_source(), "lock_wait",
                      '        (runtime.parent / "lock-waiting").write_text("waiting")\n')
+        source = _slow_start(source, slow_start)
         second = guest.launch(second_id, "toggle" if same_id else "off", source)
         guest.wait("lock-waiting")
         check("concurrent_second_waits", second.poll() is None)
@@ -649,11 +657,13 @@ def _concurrent_case(same_id: bool) -> None:
 
 
 def test_concurrent_replay_dispatches_once() -> None:
-    _concurrent_case(True)
+    for slow_start in (0.0, 2.5):
+        _concurrent_case(True, slow_start)
 
 
 def test_synchronous_completion_orders_opposite_request() -> None:
-    _concurrent_case(False)
+    for slow_start in (0.0, 2.5):
+        _concurrent_case(False, slow_start)
 
 
 def test_postdispatch_proof_loss_is_terminal_and_immutable() -> None:
@@ -930,7 +940,17 @@ def test_crash_after_durable_dispatch_never_recovers_success() -> None:
 def test_pre_dispatch_query_timeout_is_terminal() -> None:
     with Guest(behavior="slow_query") as guest:
         operation_id = "3" * 32
-        payload = _terminal(guest.run(operation_id, "on"), operation_id, "on", rc=2)
+        source = _at(_source(), "imports", '''_actual_run = subprocess.run
+def _observe_query(argv, **kwargs):
+    if argv in (["hyprctl", query, "-j"] for query in ("instances", "activewindow", "clients")):
+        (runtime.parent / (argv[1] + "-timeout")).write_text(str(kwargs["timeout"]))
+    return _actual_run(argv, **kwargs)
+subprocess.run = _observe_query
+''', before=True)
+        payload = _terminal(guest.run(operation_id, "on", source), operation_id, "on", rc=2)
+        for query in ("instances", "activewindow", "clients"):
+            timeout = float(guest.read(query + "-timeout"))
+            check(query + "_query_timeout_cap", 0.0 < timeout <= 2.0, repr(timeout))
         equals("query_timeout_failure", payload["failure"], "CLIENTS_QUERY_FAILED_TIMEOUT")
         equals("query_timeout_no_dispatch", len(guest.dispatches), 0)
         receipt, operation = guest.paths(operation_id)
@@ -968,10 +988,16 @@ with (root / "runtime/hyperlab-fullscreen/transaction.lock").open("a+") as handl
         time.sleep(0.01)
 ''', [str(guest.root)])
             guest.wait("holder-ready")
-            source = _inject(_source(), "TRANSACTION_BUDGET_SECONDS = 8.0", "TRANSACTION_BUDGET_SECONDS = 0.2")
+            source = _clock(_source())
+            source = _inject(source, "TRANSACTION_BUDGET_SECONDS = 8.0", "TRANSACTION_BUDGET_SECONDS = 0.2")
+            source = _at(source, "imports", "fixture_start = time.monotonic()\n", before=True)
+            source = _at(source, "lock_wait",
+                         '        (runtime.parent / "lock-elapsed").write_text(str(time.monotonic() - fixture_start))\n')
             source = _slow_start(source, slow_start)
             result = guest.run("4" * 32, "on", source)
             equals(label + "_lock_refusal", result.returncode, 75)
+            elapsed = float(guest.read("lock-elapsed"))
+            check(label + "_lock_shared_deadline", 0.0 < elapsed <= 0.2 + 0.05, repr(elapsed))
             equals(label + "_lock_no_dispatch", len(guest.dispatches), 0)
             check(label + "_holder_still_holds", holder.poll() is None)
             guest.write("holder-release", "release")

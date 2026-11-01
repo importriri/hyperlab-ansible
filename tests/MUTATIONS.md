@@ -2019,8 +2019,13 @@ application workers belong to the parent fixture. Context managers restore
 patches, reap children and remove files even after an assertion raises.
 
 Slow-start cases retain the 0.6 s and 1.2 s startup delays. The accumulated-stage
-case advances a controlled clock; the held-lock case keeps the real lock until
-an explicit release, after observing refusal while its holder is still alive.
+case advances a controlled clock; the held-lock case advances the same clock
+on each poll and observes refusal within the 0.2 s budget plus one 0.05 s poll,
+while its real holder remains alive until explicit release. The query-timeout
+case observes the actual instances, active-window and clients subprocess
+timeouts and requires at most 2.0 s for each. Both concurrent cases also delay
+the second interpreter by 2.5 s; larger
+fixture caps on the first transaction let the handshake decide ordering.
 The 10 s subprocess watchdog bounds cleanup, not acceptable startup speed.
 All source fault injection uses one helper that compiles the result and refuses
 missing or ambiguous targets.
@@ -2045,6 +2050,10 @@ and no-dispatch controls run alongside the refusal cases.
 | `patch_restoration` | Detach the patch cleanup stack before yielding. | `patch_restored__run_fullscreen_remote` |
 | `duplicate_definition` | Append a second definition of an existing test. | `fullscreen_no_shadowed_tests` |
 | `duplicate_family` | Add another discoverable fullscreen module. | `fullscreen_single_discovery_owner` |
+| `shared_lock_deadline` | Use only the 3 s lock cap, ignoring the shared transaction deadline. | `normal_start_lock_shared_deadline` (also `slow_start_lock_shared_deadline`) |
+| `default_query_cap` | Raise the per-command default cap from 2 s to 7 s. | `instances_query_timeout_cap` (also `activewindow_query_timeout_cap`) |
+| `client_query_cap` | Raise the explicit clients-query cap from 0.5 s to 7 s. | `clients_query_timeout_cap` |
+| `concurrent_startup_margin` | Restore the first fixture dispatch's 2 s cap while the second interpreter starts slowly. | `test_concurrent_replay_dispatches_once` and `test_synchronous_completion_orders_opposite_request`, both missing the lock-wait handshake |
 
 From the repository root, run this command; it changes only disposable copies,
 backs up each target before injection, and restores it before the green run:
@@ -2101,6 +2110,21 @@ MUTATIONS = [
          '        finally:\n            pass\n'),
     ], 'cleanup_files_removed'),
     ('stale_version_import', TEST, [], 'fullscreen_no_version_import'),
+    ('shared_lock_deadline', VM, [
+        ('lock_deadline = min(\n    transaction_deadline,\n    time.monotonic() + 3.0,\n)\n',
+         'lock_deadline = time.monotonic() + 3.0\n'),
+    ], 'normal_start_lock_shared_deadline'),
+    ('default_query_cap', VM, [
+        ('def command(argv, failure_code, timeout=2.0):\n',
+         'def command(argv, failure_code, timeout=7.0):\n'),
+    ], 'instances_query_timeout_cap'),
+    ('client_query_cap', VM, [
+        ('def mode_for_target(stable_id, timeout=0.5):\n',
+         'def mode_for_target(stable_id, timeout=7.0):\n'),
+    ], 'clients_query_timeout_cap'),
+    ('concurrent_startup_margin', TEST, [
+        ('DISPATCH_TIMEOUT_SECONDS = 60.0', 'DISPATCH_TIMEOUT_SECONDS = 2.0'),
+    ], 'test_concurrent_replay_dispatches_once'),
 ]
 RUN = 'import harness, test_vm_guest_fullscreen as tests; harness.main([tests])'
 
@@ -2141,6 +2165,10 @@ for name, relative, changes, expected in MUTATIONS:
         red_rc, red_log = run(directory)
         if red_rc != 1 or 'FAIL ' + expected not in red_log:
             raise AssertionError((name, 'intended behavior not detected; see red log', red_rc))
+        if name == 'concurrent_startup_margin':
+            if ('FAIL test_synchronous_completion_orders_opposite_request' not in red_log
+                    or red_log.count('AssertionError: fixture handshake not reached: lock-waiting') != 2):
+                raise AssertionError((name, 'both slow-start ordering cases must fail at the handshake', red_log))
         print(name + ': RED ' + expected, flush=True)
         shutil.copy2(backup, target)
         if extra is not None:
@@ -2155,9 +2183,18 @@ print(json.dumps(results, indent=2))
 PY
 ```
 
-All thirteen mutations above were observed red at the named assertions. Each
-restored module reported `passed 666, failed 0`. Both missing and ambiguous
+All seventeen mutations above were observed red at the named assertions. Each
+restored module reported `passed 694, failed 0`. Both missing and ambiguous
 injection targets were detected; the guarded stale import was refused by the
 AST check without executing a missing module. The original 59 test functions
 map to behavioral functions and named cases, with successful and no-dispatch
 controls retained alongside all distinct refusal and recovery observations.
+Before increasing the first transaction's fixture caps, both new 2.5 s
+slow-start cases also failed at the missing lock-wait handshake. The lock-cap
+mutation recorded about 3 s on the controlled clock; the query-cap mutations
+passed 7.0 s to the actual subprocesses. Neither was caught by startup timing
+or a cleanup watchdog. An initial command-default mutation stayed green with
+a clients-only probe: the clients query passes an explicit 0.5 s cap and does
+not use that default. Extending the probe to instances and active-window
+queries caught the default mutation; independently changing the explicit
+clients cap caught that separate path.
