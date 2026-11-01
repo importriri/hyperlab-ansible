@@ -1803,6 +1803,11 @@ Fixtures prove no installed-shell or Nitro/Predator observation.
 `tests/host_key_sheet_contract.py` renders the production Lua with independent
 fixture inputs and executes it with real Lua and inert recording dispatchers.
 It rejects panic engagement on every chord before checking sheet parity.
+Every bound command is split into simple commands, shell payloads are split
+again, and the words after `hyperlabctl` are read by the real hyperlabctl
+parser, so global options and shell quoting cannot hide `panic engage`. The
+contract first checks that matcher on fixed spellings it must and must not
+flag.
 Ordinary lock, key sheet and clipboard bindings are positive controls. The
 real offscreen launcher must retain those rows, offer no emergency row and
 run nothing when a key row is activated.
@@ -1815,6 +1820,7 @@ must pass, including the real QML runtime. No registered command runs.
 ```bash
 python - <<'PY'
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
@@ -1824,6 +1830,7 @@ import tempfile
 root = Path.cwd()
 template = Path('roles/host_desktop_hyprland/templates/hyprland.lua.j2')
 sheet = Path('roles/host_desktop_common/files/quickshell/hyperlab/HostKeys.qml')
+contract = Path('tests/host_key_sheet_contract.py')
 old_bind = '''hl.bind(
     main_mod .. " + SHIFT + Escape",
     hl.dsp.exec_cmd(
@@ -1853,6 +1860,35 @@ mutations = [
     ('different chord', template,
      lambda s: s + '\n' + old_bind.replace('SHIFT + Escape', 'SHIFT + F12'),
      'production Lua binds panic engage in global: SUPER + SHIFT + F12'),
+    *[(name, template,
+       lambda s, command=command: s + '\n' + old_bind.replace(
+           'SHIFT + Escape', 'SHIFT + F12').replace(
+               '"/usr/local/bin/hyperlabctl panic engage"', json.dumps(command)),
+       'production Lua binds panic engage in global: SUPER + SHIFT + F12')
+      for name, command in (
+          ('JSON global option', '/usr/local/bin/hyperlabctl --json panic engage'),
+          ('no-color global option', '/usr/local/bin/hyperlabctl --no-color panic engage'),
+          ('repo global operand', '/usr/local/bin/hyperlabctl --repo fixture panic engage'),
+          ('repo global assignment', '/usr/local/bin/hyperlabctl --repo=fixture panic engage'),
+          ('interleaved globals',
+           '/usr/local/bin/hyperlabctl panic --json --repo fixture engage --no-color'),
+          ('sh payload', "sh -c '/usr/local/bin/hyperlabctl panic engage'"),
+          ('bash payload', "/usr/bin/bash -c '/usr/local/bin/hyperlabctl --json panic engage'"),
+          ('dash payload', "dash -c '/usr/local/bin/hyperlabctl --repo=fixture panic engage'"),
+          ('nested shell payload',
+           '''sh -c "bash -c '/usr/local/bin/hyperlabctl --no-color panic engage'"'''),
+          ('shell command sequence', "sh -c '/usr/local/bin/hyperlabctl --json panic engage; :'"),
+      )],
+    ('matcher ignores shell payloads', contract,
+     lambda s: s.replace('nested.extend(simple_commands(payload, depth + 1))', 'pass'),
+     "the panic matcher missed \"sh -c 'true && hyperlabctl --json panic engage; :'\""),
+    ('matcher skips global normalization', contract,
+     lambda s: s.replace('parse_args(cli._normalize_global_options(list(arguments)))',
+                         'parse_args(list(arguments))'),
+     "the panic matcher missed 'hyperlabctl panic --no-color engage --repo=/srv/lab'"),
+    ('matcher ignores shell operators', contract,
+     lambda s: s.replace('if token and set(token) <= OPERATORS:', 'if False:'),
+     "the panic matcher missed \"sh -c 'true && hyperlabctl --json panic engage; :'\""),
     ('orphan sheet row', sheet,
      lambda s: s.replace('        { "title": "Session and appearance", "keys": [\n',
                          '        { "title": "Session and appearance", "keys": [\n' + old_row),
@@ -1875,9 +1911,11 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-key-mutations-') as directory:
         (tree / path).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / path, tree / path)
     shutil.copytree(root / sheet.parent, tree / sheet.parent)
+    shutil.copytree(root / 'tools/hyperlabctl/hyperlabctl', tree / 'tools/hyperlabctl/hyperlabctl',
+                    ignore=shutil.ignore_patterns('__pycache__'))
     backups = tree / 'backups'
     backups.mkdir()
-    for path in (template, sheet):
+    for path in (template, sheet, contract):
         shutil.copy2(tree / path, backups / path.name)
     for name, path, mutate, expected in mutations:
         target = tree / path
@@ -1905,8 +1943,10 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-key-mutations-') as directory:
 PY
 ```
 
-Observed: all seven mutations fail with their named reason and return green
-following restoration. With only the old row restored, the real offscreen
+Observed: all twenty mutations fail with their named reason and return
+green following restoration. Before the matcher read the real parser, the
+`JSON global option` and `sh payload` mutations failed only on sheet parity,
+without the panic diagnostic: the binding itself went unnoticed. With only the old row restored, the real offscreen
 scenario also fails with `the real key sheet offered an emergency shortcut`
 when run independently of the earlier parity check; the original row was
 present for this test before removal. The complete host-key contract then

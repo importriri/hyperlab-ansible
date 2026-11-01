@@ -9,13 +9,16 @@ a capture).
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from jinja2 import Environment, StrictUndefined
@@ -23,6 +26,9 @@ from jinja2 import Environment, StrictUndefined
 import host_quickshell_runtime_contract as runtime
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
+
+from hyperlabctl import cli  # noqa: E402
 SHEET = ROOT / "roles/host_desktop_common/files/quickshell/hyperlab/HostKeys.qml"
 HYPRLAND = ROOT / "roles/host_desktop_hyprland/templates/hyprland.lua.j2"
 
@@ -106,6 +112,84 @@ end
 """
 
 
+# A shell runs any later argument as code (-c, -lc, a script); each one is
+# parsed again, so quoting cannot hide a command from the check below.
+SHELLS = {"sh", "bash", "dash", "zsh", "ksh", "mksh", "busybox"}
+OPERATORS = set("();<>|&")
+MAX_SHELL_DEPTH = 8
+
+
+def simple_commands(command: str, depth: int = 0) -> list[list[str]]:
+    """Every simple command in a shell line, nested shell payloads included."""
+    if depth > MAX_SHELL_DEPTH:
+        fail(f"shell payloads nest deeper than {MAX_SHELL_DEPTH}: {command!r}")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError as exc:
+        fail(f"exec command is not shell-parseable: {command!r}: {exc}")
+    commands: list[list[str]] = [[]]
+    for token in tokens:
+        if token and set(token) <= OPERATORS:
+            commands.append([])
+        else:
+            commands[-1].append(token)
+    commands = [argv for argv in commands if argv]
+    nested: list[list[str]] = []
+    for argv in commands:
+        shell = next((i for i, word in enumerate(argv) if Path(word).name in SHELLS), None)
+        if shell is not None:
+            for payload in argv[shell + 1:]:
+                nested.extend(simple_commands(payload, depth + 1))
+    return commands + nested
+
+
+def hyperlabctl_engages(arguments: list[str]) -> bool:
+    """Whether the real hyperlabctl parser reads these arguments as panic engage.
+
+    The arguments go through the same global-option normalization and
+    argparse tree as cli.main (--json, --no-color, --repo in any position or
+    abbreviation). Nothing runs: only the parsed namespace is inspected. An
+    invocation the parser rejects never reaches a command.
+    """
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            args = cli.build_parser().parse_args(cli._normalize_global_options(list(arguments)))
+    except SystemExit:
+        return False
+    return args.command == "panic" and args.panic_action == "engage"
+
+
+def runs_panic_engage(command: str) -> bool:
+    return any(Path(word).name == "hyperlabctl" and hyperlabctl_engages(argv[i + 1:])
+               for argv in simple_commands(command) for i, word in enumerate(argv))
+
+
+def check_panic_matcher() -> None:
+    """The matcher itself, on spellings the check must and must not catch."""
+    for command in (
+        "/usr/local/bin/hyperlabctl panic engage",
+        "/usr/local/bin/hyperlabctl --json --repo /srv/lab panic engage",
+        "hyperlabctl panic --no-color engage --repo=/srv/lab",
+        "hyperlabctl --js panic engage",
+        "setsid -f hyperlabctl panic engage",
+        "sh -c 'true && hyperlabctl --json panic engage; :'",
+        "foot bash -lc \"dash -c 'hyperlabctl panic engage'\"",
+    ):
+        if not runs_panic_engage(command):
+            fail(f"the panic matcher missed {command!r}")
+    for command in (
+        "hyperlabctl panic status",
+        "hyperlabctl --json panic restore --confirm",
+        "hyperlabctl --repo panic engage",
+        "foot --app-id=floatterm bash -lc 'hyperlabctl doctor; read -r _'",
+        "echo panic engage",
+    ):
+        if runs_panic_engage(command):
+            fail(f"the panic matcher flagged {command!r}")
+
+
 def check_executed_bindings() -> None:
     lua = shutil.which("lua")
     if not lua:
@@ -129,11 +213,7 @@ def check_executed_bindings() -> None:
             fail(f"invalid Lua binding record: {line!r}")
         bindings.append(tuple(bytes.fromhex(field).decode("utf-8") for field in fields))
     for submap, chord, kind, command in bindings:
-        if kind != "exec":
-            continue
-        argv = shlex.split(command)
-        if any(Path(word).name == "hyperlabctl" and argv[i + 1:i + 3] == ["panic", "engage"]
-               for i, word in enumerate(argv)):
+        if kind == "exec" and runs_panic_engage(command):
             fail(f"production Lua binds panic engage in {submap}: {chord}")
     for chord, command in (
         ("SUPER + Escape", "/usr/local/bin/privatestack-lock"),
@@ -249,6 +329,7 @@ SCENARIO = """
 
 
 def main() -> int:
+    check_panic_matcher()
     check_executed_bindings()
     check_parity()
     check_directions()

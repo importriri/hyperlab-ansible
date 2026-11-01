@@ -372,7 +372,8 @@ Engage explicitly from the host CLI with `hyperlabctl panic engage`
 ([ADR 0047](adr/0047-emergency-stop.md), Proposed): every running Machine has
 its network links set down, then is paused, and what was changed is recorded
 privately. Inspect it with `hyperlabctl panic status`. No emergency shortcut
-is bound in Hyprland or Sway or advertised on the host key sheet;
+is bound in Hyprland (checked by executing its configuration) or in Sway (at
+this revision, unchecked), nor advertised on the host key sheet;
 `SUPER+SHIFT+Escape` is an unbound proposal pending the operator's key choice.
 A later, separately authorized binding must add its matching sheet row too.
 The physical stop/restore campaign remains open.

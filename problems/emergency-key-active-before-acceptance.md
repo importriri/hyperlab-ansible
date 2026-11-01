@@ -28,8 +28,18 @@ the contract. Existing bidirectional parity checks remain in place, and
 the real offscreen launcher rejects an emergency row while retaining its
 ordinary rows and inert activation.
 
+Each bound command is split into its simple commands, shell `-c` payloads
+are split again, and the arguments after any `hyperlabctl` word go through
+the real hyperlabctl parser, global options (`--json`, `--no-color`,
+`--repo`) included. A first version compared the two words after
+`hyperlabctl` literally, so `hyperlabctl --json panic engage`, the spelling
+the project already uses elsewhere, or the same command inside `sh -c`
+would have passed. A command reached only through a variable or a wrapper
+script is still not seen.
+
 The old binding and an alternate-chord binding both fail the executed
-regression. Restoring only the old sheet row fails parity and the real QML
+regression, as do global-option, interleaved-option, `sh`/`bash`/`dash`,
+nested-shell and command-sequence spellings. Restoring only the old sheet row fails parity and the real QML
 scenario. Removing or retargeting ordinary lock fails the positive control.
 CLI fixture tests and the shell's emergency scenarios separately check
 engagement, existing-record observation and exact, confirmed Restore.

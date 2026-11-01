@@ -52,8 +52,10 @@ retry. What could not be restored stays recorded, and restoring again retries
 only that.
 
 The proposed `SUPER+SHIFT+Escape` binding and its sheet row have been removed
-pending the operator's key choice. Neither the Hyprland nor Sway host
-configuration binds an emergency stop. Engage explicitly with
+pending the operator's key choice. The Hyprland host configuration binds
+no emergency stop, and a contract executes it to keep it so; the Sway host
+configuration binds none at this revision, but no check guards Sway yet.
+Engage explicitly with
 `hyperlabctl panic engage`; inspect the record with `hyperlabctl panic status`.
 A later, separately authorized binding must also add its matching host key
 sheet row and pass binding/sheet parity checks.
