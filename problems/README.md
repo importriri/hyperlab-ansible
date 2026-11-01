@@ -32,6 +32,9 @@ proof.
 - [`diagnostics-redaction-retained-secret-fragments.md`](diagnostics-redaction-retained-secret-fragments.md):
   quoted secret suffixes and a PEM body survived redaction; complete inputs
   are now redacted before truncation and acceptance shares the redactor.
+- [`machine-diagnostics-failed-start-delay.md`](machine-diagnostics-failed-start-delay.md):
+  an unstarted diagnostics bridge held the pane busy for the full collection
+  deadline; a separate five-second check now settles it and permits retry.
 - [`looking-glass-initial-format-failure-hung.md`](looking-glass-initial-format-failure-hung.md):
   a stream or core failure before the first format left sender initialization
   waiting forever; initialization now returns failure through cleanup.

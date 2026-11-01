@@ -533,7 +533,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       `tests/host_machine_actions_bridge_contract.py`,
       `tests/host_quickshell_runtime_contract.py`,
       `tests/host_operation_qml_contract.py`; running and host-only scope,
-      private local archive path and honest partial counts; the installed
+      private local archive path, honest partial counts, process-group cleanup,
+      fresh-archive refusal and five-second failed-start settlement; the installed
       Nitro observation is still pending)
 
 ### 9. Network security topology

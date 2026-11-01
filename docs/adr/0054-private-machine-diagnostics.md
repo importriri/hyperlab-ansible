@@ -28,6 +28,7 @@ Only `collect_diagnostics` supervises a subprocess in the Machine bridge. It
 owns the collector's process group, waits at most 660 seconds, and terminates
 and reaps it on timeout or interruption. The shell gives the entire request
 750 seconds, then allows 5 seconds for cleanup before forcing bridge exit.
+A separate five-second startup check settles a bridge that never runs.
 An immutable request id and Machine bind the result, with one collection in
 flight and separate runners for capability, lifecycle and connections.
 
@@ -39,8 +40,9 @@ The archive stays local, and redaction does not clear it for sharing.
 Keep managed lifecycle in the durable operation runner. Replace the blanket
 text assertion with executed lifecycle entrypoints that trap subprocess
 launches or direct execution, plus an AST check restricting subprocess
-supervision to `collect_diagnostics`. The diagnostics contracts separately
-exercise the real registry, collector, output validation and production QML
+supervision to `collect_diagnostics` across the whole module, attributing
+each call to its innermost enclosing function. The diagnostics contracts
+separately exercise the real registry, collector, output validation and production QML
 handlers with inert external commands. Mutating lifecycle back to a direct
 spawn must still fail before any external process can run.
 

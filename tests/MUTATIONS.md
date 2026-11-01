@@ -1658,6 +1658,15 @@ Expected failures:
 | `timeout-settlement` | `production timeout left diagnostics permanently busy` |
 | `output-redirection` | `redirected output directory reached the collector` |
 | `lifecycle-subprocess` | `managed dispatch spawned a child` before any external command runs |
+| `collector-reaping` | `collector timeout/interruption did not terminate and reap its process group` |
+| `collector-interruption` | `collector interruption handler was not installed` |
+| `collector-kill-escalation` | timeout process-group sequence lacks SIGKILL before the final communicate |
+| `collector-handler-restore` | `collector did not restore the previous signal handlers` |
+| `archive-replay` | `successful JSON reused an archive from before the launch` |
+| `module-subprocess`, `main-subprocess`, `class-subprocess` | AST spawners include `<module>` or `launch` outside `collect_diagnostics` |
+| `capability-extra-probe` | `diagnostics capability CLI probe cost changed` |
+| `startup-settlement` | `failed-to-start diagnostics did not settle at the short bound` |
+| `collector-scope` | CLI `guest_manifest_scope`, `guest_archive_scope`, `host_manifest_scope` and `host_archive_scope` |
 
 Exact mutations and checks (every restored run must exit zero):
 
@@ -1673,6 +1682,7 @@ from pathlib import Path
 root = Path.cwd()
 bridge = Path('roles/host_desktop_common/files/privatestack-machine-actions.py')
 qml = Path('roles/host_desktop_common/files/quickshell/hyperlab')
+collector = Path('tools/hyperlabctl/hyperlabctl/commands/diagnostics.py')
 archive_start = '    fd = os.open(expected, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)\n'
 bridge_text = (root / bridge).read_text()
 archive_block = bridge_text[bridge_text.index(archive_start):bridge_text.index('    return {"phase": "diagnostics"')]
@@ -1697,10 +1707,36 @@ cases = [
     ('lifecycle-subprocess', bridge,
      '        privileged(action_id, name)\n',
      '        subprocess.Popen(argv)\n        privileged(action_id, name)\n', 'operation'),
+    ('collector-reaping', bridge, '            if not completed:', '            if False:', 'bridge'),
+    ('collector-interruption', bridge,
+     'handlers = {sig: signal.signal(sig, interrupted)',
+     'handlers = {sig: signal.getsignal(sig)', 'bridge'),
+    ('collector-kill-escalation', bridge,
+     'os.killpg(process.pid, signal.SIGKILL)', 'os.killpg(process.pid, signal.SIGTERM)', 'bridge'),
+    ('collector-handler-restore', bridge,
+     '                signal.signal(sig, handler)', '                pass', 'bridge'),
+    ('archive-replay', bridge, ' or expected.name in previous', '', 'bridge'),
+    # Guard module and main calls so importing a broken fixture cannot spawn.
+    ('module-subprocess', bridge, 'if __name__ == "__main__":',
+     'if False:\n    subprocess.Popen(["true"])\n\nif __name__ == "__main__":', 'operation'),
+    ('main-subprocess', bridge, 'if __name__ == "__main__":',
+     'if __name__ == "__main__":\n    subprocess.Popen(["true"])', 'operation'),
+    ('class-subprocess', bridge, 'if __name__ == "__main__":',
+     'class FixtureSpawn:\n    def launch(self):\n        subprocess.Popen(["true"])\n\n'
+     'if __name__ == "__main__":', 'operation'),
+    ('capability-extra-probe', bridge, '        payload = cli_json("machine", "inventory")',
+     '        cli_json("machine", "inventory")\n        payload = cli_json("machine", "inventory")', 'bridge'),
+    ('startup-settlement', qml / 'MachineActions.qml',
+     'if (machineActions.diagnosticsRunner !== collectionRunner',
+     'if (true || machineActions.diagnosticsRunner !== collectionRunner', 'transport'),
+    ('collector-scope', collector, '"host-and-guest" if with_guest else "host-only"',
+     '"host-only" if with_guest else "host-and-guest"', 'cli'),
 ]
 with tempfile.TemporaryDirectory(prefix='hyperlab-diagnostics-mutations-') as temporary:
     fixture = Path(temporary)
     shutil.copytree(root / qml, fixture / qml)
+    shutil.copytree(root / 'tools/hyperlabctl/hyperlabctl', fixture / 'tools/hyperlabctl/hyperlabctl',
+                    ignore=shutil.ignore_patterns('__pycache__'))
     (fixture / bridge).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(root / bridge, fixture / bridge)
     for name in ('privatestack-operation.py', 'privatestack-machine-provision.py'):
@@ -1719,6 +1755,8 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-diagnostics-mutations-') as te
             code = ('import host_machine_actions_bridge_contract as t; '
                     f't.BRIDGE = __import__("pathlib").Path({str(fixture / bridge)!r}); '
                     'raise SystemExit(t.main())')
+        elif check == 'cli':
+            code = 'import harness, test_diagnostics; harness.main([test_diagnostics])'
         else:
             code = ('import host_quickshell_runtime_contract as r; '
                     f'r.QML = __import__("pathlib").Path({str(fixture / qml)!r}); ')
@@ -1730,6 +1768,9 @@ with tempfile.TemporaryDirectory(prefix='hyperlab-diagnostics-mutations-') as te
                          'r.run("/usr/lib/qt6/bin/qmlscene", p, "machine-diagnostics", s, m); '
                          '__import__("shutil").rmtree(p)')
         env = {**os.environ, 'PYTHONPATH': str(root / 'tests'), 'HYPERLAB_REQUIRE_QML_RUNTIME': '1'}
+        if check == 'cli':
+            env['PYTHONPATH'] = os.pathsep.join((str(fixture / 'tools/hyperlabctl'),
+                                               str(root / 'tools/hyperlabctl/tests')))
         try:
             target.write_text(original.replace(old, new))
             red = subprocess.run([sys.executable, '-c', code], env=env, check=False)
@@ -1747,4 +1788,12 @@ The malformed/foreign JSON, zero-exit-without-result and interruption cases
 are also executed by the normally discovered bridge and production transport
 contracts. The archive-validation mutation specifically proves that exit
 zero and a plausible manifest cannot substitute for a real private archive.
+The replay case returns the same zero-exit JSON and leaves the older archive
+untouched. Cleanup cases invoke installed signal handlers without delivering
+real signals and assert TERM, bounded communicate, KILL escalation and final
+reaping, as well as restoration of previous handlers. Spawn mutations are
+inert when imported; the AST scans the entire module and attributes every
+call to its innermost enclosing function, including class methods. The CLI
+scope case imports a disposable copy of the collector and checks returned
+and archived manifests without relying on bridge coverage.
 Fixtures prove no installed-shell or Nitro/Predator observation.

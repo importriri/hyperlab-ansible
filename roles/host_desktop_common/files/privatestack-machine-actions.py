@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Typed machine-operation boundary for the HyperLab shell.
 
-Two questions cross this boundary, and nothing else does:
+Machine capabilities and reviewed operations cross this boundary:
 
   capabilities NAME   what may be done to this machine right now, and why not
   VERB NAME           do exactly one reviewed operation to this machine
@@ -11,6 +11,10 @@ inventory, the checked HyperLab spec, the strict runtime SSH inventory and the
 reviewed action registry. The shell never reconstructs these rules, and a
 capability answer is advice for presentation only -- this bridge re-derives
 everything before it acts.
+
+Private diagnostics cross it as one bounded foreground request (ADR 0054):
+
+  diagnostics NAME REQUEST   collect one private archive with a correlated result
 
 The host clipboard crosses it as one more operation (ADR 0020):
 

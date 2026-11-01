@@ -678,11 +678,17 @@ def main():
 
     source = path.read_text()
     tree = ast.parse(source)
-    spawners = [function.name for function in tree.body if isinstance(function, ast.FunctionDef)
-                for node in ast.walk(function) if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name) and node.func.value.id == 'subprocess'
-                and node.func.attr == 'Popen']
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    spawners = []
+    for node in ast.walk(tree):
+        if (not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute)
+                or not isinstance(node.func.value, ast.Name) or node.func.value.id != 'subprocess'
+                or node.func.attr != 'Popen'):
+            continue
+        enclosing = parents.get(node)
+        while enclosing is not None and not isinstance(enclosing, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            enclosing = parents.get(enclosing)
+        spawners.append(enclosing.name if enclosing is not None else '<module>')
     assert spawners == ['collect_diagnostics'], spawners
     assert 'json.dumps(argv)' not in source
     assert 'os.execvp(argv[0], argv)' in source

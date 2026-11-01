@@ -120,7 +120,10 @@ def test_collect_writes_a_private_redacted_archive():
             equals("only_this_machine", [row["name"] for row in inventory], ["dev-01"])
             check("dominfo_missing", "host/domain-info.txt" in manifest["missing"])
             check("guest_logs_collected", "guest/looking-glass-host.log" in manifest["files"])
-            check("manifest_in_archive", json.loads(contents["manifest.json"])["machine"] == "dev-01")
+            archived_manifest = json.loads(contents["manifest.json"])
+            check("manifest_in_archive", archived_manifest["machine"] == "dev-01")
+            equals("guest_manifest_scope", manifest["scope"], "host-and-guest")
+            equals("guest_archive_scope", archived_manifest["scope"], "host-and-guest")
             check("redactions_counted", manifest["files"]["guest/journal-user.txt"]["redactions"] >= 2)
     finally:
         diag._ssh_argv, diag._wait_for_ssh_ready, diag.operation_records = saved
@@ -142,8 +145,13 @@ def test_collect_refuses_a_bad_name_and_works_without_the_guest():
     diag.operation_records = lambda name: ("[]\n", "")
     try:
         with tempfile.TemporaryDirectory() as td:
-            _, manifest = diag.collect(None, "srv-01", run=_fake_run(calls), output=Path(td), now=0, with_guest=False)
+            path, manifest = diag.collect(None, "srv-01", run=_fake_run(calls), output=Path(td), now=0, with_guest=False)
+            with tarfile.open(path) as archive:
+                members = [m for m in archive.getmembers() if m.name.endswith("/manifest.json")]
+                archived_manifest = json.load(archive.extractfile(members[0]))
     finally:
         diag.operation_records = saved_records
     check("host_only_has_no_guest", not any(path.startswith("guest/") for path in manifest["files"]))
+    equals("host_manifest_scope", manifest["scope"], "host-only")
+    equals("host_archive_scope", archived_manifest["scope"], "host-only")
     check("host_only_never_ssh", not any(argv[:1] == ["ssh"] for argv in calls))

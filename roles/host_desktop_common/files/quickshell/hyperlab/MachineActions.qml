@@ -234,6 +234,7 @@ Scope {
     // Independent of short capability/dispatch traffic and open connections.
     // The collector has 660 s; allow short identity reads and cleanup as well.
     readonly property int diagnosticsTimeoutMs: 750000
+    readonly property int diagnosticsStartTimeoutMs: 5000
     property int diagnosticsSerial: 0
     property var diagnosticsRunner: null
     readonly property bool diagnosticsBusy: machineActions.diagnosticsRunner !== null
@@ -258,6 +259,7 @@ Scope {
         }
         machineActions.diagnosticsRunner = runner;
         runner.deadline.start();
+        runner.startDeadline.start();
         runner.running = true;
         return true;
     }
@@ -266,6 +268,7 @@ Scope {
         if (machineActions.diagnosticsRunner !== runner)
             return;
         runner.deadline.stop();
+        runner.startDeadline.stop();
         runner.killDeadline.stop();
         machineActions.diagnosticsRunner = null;
         if (!runner.answered) {
@@ -311,6 +314,20 @@ Scope {
             stderr: StdioCollector {}
             onExited: (exitCode, exitStatus) =>
                 machineActions.finishDiagnostics(collectionRunner, exitCode, exitStatus)
+            // A failed QProcess start need not emit exited. Inspect actual
+            // running state once, without shortening a running collection.
+            property Timer startDeadline: Timer {
+                interval: machineActions.diagnosticsStartTimeoutMs
+                onTriggered: {
+                    if (machineActions.diagnosticsRunner !== collectionRunner
+                            || collectionRunner.running || collectionRunner.answered)
+                        return;
+                    collectionRunner.answered = true;
+                    machineActions.diagnosticsAnswered(collectionRunner.requestId,
+                        collectionRunner.machine, "", -1, "Diagnostics could not be started");
+                    machineActions.finishDiagnostics(collectionRunner, -1, 0);
+                }
+            }
             property Timer deadline: Timer {
                 id: collectionDeadline
                 interval: machineActions.diagnosticsTimeoutMs

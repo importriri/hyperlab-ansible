@@ -170,6 +170,11 @@ refresh and capability replies never collect anything. The bridge requires
 one registered Machine, its checked spec and a consistent live managed
 identity, and rechecks them at execution. External domains, Workbench
 candidates and missing, ambiguous or drifting identities are refused.
+For an eligible product Machine, each capability probe adds one product
+inventory read and one diagnostics registry resolution, each bounded at
+15 seconds. These run before the capability answer for all verbs; host
+latency has not been measured. Keeping this agreement check makes unavailable diagnostics
+visible before a click; execution still repeats the full check.
 
 A running Machine uses the existing host and guest sources through pinned
 SSH; a shut-off Machine uses `diagnostics collect NAME --host-only`. The
@@ -191,8 +196,11 @@ publication margin. The shell deadline is 750 seconds (12½ minutes),
 including identity reads. Timeout settles visibly, asks the bridge to
 terminate and reap the collector's process group, then forces bridge
 termination after another 5 seconds if needed. Failure and interruption
-never claim an archive. A failed start also reaches that deadline. Retry
-is enabled when cleanup ends. Capability reads, inventory, selection and
+never claim an archive. A separate five-second startup check settles a
+bridge that never runs, without waiting for the collection deadline
+([failure and regression](../problems/machine-diagnostics-failed-start-delay.md)).
+A running bridge keeps the full collection deadline. Retry is enabled
+when cleanup ends. Capability reads, inventory, selection and
 console/SSH/Looking Glass connections remain independent.
 
 The immutable request id and Machine bind every result; selecting another

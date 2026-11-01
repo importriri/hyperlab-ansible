@@ -26,6 +26,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import stat
 import sys
 import tarfile
@@ -692,9 +693,11 @@ def diagnostics_cases() -> None:
             "name": "dev-01", "image": "base", "lifecycle": "permanent",
             "device_profile": "standard", "network_profile": "dev", "gpu_handoff_profile": None}}
         inventories = {"live": [live], "product": [product], "spec": [spec]}
-        calls, launches, answers = [], [], []
+        calls, launches, answers, processes, process_events, refusals = [], [], [], [], [], []
         behavior = {}
         stamp = 0
+        previous_handlers = {sig: signal.getsignal(sig)
+                             for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
 
         def cli(*args, **kwargs):
             calls.append(args)
@@ -731,11 +734,15 @@ def diagnostics_cases() -> None:
             def __init__(self, argv, **kwargs):
                 nonlocal stamp
                 launches.append((argv, kwargs))
+                processes.append(self)
                 check(kwargs.get("start_new_session") is True,
                       "collector does not own a separately terminable process group")
                 suffix = ["--host-only"] if product["state"] == "shut off" else []
                 check(argv == ["hyperlabctl", "diagnostics", "collect", "dev-01", *suffix, "--json"],
                       "diagnostics did not use the resolved fixed argv: %r" % argv)
+                if behavior.get("replay"):
+                    self.stdout = behavior["replay"]
+                    return
                 stamp += 1
                 with patch.object(collector, "operation_records", return_value=("[]\n", "")), \
                         patch.object(collector, "_ssh_argv", return_value=["ssh", "-o", "StrictHostKeyChecking=yes", "fixture@dev-01"]), \
@@ -767,33 +774,68 @@ def diagnostics_cases() -> None:
                     self.returncode = 1
 
             def communicate(self, timeout=None):
-                check(timeout == bridge.DIAGNOSTICS_TIMEOUT or timeout == 3,
+                process_events.append(("communicate", timeout))
+                check(timeout in (bridge.DIAGNOSTICS_TIMEOUT, 3, None),
                       "collector did not get its own bounded lifetime")
-                if behavior.get("timeout") and timeout != 3:
+                if behavior.get("interrupt") and timeout == bridge.DIAGNOSTICS_TIMEOUT:
+                    sig = behavior["interrupt"]
+                    handler = signal.getsignal(sig)
+                    check(callable(handler) and handler is not previous_handlers[sig],
+                          "collector interruption handler was not installed")
+                    if callable(handler) and handler is not previous_handlers[sig]:
+                        handler(sig, None)
+                if behavior.get("timeout") and (timeout == bridge.DIAGNOSTICS_TIMEOUT
+                                               or timeout == 3 and behavior.get("stubborn")):
                     raise bridge.subprocess.TimeoutExpired([], timeout)
                 return self.stdout, "SYNTHETIC_UNREVIEWED_STDERR"
 
-        def execute(**changes):
+        def killpg(pid: int, sig: int) -> None:
+            process_events.append(("killpg", pid, sig))
+
+        def execute(*, through_main=True, **changes):
             behavior.clear()
             behavior.update(changes)
             answers.clear()
+            process_events.clear()
+            refusals.clear()
             try:
+                if not through_main:
+                    return bridge.collect_diagnostics("dev-01", "diagnostics-1")
                 with patch.object(sys, "argv", [str(BRIDGE), "diagnostics", "dev-01", "diagnostics-1"]):
                     rc = bridge.main()
                 return answers[-1] if rc == 0 and answers else None
-            except (bridge.Refused, OSError):
+            except (bridge.Refused, OSError) as exc:
+                refusals.append(exc)
                 return None
+            finally:
+                check(all(signal.getsignal(sig) is handler for sig, handler in previous_handlers.items()),
+                      "collector did not restore the previous signal handlers")
 
         with patch.object(bridge, "cli_json", cli), patch.object(bridge, "DIAGNOSTICS_OUTPUT", output), \
                 patch.object(bridge.subprocess, "Popen", Process), patch.object(bridge, "emit", answers.append), \
-                patch.object(bridge.os, "killpg"), patch.object(bridge, "runtime_ssh_problem", return_value=None):
+                patch.object(bridge.os, "killpg", killpg), patch.object(bridge, "runtime_ssh_problem", return_value=None):
             def offered():
                 return bridge.capabilities("dev-01")["verbs"]["diagnostics"]
 
             check(offered()["available"], "running product Machine cannot collect diagnostics")
             for state, scope in (("running", "host-and-guest"), ("shut off", "host-only")):
                 live["state"] = product["state"] = state
+                calls.clear()
                 check(offered()["available"], "shut-off product Machine cannot collect host diagnostics")
+                expected = [("vm", "list"), ("compose", "list")]
+                if state == "running":
+                    expected += [("actions", "--resolve", action, "--spec", spec["path"], "--domain", "dev-01")
+                                 for action in ("vm.managed-shutdown", "vm.managed-reboot")]
+                    expected += [("actions", "--resolve", action, "--domain", "dev-01")
+                                 for action in ("vm.console", "vm.ssh")]
+                else:
+                    expected += [("actions", "--resolve", "vm.managed-start", "--spec", spec["path"],
+                                  "--domain", "dev-01")]
+                expected += [("machine", "inventory"), ("actions", "--resolve",
+                             "machine.diagnostics" if state == "running" else "machine.diagnostics-host",
+                             "--domain", "dev-01")]
+                check(calls == expected and len(calls) == (8 if state == "running" else 5),
+                      "diagnostics capability CLI probe cost changed: %r" % (calls,))
                 result = execute()
                 check(result is not None, "valid diagnostics did not return saved metadata")
                 if result is None:
@@ -855,6 +897,33 @@ def diagnostics_cases() -> None:
             result = execute()
             check(result is not None and result["scope"] == "host-only", "execution reused stale running scope")
             live["state"] = product["state"] = "running"
+            result = execute()
+            check(result is not None, "archive replay fixture did not create its first archive")
+            replay = processes[-1].stdout
+            previous_archives = set(output.iterdir())
+            check(execute(replay=replay) is None and processes[-1].returncode == 0
+                  and set(output.iterdir()) == previous_archives,
+                  "successful JSON reused an archive from before the launch")
+
+            pid = Process.pid
+            for stubborn in (False, True):
+                check(execute(through_main=False, timeout=True, stubborn=stubborn) is None
+                      and refusals and isinstance(refusals[-1], bridge.Refused)
+                      and "timed out" in str(refusals[-1]), "collector timeout was not refused")
+                expected = [("communicate", bridge.DIAGNOSTICS_TIMEOUT),
+                            ("killpg", pid, signal.SIGTERM), ("communicate", 3)]
+                if stubborn:
+                    expected += [("killpg", pid, signal.SIGKILL), ("communicate", None)]
+                check(process_events == expected,
+                      "collector timeout did not terminate and reap its process group: %r" % process_events)
+            for sig in previous_handlers:
+                check(execute(through_main=False, interrupt=sig) is None and refusals
+                      and isinstance(refusals[-1], bridge.Refused)
+                      and "interrupted" in str(refusals[-1]), "collector interruption was not refused")
+                check(process_events == [("communicate", bridge.DIAGNOSTICS_TIMEOUT),
+                                         ("killpg", pid, signal.SIGTERM), ("communicate", 3)],
+                      "collector interruption did not terminate and reap its process group: %r" % process_events)
+
             for changes in ({"malformed": True}, {"missing": True}, {"nonzero": True},
                             {"symlink": True}, {"public": True}, {"timeout": True}, {"duplicate_json": True},
                             {"change": {"machine": "foreign"}}, {"change": {"files": []}},

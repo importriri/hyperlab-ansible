@@ -332,6 +332,13 @@ BODY = r'''
                   "production diagnostics did not bind the reviewed request argv");
             check(diagnostic.deadline.interval === 750000 && diagnostic.deadline.running,
                   "diagnostics did not arm its own overall deadline before spawn");
+            check(diagnostic.startDeadline !== undefined && diagnostic.startDeadline.interval === 5000
+                  && diagnostic.startDeadline.running,
+                  "diagnostics did not arm a short failed-start deadline");
+            if (window.firstFailure >= 0) { Qt.exit(40 + window.firstFailure); return; }
+            diagnostic.startDeadline.triggered();
+            check(lifecycle.diagnosticsRunner === diagnostic && diagnostic.signals.length === 0,
+                  "startup deadline interrupted a running diagnostics bridge");
             check(!lifecycle.collectDiagnostics("other-02") && lifecycle.diagnosticsRunner === diagnostic,
                   "production diagnostics duplicate guard allowed another launch");
             if (window.firstFailure >= 0) { Qt.exit(40 + window.firstFailure); return; }
@@ -403,10 +410,22 @@ BODY = r'''
             diagnostic.exited(0, 0);
             check(lifecycle.diagnosticsRunner === retry && lifecycle.diagnosticsBusy,
                   "late exit ended a newer diagnostics request");
-            retry.running = false; // Failed-to-start need not emit exited.
-            retry.deadline.triggered();
-            check(!lifecycle.diagnosticsBusy && sharedState.diagnosticsFor("other-02").state === "failed",
-                  "failed-to-start diagnostics never settled");
+            check(!retry.running, "failed-start fixture unexpectedly launched the bridge");
+            const oldDeadline = retry.deadline, oldStartDeadline = retry.startDeadline;
+            retry.startDeadline.triggered();
+            check(!lifecycle.diagnosticsBusy && sharedState.diagnosticsFor("other-02").state === "failed"
+                  && sharedState.diagnosticsFor("other-02").detail.indexOf("could not be started") >= 0
+                  && sharedState.diagnosticsFor("other-02").archive === ""
+                  && !oldDeadline.running && !oldStartDeadline.running && retry.signals.length === 0,
+                  "failed-to-start diagnostics did not settle at the short bound");
+            check(lifecycle.collectDiagnostics("dev-01"), "failed start prevented diagnostics retry");
+            diagnostic = lifecycle.diagnosticsRunner;
+            // A late timer or exit from the failed start cannot end the retry.
+            oldStartDeadline.triggered();
+            retry.exited(0, 0);
+            check(lifecycle.diagnosticsRunner === diagnostic && lifecycle.diagnosticsBusy,
+                  "late failed-start callback settled a newer diagnostics request");
+            exitDiagnostics(diagnostic, diagnosticsAnswer(diagnostic), 0, 0);
 
 '''
 
@@ -454,6 +473,8 @@ QtObject { property string text: ""; signal streamFinished() }
 Item {
     property var command: []
     property bool running: false
+    // The failed-start target never runs and never emits exited.
+    onRunningChanged: if (running && command[2] === "other-02") running = false
     property var stdout
     property var stderr
     property var signals: []
