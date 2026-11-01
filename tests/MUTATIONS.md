@@ -1953,10 +1953,15 @@ present for this test before removal. The complete host-key contract then
 passes with `HYPERLAB_REQUIRE_QML_RUNTIME=1`.
 
 To exercise the real QML rejection independently of the earlier parity check,
-restore the old row only in the staged component, then copy it back and rerun:
+restore the old row only in the staged component, then copy it back and rerun.
+Both runs load the same staged path, and copying the original back also
+restores its timestamp, so Qt's QML disk cache can serve the broken
+component's compiled form to the restored run. That run then fails with the
+same emergency-row error although the file is correct. The disk cache stays
+off for this snippet:
 
 ```bash
-PYTHONPATH=tests HYPERLAB_REQUIRE_QML_RUNTIME=1 python - <<'PY'
+QML_DISABLE_DISK_CACHE=1 PYTHONPATH=tests HYPERLAB_REQUIRE_QML_RUNTIME=1 python - <<'PY'
 import shutil
 
 import host_key_sheet_contract as keys
