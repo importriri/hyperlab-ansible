@@ -2875,3 +2875,54 @@ No mutation stayed green.
 | I15 | Delete the require that Decision opens with proposed. | `inventory mutation Decision accepted was accepted` |
 | I16 | Remove only the hidden-directory condition from `source_refusal`, retaining the docs-directory refusal. | `inventory mutation source is hidden was accepted` |
 | I17 | Delete the require that rejects an unrecognized Status header before the no-Status return. | `inventory mutation unrecognized Status '**Status:** proposed.' was accepted` |
+
+### Native Nitro view stays gated, read-only and observational
+
+The deployment contract executes the role's two boolean assertions and the
+feature document copy against a disposable destination for both flags and
+compares the exact bytes written. The read-only runtime contract executes
+the real bridge in a disposable copy with inert tracing `hyperlabctl` and
+Nitro clients. The offscreen runtime contract instantiates the real state,
+coordinator and Control Center; its Nitro scenarios keep the production
+command binding, completion and feature-file handlers with recording
+stand-ins for the process and the file, and the real deadline Timer, whose
+`running` state is observed and whose triggered signal is emitted without
+waiting for the interval. Each source was copied before breaking it,
+restored from that copy (byte-identical) and the same predicted check rerun.
+No mutation called a real client, broker or hardware node.
+
+| Mutation | Check | Observed red assertion |
+| --- | --- | --- |
+| N1: Default the Nitro flag on | `host_desktop_common_contract.py` | Nitro feature must default to boolean false |
+| N2: Skip the boolean assertion for strings and coerce with `bool` | `host_desktop_common_contract.py` | Nitro nonboolean reached installation: 'false' |
+| N3: Enable Nitro from `Boolean(parsed.nitro_view_enabled)` | QML Nitro disabled-page | invalid feature document enabled Nitro |
+| N4: Let `validSubpage` admit Nitro unconditionally | QML Nitro disabled-page | disabled direct Nitro navigation succeeded |
+| N5: Keep the `hyperlabctl` prerequisite before the Nitro branch | `host_quickshell_readonly_runtime_contract.py` | Nitro status exact read-only argv changed: absent hyperlabctl with a working Nitro client: [] |
+| N6: Run `battery off` instead of `status` | `host_quickshell_readonly_runtime_contract.py` | Nitro status exact read-only argv changed: success: [['battery', 'off']] |
+| N7: Run `fan 100 100` instead of `status` | `host_quickshell_readonly_runtime_contract.py` | Nitro status exact read-only argv changed: success: [['fan', '100', '100']] |
+| N8: Read the limiter without its capability | QML Nitro failures | false battery capability shown as an observation |
+| N9: Show the limiter card for any snapshot, absent reading as off | QML Nitro failures | false battery capability shown as an observation |
+| N10: Keep the previous RGB readback when `per_zone` is false | QML Nitro failures | RGB readback stayed visible after capability loss |
+| N11: Drop the boolean type check of the fan capability | QML Nitro failures | malformed Nitro status accepted |
+| N12: Accept any integers as fan percentages | QML Nitro failures | malformed Nitro status accepted |
+| N13: Accept non-hex zone colours | QML Nitro failures | malformed Nitro status accepted |
+| N14: Remove the 16384-character response bound | QML Nitro failures | malformed Nitro status accepted |
+| N15: Do not arm the completion deadline | QML Nitro page/small viewport | Nitro request did not arm its completion deadline |
+| N16: Remove the freshness boundary | QML Nitro failures | stale Nitro observation appears current |
+| N17: Remove the flight-generation admission guard | QML Nitro late-answer | old Nitro answer consumed the new request |
+| N18: Do not signal the bridge on hide | QML Nitro late-answer | Nitro hide did not stop its bridge process |
+| N19: Remove the single-flight admission guard | QML Nitro page/small viewport | overlapping Nitro read accepted |
+
+Every row above was red and then restored green. N8 changes state
+validation and N9 only presentation; both fail the same visible-content
+assertion, which runs before the unsupported case.
+
+One additional mutation, N20, **stayed green**, as its Networks counterpart
+M9 did: removing only the second `generation === state.nitroGeneration`
+comparison in `finishNitro`. Hiding, disabling and a feature-file reload
+already clear `nitroPending`, and N17's admission guard rejects callbacks of
+another runner. The comparison was restored and the scenario passed again.
+
+The bridge mutations N6 and N7 executed only the inert client, which
+recorded its argv; the contract requires exactly `["status"]` and no
+`hyperlabctl` call.
