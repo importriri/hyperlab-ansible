@@ -2838,3 +2838,15 @@ expected refusal as a failure. A first harness let that `ValueError`
 escape as a bare traceback; it now names it. A first attempt at I13 edited
 the identical lines of `evidence_refusal` instead, stayed green because no
 roadmap evidence link escapes, and was repeated on `source_refusal`.
+
+The inventory mutations I1–I14 were repeated with the v1 host-command
+checks present in the same entrypoint. All fourteen breaks still exited 1
+with the diagnostics above (the index line numbers shifted after the
+activation-path clarification); all restorations and the three wording
+and case controls exited 0. The v1 command check was also exercised in a
+disposable fixture containing the real README, playbook map and release
+runbook: changing only the second release apply to `playbooks/lab.yml`
+failed with `release-evidence.md '## 5. Host convergence': release host
+commands are ...`, showing the wrong third argv. Restoring the saved
+runbook bytes passed. The normal `python tests/docs_contract.py` entrypoint
+retains both sets of fixtures and checks; neither proof replaces the other.

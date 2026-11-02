@@ -181,7 +181,7 @@ Every entry has five fields. **Decision** repeats the record's status.
 | Activation | Meaning |
 | --- | --- |
 | `none` | There is nothing to activate. |
-| `default` | Some of it is installed and acts without a HyperLab-specific choice, through `playbooks/lab.yml` with its `foundation.yml`, or the playbooks the Machine provisioner runs. |
+| `default` | Some of it is installed and acts without a HyperLab-specific choice, through `playbooks/v1-host.yml` (including `lab.yml` and `foundation.yml`), or the playbooks the Machine provisioner runs. |
 | `on request` | Installed by an ordinary path, it acts only when the operator runs the command or takes the shell action. |
 | `opt-in` | Nothing is installed or acts until the operator runs a separate playbook, sets a switch that is off by default or names a profile. |
 | `not established` | The sources read do not settle how it becomes active. |
@@ -199,14 +199,18 @@ remain.
     `playbooks/lab.yml`, installs the machine bridge, the operation runner
     and the provisioner in `/usr/local/bin` and stages the shell source;
     the Create view exists only in the Quickshell shell of the Hyprland
-    session, installed by the separate `playbooks/host-desktop-hyprland.yml`
-    without making it the default session. Nothing is created until the
-    operator submits a creation.
+    session. `playbooks/v1-host.yml` imports `lab.yml` and then
+    `host-desktop-hyprland.yml` with the managed session lifecycle enabled,
+    staging Quickshell beside Sway without starting a session or selecting
+    a Ly default. The Hyprland component run alone leaves that lifecycle
+    off. Nothing is created until the operator submits a creation.
   - Source: [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
     [`privatestack-operation.py`](../../roles/host_desktop_common/files/privatestack-operation.py),
     [`privatestack-machine-provision.py`](../../roles/host_desktop_common/files/privatestack-machine-provision.py),
     [`machine_provision.py`](../../tools/hyperlabctl/hyperlabctl/machine_provision.py),
     [`CreateMachineView.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/CreateMachineView.qml),
+    [`v1-host.yml`](../../playbooks/v1-host.yml),
+    [`playbook_topology_contract.py`](../../tests/playbook_topology_contract.py),
     [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py),
     [`host_quickshell_create_view_contract.py`](../../tests/host_quickshell_create_view_contract.py),
     [`host_machine_provision_contract.py`](../../tests/host_machine_provision_contract.py)
