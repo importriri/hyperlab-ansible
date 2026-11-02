@@ -101,7 +101,12 @@ time limit and process-group cleanup on timeout. Fixture overrides use
 extra vars because `vars_files` outrank play variables; a preceding Ansible
 assertion verifies the effective executable and repository paths before
 either command can run. Temporary plays, callbacks, programs and traces
-are removed even on failure. Runtime checks precede the existing textual
+are removed even on failure. HOME is private too, and Python derives its
+user site from HOME, so the parent's user base (`PYTHONUSERBASE`) is passed
+on: CI installs ansible with `pip install --user`, and without it that
+ansible-playbook cannot import `ansible`, prints no report and fails the
+contract. A first check compares the child's user site with the parent's.
+Runtime checks precede the existing textual
 role guards: corrupting stdin, publishing a fixed mode, skipping probes
 in check mode or omitting a directory is caught through execution first.
 The observed failures and restored passes are recorded in `tests/MUTATIONS.md`.

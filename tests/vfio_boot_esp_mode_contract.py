@@ -23,6 +23,7 @@ import os
 import posixpath
 import shutil
 import signal
+import site
 import subprocess
 import sys
 import tempfile
@@ -244,6 +245,38 @@ def decision_tasks() -> list[dict[str, Any]]:
     return selected
 
 
+def child_environment(workspace: Path, configuration: Path) -> dict[str, str]:
+    """No inherited Ansible configuration, inventory, callbacks or user state.
+
+    HOME is private, but Python derives its user site from HOME, and CI
+    installs ansible with pip --user: the parent's user base must follow,
+    or that ansible-playbook cannot import ansible.
+    """
+    return {"PATH": os.environ.get("PATH", os.defpath), "HOME": str(workspace),
+            "TMPDIR": str(workspace), "PYTHONUSERBASE": site.getuserbase(),
+            "ANSIBLE_HOME": str(workspace / "ansible"),
+            "ANSIBLE_CONFIG": str(configuration), "ANSIBLE_NOCOLOR": "1",
+            "ANSIBLE_LOCAL_TEMP": str(workspace / "local"),
+            "ANSIBLE_REMOTE_TEMP": str(workspace / "remote"), "PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def check_child_user_site() -> None:
+    """A pip --user ansible visible here must stay importable in the child."""
+    with tempfile.TemporaryDirectory(prefix="esp-mode-user-site-") as temporary:
+        workspace = Path(temporary)
+        environment = child_environment(workspace, workspace / "ansible.cfg")
+        require(Path(environment["HOME"]) == workspace, "the runtime fixture must keep a private HOME")
+        probe = subprocess.run([sys.executable, "-c",
+                                "import json, site; print(json.dumps(site.getusersitepackages()))"],
+                               env=environment, stdin=subprocess.DEVNULL, capture_output=True,
+                               text=True, timeout=30, check=False)
+    require(probe.returncode == 0, f"user site probe failed: {probe.stderr}")
+    child = json.loads(probe.stdout)
+    require(child == site.getusersitepackages(),
+            f"the runtime child resolves the user site {child!r}, not {site.getusersitepackages()!r}: "
+            "a pip --user ansible-playbook could not import ansible")
+
+
 def run_decision_play(tasks: list[dict[str, Any]], documents: list[str],
                       expected: str, check: bool, wanted: str | None) -> tuple[int, dict[str, Any], list[Any]]:
     executable = shutil.which("ansible-playbook")
@@ -292,12 +325,7 @@ print(documents[argv[2]])
                  "tasks": [*tasks, assertion]}]
         play_path = workspace / "decision.yml"
         play_path.write_text(yaml.safe_dump(play, sort_keys=False), encoding="utf-8")
-        # No inherited Ansible configuration, inventory, callbacks or user state.
-        environment = {"PATH": os.environ.get("PATH", os.defpath), "HOME": temporary,
-                       "TMPDIR": temporary, "ANSIBLE_HOME": str(workspace / "ansible"),
-                       "ANSIBLE_CONFIG": str(configuration), "ANSIBLE_NOCOLOR": "1",
-                       "ANSIBLE_LOCAL_TEMP": str(workspace / "local"),
-                       "ANSIBLE_REMOTE_TEMP": str(workspace / "remote"), "PYTHONDONTWRITEBYTECODE": "1"}
+        environment = child_environment(workspace, configuration)
         argv = [executable, "-i", "localhost,", "--connection", "local",
                 "--extra-vars", f"@{overrides}", str(play_path)]
         if check:
@@ -452,6 +480,7 @@ def check_role() -> None:
 
 
 def main() -> int:
+    check_child_user_site()
     check_runtime()
     check_tool()
     check_role()

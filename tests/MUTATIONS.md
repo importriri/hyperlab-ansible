@@ -749,6 +749,8 @@ mutations = [
      'vfio_boot_file_mode: "0644"',
      'vfio_boot_file_mode: "0644"\nvfio_boot_file_mode: "0644"',
      'duplicate YAML keys'),
+    ('private-user-site', entrypoint, ' "PYTHONUSERBASE": site.getuserbase(),', '',
+     'the runtime child resolves the user site'),
 ]
 mutations = [mutation for mutation in mutations if not sys.argv[1:] or mutation[0] in sys.argv[1:]]
 assert mutations
@@ -794,6 +796,7 @@ PY
 | `unsafe-selection` | `unsafe decision task selection` refuses the added `notify` before executing Ansible. | Exit 0, only the four reviewed task objects are selected. |
 | `changed-probe` | Removing the probe's `changed_when: false` completes the fact assertion but fails `runtime vfat (normal): recap changed is not 0`, with actual changed=1. | Exit 0, changed=0 in every normal/check case. |
 | `duplicate-key` | Repeating the default mode key fails `duplicate YAML keys` before executing Ansible. | Exit 0, the unambiguous real defaults load successfully. |
+| `private-user-site` | Dropping `PYTHONUSERBASE` from the child environment fails `the runtime child resolves the user site` before any play runs: with HOME private, the child's user site moves under the temporary directory, where a `pip install --user` ansible (as in CI) cannot be imported. | Exit 0, the child resolves the parent's user site. |
 
 Every restored invocation also checks ext4 default string `0644`, ext4 custom
 string `0600`, unsafe `dmask=0000`, different targets and different options,
