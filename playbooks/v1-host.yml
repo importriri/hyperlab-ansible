@@ -1,0 +1,20 @@
+---
+# The v1 host target. Release convergence is measured on this playbook:
+# check/diff, first apply and second apply all run it.
+#
+# It reuses the component playbooks and copies none of their roles. lab.yml
+# keeps the foundation, the Sway cockpit and Looking Glass. The Hyprland
+# component then stages the reviewed managed sessions, Quickshell included,
+# beside Sway, which stays selectable as the recovery session. Staging
+# installs files only: no compositor or display manager is started and no
+# Ly default is selected. The VFIO sleep guard comes last.
+- name: Assemble the laptop laboratory first
+  import_playbook: lab.yml
+
+- name: Stage the managed Hyprland and Quickshell sessions beside Sway
+  import_playbook: host-desktop-hyprland.yml
+  vars:
+    host_desktop_hyprland_session_lifecycle_enabled: true
+
+- name: Keep the host awake while a VFIO Machine runs
+  import_playbook: host-sleep-guard.yml
