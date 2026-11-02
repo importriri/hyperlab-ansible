@@ -154,3 +154,425 @@ entered the pipeline.
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
+
+## Proposed decisions and their code
+
+A record whose own Status line says proposed has not been accepted, whatever
+code exists for it. This inventory lists every such record once and says
+how much of it is built, how that code becomes active and what still stands
+between it and acceptance. It is read from the sources and playbooks linked
+in each entry, not from the names of tests: a contract proves what it
+exercises in software, never that a playbook ran on the operator's host or
+that hardware behaved. Nothing here accepts a decision or records a physical
+observation. A record without a Status line is neither proposed nor
+accepted by default and is not listed; there is no record 0049.
+`tests/docs_contract.py` checks the inventory's membership, fields, labels
+and links; review of the sources establishes what each entry says.
+
+Every entry has five fields. **Decision** repeats the record's status.
+**Built** and **Activation** each open with one label and a description:
+
+| Built | Meaning |
+| --- | --- |
+| `none` | No code in the tree implements the decision. |
+| `partial` | Some of the decided software is built; the entry names what is missing. |
+| `built` | The software the record describes is built and exercised by contracts; acceptance and lab or hardware proof may still be open. |
+
+| Activation | Meaning |
+| --- | --- |
+| `none` | There is nothing to activate. |
+| `default` | Some of it is installed and acts without a HyperLab-specific choice, through `playbooks/lab.yml` with its `foundation.yml`, or the playbooks the Machine provisioner runs. |
+| `on request` | Installed by an ordinary path, it acts only when the operator runs the command or takes the shell action. |
+| `opt-in` | Nothing is installed or acts until the operator runs a separate playbook, sets a switch that is off by default or names a profile. |
+| `not established` | The sources read do not settle how it becomes active. |
+
+**Source** links the code and the checks that exercise it, or says `none`.
+**Prerequisites** lists the decision, software, lab and hardware steps that
+remain.
+
+- [ADR 0017](0017-shell-machine-creation.md)
+  - Decision: proposed; no record accepts it.
+  - Built: built — the plan (`machine create-plan`), the staged intent
+    (`machine create --project`, ADR 0053), the shell's Create view and the
+    provisioning runner with its whole-plan check and hash-file cleanup.
+  - Activation: on request — `host_desktop_common`, part of
+    `playbooks/lab.yml`, installs the machine bridge, the operation runner
+    and the provisioner in `/usr/local/bin` and stages the shell source;
+    the Create view exists only in the Quickshell shell of the Hyprland
+    session, installed by the separate `playbooks/host-desktop-hyprland.yml`
+    without making it the default session. Nothing is created until the
+    operator submits a creation.
+  - Source: [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
+    [`privatestack-operation.py`](../../roles/host_desktop_common/files/privatestack-operation.py),
+    [`privatestack-machine-provision.py`](../../roles/host_desktop_common/files/privatestack-machine-provision.py),
+    [`machine_provision.py`](../../tools/hyperlabctl/hyperlabctl/machine_provision.py),
+    [`CreateMachineView.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/CreateMachineView.qml),
+    [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py),
+    [`host_quickshell_create_view_contract.py`](../../tests/host_quickshell_create_view_contract.py),
+    [`host_machine_provision_contract.py`](../../tests/host_machine_provision_contract.py)
+  - Prerequisites: the operator's decision; a Machine created from the
+    installed shell on Nitro, with a real unit stop and a real
+    `ansible-playbook` under the runner; the disposable follow-up of
+    ADR 0018 and the lease of ADR 0019, both open.
+
+- [ADR 0018](0018-disposable-discards-on-stop.md)
+  - Decision: proposed; no record accepts it.
+  - Built: partial — only `lifecycle: disposable` gets `<transient/>` in the
+    domain template, and the managed XML contract refuses a disposable
+    domain without it. Closing guest access and re-pinning the host key at
+    every later boot are not built.
+  - Activation: default — every disposable Machine defined through the
+    `guest` role (`playbooks/vm-create.yml`, which the provisioner runs)
+    gets the transient disk, and the server Templates allow the disposable
+    lifecycle.
+    `playbooks/vm-start.yml` runs neither `vm-guest-inventory.yml` nor
+    `guest-close-access.yml` at a later boot.
+  - Source: [`domain.xml.j2`](../../roles/guest/templates/domain.xml.j2),
+    [`guest_xml_contract.py`](../../tools/guest_xml_contract.py),
+    [`guest_contract.py`](../../tests/guest_contract.py)
+  - Prerequisites: the operator's decision; the software that closes access
+    and re-pins the host key at every boot (ADR 0025 shapes the pin); a
+    disposable Machine started, stopped and started again on Nitro.
+
+- [ADR 0019](0019-gpu-lease.md)
+  - Decision: proposed; implementation waits for the record's
+    preconditions.
+  - Built: none — no Template offers `gpu_lease`, no planner renders a
+    second shape, the hook does not distinguish a run without the GPU, and
+    every VFIO Machine starts with the GPU.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: an image with a working session on both shapes
+    (`workstation-dev-standard`); the Nitro define-then-start test; the
+    operator's choice of Templates and default; then the planner, hook,
+    validation and Start changes the record describes.
+
+- [ADR 0022](0022-network-trust-and-gpu-policy.md)
+  - Decision: proposed; no record accepts it, although the policy runs.
+  - Built: built — the two fields, the ladder in the qemu hook, the ceiling
+    rule in the factory, the guest planner and the root policy tool, and
+    GPU-capable services through a reviewed handoff profile. The per-run
+    lease it refers to is ADR 0019 and is not built.
+  - Activation: default — `playbooks/foundation.yml` installs the hook and
+    its rotation through `gpu_handoff` on a host profile that passes a GPU
+    through; the factory and the planner apply the ceiling rule to every
+    Machine they create or plan.
+  - Source: [`qemu`](../../roles/gpu_handoff/files/qemu),
+    [`gpu_handoff_policy.py`](../../tools/gpu_handoff_policy.py),
+    [`guest_plan.py`](../../tools/guest_plan.py),
+    [`machine_factory.py`](../../tools/hyperlabctl/hyperlabctl/machine_factory.py),
+    [`hook.bats`](../../tests/hook.bats)
+  - Prerequisites: the operator's decision on a policy that is already
+    active; the lease of ADR 0019. The record names no hardware procedure.
+
+- [ADR 0025](0025-host-key-without-agent-file-reads.md)
+  - Decision: proposed; the operator chooses before any of it is built.
+  - Built: none — the host key is still read through QEMU Guest Agent file
+    calls; no serial console log, console parser or host-made host key
+    exists.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the choice between options A, B and C; then the console
+    source in the inventory step and a reviewed migration of existing
+    domain definitions.
+
+- [ADR 0027](0027-guest-notification-owner.md)
+  - Decision: proposed; the operator chooses who owns notifications.
+  - Built: partial — what the record builds under every option:
+    `hyperlab-desk quiet` with its state, mako's do-not-disturb mode
+    following the Desk in front, `quiet sync` at session start, and the
+    guest status island showing a quiet Desk. No shell notification server
+    and no list of waiting notifications exist.
+  - Activation: default — the `guest_desktop_hyprland` role installs it in
+    every workstation profile playbook the provisioner runs, such as
+    `playbooks/guest-arch-dev.yml`.
+  - Source: [`hyperlab-desk.py`](../../roles/guest_desktop_hyprland/files/hyperlab-desk.py),
+    [`hyprland.lua.j2`](../../roles/guest_desktop_hyprland/templates/hyprland.lua.j2),
+    [`StatusIsland.qml`](../../roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace/StatusIsland.qml),
+    [`guest_desk_helper_contract.py`](../../tests/guest_desk_helper_contract.py)
+  - Prerequisites: the choice between options A, B and C; for B, the shell's
+    notification server and a contract that proves the name handover.
+
+- [ADR 0030](0030-disposable-browser-image.md)
+  - Decision: proposed; the operator chooses before the image is built.
+  - Built: none — the `browser-disposable` Template is a draft and the
+    `arch-browser` image manifest says `not-built`; there is no browser
+    profile playbook, account role or capture.
+  - Activation: none — the draft Template is not offered for creation.
+  - Source: none
+  - Prerequisites: the choice between options A and B, and of the browser;
+    the image built, sealed and validated; the download question of
+    milestone 6.
+
+- [ADR 0031](0031-service-appliance-templates.md)
+  - Decision: proposed; the operator chooses before a services Template is
+    ready.
+  - Built: none — `svc-jellyfin` is a draft Template; Jellyfin is deployed
+    by `playbooks/jellyfin.yml` under ADR 0012, not by this decision.
+  - Activation: none — the draft Template is not offered for creation.
+  - Source: none
+  - Prerequisites: the choice between options A and B; then the singleton
+    services Template and its provisioning through the operation runner.
+
+- [ADR 0032](0032-guest-clipboard-out.md)
+  - Decision: proposed; the operator chooses before any of it is built.
+  - Built: none — only host to guest exists (ADR 0020); there is no guest
+    offer program and no `clipboard take`.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the choice between options A and B; then the pull, its
+    confirmations, the control-character refusal and the crossing log.
+
+- [ADR 0033](0033-file-transfer-drop-folder.md)
+  - Decision: proposed; the operator chooses before it is built.
+  - Built: none — no file crosses between host and guests; SPICE file
+    transfer and shared folders are off in every spec.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the choice between options A and B; then the host action
+    and the fixed guest receiver with its limits and log.
+
+- [ADR 0034](0034-usb-passthrough.md)
+  - Decision: proposed; the operator chooses before it is built.
+  - Built: none — every spec's `usb_allowlist` is empty and the guest
+    planner refuses a non-empty one; the host USB policy of ADR 0038 is a
+    separate, accepted record.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the choice between options A and B; then the host
+    allowlist, the live-only attach and detach actions and their shell
+    presentation.
+
+- [ADR 0035](0035-microphone-and-camera.md)
+  - Decision: proposed.
+  - Built: none — no domain definition gives a guest an audio input or a
+    camera, and `tests/media_input_contract.py` keeps it that way until
+    this is decided.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the operator's choice for the microphone and the camera;
+    then the on-demand capture link and the host-drawn indicator.
+
+- [ADR 0036](0036-machine-snapshots-and-backups.md)
+  - Decision: proposed; the operator chooses before any of it is built.
+  - Built: none — only registered services have backups, offline, local and
+    unencrypted, under ADR 0011; Machines have neither snapshots nor
+    encrypted backups.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the choice of snapshot and backup options; the backup
+    target, which ADR 0043 constrains if it is a USB disk; the restore drill
+    on a clean host.
+
+- [ADR 0041](0041-seamless-guest-applications.md)
+  - Decision: proposed; future work in the roadmap's "Later".
+  - Built: none — a Machine is a whole desktop.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the host frame holding in every case (ADR 0039) and QEMU
+    confinement in force (ADR 0037); then the confined waypipe client and a
+    tested clipboard and drag-and-drop filter.
+
+- [ADR 0042](0042-network-device-machine.md)
+  - Decision: proposed; the hardware test decides it.
+  - Built: none — the host drives the Wi-Fi card; there is no sys-net
+    Machine and no uplink network.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the record's Nitro hardware test, then the operator's
+    decision, then the Machine, the uplink and the fallback.
+
+- [ADR 0043](0043-usb-controller-machine.md)
+  - Decision: proposed; the hardware test decides it.
+  - Built: none — the host drives the only USB controller; there is no
+    sys-usb Machine, boot profile or vsock relay.
+  - Activation: none — there is no code to activate.
+  - Source: none
+  - Prerequisites: the record's Nitro hardware test, then the operator's
+    decision, then the boot profile, the Machine and the device handoff.
+
+- [ADR 0044](0044-measured-boot.md)
+  - Decision: proposed; every step that changes how Nitro boots stays the
+    operator's.
+  - Built: partial — step 1 and the measured part of step 2 of option A: a
+    signed multi-profile UKI with signed PCR 11 policies, checked against
+    the host's `db` certificate, the previous image kept, and an mkinitcpio
+    post hook. TPM2 enrollment with a PIN, the recovery key, a new default
+    entry and the removal of the type 1 entries are not built and stay the
+    operator's.
+  - Activation: opt-in — only `playbooks/measured-boot.yml` runs the role,
+    no default playbook imports it, and with `measured_boot_enabled: false`,
+    the default, it builds nothing and removes its rebuild hook.
+  - Source: [`main.yml`](../../roles/measured_boot/tasks/main.yml),
+    [`defaults/main.yml`](../../roles/measured_boot/defaults/main.yml),
+    [`hyperlab-uki-build.py`](../../roles/measured_boot/files/hyperlab-uki-build.py),
+    [`measured-boot.yml`](../../playbooks/measured-boot.yml),
+    [`measured_boot_contract.py`](../../tests/measured_boot_contract.py)
+  - Prerequisites: the operator's decision; every profile booted from the
+    image in the lab host (OVMF in setup mode, swtpm); the record's Nitro
+    hardware test in its order, TPM2 enrollment included. On a host without
+    GPU passthrough the role is not rendered (ADR 0052).
+
+- [ADR 0045](0045-looking-glass-stream-health.md)
+  - Decision: proposed; the Nitro test decides it.
+  - Built: built — `hyperlabctl looking-glass health` and
+    `restart-capture`, the bridge's `stream-health` and `restart-capture`
+    for a running managed Linux Looking Glass Machine, and the Stream
+    section of the Machine pane.
+  - Activation: on request — the commands run when the operator calls them,
+    and the Stream section is in the Quickshell shell of the Hyprland
+    session (`playbooks/host-desktop-hyprland.yml`). The sender they
+    observe is built by the Looking Glass workstation and gaming profile
+    playbooks and started only when Looking Glass is opened.
+  - Source: [`looking_glass.py`](../../tools/hyperlabctl/hyperlabctl/commands/looking_glass.py),
+    [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
+    [`MachineContextPane.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/MachineContextPane.qml),
+    [`test_looking_glass.py`](../../tools/hyperlabctl/tests/test_looking_glass.py),
+    [`host_machine_actions_bridge_contract.py`](../../tests/host_machine_actions_bridge_contract.py)
+  - Prerequisites: the operator's decision; the record's hardware items 2 to
+    5, which wait for the installed host shell. Its amendment of 2026-10-13
+    reports the earlier Nitro run; this inventory does not re-check it.
+
+- [ADR 0046](0046-nested-lab-host.md)
+  - Decision: proposed.
+  - Built: built — `tools/lab/hl_lab.py` checks, creates, starts, stops and
+    removes only `hl-lab-*` resources without privilege, its checker
+    refuses any other domain definition, and the `hl-lab-testbed` network
+    is declared beside the guest networks.
+  - Activation: default — `lab_isolation`, in `playbooks/foundation.yml`,
+    loads the host's rules for the lab bridge on every apply. The lab
+    resources exist only after the operator runs `hl_lab.py create`, and
+    `start` requires `--isolation-checked`.
+  - Source: [`hl_lab.py`](../../tools/lab/hl_lab.py),
+    [`hl_lab_check.py`](../../tools/lab/hl_lab_check.py),
+    [`hl-lab-host.xml`](../../tools/lab/hl-lab-host.xml),
+    [`lab_isolation defaults`](../../roles/lab_isolation/defaults/main.yml),
+    [`hl_lab_contract.py`](../../tests/hl_lab_contract.py)
+  - Prerequisites: the operator's decision; the record's Nitro test of the
+    loaded isolation, the definition, the reachability and the install
+    inside. This inventory does not establish that a lab host built with
+    this tool exists.
+
+- [ADR 0047](0047-emergency-stop.md)
+  - Decision: proposed; the key choice is the operator's.
+  - Built: partial — `hyperlabctl panic engage`, `status` and
+    `restore --confirm`, the bridge's `panic-status` and `panic-restore`
+    (it cannot engage), and the shell's banner with a typed Restore. At
+    this revision neither the Hyprland template nor the host key sheet
+    binds or lists an emergency key; the Sway configuration binds none
+    either, and no check guards Sway.
+  - Activation: on request — a stop is engaged only by running
+    `hyperlabctl panic engage`; the banner and Restore appear in the
+    Hyprland shell while a record exists. Whether a host's installed
+    configuration still carries the earlier `SUPER+SHIFT+Escape` binding
+    is not established here.
+  - Source: [`panic.py`](../../tools/hyperlabctl/hyperlabctl/commands/panic.py),
+    [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
+    [`WorkspaceSurface.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/WorkspaceSurface.qml),
+    [`hyprland.lua.j2`](../../roles/host_desktop_hyprland/templates/hyprland.lua.j2),
+    [`test_panic.py`](../../tools/hyperlabctl/tests/test_panic.py),
+    [`host_key_sheet_contract.py`](../../tests/host_key_sheet_contract.py)
+  - Prerequisites: the operator's decision and key choice; a separately
+    authorized binding with its sheet row and parity checks; the installed
+    absence check on Nitro and Predator; the physical stop and restore
+    campaign with running, paused, shut-off and VFIO Machines.
+
+- [ADR 0048](0048-key-vault.md)
+  - Decision: proposed.
+  - Built: built — the host relay with its confirmation helper, the
+    `key_vault` spec field and its domain checks, the vault Machine's
+    cloud-init with its listener, and the client agent.
+  - Activation: opt-in — the relay comes only from `playbooks/host-vault.yml`,
+    the vault only from creating `vm-specs/vault.yml`, the client only from
+    `playbooks/guest-vault-client.yml`, and the client agent becomes the
+    default `SSH_AUTH_SOCK` only with `guest_vault_client_default_agent`.
+  - Source: [`hyperlab-vault-relay.py`](../../roles/host_vault/files/hyperlab-vault-relay.py),
+    [`hyperlab-vault-confirm.py`](../../roles/host_vault/files/hyperlab-vault-confirm.py),
+    [`vault.yml`](../../vm-specs/vault.yml),
+    [`user-data.j2`](../../roles/guest/templates/user-data.j2),
+    [`hyperlab-vault-agent.py`](../../roles/guest_vault_client/files/hyperlab-vault-agent.py),
+    [`vault_relay_contract.py`](../../tests/vault_relay_contract.py),
+    [`vault_guest_contract.py`](../../tests/vault_guest_contract.py),
+    [`key_vault_domain_contract.py`](../../tests/key_vault_domain_contract.py)
+  - Prerequisites: the operator's decision; that vhost-vsock carries a
+    guest's packets only to the host, and the confirmation dialog's output,
+    both still unobserved; the record's test in the lab host, then on Nitro.
+
+- [ADR 0050](0050-hardware-readiness-and-profile.md)
+  - Decision: proposed.
+  - Built: built — `hyperlabctl doctor --hardware` and its `--profile NAME`
+    proposal, reading `/proc` and `/sys` without privilege.
+  - Activation: on request — a read-only command; no installer in this
+    repository calls it.
+  - Source: [`hardware.py`](../../tools/hyperlabctl/hyperlabctl/hardware.py),
+    [`doctor.py`](../../tools/hyperlabctl/hyperlabctl/commands/doctor.py),
+    [`test_hardware.py`](../../tools/hyperlabctl/tests/test_hardware.py)
+  - Prerequisites: the operator's decision; the runs on the Predator and in
+    the lab host that the record leaves to do; the installer that would
+    call it.
+
+- [ADR 0051](0051-disposable-viewer-and-safe-documents.md)
+  - Decision: proposed.
+  - Built: partial — step 1 only, `hyperlab-safe-pdf to-pixels` and
+    `from-pixels` with the stream reader's limits. The viewer Machine, the
+    host relay and `hyperlab-open-disposable` are not built.
+  - Activation: opt-in — only `playbooks/guest-safe-documents.yml` installs
+    the converter, and no profile playbook imports it.
+  - Source: [`hyperlab-safe-pdf.py`](../../roles/guest_safe_documents/files/hyperlab-safe-pdf.py),
+    [`main.yml`](../../roles/guest_safe_documents/tasks/main.yml),
+    [`guest-safe-documents.yml`](../../playbooks/guest-safe-documents.yml),
+    [`safe_pdf_contract.py`](../../tests/safe_pdf_contract.py)
+  - Prerequisites: the operator's decision; steps 2 to 4 of the record; its
+    test in the lab host, then on Nitro.
+
+- [ADR 0052](0052-host-without-gpu-passthrough.md)
+  - Decision: proposed.
+  - Built: built — the `no-gpu-passthrough` profile, the selection rules
+    that keep `auto` from considering it, and the skip of `vfio_boot` and
+    `gpu_handoff` without their brick stamps.
+  - Activation: opt-in — only `host_profile: no-gpu-passthrough` selects it.
+    The default `host_profile: auto` runs the same selection on every
+    `foundation.yml` apply, never picks it and still stops when no profile
+    matches completely: there is no automatic fallback. On such a host a
+    VFIO Machine's GPU policy step refuses without the `gpu_handoff`
+    directory.
+  - Source: [`select.yml`](../../roles/hardware_probe/tasks/select.yml),
+    [`hardware.yml`](../../group_vars/all/hardware.yml),
+    [`foundation.yml`](../../playbooks/foundation.yml),
+    [`vfio-policy.yml`](../../roles/guest/tasks/vfio-policy.yml),
+    [`render.yml`](../../tests/render.yml),
+    [`static_contract.py`](../../tests/static_contract.py)
+  - Prerequisites: the operator's decision; the record's run in the lab
+    host with the profile named, and `auto` on Nitro; nothing is tested on
+    a real one-GPU host.
+
+- [ADR 0053](0053-withdraw-machine-intent.md)
+  - Decision: proposed.
+  - Built: built — `machine create --project`, which publishes the record
+    last under the registry lock, and `machine withdraw ID --record-sha256`
+    with its projection and domain refusals.
+  - Activation: on request — the shell's creation runs the staged step
+    through the bridge, and withdraw runs only when the operator calls it.
+    Nothing removes the record and spec an interrupted provisioning leaves.
+  - Source: [`machine_registry.py`](../../tools/hyperlabctl/hyperlabctl/machine_registry.py),
+    [`machine.py`](../../tools/hyperlabctl/hyperlabctl/commands/machine.py),
+    [`c10_machine_registry_contract.py`](../../tests/c10_machine_registry_contract.py),
+    [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py)
+  - Prerequisites: the operator's decision; the record's Nitro test with the
+    bridge installed; a cleanup for what an interrupted provisioning leaves,
+    if one is wanted.
+
+- [ADR 0054](0054-private-machine-diagnostics.md)
+  - Decision: proposed.
+  - Built: built — the bridge's supervised `collect_diagnostics` over the
+    fixed registry routes, its result validation and the shell's handlers,
+    exercised with synthetic sources.
+  - Activation: on request — the Diagnostics action of the selected Machine
+    in the Hyprland shell, through the bridge `host_desktop_common` installs.
+  - Source: [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
+    [`diagnostics.py`](../../tools/hyperlabctl/hyperlabctl/commands/diagnostics.py),
+    [`test_diagnostics.py`](../../tools/hyperlabctl/tests/test_diagnostics.py),
+    [`host_machine_actions_bridge_contract.py`](../../tests/host_machine_actions_bridge_contract.py),
+    [`host_operation_integration_contract.py`](../../tests/host_operation_integration_contract.py)
+  - Prerequisites: the operator's decision; collection from the installed
+    shell and on hardware, on Nitro and Predator.

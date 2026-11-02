@@ -21,12 +21,23 @@ ADRs 0017, 0018 and 0022 carry one recognized Status line right below
 their title, and their index entries open with the same status. This
 proves the structure of a reference, not that an observation is authentic
 or that a receipt is enough for the claim.
+
+The ADR index's proposal inventory has exactly one entry per numbered
+record whose own Status line says proposed (in any letter case), and none
+for any other record; a record without a Status line is neither proposed
+nor accepted. Every entry links its record and fills the Decision, Built,
+Activation, Source and Prerequisites fields with a known label, and a
+claimed build names existing source files inside the repository. This
+checks consistency and paths only: source inspection and review establish
+what an entry means, and no entry accepts a decision or records a physical
+observation.
 """
 
 from __future__ import annotations
 
 import re
 import shlex
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import unquote
@@ -54,6 +65,17 @@ STATUS_SCOPED_ADRS = (
     "0022-network-trust-and-gpu-policy.md",
 )
 ADR_STATUS = re.compile(r"^Status: (proposed|accepted)\b")
+
+ADR_RECORD = re.compile(r"^(?P<number>\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+STATUS_LINE = re.compile(r"^(?:- )?status:", re.IGNORECASE)
+DECLARED_STATUS = re.compile(r"^(?:- )?status:\s*(?P<status>proposed|accepted)\b", re.IGNORECASE)
+INVENTORY_HEADING = "## Proposed decisions and their code"
+INVENTORY_ENTRY = re.compile(r"^- \[ADR (?P<number>\d{4})\]\((?P<target>[^()\s]+)\)$")
+INVENTORY_FIELD = re.compile(r"^  - (?P<field>[A-Za-z]+): (?P<text>.*)$")
+INVENTORY_FIELDS = ("Decision", "Built", "Activation", "Source", "Prerequisites")
+BUILT_LABELS = ("none", "partial", "built")
+ACTIVATION_LABELS = ("none", "default", "on request", "opt-in", "not established")
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]*)\)")
 
 
 def require(condition: bool, message: str) -> None:
@@ -403,11 +425,375 @@ def check_v1_host_command_parsing() -> None:
             raise AssertionError("a second release apply of lab.yml was accepted")
 
 
+def declared_status(path: Path) -> str | None:
+    """The status a numbered ADR declares, lower case, or None without one.
+
+    A record without a Status line is neither proposed nor accepted. A
+    second Status line, one that is not right below the title, or a status
+    word other than proposed or accepted is a refusal.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    statuses = [line for line in lines if STATUS_LINE.match(line)]
+    if not statuses:
+        return None
+    require(len(statuses) == 1, f"{path.name} has {len(statuses)} Status lines, not one")
+    require(bool(lines) and lines[0].startswith("# ADR "), f"{path.name} lost its title")
+    first = next((line for line in lines[1:] if line.strip()), "")
+    require(first == statuses[0], f"{path.name}: the Status line is not right below the title")
+    match = DECLARED_STATUS.match(first)
+    require(match is not None, f"{path.name}: unrecognized status line {first!r}")
+    return match["status"].lower()
+
+
+def adr_records(adr: Path) -> dict[str, Path]:
+    """File name -> path of every numbered ADR record, numbers unique."""
+    records: dict[str, Path] = {}
+    numbers: dict[str, str] = {}
+    for path in sorted(adr.iterdir()):
+        if not (re.match(r"^\d{4}-", path.name) and path.name.endswith(".md")):
+            continue
+        match = ADR_RECORD.match(path.name)
+        require(match is not None, f"{path.name} is not a well-formed ADR file name")
+        require(
+            path.is_file() and not path.is_symlink(),
+            f"{path.name} is not a regular ADR file",
+        )
+        number = match["number"]
+        require(number not in numbers, f"ADR {number} is both {numbers.get(number)} and {path.name}")
+        numbers[number] = path.name
+        records[path.name] = path
+    return records
+
+
+def inventory_lines(text: str) -> list[tuple[int, str]]:
+    """(line number, line) of the proposal inventory section of the index."""
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if line == INVENTORY_HEADING]
+    require(
+        len(starts) == 1,
+        f"ADR index has {len(starts)} {INVENTORY_HEADING!r} sections, not one",
+    )
+    body: list[tuple[int, str]] = []
+    for number, line in enumerate(lines[starts[0] + 1:], start=starts[0] + 2):
+        if re.match(r"^#{1,2} ", line):
+            break
+        body.append((number, line))
+    return body
+
+
+def inventory_entries(text: str) -> dict[str, tuple[int, str, dict[str, str]]]:
+    """Linked file -> (line, ADR number, fields) of every inventory entry.
+
+    An entry is a top-level `- [ADR NNNN](file)` item followed directly by
+    its `  - Field: text` items, each field continued by lines indented
+    four spaces; a blank line ends the entry. Prose may precede the first
+    entry. Any other top-level list item in the section, and any other line
+    after the first entry, is malformed.
+    """
+    entries: dict[str, tuple[int, str, dict[str, list[str]]]] = {}
+    fields: dict[str, list[str]] | None = None
+    field: list[str] | None = None
+    started = False
+    for number, line in inventory_lines(text):
+        malformed = f"ADR index line {number}: malformed proposal inventory line {line!r}"
+        heading = INVENTORY_ENTRY.match(line)
+        if heading:
+            started = True
+            name = heading["target"]
+            require(name not in entries, f"proposal inventory lists {name} twice")
+            fields = {}
+            field = None
+            entries[name] = (number, heading["number"], fields)
+            continue
+        require(not line.startswith("- "), malformed)
+        if not started:
+            continue
+        if not line.strip():
+            fields = field = None
+            continue
+        item = INVENTORY_FIELD.match(line)
+        if item and fields is not None:
+            key = item["field"]
+            require(key in INVENTORY_FIELDS, f"ADR index line {number}: unknown inventory field {key!r}")
+            require(key not in fields, f"ADR index line {number}: inventory field {key} repeated")
+            field = fields[key] = [item["text"].strip()]
+            continue
+        continued = line.startswith("    ") and not line.lstrip().startswith("- ")
+        require(field is not None and continued, malformed)
+        assert field is not None
+        field.append(line.strip())
+    return {
+        name: (number, adr, {key: " ".join(parts).strip() for key, parts in values.items()})
+        for name, (number, adr, values) in entries.items()
+    }
+
+
+def field_label(text: str, labels: tuple[str, ...], where: str, field: str) -> str:
+    """The label a Built or Activation field opens with, before its description."""
+    for label in sorted(labels, key=len, reverse=True):
+        prefix = f"{label} — "
+        if text.startswith(prefix) and text[len(prefix):].strip():
+            return label
+    raise AssertionError(
+        f"{where}: {field} does not open with one of {', '.join(labels)} and a description"
+    )
+
+
+def source_refusal(root: Path, base: Path, raw: str) -> str | None:
+    """Why an inventory source link is not an existing source file, or None."""
+    if not raw or raw != raw.strip() or SCHEME.match(raw) or raw.startswith(("/", "#")):
+        return "is not a relative path inside the repository"
+    target = unquote(raw.split("#", 1)[0])
+    if not target:
+        return "is not a relative path inside the repository"
+    resolved = (base / target).resolve()
+    if not resolved.is_relative_to(root):
+        return "escapes the repository"
+    if not resolved.is_file():
+        return "is not an existing file"
+    relative = resolved.relative_to(root)
+    if relative.parts[0] == "docs" or any(part.startswith(".") for part in relative.parts):
+        return "is not a source or verification file"
+    return None
+
+
+def check_proposal_inventory(root: Path) -> None:
+    root = root.resolve()
+    adr = root / "docs" / "adr"
+    records = adr_records(adr)
+    proposed = {name for name, path in records.items() if declared_status(path) == "proposed"}
+    text = (adr / "README.md").read_text(encoding="utf-8")
+    navigation = adr_index_entries(text)
+    for name in records:
+        require(name in navigation, f"ADR index navigation omits {name}")
+    entries = inventory_entries(text)
+    for name, (line, number, fields) in entries.items():
+        where = f"proposal inventory entry {name} (ADR index line {line})"
+        record = ADR_RECORD.match(name)
+        require(record is not None, f"{where}: the link is not a numbered ADR file name")
+        assert record is not None
+        require(name in records, f"{where}: the linked record does not exist")
+        require(record["number"] == number, f"{where} links ADR {number} to a different record")
+        require(name in proposed, f"proposal inventory lists {name}, whose Status is not proposed")
+        for key in INVENTORY_FIELDS:
+            require(key in fields, f"{where} lacks {key}")
+            require(bool(fields[key]), f"{where} has an empty {key}")
+        require(
+            re.match(r"proposed\b", fields["Decision"], re.IGNORECASE) is not None,
+            f"{where}: Decision does not say proposed",
+        )
+        built = field_label(fields["Built"], BUILT_LABELS, where, "Built")
+        active = field_label(fields["Activation"], ACTIVATION_LABELS, where, "Activation")
+        require(
+            (built == "none") == (active == "none"),
+            f"{where}: Built {built!r} and Activation {active!r} disagree",
+        )
+        links = MARKDOWN_LINK.findall(fields["Source"])
+        if fields["Source"] == "none":
+            require(built == "none", f"{where}: a {built} build names no source")
+        else:
+            require(built != "none", f"{where}: nothing is built, so Source must be none")
+            require(bool(links), f"{where}: Source is neither none nor source links")
+        for raw in links:
+            refusal = source_refusal(root, adr, raw)
+            require(refusal is None, f"{where}: source link {raw!r} {refusal}")
+    for name in sorted(proposed - entries.keys()):
+        raise AssertionError(f"proposal inventory omits {name}")
+
+
+def check_inventory_fixtures() -> None:
+    """The inventory check accepts harmless edits and refuses each break."""
+    entries = inventory_entries((DOCS / "adr" / "README.md").read_text(encoding="utf-8"))
+    sources = sorted(
+        {raw for _, _, fields in entries.values() for raw in MARKDOWN_LINK.findall(fields["Source"])}
+    )
+    with TemporaryDirectory() as directory:
+        scratch = Path(directory).resolve()
+        (scratch / "outside.py").write_text("", encoding="utf-8")
+        root = scratch / "repo"
+        adr = root / "docs" / "adr"
+
+        def reset() -> None:
+            if root.exists():
+                shutil.rmtree(root)
+            shutil.copytree(DOCS / "adr", adr)
+            for raw in sources:
+                relative = (DOCS / "adr" / unquote(raw.split("#", 1)[0])).resolve().relative_to(ROOT)
+                (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, root / relative)
+
+        def edit(name: str, old: str, new: str) -> None:
+            path = adr / name
+            text = path.read_text(encoding="utf-8")
+            require(old in text, f"fixture anchor {old!r} is missing from {name}")
+            path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+        def block(name: str) -> str:
+            text = (adr / "README.md").read_text(encoding="utf-8")
+            match = re.search(
+                rf"^- \[ADR {name[:4]}\]\({re.escape(name)}\)\n(?:[^\n]+\n)*",
+                text,
+                re.MULTILINE,
+            )
+            require(match is not None, f"fixture entry {name} is missing")
+            assert match is not None
+            return match[0]
+
+        def without(entry: str, key: str) -> str:
+            kept: list[str] = []
+            dropping = False
+            for line in entry.splitlines(keepends=True):
+                if line.startswith("  - "):
+                    dropping = line.startswith(f"  - {key}: ")
+                if not dropping:
+                    kept.append(line)
+            require(len(kept) < len(entry.splitlines()), f"fixture field {key} is missing")
+            return "".join(kept)
+
+        def accepts(label: str, *edits: tuple[str, str, str]) -> None:
+            reset()
+            for name, old, new in edits:
+                edit(name, old, new)
+            try:
+                check_proposal_inventory(root)
+            except AssertionError as error:
+                raise AssertionError(f"inventory control {label} was refused: {error}") from None
+
+        def refuses(label: str, expected: str, *edits: tuple[str, str, str]) -> None:
+            reset()
+            for name, old, new in edits:
+                edit(name, old, new)
+            try:
+                check_proposal_inventory(root)
+            except Exception as error:  # noqa: BLE001 - a crash is not the refusal
+                require(
+                    isinstance(error, AssertionError) and expected in str(error),
+                    f"inventory mutation {label} failed for another reason: "
+                    f"{type(error).__name__}: {error}",
+                )
+            else:
+                raise AssertionError(f"inventory mutation {label} was accepted")
+
+        def status_line(name: str) -> str:
+            line = next(
+                (line for line in (adr / name).read_text(encoding="utf-8").splitlines()
+                 if STATUS_LINE.match(line)),
+                None,
+            )
+            require(line is not None, f"fixture record {name} has no Status line")
+            assert line is not None
+            return line
+
+        def recased(name: str, upper: bool) -> tuple[str, str, str]:
+            line = status_line(name)
+            match = DECLARED_STATUS.match(line)
+            require(match is not None, f"fixture record {name} has no recognized Status")
+            assert match is not None
+            head = match[0].upper() if upper else match[0].lower()
+            return (name, line, head + line[len(match[0]):])
+
+        # Members are chosen from the tree, so accepting or adding a record
+        # changes which ones are exercised, never whether the checks run.
+        index = "README.md"
+        reset()
+        statuses = {name: declared_status(path) for name, path in adr_records(adr).items()}
+        members = sorted(name for name, status in statuses.items() if status == "proposed")
+        accepted = sorted(name for name, status in statuses.items() if status == "accepted")
+        built = [name for name in members if entries[name][2]["Source"] != "none"]
+        require(len(members) >= 2 and bool(accepted) and bool(built), "too few fixture records")
+        target = built[-1]
+        other = next(name for name in members if name != target)
+        number = target[:4]
+        heading = f"- [ADR {number}]({target})"
+        target_entry = block(target)
+        other_entry = block(other)
+        source = MARKDOWN_LINK.search(target_entry.split("  - Source: ", 1)[1])
+        require(source is not None, f"fixture entry {target} has no source link")
+        assert source is not None
+
+        target_status = status_line(target)
+        recase = (recased(target, True), recased(other, False))
+
+        def relinked(new: str) -> tuple[str, str, str]:
+            return (index, target_entry, target_entry.replace(f"]({source[1]})", f"]({new})", 1))
+
+        accepts("unchanged")
+        accepts(
+            "harmless wording",
+            (index, f"{INVENTORY_HEADING}\n", f"{INVENTORY_HEADING}\n\nAn added paragraph.\n"),
+            (index, "  - Prerequisites: ", "  - Prerequisites: Still open: "),
+        )
+        accepts("Status letter case", *recase)
+        refuses("entry removed", f"proposal inventory omits {target}", (index, target_entry, ""))
+        refuses(
+            "entry duplicated",
+            f"proposal inventory lists {target} twice",
+            (index, other_entry, f"{other_entry}\n{target_entry}"),
+        )
+        refuses(
+            "accepted record substituted",
+            f"proposal inventory lists {accepted[0]}, whose Status is not proposed",
+            (index, heading, f"- [ADR {accepted[0][:4]}]({accepted[0]})"),
+        )
+        refuses(
+            "Status removed from a member",
+            f"proposal inventory lists {target}, whose Status is not proposed",
+            (target, f"{target_status}\n", ""),
+        )
+        refuses(
+            "Status line duplicated",
+            f"{target} has 2 Status lines, not one",
+            (target, f"{target_status}\n", f"{target_status}\n\nStatus: accepted.\n"),
+        )
+        refuses(
+            "number mismatched",
+            f"links ADR {other[:4]} to a different record",
+            (index, heading, f"- [ADR {other[:4]}]({target})"),
+        )
+        refuses(
+            "malformed entry",
+            "malformed proposal inventory line",
+            (index, heading, f"- [ADR {number[1:]}]({target})"),
+        )
+        refuses(
+            "escaping record link",
+            "the link is not a numbered ADR file name",
+            (index, heading, f"- [ADR {number}](../adr/{target})"),
+        )
+        refuses(
+            "navigation link removed",
+            f"ADR index navigation omits {target}",
+            (index, f"[`{target}`]({target})", f"`{target}`"),
+        )
+        for key in INVENTORY_FIELDS:
+            refuses(f"{key} removed", f"lacks {key}", (index, target_entry, without(target_entry, key)))
+        refuses(
+            "unknown Built label",
+            "Built does not open with one of",
+            (index, target_entry, target_entry.replace("  - Built: ", "  - Built: complete, ", 1)),
+        )
+        refuses(
+            "build without source",
+            "build names no source",
+            (index, target_entry, re.sub(r"  - Source: .*\n(?:    .*\n)*", "  - Source: none\n", target_entry)),
+        )
+        refuses("source missing", "is not an existing file", relinked("../../tools/no-such-source.py"))
+        refuses("source escaping", "escapes the repository", relinked("../../../outside.py"))
+        refuses(
+            "source absolute",
+            "is not a relative path inside the repository",
+            relinked(str(scratch / "outside.py")),
+        )
+        refuses("source is documentation", "is not a source or verification file", relinked(other))
+
+
 def main() -> int:
     check_checkbox_paragraphs()
     check_v1_host_command_parsing()
     check_v1_host_commands(ROOT)
     check_adr_status(ROOT)
+    check_proposal_inventory(ROOT)
+    check_inventory_fixtures()
     check_roadmap_evidence(ROOT)
 
     for path in MARKDOWN:
