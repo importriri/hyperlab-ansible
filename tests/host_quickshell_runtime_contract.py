@@ -1046,6 +1046,43 @@ NETWORKS_DISABLED = r"""
                   "invalid features launched network inventory");
 """
 
+NETWORKS_LOADING = r"""
+            const rows = @@NETWORK_ROWS@@;
+            sharedState.observationNow = sharedState.startedAt + 91000;
+            sharedState.applyFeatures('{"networks_view_enabled":true}');
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            check(sharedState.networksStatus === "loading",
+                  "Networks first read after shell uptime became unavailable");
+            check(visibleText(workspaceSurface, "Reading declared networks")
+                  && !visibleText(workspaceSurface, "Networks unavailable"),
+                  "Networks first read after shell uptime lost its loading label");
+            // The simulated wait ends when the fixture's fresh answer arrives.
+            sharedState.observationNow = Date.now();
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksStatus === "ready",
+                  "Networks first answer after shell uptime did not become ready");
+            sharedSurfaces.closeWorkspace();
+            sharedState.observationNow = sharedState.startedAt + 182000;
+            sharedSurfaces.openWorkspacePage("controls", "networks", false);
+            check(sharedState.networksStatus === "loading",
+                  "Networks reopening after shell uptime became unavailable");
+            check(visibleText(workspaceSurface, "Reading declared networks")
+                  && !visibleText(workspaceSurface, "Networks unavailable"),
+                  "Networks reopening after shell uptime lost its loading label");
+            sharedState.networkFixtureTimeout();
+            check(sharedState.networksStatus === "unavailable"
+                  && visibleText(workspaceSurface, "Networks unavailable"),
+                  "Networks aged-shell read did not fail at its own deadline");
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksStatus === "unavailable",
+                  "Networks aged-shell timeout accepted a late answer");
+            sharedState.requestNetworks();
+            sharedState.observationNow = Date.now();
+            sharedState.networkFixtureComplete(JSON.stringify(rows), 0);
+            check(sharedState.networksStatus === "ready",
+                  "Networks aged-shell read did not recover with a fresh answer");
+"""
+
 NETWORKS = r"""
             const rows = @@NETWORK_ROWS@@;
             sharedState.applyFeatures('{"networks_view_enabled":true}');
@@ -1197,6 +1234,8 @@ NETWORKS_LATE = r"""
             const old = sharedState.networksFlightGeneration;
             sharedSurfaces.closeWorkspace();
             check(!sharedState.networksPending, "hiding Networks kept a pending observation");
+            check(sharedState.networkFixtureSignals.indexOf(9) >= 0,
+                  "Networks hide did not stop its bridge process");
             sharedSurfaces.openWorkspacePage("controls", "networks", false);
             check(sharedState.networkFixtureLaunches.length === 1,
                   "reopening Networks overlapped a retiring process");
@@ -1210,7 +1249,11 @@ NETWORKS_LATE = r"""
                   "old Networks generation replaced outstanding new request");
             check(sharedState.networksPending && sharedState.networksRows.length === 0,
                   "old Networks answer consumed the new request");
+            const signalsBeforeDisable = sharedState.networkFixtureSignals.length;
             sharedState.applyFeatures('{"networks_view_enabled":false}');
+            check(sharedState.networkFixtureSignals.length === signalsBeforeDisable + 1
+                  && sharedState.networkFixtureSignals[signalsBeforeDisable] === 9,
+                  "Networks disable did not stop its bridge process");
             check(sharedSurfaces.subpage === "session", "disabled Networks subpage retained");
             sharedState.applyFeatures('{"networks_view_enabled":true}');
             sharedSurfaces.openSubpage("networks");
@@ -3136,6 +3179,8 @@ def main() -> int:
 
         cases = [
             ("networks-disabled", 800, 600, populated, NETWORKS_DISABLED),
+            ("networks-loading", 800, 600, populated,
+             NETWORKS_LOADING.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
             ("networks", 1920, 1080, populated,
              NETWORKS.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
             ("networks-small", 800, 600, populated,

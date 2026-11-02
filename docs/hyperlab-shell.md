@@ -330,10 +330,15 @@ physical acceptance.
 `privatestack-hyperlab network-inventory`, whose fixed command is exactly
 `hyperlabctl --json net list`. It reads on opening and on the existing
 30-second slow cadence only while that enabled page is visible. Only one
-process may be in flight. A 15-second completion deadline marks an unanswered
-or failed start unavailable and stops its owned process. Each flight keeps
-its request generation through cancellation; hiding, disabling and reopening
-cannot publish a previous flight's answer or overlap a retiring process.
+bridge process may be in flight. Opening or reopening shows **Reading declared
+networks** until the first reply or completion deadline, regardless of shell
+uptime. A 15-second completion deadline marks an unanswered or failed start
+unavailable and signals the bridge process to stop. Hiding or disabling also
+signals that bridge to stop. Cancellation does not terminate the CLI or its
+descendants as a process group; a child read can outlive the bridge. Each
+flight keeps its request generation through cancellation; hiding, disabling
+and reopening cannot publish a previous flight's answer or overlap a retiring
+bridge process.
 
 The complete array must validate before any row is published: object rows,
 unique valid names, the three known state words, nullable string subnet and
@@ -372,7 +377,8 @@ QML state, coordinator and presentation with inert transport. Require the
 Qt runtime explicitly with
 `HYPERLAB_REQUIRE_QML_RUNTIME=1 python tests/host_quickshell_runtime_contract.py`.
 The fixtures cover all three row states, empty/unavailable/stale/recovery,
-malformed and duplicate rows, failed starts, deadlines, late replies,
+malformed and duplicate rows, opening after long shell uptime, failed starts,
+deadlines, late replies, bridge cancellation on hiding or disabling,
 disabling/reopening, keyboard focus and a small viewport. They do not prove
 installed Quickshell process ordering, compositor focus or network isolation.
 Nested default/opt-in convergence and physical acceptance on Nitro, then

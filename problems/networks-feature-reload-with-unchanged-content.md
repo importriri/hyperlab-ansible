@@ -34,3 +34,16 @@ The workspace/theme contract now checks the exact names of the watched
 FileViews: keyboard layout, reduced motion and this feature document.
 It preserves the session appearance restriction: the theme file remains
 unwatched. Removing either required watcher or adding a theme watcher fails.
+
+## Watcher coverage
+
+Checking only top-level FileView blocks with fixed indentation missed an
+additional watcher nested inside a reviewed input. A compact
+`watchChanges:true` binding also escaped that membership check. A nested
+theme FileView passed the original contract despite adding an unreviewed
+watched input.
+
+The contract now counts every `watchChanges` binding across the whole state
+file, regardless of whitespace or nesting, as well as requiring the three
+named watchers. Both nested and compact theme-watcher mutations fail with
+"session FileView watcher policy changed" and pass after restoration.

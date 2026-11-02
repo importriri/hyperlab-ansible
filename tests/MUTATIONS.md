@@ -2407,10 +2407,27 @@ assertions, with no syntax error or missing tool.
 | M26: Remove the feature document path | QML Networks disabled-page | Networks feature file path differs from deployment |
 | M27: Disconnect the request completion deadline | QML Networks failures/deadline | Networks timeout did not become unavailable |
 | M28: Extend the documented completion deadline | QML Networks disabled-page | Networks completion deadline differs from its documented bound |
+| M29: Apply the shared startup-relative loading rule to Networks | QML Networks loading after shell uptime | Networks first read after shell uptime became unavailable |
+| M30: Remove bridge cancellation on hide | QML Networks late-answer | Networks hide did not stop its bridge process |
+| M31: Cancel on hide but omit cancellation on disable | QML Networks late-answer | Networks disable did not stop its bridge process |
+| M32: Add a nested theme FileView watcher | `host_quickshell_workspace_theme_contract.py` | session FileView watcher policy changed |
+| M33: Add a compact `watchChanges:true` theme binding | `host_quickshell_workspace_theme_contract.py` | session FileView watcher policy changed |
 
 Every row above was red and then restored green (exit 0). M9b is the
 flight-generation admission guard: an old callback must not consume a newer
 request even when it cannot publish its own rows.
+
+M29 opens and reopens the real page after 91 seconds of simulated shell
+uptime, requiring the visible loading label until a reply or the flight's
+own deadline. M30 requires signal 9 immediately after hiding; M31 requires
+a new signal when disabling a pending read. These signals address the
+bridge process; they do not prove descendant process-group cleanup.
+
+Before the whole-file watcher count was added, M32 **stayed green**: the
+named-membership check only inspected top-level blocks at fixed indentation.
+After adding a whitespace-independent count of every `watchChanges` binding
+alongside that membership check, both M32 and M33 were red as shown above
+and restored green. No input watcher was added to the accepted membership.
 
 One additional mutation, M9, **stayed green**: removing only the second
 `generation === state.networksGeneration` comparison in `finishNetworks`.

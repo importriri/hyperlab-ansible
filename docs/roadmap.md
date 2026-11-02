@@ -868,7 +868,7 @@ work explicitly requires it.
       (the Create view needs none: it runs the same steps as the CLI)
   - [x] default-off, read-only native Networks page: declared configuration
         and libvirt observation, complete validation, guarded navigation and
-        freshness (`tests/host_quickshell_runtime_contract.py`,
+        on-demand loading/freshness (`tests/host_quickshell_runtime_contract.py`,
         `tests/host_quickshell_readonly_runtime_contract.py`,
         `tests/host_desktop_common_contract.py`; software-verified with fixtures;
         installed convergence and Nitro/Predator acceptance remain open)

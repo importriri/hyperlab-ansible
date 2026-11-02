@@ -206,7 +206,10 @@ Scope {
     property var networksObserved: []
 
     readonly property string networksStatus: {
-        const health = state.sourceState(state.networksSourceState, state.networksObservedAt);
+        // Networks starts on demand, possibly long after shell startup.
+        // Its own completion deadline turns an unanswered read unavailable.
+        const health = state.networksSourceState === "loading" ? "loading"
+            : state.sourceState(state.networksSourceState, state.networksObservedAt);
         return health === "ok" ? (state.networksObserved.length ? "ready" : "empty") : health;
     }
     // Old rows never look current, including during a failure or after hiding.

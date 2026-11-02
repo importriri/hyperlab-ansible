@@ -287,7 +287,8 @@ def main() -> int:
         if re.search(r"(?m)^        watchChanges: true$", block)
     ]
     require(
-        len(watched) == 3
+        len(re.findall(r"\bwatchChanges\s*:", state_qml)) == len(watched)
+        and len(watched) == 3
         and set(watched) == {"keyboardStateFile", "reducedMotionStateFile", "featuresFile"},
         "session FileView watcher policy changed",
     )
