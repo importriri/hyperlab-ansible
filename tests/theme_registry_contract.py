@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import yaml
+from jinja2 import Environment, nodes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,7 @@ CHOICES = "tools/choices/choices.yml"
 GENERATED = "group_vars/all/choices.yml"
 PALETTE = "tools/palette/palette.yml"
 MANIFEST = "themes/trust-model/theme.yml"
+INSTALLER = "roles/host_desktop_sway/tasks/palette.yml"
 APPEARANCE = {
     "base", "mantle", "surface", "overlay", "text", "subtext",
     "accent", "accent2", "ok", "warn", "bad",
@@ -67,7 +69,7 @@ def change_palette(repo: Path, name: str, edit: Callable[[dict[str, Any]], None]
 
 def fixture(sandbox: Path) -> Path:
     repo = sandbox / "repo"
-    for relative in INPUTS:
+    for relative in (*INPUTS, INSTALLER):
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
@@ -93,7 +95,7 @@ def snapshot(root: Path) -> dict[str, tuple[int, bytes | str | None]]:
     return entries
 
 
-def preview(repo: Path, sandbox: Path) -> subprocess.CompletedProcess[str]:
+def preview(repo: Path, sandbox: Path, *, audit_root: bool = False) -> subprocess.CompletedProcess[str]:
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", HOME=str(sandbox / "home"))
     for key, name in (
         ("XDG_CONFIG_HOME", "config"), ("XDG_CACHE_HOME", "cache"),
@@ -102,8 +104,35 @@ def preview(repo: Path, sandbox: Path) -> subprocess.CompletedProcess[str]:
     ):
         environment[key] = str(sandbox / name)
     before = snapshot(sandbox)
+    command = [sys.executable, "-B", str(TOOL), "--repo", str(repo), "palette-summaries", "--json"]
+    if audit_root:
+        # Run the same CLI entry point, counting actual root-path opens rather
+        # than assuming that resolving a Path pins its directory identity.
+        wrapper = """
+import runpy
+import sys
+
+sys.argv = sys.argv[1:]
+root = sys.argv[2]
+root_opens = 0
+
+def audit(event, args):
+    global root_opens
+    if event == "open" and args[0] == root:
+        root_opens += 1
+
+sys.addaudithook(audit)
+try:
+    runpy.run_path(sys.argv[0], run_name="__main__")
+except SystemExit:
+    if root_opens != 1:
+        raise AssertionError("preview must open resolved repository root exactly once")
+    raise
+"""
+        command = [sys.executable, "-B", "-c", wrapper, str(TOOL), "--repo", str(repo.resolve()),
+                   "palette-summaries", "--json"]
     result = subprocess.run(
-        [sys.executable, "-B", str(TOOL), "--repo", str(repo), "palette-summaries", "--json"],
+        command,
         check=False, text=True, capture_output=True, env=environment, timeout=15,
     )
     require(snapshot(sandbox) == before, "palette preview wrote to the input tree or HOME/XDG")
@@ -161,6 +190,25 @@ def refused_preview(edit: Callable[[Path], None], diagnostic: str, name: str) ->
                 f"{name}: wrong refusal diagnostic: {result.stderr}")
 
 
+def check_legacy_installer(repo: Path) -> None:
+    tasks = yaml.safe_load((repo / INSTALLER).read_text(encoding="utf-8"))
+    installers = [task for task in tasks if task.get("name") == "Install every runtime palette fragment"]
+    require(len(installers) == 1, "legacy palette installer must be unique")
+    loop = Environment().parse(installers[0]["loop"])
+    products = [node for node in loop.find_all(nodes.Filter) if node.name == "product"]
+    require(len(products) == 1 and isinstance(products[0].node, nodes.List),
+            "legacy palette installer must use an explicit product list")
+    items = products[0].node.items
+    require(all(isinstance(item, nodes.Const) and isinstance(item.value, str) for item in items),
+            "legacy palette installer ids must be string literals")
+    installed = [item.value for item in items]
+    options = yaml_doc(repo, CHOICES)["choices"]["desktop_palette"]["options"]
+    variants = yaml_doc(repo, PALETTE)["variants"]
+    legacy = set(options) & set(variants)
+    require(len(installed) == len(set(installed)) and legacy == set(installed),
+            "legacy runtime presets differ from the installer loop")
+
+
 def check_palette_summaries() -> None:
     # Test this before success parsing so a streaming exporter fails specifically
     # for partial stdout when its last row is invalid.
@@ -174,6 +222,9 @@ def check_palette_summaries() -> None:
         baseline = successful_preview(repo, sandbox)
         require(baseline == accepted, "fixture and accepted source previews differ")
         require(successful_preview(repo, sandbox) == baseline, "fixture preview bytes are unstable")
+        audited = preview(repo, sandbox, audit_root=True)
+        require(audited.returncode == 0 and audited.stderr == "" and audited.stdout == baseline,
+                f"root descriptor audit failed: {audited.stderr}")
         change_palette(repo, "blue", lambda doc: doc.update(accent="#a1B2c3"))
         changed = successful_preview(repo, sandbox)
         before_rows = json.loads(baseline)["presets"]
@@ -238,6 +289,21 @@ def check_palette_summaries() -> None:
             path.symlink_to(external)
 
         refused_preview(redirect, "", f"external symlink {relative}")
+
+    for relative in (PALETTE, CHOICES, GENERATED, MANIFEST):
+        def invalid_date(repo: Path, relative: str = relative) -> None:
+            with (repo / relative).open("a", encoding="utf-8") as stream:
+                stream.write("bad_date: 2026-13-45\n")
+        refused_preview(invalid_date, "", f"invalid YAML date {relative}")
+        refused_preview(lambda repo, r=relative: (repo / r).write_text("[" * 100000, encoding="utf-8"),
+                        "", f"excessive YAML nesting {relative}")
+
+    for name in sorted(PRESETS):
+        refused_preview(lambda repo, n=name: (repo / PALETTES[n]).write_text(
+            '{"oversized": ' + "9" * 5000 + '}', encoding="utf-8"),
+            "", f"oversized JSON integer {name}")
+        refused_preview(lambda repo, n=name: (repo / PALETTES[n]).write_text(
+            "[" * 100000, encoding="utf-8"), "", f"excessive JSON nesting {name}")
 
     for relative, addition in (
         (CHOICES, "version: 1\n"), (GENERATED, "desktop_palette: green\n"),
@@ -560,6 +626,7 @@ def main() -> int:
         "legacy palettes were registered as plugin themes",
     )
 
+    check_legacy_installer(ROOT)
     check_palette_summaries()
 
     print("HyperLab declarative theme registry contract: OK")

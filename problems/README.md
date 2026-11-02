@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`theme-preview-parser-errors.md`](theme-preview-parser-errors.md):
+  invalid YAML dates, oversized JSON integers and excessive nesting escaped
+  the palette preview diagnostic; parser errors now use the ordinary refusal.
 - [`networks-loading-after-shell-uptime.md`](networks-loading-after-shell-uptime.md):
   an on-demand inventory read inherited shell startup age and displayed a
   failure before its first reply or completion deadline.

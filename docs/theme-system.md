@@ -442,9 +442,19 @@ when the caller could bypass those permissions. Ordinary input failures
 return exit `1`, empty stdout and a diagnostic beginning
 `HyperLab theme registry:` on stderr. Argument errors retain exit `2`.
 
+One open descriptor anchors the resolved repository root for the whole
+preview; each input is opened relative to that descriptor. Parser failures
+including invalid YAML dates, oversized JSON integers and excessive nesting
+also produce the ordinary refusal diagnostic without a traceback.
+
 `python tests/theme_registry_contract.py` exercises the real CLI with
 temporary independent inputs, per-preset expectations, an unlisted manifest,
 malformed inputs and byte/entry snapshots proving no writes in those runs.
+The contract also compares the legacy runtime ids with the installer's
+loop, parsed from task YAML and its Jinja expression, and audits that the
+CLI opens the resolved repository root exactly once. Adding a legacy runtime
+variant without extending the installer fails this source contract.
+
 The palette-export prerequisite requires successful verification and review;
 it does not close the roadmap's visual theme and wallpaper browser checkbox.
 The native browser, its interactions and Nitro/Predator acceptance remain

@@ -2503,3 +2503,37 @@ unlisted manifest adds no row; even malformed unlisted input is not read.
 Repeated accepted-source runs emit stable bytes and exactly five distinct
 source appearances. None of these checks switches an actual theme or proves
 installed state, asset rights, browser behavior or hardware acceptance.
+
+#### Parser failures and repository-root anchoring
+
+The same discovered contract now refuses invalid date-shaped YAML values in
+all four YAML inputs, 5000-digit JSON integers in every preset, and excessive
+JSON/YAML nesting. Each refusal requires exit 1, empty stdout, the registry
+prefix without a traceback, and unchanged input/HOME/XDG snapshots. The
+original readers failed these new cases with `wrong refusal diagnostic`.
+An audit hook around the real CLI entry point counts opens of the resolved
+root path; the original per-input opens failed that assertion.
+
+The following separate mutations used saved disposable source copies and the
+unchanged contract. Each red was exit 1 with the assertion shown; restoring
+the saved input bytes returned exit 0 and both contract OK lines.
+
+| Mutation | Break | Observed red diagnostic |
+| --- | --- | --- |
+| P19 | Stop converting YAML `ValueError` to `ThemeError`. | `invalid YAML date tools/palette/palette.yml: wrong refusal diagnostic` |
+| P20 | Stop converting YAML `RecursionError` to `ThemeError`. | `excessive YAML nesting tools/palette/palette.yml: wrong refusal diagnostic` |
+| P21 | Stop converting JSON `ValueError` to `ThemeError`. | `oversized JSON integer blue: wrong refusal diagnostic` |
+| P22 | Stop converting JSON `RecursionError` to `ThemeError`. | `excessive JSON nesting blue: wrong refusal diagnostic` |
+| P23 | Reopen the resolved root path in each `read_source` call instead of duplicating the shared descriptor. | `preview must open resolved repository root exactly once` |
+| P24 | Add Amber to source/generated runtime choices and palette variants, with its own valid JSON, without extending the installer loop. | `legacy runtime presets differ from the installer loop` |
+
+The installer comparison parses the task YAML and the Jinja product list,
+then compares that list with the runtime choices classified as legacy by
+the palette source. It introduces no additional exporter input or theme list.
+
+P25 changes the row iteration from `options` to `generated_options` after
+their required set-equality check. It **stayed green** (exit 0), as did its
+restoration: every validated input has the same id set and sorted output
+under either iteration. This equivalent mutation is recorded without
+weakening the source/generated agreement check. The exporter retains source
+options as the requested ids.

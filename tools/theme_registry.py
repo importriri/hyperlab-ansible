@@ -430,8 +430,8 @@ def unique_json(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def read_source(repo: Path, relative: str) -> str:
-    """Open only regular files beneath a resolved root, without following links.
+def read_source(root_fd: int, relative: str) -> str:
+    """Open only regular files beneath an anchored root, without following links.
 
     Each directory is opened relative to the preceding descriptor. A replaced
     ancestor therefore cannot redirect a subsequent open outside the root.
@@ -440,7 +440,7 @@ def read_source(repo: Path, relative: str) -> str:
     require(parts and all(part not in {".", "..", "/"} for part in parts),
             "invalid preview input path")
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
-    directory = os.open(repo, flags | os.O_DIRECTORY)
+    directory = os.dup(root_fd)
     try:
         for part in parts[:-1]:
             child = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
@@ -457,9 +457,21 @@ def read_source(repo: Path, relative: str) -> str:
         os.close(directory)
 
 
-def source_yaml(repo: Path, relative: str) -> dict[str, Any]:
-    doc = yaml.load(read_source(repo, relative), Loader=PreviewLoader)
+def source_yaml(root_fd: int, relative: str) -> dict[str, Any]:
+    try:
+        doc = yaml.load(read_source(root_fd, relative), Loader=PreviewLoader)
+    except (ValueError, RecursionError) as exc:
+        raise ThemeError(f"{relative}: invalid YAML: {exc}") from exc
     require(isinstance(doc, dict), f"{relative}: document must be a mapping")
+    return doc
+
+
+def source_json(root_fd: int, relative: str) -> dict[str, Any]:
+    try:
+        doc = json.loads(read_source(root_fd, relative), object_pairs_hook=unique_json)
+    except (ValueError, RecursionError) as exc:
+        raise ThemeError(f"{relative}: invalid JSON: {exc}") from exc
+    require(isinstance(doc, dict), f"{relative}: palette must be a mapping")
     return doc
 
 
@@ -485,14 +497,22 @@ def valid_colour(value: Any, context: str) -> None:
 
 def palette_summaries(repo: Path) -> dict[str, Any]:
     repo = repo.resolve(strict=True)
-    source = source_yaml(repo, "tools/choices/choices.yml")
+    root_fd = os.open(repo, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY)
+    try:
+        return source_palette_summaries(repo, root_fd)
+    finally:
+        os.close(root_fd)
+
+
+def source_palette_summaries(repo: Path, root_fd: int) -> dict[str, Any]:
+    source = source_yaml(root_fd, "tools/choices/choices.yml")
     choice = mapping_field(mapping_field(source, "choices"), "desktop_palette")
     options = valid_ids(list(mapping_field(choice, "options")))
-    generated = source_yaml(repo, "group_vars/all/choices.yml")
+    generated = source_yaml(root_fd, "group_vars/all/choices.yml")
     generated_options = valid_ids(generated.get("desktop_palette_options"))
     require(set(options) == set(generated_options), "source and generated runtime options disagree")
 
-    palette_source = source_yaml(repo, "tools/palette/palette.yml")
+    palette_source = source_yaml(root_fd, "tools/palette/palette.yml")
     variants = mapping_field(palette_source, "variants")
     domains = mapping_field(palette_source, "domains")
     exact_keys(domains, DOMAIN_KEYS, "canonical domains")
@@ -511,15 +531,14 @@ def palette_summaries(repo: Path) -> dict[str, Any]:
             relative = f"roles/host_desktop_sway/files/palette/{theme_id}/hyperlab-palette-quickshell.json"
         else:
             relative_manifest = f"themes/{theme_id}/theme.yml"
-            manifest = validate_theme(repo / relative_manifest, source_yaml(repo, relative_manifest))
+            manifest = validate_theme(repo / relative_manifest, source_yaml(root_fd, relative_manifest))
             label = manifest["name"]
             source_kind = "declarative"
             manifest_status = manifest["status"]
             manifest_visible = manifest["selector"]["visible"]
             relative = f"themes/{theme_id}/rendered/hyperlab-palette-quickshell.json"
 
-        palette = json.loads(read_source(repo, relative), object_pairs_hook=unique_json)
-        require(isinstance(palette, dict), f"{relative}: palette must be a mapping")
+        palette = source_json(root_fd, relative)
         exact_keys(palette, APPEARANCE_KEYS | DOMAIN_KEYS | {"name"}, theme_id)
         require(palette["name"] == theme_id, f"{theme_id}: wrong palette name")
         for key in sorted(APPEARANCE_KEYS | DOMAIN_KEYS):
