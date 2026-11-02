@@ -1134,24 +1134,24 @@ why the value is asserted in a play. The red message is the one the
 contract prints.
 
 The playbook observes one host variable, `ansible_user`, after
-rendering; "effective user" in the entries below means that value. It
-is not the SSH login. The SSH connection plugin reads its
-`remote_user` option from both `ansible_user` and `ansible_ssh_user`,
-and when both are set the later entry, `ansible_ssh_user`, is chosen.
-The playbook never asks the plugin, so it cannot see a competing
-alias. For M7 the choice was resolved separately, with the installed
-Ansible 2.21.4 and no connection: in the same temporary copy,
-`PlaybookCLI` parsed `-i inventory.ini` and the `-e` overrides and
-built the inventory and variables. A play for `svc-jellyfin` and a
-task that never ran gave the task variables. The `ssh` plugin, chosen
-by the task's connection keyword, was loaded but never connected. It
-received the rendered variables through
+rendering; "effective user" in the entries below means that value. It is
+not the SSH login. The SSH connection plugin reads its `remote_user`
+option from the variables `ansible_user` and `ansible_ssh_user`, in that
+order, and when both are set the later one in that list,
+`ansible_ssh_user`, is chosen. The playbook never asks the plugin, so it
+cannot see a competing alias. For M7 the choice was resolved separately,
+with the installed Ansible 2.21.4 and no connection: in a temporary copy
+made the same way, `PlaybookCLI` parsed `-i inventory.ini` and the `-e`
+overrides and built the inventory and variables. A play for
+`svc-jellyfin` and a task that never ran gave the task variables. The
+`ssh` plugin, chosen by the task's connection keyword, was loaded but
+never connected. It received the rendered variables through
 `_resolve_option_variables` and `set_options`, as the task executor
 passes them, and `get_option_and_origin('remote_user')` returned the
 login and its source. Process spawns and socket connects were trapped
-during resolution and none happened. On the intact inventory it
-returned `svcproofa` and `svcproofb` for the two overrides and the
-configured `admin_user` without one, each from `var: ansible_user`.
+during resolution and none happened. On the intact inventory it returned
+`svcproofa` and `svcproofb` for the two overrides and the configured
+`admin_user` without one, each from `var: ansible_user`.
 
 - M1. Break: put "outside the restricted" and, on the next line, the
   removed two-word phrase back at the end of the introductory note of
