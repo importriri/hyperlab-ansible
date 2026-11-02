@@ -20,12 +20,13 @@ cd hyperlab-ansible
 ansible-galaxy collection install -r collections/requirements.yml
 ./verify.sh
 ansible-playbook -K playbooks/preflight.yml
-ansible-playbook -K playbooks/lab.yml --check --diff
-ansible-playbook -K playbooks/lab.yml
-ansible-playbook -K playbooks/lab.yml
+ansible-playbook -K playbooks/v1-host.yml --check --diff
+ansible-playbook -K playbooks/v1-host.yml
+ansible-playbook -K playbooks/v1-host.yml
 ```
 
-The last run must report `changed=0`. A successful CI run is a software result;
+The last run must report `changed=0`, `failed=0` and `unreachable=0` for every
+host. A successful CI run is a software result;
 hardware support is recorded separately in `arch-hypervisor-lab`.
 
 Level 2b of `./verify.sh` runs `tests/render.yml` with a sudo credential:
@@ -58,14 +59,34 @@ After the first successful application, the routine reconciliation path is:
 
 ```bash
 ansible-playbook -K playbooks/preflight.yml
-ansible-playbook -K playbooks/lab.yml --check --diff
-ansible-playbook -K playbooks/lab.yml
-ansible-playbook -K playbooks/lab.yml   # must end with changed=0
+ansible-playbook -K playbooks/v1-host.yml --check --diff
+ansible-playbook -K playbooks/v1-host.yml
+ansible-playbook -K playbooks/v1-host.yml   # must end with changed=0
 ```
+
+## The v1 host target
+
+`playbooks/v1-host.yml` is the host that v1 demonstrates and the one release
+convergence measures. It imports `lab.yml`, then `host-desktop-hyprland.yml`
+with the managed session lifecycle switched on for that import only, then
+`host-sleep-guard.yml`. It copies no role.
+
+The Hyprland step stages files: the reviewed Hyprland configuration, the
+HyperLab Hyprland and HyperLab Sway sessions in Ly's private catalog, their
+user session targets and the Quickshell shell bound to the Hyprland session.
+It starts no compositor or display manager, selects no Ly default and leaves
+the global shell replacement gates closed. Sway, Waybar and the GTK surfaces
+stay installed and selectable as the recovery session. The sleep guard keeps
+the host awake while a VFIO Machine runs.
+
+USBGuard, QEMU AppArmor confinement, measured boot, the security plane and
+Nitro thermal control are not part of this target. Each keeps its own
+playbook and its own status.
 
 ## What `lab.yml` owns
 
-`lab.yml` is the normal laptop target. It applies the headless foundation first,
+`lab.yml` is the laptop laboratory without the Hyprland session and the sleep
+guard. It applies the headless foundation first,
 then the local Sway desktop, then the Looking Glass host transport. That order is
 intentional: Looking Glass is part of the interactive desktop path and must not
 become a hidden prerequisite of the recovery host.

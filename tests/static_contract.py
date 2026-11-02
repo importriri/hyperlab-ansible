@@ -408,8 +408,9 @@ def collect_errors(root: Path = ROOT) -> list[str]:
           "README must route details to the grouped operator documentation")
     check("group_vars/all/bricks.yml" in readme and "stamp" in brick_catalog.lower(),
           "extension documentation must retain graph and stamp ownership")
-    check("foundation.yml" in playbook_map and "lab.yml" in playbook_map,
-          "playbook documentation must explain both broad targets")
+    check("foundation.yml" in playbook_map and "lab.yml" in playbook_map
+          and "v1-host.yml" in playbook_map,
+          "playbook documentation must explain the three broad targets")
 
     check(requires.get("bootstrap_storage") == ["kvm_host"],
           "bootstrap storage validation belongs to the brick that owns libvirt")

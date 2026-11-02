@@ -47,10 +47,38 @@ Machine is refused. Without it, an unknown computer stops at
 
 Use this target for a blind host, storage validation or early recovery.
 
+### `playbooks/v1-host.yml`
+
+Builds the v1 host and is the target release convergence measures. It imports
+`lab.yml`, then `host-desktop-hyprland.yml` with
+`host_desktop_hyprland_session_lifecycle_enabled: true` scoped to that import,
+then `host-sleep-guard.yml`. The Hyprland step stages the managed HyperLab
+Hyprland and HyperLab Sway sessions, their user session targets and the
+Quickshell shell bound to the Hyprland session; it starts no compositor or
+display manager and selects no Ly default. Sway stays the recovery session.
+
+```bash
+# Preview the laboratory, the managed Hyprland sessions and the sleep guard.
+ansible-playbook -K playbooks/v1-host.yml --check --diff
+
+# Apply the v1 host target.
+ansible-playbook -K playbooks/v1-host.yml
+
+# Prove immediate idempotence; this pass must report changed=0.
+ansible-playbook -K playbooks/v1-host.yml
+```
+
+Desktop changes in the second pass are failures like any other. USBGuard
+(`host-usbguard.yml`), QEMU AppArmor confinement (`qemu-apparmor.yml`),
+measured boot (`measured-boot.yml`), the security plane
+(`host-security-plane.yml`) and Nitro thermal control (`nitro-sense.yml`) are
+not part of this target.
+
 ### `playbooks/lab.yml`
 
-Builds the intended laptop laboratory. It imports `foundation.yml`, then adds the
-local host Sway cockpit and Looking Glass host transport.
+Builds the laptop laboratory that `v1-host.yml` starts from. It imports
+`foundation.yml`, then adds the local host Sway cockpit and Looking Glass host
+transport.
 
 ```bash
 # Preview foundation, Sway and Looking Glass host transport.
@@ -78,6 +106,11 @@ remain explicit transactions.
 - `network-domains.yml` — reconcile only the five libvirt networks.
 - `host-desktop-sway.yml` — reconcile the Sway cockpit on the physical host only.
 - `looking-glass.yml` — reconcile only the host-side Looking Glass transport.
+- `host-desktop-hyprland.yml` — reconcile the side-by-side Hyprland
+  configuration alone. Run by itself it leaves the managed session lifecycle
+  off; `v1-host.yml` is the target that stages it.
+- `host-sleep-guard.yml` — reconcile only the VFIO sleep inhibitor unit and
+  its libvirt hook.
 - `nitro-sense.yml` — reconcile native Acer Nitro platform profiles or the
   explicitly enabled Linuwu-Sense replacement; it is never part of a broad
   target.

@@ -12,6 +12,11 @@ Nitro", or calls itself physical) names its evidence: an `evidence:` link
 to an acceptance receipt in docs/, or the words "operator-observed,
 unpublished". An entry is the checkbox line with its indented continuation
 paragraphs, including those separated by blank lines.
+The v1 host target, playbooks/v1-host.yml, is what README's first run and
+fast path, the playbook map and the release host-convergence runbook use
+for check/diff, first apply and second apply. Their bash blocks are parsed
+into command argv; a comment or prose naming a playbook is not a command.
+lab.yml and the component playbooks stay documented as narrower targets.
 ADRs 0017, 0018 and 0022 carry one recognized Status line right below
 their title, and their index entries open with the same status. This
 proves the structure of a reference, not that an observation is authentic
@@ -21,6 +26,7 @@ or that a receipt is enough for the claim.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import unquote
@@ -216,8 +222,191 @@ def check_adr_status(root: Path) -> None:
         )
 
 
+V1_HOST = "playbooks/v1-host.yml"
+CONVERGENCE = [
+    ["ansible-playbook", "-K", V1_HOST, "--check", "--diff"],
+    ["ansible-playbook", "-K", V1_HOST],
+    ["ansible-playbook", "-K", V1_HOST],
+]
+CONTROL_OPERATORS = {"|", "|&", ";", "&&", "||", "&", ">", ">>", "<", "(", ")"}
+FENCE = re.compile(r"^(`{3,})(\S*)\s*$")
+HEADING = re.compile(r"^(#{1,6}) ")
+
+
+def markdown_section(path: Path, heading: str) -> list[str]:
+    """Lines under one unique heading, up to the next heading of its level.
+
+    Fenced code is skipped while looking for headings, so a shell comment
+    inside a block never ends a section.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    heading_match = HEADING.match(heading)
+    require(heading_match is not None, f"not a Markdown heading: {heading!r}")
+    level = len(heading_match[1])
+    starts: list[int] = []
+    fence = ""
+    for number, line in enumerate(lines):
+        match = FENCE.match(line)
+        if match and (not fence or match[1] == fence):
+            fence = "" if fence else match[1]
+            continue
+        if not fence and line == heading:
+            starts.append(number)
+    require(len(starts) == 1, f"{path.name}: heading {heading!r} occurs {len(starts)} times")
+    body: list[str] = []
+    fence = ""
+    for line in lines[starts[0] + 1:]:
+        match = FENCE.match(line)
+        if match and (not fence or match[1] == fence):
+            fence = "" if fence else match[1]
+        elif not fence:
+            found = HEADING.match(line)
+            if found and len(found[1]) <= level:
+                break
+        body.append(line)
+    return body
+
+
+def bash_blocks(lines: list[str]) -> list[str]:
+    blocks: list[str] = []
+    current: list[str] | None = None
+    fence = ""
+    for line in lines:
+        match = FENCE.match(line)
+        if current is None and match:
+            fence = match[1]
+            current = [] if match[2] == "bash" else None
+            if current is None:
+                fence = ""
+            continue
+        if current is not None and match and match[1] == fence and not match[2]:
+            blocks.append("\n".join(current))
+            current = None
+            continue
+        if current is not None:
+            current.append(line)
+    require(current is None, "unterminated bash block")
+    return blocks
+
+
+def ansible_commands(block: str) -> list[list[str]]:
+    """argv of every ansible-playbook command, cut at its first operator."""
+    commands: list[list[str]] = []
+    for logical in block.replace("\\\n", " ").splitlines():
+        lexer = shlex.shlex(logical, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        argv: list[str] = []
+        for token in lexer:
+            if token in CONTROL_OPERATORS:
+                break
+            argv.append(token)
+        if argv and argv[0] == "ansible-playbook":
+            commands.append(argv)
+    return commands
+
+
+def section_commands(path: Path, heading: str) -> list[list[str]]:
+    blocks = bash_blocks(markdown_section(path, heading))
+    require(bool(blocks), f"{path.name}: {heading!r} has no bash block")
+    return ansible_commands(blocks[0])
+
+
+def check_v1_host_commands(root: Path) -> None:
+    """Check/diff, first and second apply all name the v1 host target."""
+    readme = root / "README.md"
+    playbook_map = root / "docs" / "playbooks.md"
+    release = root / "docs" / "release-evidence.md"
+    preflight = ["ansible-playbook", "-K", "playbooks/preflight.yml"]
+    for path, heading, expected in (
+        (readme, "## Start here", [preflight, *CONVERGENCE]),
+        (readme, "### Fast path after the first boot", [preflight, *CONVERGENCE]),
+        (playbook_map, "### `playbooks/v1-host.yml`", CONVERGENCE),
+        (release, "## 5. Host convergence", CONVERGENCE),
+    ):
+        actual = section_commands(path, heading)
+        require(
+            actual == expected,
+            f"{path.name} {heading!r}: release host commands are {actual!r}, not {expected!r}",
+        )
+    convergence = "\n".join(markdown_section(release, "## 5. Host convergence"))
+    for recap in ("changed=0", "failed=0", "unreachable=0"):
+        require(recap in convergence, f"release host convergence no longer requires {recap}")
+    # The component and recovery targets stay documented.
+    lab = section_commands(playbook_map, "### `playbooks/lab.yml`")
+    require(
+        lab == [[argv[0], argv[1], "playbooks/lab.yml", *argv[3:]] for argv in CONVERGENCE],
+        f"playbooks.md lost the lab.yml component commands: {lab!r}",
+    )
+    narrow = {
+        match[1]
+        for line in markdown_section(playbook_map, "## Narrow host reconciliation")
+        if (match := re.match(r"^- `([^`]+\.yml)`", line))
+    }
+    for component in (
+        "host-desktop-sway.yml",
+        "looking-glass.yml",
+        "host-desktop-hyprland.yml",
+        "host-sleep-guard.yml",
+    ):
+        require(component in narrow, f"playbooks.md no longer lists {component}")
+
+
+def check_v1_host_command_parsing() -> None:
+    """Drift in only one apply is seen; prose and comments are not commands."""
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "docs").mkdir()
+        apply = f"ansible-playbook -K {V1_HOST}"
+        block = (
+            "```bash\n"
+            "# ansible-playbook -K playbooks/lab.yml\n"
+            f"{apply} --check --diff \\\n  |& tee check.log\n"
+            f"{apply} |& tee first.log\n"
+            f"{apply}   # must end with changed=0\n"
+            "```\n"
+        )
+        start = "```bash\nansible-playbook -K playbooks/preflight.yml\n" + block[8:]
+        lab = block.replace(V1_HOST, "playbooks/lab.yml")
+        narrow = "".join(
+            f"- `{name}` — component.\n"
+            for name in (
+                "host-desktop-sway.yml",
+                "looking-glass.yml",
+                "host-desktop-hyprland.yml",
+                "host-sleep-guard.yml",
+            )
+        )
+        release = (
+            "## 5. Host convergence\n\nchanged=0, failed=0 and unreachable=0.\n\n" + block
+        )
+        (root / "README.md").write_text(
+            f"## Start here\n\n{start}\n### Fast path after the first boot\n\n{start}",
+            encoding="utf-8",
+        )
+        (root / "docs" / "playbooks.md").write_text(
+            f"### `playbooks/v1-host.yml`\n\n{block}\n### `playbooks/lab.yml`\n\n{lab}\n"
+            f"## Narrow host reconciliation\n\n{narrow}",
+            encoding="utf-8",
+        )
+        (root / "docs" / "release-evidence.md").write_text(release, encoding="utf-8")
+        check_v1_host_commands(root)
+        second = release.replace(f"{apply} |& tee first.log\n{apply}", (
+            f"{apply} |& tee first.log\nansible-playbook -K playbooks/lab.yml"
+        ))
+        require(second != release, "fixture did not drift the second apply")
+        (root / "docs" / "release-evidence.md").write_text(second, encoding="utf-8")
+        try:
+            check_v1_host_commands(root)
+        except AssertionError as error:
+            require("release-evidence.md" in str(error), f"unexpected refusal: {error}")
+        else:
+            raise AssertionError("a second release apply of lab.yml was accepted")
+
+
 def main() -> int:
     check_checkbox_paragraphs()
+    check_v1_host_command_parsing()
+    check_v1_host_commands(ROOT)
     check_adr_status(ROOT)
     check_roadmap_evidence(ROOT)
 
@@ -267,7 +456,7 @@ def main() -> int:
     require("### Fast path after the first boot" in readme, "README fast path missing")
     require("docs/desktop.md" in readme, "desktop guide is not linked from README")
     require(
-        "ansible-playbook -K playbooks/lab.yml   # must end with changed=0" in readme,
+        "ansible-playbook -K playbooks/v1-host.yml   # must end with changed=0" in readme,
         "fast path does not state the idempotence gate",
     )
 

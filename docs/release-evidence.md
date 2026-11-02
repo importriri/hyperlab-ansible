@@ -149,17 +149,26 @@ The storage probe compares that contract with the live mapper, Btrfs root,
 
 ## 5. Host convergence
 
-Keep the check-mode, first-apply and second-apply transcripts. The second real
-apply must report `changed=0` for every host.
+The gate measures the v1 host target, `playbooks/v1-host.yml`: `lab.yml`,
+then the managed Hyprland and Quickshell sessions staged beside the Sway
+recovery session, then the VFIO sleep guard. All three transcripts run that
+same playbook. Keep the check-mode, first-apply and second-apply transcripts.
+The second real apply must report `changed=0`, `failed=0` and
+`unreachable=0` for every host. A desktop change in that pass is a failure,
+not an exception.
 
 ```bash
-ansible-playbook -K playbooks/lab.yml --check --diff \
-  |& tee "$RELEASE_DIR/lab-check.log"
-ansible-playbook -K playbooks/lab.yml \
-  |& tee "$RELEASE_DIR/lab-first.log"
-ansible-playbook -K playbooks/lab.yml \
-  |& tee "$RELEASE_DIR/lab-second.log"
+ansible-playbook -K playbooks/v1-host.yml --check --diff \
+  |& tee "$RELEASE_DIR/v1-host-check.log"
+ansible-playbook -K playbooks/v1-host.yml \
+  |& tee "$RELEASE_DIR/v1-host-first.log"
+ansible-playbook -K playbooks/v1-host.yml \
+  |& tee "$RELEASE_DIR/v1-host-second.log"
 ```
+
+USBGuard, QEMU AppArmor confinement, measured boot, the security plane and
+Nitro thermal control are not in this target; their convergence is not
+measured by this gate.
 
 Use `release_probe.py idempotence` to turn those transcripts into the typed gate
 payload. A successful return code without a clean play recap is not enough.

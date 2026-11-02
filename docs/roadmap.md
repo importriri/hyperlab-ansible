@@ -726,6 +726,18 @@ Measured with the complete security plane active.
         `tests/release_acceptance_contract.py`,
         `tests/release_probe_contract.py`, software-verified on fixture
         campaigns)
+  - [x] host-idempotence measures the v1 host target,
+        `playbooks/v1-host.yml`: `lab.yml`, then the managed Hyprland and
+        Quickshell sessions staged beside the Sway recovery session, then
+        the VFIO sleep guard, each applied once. README, the playbook map
+        and the release runbook use it for check/diff and both applies
+        (`tests/playbook_topology_contract.py`, which evaluates the staged
+        task inputs with the Ansible engine, and `tests/docs_contract.py`;
+        software-verified, no apply of this target observed)
+  - [ ] the three `playbooks/v1-host.yml` transcripts on the Nitro with a
+        second pass at `changed=0`, then a managed HyperLab Hyprland login
+        with the shell, managed Sway recovery and the sleep inhibitor held
+        by a running VFIO guest
 - [ ] `arch-bootstrap` frozen at the same campaign; `arch-hypervisor-lab`
       receives only the sanitized evidence
 - [x] threat model document: what HyperLab protects against and what it does
