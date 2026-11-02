@@ -2616,3 +2616,56 @@ restoration: every validated input has the same id set and sorted output
 under either iteration. This equivalent mutation is recorded without
 weakening the source/generated agreement check. The exporter retains source
 options as the requested ids.
+
+### The v1 host target stages the managed lifecycle and drives every apply
+
+`python tests/playbook_topology_contract.py` follows the real imports of
+`playbooks/v1-host.yml`. The closure must be `lab.yml`'s, then the
+`host_desktop_hyprland` guard and role, then the `host_sleep_guard` guard and
+role, each once. Its resolver refuses missing, escaping, absolute, templated,
+symlinked, repeated and cyclic imports, duplicate YAML keys and plays it
+cannot see into (tasks, or extra keys on an import). A role or file name in a
+comment is not in the closure. The Hyprland import must carry exactly
+`host_desktop_hyprland_session_lifecycle_enabled: true` as a YAML boolean, and
+no other play may set or inherit it. The installed Ansible engine
+(`Playbook.load`, `VariableManager.get_vars`, `Templar`) then evaluates the
+`when`, loop and arguments of every file-writing task of both roles, with
+`ansible_check_mode` false and the fallback palette as the two fixed runtime
+results. The Ly catalog, the five Ly discovery lines, both session targets,
+the Quickshell unit and its wants link must be staged. The inactive-runtime
+and lifecycle-boundary assertions must evaluate true, and the role must hold
+no service or command action. The bare `host-desktop-hyprland.yml` import must
+fail the same check. `python tests/docs_contract.py` parses the bash blocks of
+README's first run and fast path, the playbook map and release section 5 into
+argv. All three must run `ansible-playbook -K playbooks/v1-host.yml`, the
+first with `--check --diff`.
+
+Each break below was applied to the tracked file from a copy saved outside
+the tree. The listed contract exited 1 with the diagnostic shown. Restoring
+the copy gave identical bytes and exit 0 (`playbook topology contract: OK (9
+tests)` or `documentation contract: OK`). No mutation stayed green.
+
+| Mutation | Break | Observed red diagnostic |
+| --- | --- | --- |
+| V1 | Remove the Hyprland import from `v1-host.yml`. | closure files `['v1-host.yml', 'lab.yml', 'foundation.yml', 'host-sleep-guard.yml']` |
+| V2 | Remove the sleep-guard import. | closure files end at `host-desktop-hyprland.yml` |
+| V3 | Remove the lifecycle opt-in `vars`. | scoped vars `'host-desktop-hyprland.yml': None` |
+| V4 | Quote the opt-in as `"true"`. | scoped vars hold the string `'true'` |
+| V5 | Redirect the managed catalog copy to `/etc/ly/sessions/`. | `managed catalog does not receive hyperlab-hyprland.desktop` (and Sway) |
+| V6 | Set Ly `waylandsessions` to `/usr/share/wayland-sessions`. | `Ly discovery is not restricted to the managed catalog` |
+| V7 | Point only the second release apply back at `playbooks/lab.yml`. | `release-evidence.md '## 5. Host convergence': release host commands are ...` |
+| V8 | Drop the repeated-import refusal in the resolver. | `playbooks/repeat.yml was accepted; expected refusal: imported twice` |
+| V9 | Drop the symlink refusal in the resolver. | `playbooks/linked.yml was accepted; expected refusal: redirected by a symlink` |
+| V10 | Filter Quickshell out of the managed target coupling loop. | `Quickshell is not coupled to the managed Hyprland target` |
+| V11 | Redirect the Sway session target destination. | `session target hyperlab-sway-session.target is not staged` |
+| V12 | Add `host_desktop_hyprland_runtime_enabled: true` to the import. | scoped vars carry the extra runtime key |
+| V13 | Add `host_desktop_hyprland_manage_ly: true` to the import. | scoped vars carry the extra Ly key |
+| V14 | Also set the opt-in on the `lab.yml` import. | scoped vars `'lab.yml': {...: True}` |
+| V15 | Point only README's fast-path second apply at `lab.yml`. | `README.md '### Fast path after the first boot': release host commands are ...` |
+| V16 | Import `host-sleep-guard.yml` twice. | `ImportRefused: host-sleep-guard.yml: imported twice` |
+| V17 | Set the role default `host_desktop_hyprland_runtime_enabled: true`. | `'Keep host Hyprland configuration side-by-side and inactive' would fail: ['not host_desktop_hyprland_runtime_enabled']` |
+| V18 | Set the role default `host_desktop_hyprland_preserve_sway_fallback: false`. | both the inactive and the lifecycle-boundary assertions `would fail` |
+
+V12 and V13 are refused first by the exact import variables. V17 and V18
+reach only the engine-evaluated assertions. This is a software proof of the
+task inputs: no task ran, no file was installed and no session was observed.
