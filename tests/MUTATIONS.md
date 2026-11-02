@@ -2777,3 +2777,64 @@ tests)` or `documentation contract: OK`). No mutation stayed green.
 V12 and V13 are refused first by the exact import variables. V17 and V18
 reach only the engine-evaluated assertions. This is a software proof of the
 task inputs: no task ran, no file was installed and no session was observed.
+
+## Proposed decision inventory in the ADR index
+
+`python tests/docs_contract.py` is the red check below. It derives the
+proposed set from every numbered record's own Status line (`Status:` or
+`- Status:`, any letter case), then parses the "Proposed decisions and
+their code" section of `docs/adr/README.md` entry by entry. Each break was
+made on the real file from a copy in a scratch directory, observed red with
+the message shown, then the copy was put back and the contract was green
+again (exit 0, `documentation contract: OK`). Line numbers are those of the
+index at the commit that added the inventory. The contract proves the
+inventory's membership, fields, labels and links, not that an entry's
+description is true: that is source review.
+
+| # | Break | Observed red diagnostic |
+| --- | --- | --- |
+| I1 | Delete the 0052 inventory entry; its numbered navigation link stays. | `proposal inventory omits 0052-host-without-gpu-passthrough.md` |
+| I2 | Repeat the 0017 entry after itself. | `proposal inventory lists 0017-shell-machine-creation.md twice` |
+| I3 | The 0052 entry heading links the accepted `0037-qemu-process-confinement.md` instead. | `proposal inventory lists 0037-qemu-process-confinement.md, whose Status is not proposed` |
+| I4 | Delete the Activation field of 0044. | `proposal inventory entry 0044-measured-boot.md (ADR index line 394) lacks Activation` |
+| I5 | Delete the Prerequisites field of 0051. | `proposal inventory entry 0051-disposable-viewer-and-safe-documents.md (ADR index line 514) lacks Prerequisites` |
+| I6 | The first 0052 source link becomes `../../roles/hardware_probe/tasks/choose.yml`. | `... (ADR index line 528): source link '../../roles/hardware_probe/tasks/choose.yml' is not an existing file` |
+| I7 | The same link becomes `../../../../../../../../etc/hostname`, an existing file outside the checkout. | `... source link '../../../../../../../../etc/hostname' escapes the repository` |
+| I8 | 0044's Built label becomes `none` while its Activation stays `opt-in`. | `... (ADR index line 394): Built 'none' and Activation 'opt-in' disagree` |
+| I9 | 0018's Activation label becomes `live`. | `... (ADR index line 218): Activation does not open with one of none, default, on request, opt-in, not established and a description` |
+| I10 | ADR 0052 loses its `Status: proposed.` line. | `proposal inventory lists 0052-host-without-gpu-passthrough.md, whose Status is not proposed` |
+
+Positive controls, each green (exit 0) on the real files: reword 0019's
+Built description; ADR 0052's `Status: proposed.` becomes
+`STATUS: PROPOSED.`; ADR 0047's `Status: Proposed.` becomes
+`status: proposed.`. A first version of the built-in fixtures used those
+exact Status words as edit anchors, so the second and third controls went
+red with `fixture anchor 'Status: proposed.' is missing`. The fixtures now
+read each record's Status line from the tree and choose their members from
+the derived set, so a harmless case change or a later accepted record
+changes which entries are exercised, not whether the check runs.
+
+The contract also runs its own fixtures in a temporary copy of `docs/adr`
+and of every linked source: the unchanged index, added prose and Status
+case changes are accepted; removal, duplication, an accepted record in
+place of a member, a removed or repeated Status line, a mismatched number,
+a malformed or escaping heading, a removed navigation link, each removed
+field, an unknown label, a build with `Source: none`, and missing,
+escaping, absolute and documentation source links are refused, each with
+its own message. These mutations of the contract itself show the fixtures
+bite:
+
+| # | Break in `tests/docs_contract.py` | Observed red diagnostic |
+| --- | --- | --- |
+| I11 | The loop that refuses an omitted member no longer raises. | `inventory mutation entry removed was accepted` |
+| I12 | `DECLARED_STATUS` loses `re.IGNORECASE`. | `0001-image-store-layout.md: unrecognized status line '- Status: accepted for M2 static integration'`, from the real tree before the fixtures run |
+| I13 | `source_refusal` no longer returns `escapes the repository`. | `inventory mutation source escaping failed for another reason: ValueError: '<tmp>/outside.py' is not in the subpath of '<tmp>/repo'` |
+| I14 | The refusal of an entry whose record is not proposed is deleted. | `inventory mutation accepted record substituted failed for another reason: AssertionError: proposal inventory omits 0054-private-machine-diagnostics.md` |
+
+I13 is red through the contract's own code, not an environment error: with
+the guard gone, the next step cannot place the escaping file in the
+checkout, and the fixture harness reports any exception other than the
+expected refusal as a failure. A first harness let that `ValueError`
+escape as a bare traceback; it now names it. A first attempt at I13 edited
+the identical lines of `evidence_refusal` instead, stayed green because no
+roadmap evidence link escapes, and was repeated on `source_refusal`.
