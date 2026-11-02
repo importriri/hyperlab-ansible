@@ -47,12 +47,16 @@ ShellRoot {
         networksPageVisible: sharedSurfaces.workspaceOpen
             && sharedSurfaces.workspaceView === "controls"
             && sharedSurfaces.subpage === "networks"
+        nitroPageVisible: sharedSurfaces.workspaceOpen
+            && sharedSurfaces.workspaceView === "controls"
+            && sharedSurfaces.subpage === "nitro"
     }
 
     ShellSurfaces {
         id: sharedSurfaces
 
         networksViewEnabled: sharedState.networksViewEnabled
+        nitroViewEnabled: sharedState.nitroViewEnabled
 
         // Where a keyboard or IPC request lands: the compositor's focused
         // output when it names a live screen, otherwise the first live

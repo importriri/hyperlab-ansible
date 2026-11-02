@@ -49,6 +49,16 @@ QtObject {
         }
     }
 
+    property bool nitroViewEnabled: false
+
+    onNitroViewEnabledChanged: {
+        if (!surfaces.nitroViewEnabled && surfaces.workspaceView === "controls"
+            && surfaces.subpage === "nitro") {
+            surfaces.cancelConfirmation();
+            surfaces.subpage = surfaces.defaultSubpage("controls");
+        }
+    }
+
     property bool workspaceOpen: false
     property string workspaceView: "machines"
     property string subpage: "inventory"
@@ -122,6 +132,8 @@ QtObject {
     function validSubpage(view, candidate) {
         if (String(view) === "controls" && String(candidate) === "networks")
             return surfaces.networksViewEnabled;
+        if (String(view) === "controls" && String(candidate) === "nitro")
+            return surfaces.nitroViewEnabled;
 
         const pages = surfaces.subpages[String(view)];
 

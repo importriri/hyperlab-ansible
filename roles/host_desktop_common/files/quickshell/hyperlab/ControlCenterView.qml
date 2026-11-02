@@ -2,7 +2,8 @@
 //
 // The host's own settings, native, in three sections an operator can name:
 // Session, Audio and network, Input and appearance; an opt-in read-only
-// Networks page shows declared configuration and libvirt state. It replaces the old Rofi
+// Networks page shows declared configuration and libvirt state, and an
+// opt-in read-only Nitro page shows driver readbacks. It replaces the old Rofi
 // and GTK control routes entirely — nothing here opens a legacy surface —
 // and it uses the same rows, cards and confirmation as the rest of the
 // product.
@@ -36,6 +37,11 @@ Item {
         { "id": "appearance", "label": "Input and appearance" }
     ].concat(view.shellState.networksViewEnabled
              ? [{ "id": "networks", "label": "Networks" }] : [])
+     .concat(view.shellState.nitroViewEnabled
+             ? [{ "id": "nitro", "label": "Nitro" }] : [])
+
+    // Present only while the page is enabled, visible and fresh.
+    readonly property var nitro: view.shellState.nitroSnapshot
 
     readonly property string section: view.shellSurfaces.subpage
 
@@ -199,6 +205,192 @@ Item {
                                 text: "Libvirt observation: " + modelData.state
                                 color: view.theme.textPrimary
                             }
+                        }
+                    }
+                }
+            }
+
+            // ---------------------------------------------- Nitro (opt-in)
+
+            Column {
+                objectName: "nitro-page"
+                width: parent.width
+                spacing: view.tokens.spaceMd
+                visible: view.section === "nitro" && view.shellState.nitroViewEnabled
+
+                SectionHeader {
+                    width: parent.width
+                    tokens: view.tokens
+                    theme: view.theme
+                    label: "Nitro hardware"
+                    description: "Read-only driver readbacks from the Nitro control client"
+                }
+                ShellLabel {
+                    width: parent.width
+                    tokens: view.tokens
+                    role: "body"
+                    wrapMode: Text.WordWrap
+                    text: "This page changes nothing. It does not show firmware effects, per-key lighting, boot defaults or saved settings."
+                    color: view.theme.textSecondary
+                }
+                EmptyState {
+                    width: parent.width
+                    visible: view.shellState.nitroStatus !== "current"
+                    tokens: view.tokens
+                    theme: view.theme
+                    kind: view.shellState.nitroStatus === "unavailable" ? "unavailable"
+                        : (view.shellState.nitroStatus === "unsupported" ? "empty" : "loading")
+                    title: {
+                        switch (view.shellState.nitroStatus) {
+                        case "unsupported": return "No supported Nitro readbacks";
+                        case "unavailable": return "Nitro hardware unavailable";
+                        case "stale": return "Nitro observation is stale";
+                        default: return "Reading Nitro hardware";
+                        }
+                    }
+                    description: {
+                        switch (view.shellState.nitroStatus) {
+                        case "unsupported":
+                            return "The client answered without fan, battery limiter or four-zone keyboard support.";
+                        case "unavailable":
+                            return "The Nitro client or broker gave no valid status. Nothing is shown in its place.";
+                        default:
+                            return "Only a fresh, valid status can show hardware readbacks.";
+                        }
+                    }
+                }
+                ShellCard {
+                    objectName: "nitro-product"
+                    width: parent.width
+                    visible: view.nitro !== null
+                    activeFocusOnTab: true
+                    accessibleName: view.nitro === null ? "" : "Product: " + view.nitro.model
+                    tokens: view.tokens
+                    theme: view.theme
+                    ShellLabel {
+                        width: parent.width
+                        tokens: view.tokens
+                        role: "section"
+                        textFormat: Text.PlainText
+                        text: view.nitro === null ? "" : "Product: " + view.nitro.model
+                        color: view.theme.textPrimary
+                    }
+                }
+                ShellCard {
+                    id: nitroFan
+                    objectName: "nitro-fan"
+                    width: parent.width
+                    visible: view.nitro !== null && view.nitro.fan !== null
+                    activeFocusOnTab: true
+                    accessibleName: visible
+                        ? "Fan driver settings. CPU " + view.nitro.fan.cpu + " percent, GPU "
+                          + view.nitro.fan.gpu + " percent. Not measured speed." : ""
+                    tokens: view.tokens
+                    theme: view.theme
+                    Column {
+                        width: parent.width
+                        spacing: view.tokens.spaceSm
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "section"
+                            text: "Fan driver settings"
+                            color: view.theme.textPrimary
+                        }
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "body"
+                            text: nitroFan.visible ? "CPU fan setting: " + view.nitro.fan.cpu + "%" : ""
+                            color: view.theme.textPrimary
+                        }
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "body"
+                            text: nitroFan.visible ? "GPU fan setting: " + view.nitro.fan.gpu + "%" : ""
+                            color: view.theme.textPrimary
+                        }
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "body"
+                            wrapMode: Text.WordWrap
+                            text: "Fan percentages are driver settings, not measured RPM, temperature or performance."
+                            color: view.theme.textSecondary
+                        }
+                    }
+                }
+                ShellCard {
+                    id: nitroBattery
+                    objectName: "nitro-battery"
+                    width: parent.width
+                    visible: view.nitro !== null && view.nitro.battery !== null
+                    activeFocusOnTab: true
+                    accessibleName: visible
+                        ? "Battery charge limiter readback: " + (view.nitro.battery ? "on" : "off") : ""
+                    tokens: view.tokens
+                    theme: view.theme
+                    ShellLabel {
+                        width: parent.width
+                        tokens: view.tokens
+                        role: "body"
+                        text: nitroBattery.visible
+                            ? "Battery charge limiter readback: " + (view.nitro.battery ? "on" : "off") : ""
+                        color: view.theme.textPrimary
+                    }
+                }
+                ShellCard {
+                    id: nitroKeyboard
+                    objectName: "nitro-keyboard"
+                    width: parent.width
+                    visible: view.nitro !== null && view.nitro.keyboard !== null
+                    activeFocusOnTab: true
+                    accessibleName: visible
+                        ? "Four-zone keyboard readback. " + view.nitro.keyboard.zones.join(", ")
+                          + ". Brightness " + view.nitro.keyboard.brightness + " percent." : ""
+                    tokens: view.tokens
+                    theme: view.theme
+                    Column {
+                        width: parent.width
+                        spacing: view.tokens.spaceSm
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "section"
+                            text: "Four-zone keyboard lighting"
+                            color: view.theme.textPrimary
+                        }
+                        Repeater {
+                            model: nitroKeyboard.visible ? view.nitro.keyboard.zones : []
+                            delegate: Row {
+                                required property var modelData
+                                required property int index
+                                spacing: view.tokens.spaceSm
+                                Rectangle {
+                                    width: view.tokens.spaceMd
+                                    height: view.tokens.spaceMd
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    radius: view.tokens.radiusControl
+                                    color: modelData
+                                    border.width: view.tokens.borderSize
+                                    border.color: view.theme.boundaryStrong
+                                }
+                                ShellLabel {
+                                    tokens: view.tokens
+                                    role: "value"
+                                    text: "Zone " + (index + 1) + ": " + modelData
+                                    color: view.theme.textPrimary
+                                }
+                            }
+                        }
+                        ShellLabel {
+                            width: parent.width
+                            tokens: view.tokens
+                            role: "body"
+                            text: nitroKeyboard.visible
+                                ? "Keyboard brightness: " + view.nitro.keyboard.brightness + "%" : ""
+                            color: view.theme.textPrimary
                         }
                     }
                 }

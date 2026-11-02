@@ -276,8 +276,8 @@ One reusable dialog, owned by `ShellSurfaces`, living inside the workspace.
 
 ## Control Center
 
-Three standard sections and an optional read-only Networks section, native,
-replacing the Rofi and GTK control routes entirely.
+Three standard sections and optional read-only Networks and Nitro sections,
+native, replacing the Rofi and GTK control routes entirely.
 
 - **Session** — Lock and Suspend are immediate; Log out, Reboot and Power off
   go through confirmation, and the consequence text names how many machines
@@ -307,14 +307,17 @@ anything and generates `/etc/xdg/quickshell/hyperlab/features.json`, owned by
 root:root with mode 0644, beneath the existing root-owned config directory:
 
 ```json
-{"networks_view_enabled": false}
+{"networks_view_enabled": false, "nitro_view_enabled": false}
 ```
 
-This small document contains only that boolean. Missing, unreadable,
-malformed, duplicate-key or nonboolean content disables the view. The running
-shell watches it: disabling withdraws the tab and returns an open Networks
-page to Session, invalidating pending observations. Installation starts or
-restarts no shell. The existing stage and recovery contracts still apply.
+This small document contains only the two view booleans, each at most once;
+`nitro_view_enabled` is described [below](#nitro-hardware-readbacks-opt-in).
+Unreadable, malformed, duplicate-key, extra-key or nonboolean content
+disables both views; a missing member disables only its own view. The
+running shell watches it: disabling withdraws the tab and returns an open
+Networks page to Session, invalidating pending observations. Installation
+starts or restarts no shell. The existing stage and recovery contracts still
+apply.
 
 When enabled, **Networks** shows every declared network from
 `hyperlabctl --json net list`: name, **Configured subnet**, **Configured
@@ -382,8 +385,104 @@ deadlines, late replies, bridge cancellation on hiding or disabling,
 disabling/reopening, keyboard focus and a small viewport. They do not prove
 installed Quickshell process ordering, compositor focus or network isolation.
 Nested default/opt-in convergence and physical acceptance on Nitro, then
-Predator with the same frozen commits, remain required. The native Nitro
-hardware view remains open.
+Predator with the same frozen commits, remain required.
+
+### Nitro hardware readbacks (opt-in)
+
+`host_desktop_common_nitro_view_enabled` is a second standalone boolean,
+default `false`, validated by the common role before it installs anything
+and written as `nitro_view_enabled` into the same root-owned
+`features.json` (root:root, mode 0644). Enabling it installs no driver,
+client or broker, starts or restarts no shell or broker, and grants no
+hardware action. The page tolerates a host without the Nitro backend: it
+says the hardware is unavailable.
+
+When enabled, Control Center gains a **Nitro** section that shows, from the
+existing unprivileged client's status request:
+
+- **Product** — the DMI product name the broker reports;
+- **Fan driver settings** — the CPU and GPU fan percentages the driver
+  holds. They are settings, not a measured RPM, temperature or performance
+  figure, and the page says so;
+- **Battery charge limiter readback** — on or off as the driver reads it;
+- **Four-zone keyboard lighting** — the four static zone colours and the
+  keyboard brightness.
+
+Each readback appears only when its capability is the JSON boolean `true`. A
+false capability is absence: its runtime value is not read and nothing is
+shown in its place, so a false battery capability is never presented as a
+disabled limiter and an RGB readback disappears when `per_zone` turns false.
+A valid status with no supported capability says **No supported Nitro
+readbacks** beside the product. The page shows no firmware effect, per-key
+lighting, boot default, saved persistent setting, GPU ownership or trust, and
+offers no editable control or Apply action. Nitro writes stay on their
+existing reviewed paths, such as the legacy
+[Control Board](nitro-control-panel.md), all through the narrow
+[broker](nitro-control-backend.md); this page adds none.
+
+`ShellState` owns the one request, `privatestack-hyperlab nitro-status`. The
+bridge handles that field before its `hyperlabctl` prerequisite, so a host
+without `hyperlabctl` can still read a working client, and runs exactly
+`/usr/local/bin/hyperlab-nitro-control status`; extra words are ignored and
+nothing in a field or response selects a command, path or write. A missing
+client, a nonzero exit or empty output yields one fixed fallback object; the
+client's own error text, which carries broker diagnostics, is not forwarded.
+
+Reading follows the Networks transport: on opening and on the 30-second slow
+cadence only while the enabled page is visible, one bridge process at most,
+**Reading Nitro hardware** until the first reply, a 15-second completion
+deadline that marks an unanswered or failed start unavailable and signals
+the bridge to stop, and a request generation per flight so a reply after
+hiding, disabling, a feature-file reload or reopening is never published.
+Cancellation signals the bridge only, not the client as a process group.
+
+A reply longer than 16384 characters (the client's own response bound) is
+refused unparsed. Otherwise the whole envelope must validate before anything
+is shown: `ok` exactly `true`; a product name of letters, digits, spaces and
+`._()+-` up to 64 characters; `fan`, `battery_limiter` and `per_zone`
+capabilities as JSON booleans, never coerced from strings or numbers; for
+each true capability, `runtime.fan` as `CPU,GPU` percentages 0–100,
+`runtime.battery_limiter` as a boolean and `runtime.per_zone` as four
+six-digit hex colours and a 0–100 brightness. Any failure, an error object,
+a nonzero exit or a timeout says **Nitro hardware unavailable** and shows no
+value; there is no valid-prefix publication. After the shared 90-second
+freshness boundary the page says **Nitro observation is stale** and
+withholds every readback. A fresh valid reply recovers. Readback cards are
+reachable with Tab, and disabling the view while the page is open returns to
+Session.
+
+Deploy the accepted candidate through the host deployment first, so the
+shared status bridge carries the `nitro-status` field, then opt in and
+restore with the common role exactly as for Networks:
+
+```bash
+ansible-playbook -K playbooks/host-desktop-common.yml --extra-vars '{"host_desktop_common_nitro_view_enabled": true}'
+# Repeat the same command: changed=0 is required on the second pass.
+cat /etc/xdg/quickshell/hyperlab/features.json
+/usr/local/bin/hyperlab-nitro-control status
+privatestack-hyperlab nitro-status
+qs -c hyperlab ipc call workspace controls
+# Select Nitro, compare contemporaneous readbacks, use Tab and a small window.
+ansible-playbook -K playbooks/host-desktop-common.yml --extra-vars '{"host_desktop_common_nitro_view_enabled": false}'
+# Repeat: changed=0; the Nitro tab must disappear, including while open.
+```
+
+The same three contracts cover this view.
+`tests/host_desktop_common_contract.py` executes the role's assertions and
+document copy for both flags and checks the exact bytes it writes.
+`tests/host_quickshell_readonly_runtime_contract.py` executes the real
+bridge with tracing inert `hyperlabctl` and Nitro clients: success, absent
+`hyperlabctl`, absent client, nonzero client and empty output, with the
+exact argv `["status"]` and no other call.
+`tests/host_quickshell_runtime_contract.py` runs the real QML with recording
+stand-ins for the Nitro process and the feature file and the real deadline
+timer: default-off, opt-in, invalid features, missing or false capabilities,
+bad types, ranges and colours, unsupported, loading, unavailable, stale,
+timeout, failed start, late replies after hiding, disabling or a
+feature-file reload, keyboard focus and a small viewport. They do not prove
+installed Quickshell process ordering, the broker, the driver or the
+hardware. Nested default/opt-in convergence and physical acceptance on Nitro,
+then Predator with the same frozen commits, remain required.
 
 ## Diagnostics
 

@@ -11,6 +11,9 @@
 set -uo pipefail
 
 declare -r cli=/usr/local/bin/hyperlabctl
+# Installed by nitro_sense when its control backend is enabled. It is an
+# independent read: a host without hyperlabctl may still have this client.
+declare -r nitro_client=/usr/local/bin/hyperlab-nitro-control
 
 fallback() {
     local reason="$1"
@@ -26,8 +29,29 @@ usable() {
     return 0
 }
 
+# The one Nitro read: a fixed `status` request, never a write. A missing
+# client, a failure or empty output yields the same fixed fallback; the
+# client's own error object is broker diagnostics and is not forwarded.
+nitro_status() {
+    local payload
+    if [[ ! -x ${nitro_client} ]]; then
+        fallback "Nitro status is unavailable"
+        return 0
+    fi
+    if ! payload="$(${nitro_client} status 2>/dev/null)" || [[ -z ${payload} ]]; then
+        fallback "Nitro status is unavailable"
+        return 0
+    fi
+    printf '%s\n' "${payload}"
+    return 0
+}
+
 once() {
     local field="$1" payload
+    if [[ ${field} == nitro-status ]]; then
+        nitro_status
+        return 0
+    fi
     usable || return 0
     if [[ ${field} == vms ]]; then
         if ! payload="$(${cli} machine inventory --json 2>/dev/null)"; then

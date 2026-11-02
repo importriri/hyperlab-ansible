@@ -4,7 +4,8 @@
 // receive plain values and never open a process, a socket or a file.
 //
 // Every source is a reviewed read-only bridge:
-//   privatestack-hyperlab              status, trust claim and inventory
+//   privatestack-hyperlab              status, trust claim, inventory and
+//                                      opt-in Networks and Nitro readbacks
 //   privatestack-compositor-adapter    compositor-neutral workspace/focus
 //   privatestack-surface-provenance    reviewed focused-surface provenance
 //   privatestack-telemetry             host telemetry snapshot
@@ -218,13 +219,16 @@ Scope {
         ? state.networksObserved : []
 
     function applyFeatures(raw) {
-        // This small document has one boolean. Reject duplicates, additional
-        // keys and nonbooleans as well as malformed or unreadable content.
+        // This small document holds at most the two known booleans, each
+        // once. Duplicate, additional or nonboolean members and malformed or
+        // unreadable content disable every page; a missing member disables
+        // only its own page.
         const source = String(raw).trim();
-        const parsed = state.parseJson(source);
-        state.networksViewEnabled =
-            /^\{\s*"networks_view_enabled"\s*:\s*(true|false)\s*\}$/.test(source)
-            && parsed !== null && parsed.networks_view_enabled === true;
+        const shape = /^\{\s*"(networks_view_enabled|nitro_view_enabled)"\s*:\s*(?:true|false)\s*(?:,\s*"(networks_view_enabled|nitro_view_enabled)"\s*:\s*(?:true|false)\s*)?\}$/
+            .exec(source);
+        const parsed = shape !== null && shape[1] !== shape[2] ? state.parseJson(source) : null;
+        state.networksViewEnabled = parsed !== null && parsed.networks_view_enabled === true;
+        state.nitroViewEnabled = parsed !== null && parsed.nitro_view_enabled === true;
     }
 
     onNetworksReadableChanged: {
@@ -326,6 +330,178 @@ Scope {
         else
             // A failed start need not emit exited; it has the same deadline.
             state.finishNetworks(state.networksFlightGeneration, "", -1);
+        return true;
+    }
+
+    // --------------------------------------------------------------- nitro
+
+    // Read-only Nitro driver readbacks through the fixed bridge field. The
+    // bridge runs only the unprivileged client's status request.
+    property bool nitroViewEnabled: false
+    // Injected once by the root, independent of presentation instances.
+    property bool nitroPageVisible: false
+    readonly property bool nitroReadable:
+        state.nitroViewEnabled && state.nitroPageVisible
+
+    readonly property int nitroTimeoutMs: 15000
+    // The client refuses broker replies above 16 KiB; a longer answer is
+    // not a status and is never parsed.
+    readonly property int nitroMaxResponseChars: 16384
+    property int nitroGeneration: 0
+    property int nitroFlightGeneration: -1
+    property bool nitroInFlight: false
+    property bool nitroPending: false
+    property bool nitroRefreshQueued: false
+    property string nitroSourceState: "loading"
+    property real nitroObservedAt: 0
+    property var nitroObserved: null
+
+    // loading, current, unsupported (valid, no readable capability), stale
+    // or unavailable (client, broker, transport or validation failure).
+    readonly property string nitroStatus: {
+        // The read starts on demand; its own deadline reports no answer.
+        const health = state.nitroSourceState === "loading" ? "loading"
+            : state.sourceState(state.nitroSourceState, state.nitroObservedAt);
+        if (health !== "ok")
+            return health;
+        if (state.nitroObserved === null)
+            return "unavailable";
+        return state.nitroObserved.supported ? "current" : "unsupported";
+    }
+    // Old readbacks never look current, during a failure or after hiding.
+    readonly property var nitroSnapshot:
+        state.nitroReadable
+        && (state.nitroStatus === "current" || state.nitroStatus === "unsupported")
+        ? state.nitroObserved : null
+
+    onNitroReadableChanged: {
+        if (state.nitroReadable) {
+            state.nitroRefreshQueued = state.nitroInFlight;
+            state.requestNitro();
+        } else {
+            state.nitroGeneration += 1;
+            state.nitroPending = false;
+            state.nitroRefreshQueued = false;
+            state.nitroObserved = null;
+            state.nitroObservedAt = 0;
+            state.nitroSourceState = "loading";
+            // The flight keeps its own generation until exit, so reopening
+            // can neither reuse it nor overlap the retiring bridge.
+            if (nitroProcess.running)
+                nitroProcess.signal(9);
+        }
+    }
+
+    function requestNitro() {
+        if (!state.nitroReadable || state.nitroInFlight)
+            return false;
+
+        state.nitroGeneration += 1;
+        state.nitroFlightGeneration = state.nitroGeneration;
+        state.nitroInFlight = true;
+        state.nitroPending = true;
+        nitroProcess.generation = state.nitroFlightGeneration;
+        nitroProcess.buffer = "";
+        nitroDeadline.restart();
+        nitroProcess.running = true;
+        return true;
+    }
+
+    // The whole envelope validates before anything is published. Only the
+    // consumed fields are read; a false capability is absence, and its
+    // runtime value is neither read nor shown.
+    function validNitroStatus(parsed) {
+        const object = value => value !== null && typeof value === "object"
+            && !Array.isArray(value);
+        if (!object(parsed) || parsed.ok !== true || !object(parsed.status))
+            return null;
+
+        const status = parsed.status;
+        const capabilities = status.capabilities;
+        const runtime = status.runtime;
+        if (typeof status.model !== "string"
+            || !/^[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,63}$/.test(status.model)
+            || !object(capabilities) || !object(runtime)
+            || typeof capabilities.fan !== "boolean"
+            || typeof capabilities.battery_limiter !== "boolean"
+            || typeof capabilities.per_zone !== "boolean")
+            return null;
+
+        let fan = null;
+        if (capabilities.fan) {
+            const match = typeof runtime.fan === "string"
+                ? /^(100|[1-9]?[0-9]),(100|[1-9]?[0-9])$/.exec(runtime.fan) : null;
+            if (match === null)
+                return null;
+            fan = {"cpu": Number(match[1]), "gpu": Number(match[2])};
+        }
+
+        let battery = null;
+        if (capabilities.battery_limiter) {
+            if (typeof runtime.battery_limiter !== "boolean")
+                return null;
+            battery = runtime.battery_limiter;
+        }
+
+        let keyboard = null;
+        if (capabilities.per_zone) {
+            const match = typeof runtime.per_zone === "string"
+                ? /^([0-9A-Fa-f]{6}),([0-9A-Fa-f]{6}),([0-9A-Fa-f]{6}),([0-9A-Fa-f]{6}),(100|[1-9]?[0-9])$/
+                    .exec(runtime.per_zone)
+                : null;
+            if (match === null)
+                return null;
+            keyboard = {"zones": match.slice(1, 5).map(zone => "#" + zone.toLowerCase()),
+                        "brightness": Number(match[5])};
+        }
+
+        return {"model": status.model, "fan": fan, "battery": battery,
+                "keyboard": keyboard,
+                "supported": fan !== null || battery !== null || keyboard !== null};
+    }
+
+    function finishNitro(generation, raw, exitCode) {
+        // A retired runner can neither consume nor release a newer flight.
+        if (!state.nitroInFlight || generation !== state.nitroFlightGeneration)
+            return false;
+
+        const current = state.nitroPending && state.nitroReadable
+            && generation === state.nitroGeneration;
+        state.nitroPending = false;
+        state.nitroInFlight = false;
+        nitroDeadline.stop();
+        let accepted = false;
+        if (current) {
+            const text = String(raw);
+            const observed = exitCode === 0 && text.length <= state.nitroMaxResponseChars
+                ? state.validNitroStatus(state.parseJson(text)) : null;
+            state.nitroObserved = observed;
+            state.nitroSourceState = observed === null ? "unavailable" : "ok";
+            state.nitroObservedAt = observed === null ? 0 : Date.now();
+            accepted = observed !== null;
+        }
+        if (state.nitroRefreshQueued && state.nitroReadable) {
+            state.nitroRefreshQueued = false;
+            state.requestNitro();
+        }
+        return accepted;
+    }
+
+    function nitroTimedOut() {
+        if (!state.nitroInFlight)
+            return false;
+
+        state.nitroPending = false;
+        if (state.nitroReadable) {
+            state.nitroSourceState = "unavailable";
+            state.nitroObserved = null;
+            state.nitroObservedAt = 0;
+        }
+        if (nitroProcess.running)
+            nitroProcess.signal(9);
+        else
+            // A failed start need not emit exited; it has the same deadline.
+            state.finishNitro(state.nitroFlightGeneration, "", -1);
         return true;
     }
 
@@ -2340,6 +2516,7 @@ Scope {
         state.startPoll(outsideDomainsProcess);
         state.startPoll(telemetryProcess);
         state.requestNetworks();
+        state.requestNitro();
     }
 
     function refreshTelemetry() {
@@ -2423,6 +2600,27 @@ Scope {
         interval: state.networksTimeoutMs
         repeat: false
         onTriggered: state.networksTimedOut()
+    }
+
+    Process {
+        id: nitroProcess
+        // Immutable for the life of this flight, including cancellation.
+        property int generation: -1
+        property string buffer: ""
+        command: [state.statusBridge, "nitro-status"]
+        stdout: StdioCollector {
+            onStreamFinished: nitroProcess.buffer = String(this.text)
+        }
+        onExited: (exitCode, exitStatus) => {
+            state.finishNitro(nitroProcess.generation, nitroProcess.buffer, exitCode);
+        }
+    }
+
+    Timer {
+        id: nitroDeadline
+        interval: state.nitroTimeoutMs
+        repeat: false
+        onTriggered: state.nitroTimedOut()
     }
 
     SystemClock {

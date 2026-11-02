@@ -24,25 +24,33 @@ def text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def check_networks_deployment(shared: dict) -> None:
-    flag = "host_desktop_common_networks_view_enabled"
-    require(shared.get(flag) is False, "Networks feature must default to boolean false")
+FEATURE_FLAGS = {
+    "host_desktop_common_networks_view_enabled": ("networks_view_enabled", "Networks"),
+    "host_desktop_common_nitro_view_enabled": ("nitro_view_enabled", "Nitro"),
+}
+
+
+def check_feature_deployment(shared: dict) -> None:
     tasks = yaml.safe_load(text("roles/host_desktop_common/tasks/main.yml"))
-    assertions = [task for task in tasks if flag + " is boolean" in
-                  task.get("ansible.builtin.assert", {}).get("that", [])]
-    require(len(assertions) == 1, "Networks flag needs one boolean validation")
+    first_install = next(i for i, task in enumerate(tasks)
+                         if "community.general.pacman" in task)
+    assertions = []
+    for flag, (_, label) in FEATURE_FLAGS.items():
+        require(shared.get(flag) is False, f"{label} feature must default to boolean false")
+        found = [task for task in tasks if flag + " is boolean" in
+                 task.get("ansible.builtin.assert", {}).get("that", [])]
+        require(len(found) == 1, f"{label} flag needs one boolean validation")
+        require(tasks.index(found[0]) < first_install,
+                f"{label} flag validation must precede installation")
+        assertions.append(found[0])
     copies = [task for task in tasks if task.get("ansible.builtin.copy", {})
               .get("dest", "").endswith("/features.json")]
-    require(len(copies) == 1, "Networks feature document needs one installation")
+    require(len(copies) == 1, "feature document needs one installation")
     copy = copies[0]["ansible.builtin.copy"]
     require(copy["dest"] == "{{ host_desktop_common_shell_stage.config_root }}/features.json"
             and copy["owner"] == "root" and copy["group"] == "root"
-            and copy["mode"] == "0644", "Networks feature document deployment changed")
-    first_install = next(i for i, task in enumerate(tasks)
-                         if "community.general.pacman" in task)
-    require(tasks.index(assertions[0]) < first_install,
-            "Networks flag validation must precede installation")
-    # Execute the actual assertion and copy content in a disposable local
+            and copy["mode"] == "0644", "feature document deployment changed")
+    # Execute the actual assertions and copy content in a disposable local
     # play. Only destination and ownership are adapted; no role is applied.
     with tempfile.TemporaryDirectory(prefix="hyperlab-features-") as raw:
         directory = Path(raw)
@@ -53,34 +61,46 @@ def check_networks_deployment(shared: dict) -> None:
         play = directory / "features.yml"
         play.write_text(yaml.safe_dump([{
             "name": "Check feature document", "hosts": "localhost",
-            "gather_facts": False, "tasks": [assertions[0], {
+            "gather_facts": False, "tasks": [*assertions, {
                 "name": "Stage feature JSON", "ansible.builtin.copy": task_copy}]
         }]))
-        for value in (False, True, "false", "true", 0, 1, None, [], {}):
+        cases = [(flag, value) for flag in FEATURE_FLAGS
+                 for value in (False, True, "false", "true", 0, 1, None, [], {})]
+        cases.append((None, True))
+        for varied, value in cases:
+            values = {flag: (value if varied in (None, flag) else False)
+                      for flag in FEATURE_FLAGS}
+            label = "both flags" if varied is None else FEATURE_FLAGS[varied][1]
             output.unlink(missing_ok=True)
             result = subprocess.run([
                 "ansible-playbook", "-i", "localhost,", "-c", "local", str(play),
-                "--extra-vars", json.dumps({flag: value})],
+                "--extra-vars", json.dumps(values)],
                 env={**os.environ, "ANSIBLE_NOCOLOR": "1"}, capture_output=True,
                 text=True, timeout=60, check=False)
             if type(value) is bool:
                 require(result.returncode == 0 and output.is_file(),
-                        f"Networks boolean did not render: {value}: {result.stdout}")
+                        f"{label} boolean did not render: {value}: {result.stdout}")
                 document = json.loads(output.read_text())
-                require(document == {"networks_view_enabled": value}
-                        and type(document["networks_view_enabled"]) is bool
+                expected = {key: values[flag] for flag, (key, _) in FEATURE_FLAGS.items()}
+                require(document == expected
+                        and all(type(item) is bool for item in document.values())
                         and output.stat().st_mode & 0o777 == 0o644,
-                        f"Networks generated document differs: {document}")
+                        f"{label} generated document differs: {document}")
+                # The shell parses these exact bytes (host_quickshell_runtime_contract).
+                require(output.read_bytes() == (
+                    '{"networks_view_enabled": %s, "nitro_view_enabled": %s}\n' % tuple(
+                        json.dumps(expected[key]) for key, _ in FEATURE_FLAGS.values())
+                ).encode(), f"{label} written bytes differ: {output.read_bytes()!r}")
             else:
                 require(result.returncode != 0 and not output.exists(),
-                        f"Networks nonboolean reached installation: {value!r}")
+                        f"{label} nonboolean reached installation: {value!r}")
                 marker = "FAILED! => "
                 require(marker in result.stdout,
-                        f"Networks refusal did not report its assertion: {result.stdout}")
+                        f"{label} refusal did not report its assertion: {result.stdout}")
                 failure, _ = json.JSONDecoder().raw_decode(result.stdout.split(marker, 1)[1])
-                require(failure.get("assertion") == flag + " is boolean"
+                require(failure.get("assertion") == varied + " is boolean"
                         and failure.get("evaluated_to") is False,
-                        f"Networks refusal failed for an unrelated reason: {failure}")
+                        f"{label} refusal failed for an unrelated reason: {failure}")
 
 
 def main() -> int:
@@ -89,7 +109,7 @@ def main() -> int:
         text("group_vars/all/host-desktop.yml")
     )
 
-    check_networks_deployment(shared)
+    check_feature_deployment(shared)
 
     product = shared["host_desktop_common_product_contract"]
     trust = shared["host_desktop_common_trust_contract"]

@@ -77,8 +77,101 @@ def check_network_bridge() -> None:
                         f"network bridge failure became inventory: {label}")
 
 
+NITRO_STATUS = {
+    "ok": True,
+    "status": {
+        "model": "Nitro AN515-55",
+        "capabilities": {"fan": True, "battery_limiter": True,
+                         "per_zone": True, "effect": False},
+        "runtime": {"fan": "40,55", "battery_limiter": True,
+                    "per_zone": "ff0000,00ff00,0000ff,ffffff,60"},
+        "persistence": {"supported": True, "scope_default": "runtime",
+                        "saved": {"fan": None, "battery_limiter": None,
+                                  "per_zone": None},
+                        "overrides": []},
+    },
+}
+
+
+def check_nitro_bridge() -> None:
+    """Execute the real bridge with inert, tracing hyperlabctl and Nitro clients."""
+    source = text("roles/host_desktop_sway/files/privatestack-hyperlab.sh")
+    defaults = yaml.safe_load(text("roles/nitro_sense/defaults/main.yml"))
+    installed = defaults["nitro_sense_control_client"]
+    require(installed == "/usr/local/bin/hyperlab-nitro-control",
+            f"installed Nitro client path changed: {installed}")
+    cli_needle = "declare -r cli=/usr/local/bin/hyperlabctl"
+    nitro_needle = "declare -r nitro_client=" + installed
+    require(source.count(cli_needle) == 1 and source.count(nitro_needle) == 1,
+            "bridge fixture cannot isolate hyperlabctl and the Nitro client")
+    # Both stand-ins record their argv and never touch a socket or hardware.
+    tracer = ("#!/usr/bin/env python3\nimport json, os, sys\n"
+              "with open(os.environ['{trace}'], 'a') as stream:\n"
+              "    stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+              "sys.stdout.write(os.environ['{output}'])\n"
+              "sys.stderr.write('{stderr}\\n')\n"
+              "sys.exit(int(os.environ['{code}']))\n")
+    raw_error = '{"error": "unavailable Nitro node: /fixture/fan_speed", "ok": false}\n'
+    with tempfile.TemporaryDirectory(prefix="hyperlab-nitro-bridge-") as raw:
+        directory = Path(raw)
+        cli = directory / "hyperlabctl"
+        client = directory / "hyperlab-nitro-control"
+        cli_trace = directory / "cli.jsonl"
+        nitro_trace = directory / "nitro.jsonl"
+        bridge = directory / "bridge.sh"
+        bridge.write_text(source
+                          .replace(cli_needle, "declare -r cli=" + shlex.quote(str(cli)))
+                          .replace(nitro_needle, "declare -r nitro_client="
+                                   + shlex.quote(str(client))))
+        good = json.dumps(NITRO_STATUS, sort_keys=True) + "\n"
+        for label, cli_present, client_present, output, code, extra in (
+            ("success", True, True, good, 0, []),
+            ("absent hyperlabctl with a working Nitro client", False, True, good, 0, []),
+            ("ignored trailing words", True, True, good, 0, ["battery", "off"]),
+            ("absent Nitro client", True, False, good, 0, []),
+            ("nonzero Nitro client", True, True, raw_error, 1, []),
+            ("empty Nitro output", True, True, "", 0, []),
+        ):
+            for path, present, trace, prefix in (
+                (cli, cli_present, cli_trace, "CLI"),
+                (client, client_present, nitro_trace, "NITRO"),
+            ):
+                path.unlink(missing_ok=True)
+                trace.write_text("")
+                if present:
+                    path.write_text(tracer.format(
+                        trace=prefix + "_TRACE", output=prefix + "_OUTPUT",
+                        code=prefix + "_EXIT", stderr=prefix + " DIAGNOSTIC"))
+                    path.chmod(0o755)
+            result = subprocess.run(
+                ["bash", str(bridge), "nitro-status", *extra],
+                env={**os.environ, "CLI_TRACE": str(cli_trace),
+                     "CLI_OUTPUT": "{}", "CLI_EXIT": "0",
+                     "NITRO_TRACE": str(nitro_trace), "NITRO_OUTPUT": output,
+                     "NITRO_EXIT": str(code)},
+                capture_output=True, text=True, timeout=10, check=False)
+            cli_calls = [json.loads(line) for line in cli_trace.read_text().splitlines()]
+            nitro_calls = [json.loads(line) for line in nitro_trace.read_text().splitlines()]
+            require(cli_calls == [], f"Nitro status called hyperlabctl: {label}: {cli_calls}")
+            require(nitro_calls == ([["status"]] if client_present else []),
+                    f"Nitro status exact read-only argv changed: {label}: {nitro_calls}")
+            require(result.returncode == 0 and not result.stderr,
+                    f"Nitro bridge process failed or leaked diagnostics: {label}")
+            parsed = json.loads(result.stdout)
+            if output == good and client_present:
+                require(parsed == NITRO_STATUS,
+                        f"absent hyperlabctl hid Nitro client or altered status: {label}: {parsed}")
+            else:
+                require(parsed == {"text": "?", "alt": "error", "class": "error",
+                                   "tooltip": "Nitro status is unavailable"},
+                        f"Nitro failure did not yield the fixed fallback: {label}: {parsed}")
+                require("fixture" not in result.stdout and "ok" not in parsed,
+                        f"Nitro fallback forwarded broker diagnostics: {label}")
+
+
 def main() -> int:
     check_network_bridge()
+    check_nitro_bridge()
 
     shared = yaml.safe_load(
         text("group_vars/all/host-desktop.yml")

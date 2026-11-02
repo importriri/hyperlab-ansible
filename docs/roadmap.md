@@ -884,6 +884,13 @@ work explicitly requires it.
         `tests/host_quickshell_readonly_runtime_contract.py`,
         `tests/host_desktop_common_contract.py`; software-verified with fixtures;
         installed convergence and Nitro/Predator acceptance remain open)
+  - [x] default-off, read-only native Nitro observation page: product, fan
+        driver settings, battery limiter and four-zone readbacks through the
+        fixed client status request, typed validation, guarded navigation and
+        freshness (`tests/host_quickshell_runtime_contract.py`,
+        `tests/host_quickshell_readonly_runtime_contract.py`,
+        `tests/host_desktop_common_contract.py`; software-verified with fixtures;
+        installed convergence and Nitro/Predator acceptance remain open)
 - [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
 - [ ] shell-owned notifications (mako remains the reviewed daemon)
 - [x] complete keybinding cheatsheet surface: `SUPER + F1`, every host binding

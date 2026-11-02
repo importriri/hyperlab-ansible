@@ -155,6 +155,10 @@ def adapt_state(source: str) -> str:
                               source, re.M | re.S)
     network_deadline = re.search(r"    Timer \{\n        id: networksDeadline\n.*?^    \}\n",
                                 source, re.M | re.S)
+    nitro_process = re.search(r"    Process \{\n        id: nitroProcess\n.*?^    \}\n",
+                              source, re.M | re.S)
+    nitro_deadline = re.search(r"    Timer \{\n        id: nitroDeadline\n.*?^    \}\n",
+                               source, re.M | re.S)
     source = strip_blocks(source, "Process", "FileView", "SystemClock", "Timer")
     source = source.replace(
         "    readonly property alias clock: shellClock\n",
@@ -173,27 +177,10 @@ def adapt_state(source: str) -> str:
         "",
         source,
     )
-    if network_process and features_file and network_deadline:
-        process = network_process[0].replace("Process {", "QtObject {", 1)
-        process = process.replace("        id: networksProcess\n", """        id: networksProcess
-        property var command
-        property bool running: false
-        property QtObject stdout
-        property var launches: []
-        property var signals: []
-        signal exited(int code, int status)
-        function signal(number) { signals = signals.concat([number]); }
-        function complete(raw, code) {
-            stdout.text = raw;
-            stdout.streamFinished();
-            running = false;
-            exited(code, 0);
-        }
-        onRunningChanged: if (running) launches = launches.concat([command.slice()]);
-""")
-        process = process.replace("StdioCollector {", "QtObject {\n"
-                                  "            property string text: \"\"\n"
-                                  "            signal streamFinished()", 1)
+    if (network_process and features_file and network_deadline
+            and nitro_process and nitro_deadline):
+        process = process_stand_in(network_process[0], "networksProcess")
+        nitro = process_stand_in(nitro_process[0], "nitroProcess")
         features = features_file[0].replace("FileView {", "QtObject {", 1)
         features = features.replace("        id: featuresFile\n", """        id: featuresFile
         property string path
@@ -212,7 +199,7 @@ def adapt_state(source: str) -> str:
                            "outsideDomainsProcess", "telemetryProcess"):
             sources += ("    QtObject { id: " + identifier
                         + "; property bool running: false; property real startedAt: 0 }\n")
-        source = source.replace("    id: state\n", "    id: state\n" + sources + process + features + """
+        source = source.replace("    id: state\n", "    id: state\n" + sources + process + nitro + features + """
     QtObject { id: networksDeadline; function restart() {} function stop() {} }
     readonly property var networkFixtureLaunches: networksProcess.launches
     readonly property var networkFixtureSignals: networksProcess.signals
@@ -225,12 +212,57 @@ def adapt_state(source: str) -> str:
     readonly property int networkFixtureDeadline: networksDeadline.interval
     readonly property string networkFixturePath: featuresFile.path
     function networkFixtureTimeout() { networksDeadline.triggered(); }
+    QtObject { id: nitroDeadline; function restart() {} function stop() {} }
+    readonly property var nitroFixtureLaunches: nitroProcess.launches
+    readonly property var nitroFixtureSignals: nitroProcess.signals
+    function nitroFixtureComplete(raw, code) { nitroProcess.complete(raw, code); }
+    function nitroFixtureFailedStart() { nitroProcess.running = false; }
+    readonly property int nitroFixtureDeadline: nitroDeadline.interval
+    readonly property bool nitroFixtureDeadlineArmed: nitroDeadline.running
+    function nitroFixtureTimeout() { nitroDeadline.triggered(); }
 """, 1)
         source = source.replace(
             "    QtObject { id: networksDeadline; function restart() {} function stop() {} }",
             network_deadline[0], 1,
         )
+        source = source.replace(
+            "    QtObject { id: nitroDeadline; function restart() {} function stop() {} }",
+            nitro_deadline[0], 1,
+        )
+    else:
+        # Without the transport blocks no scenario could prove polling,
+        # deadlines or correlation; refuse rather than run a weaker harness.
+        raise SystemExit("HyperLab Quickshell runtime contract: ShellState "
+                         "feature or bridge transport blocks are missing")
     return source
+
+
+def process_stand_in(block: str, identifier: str) -> str:
+    """Replace a real bridge Process with a recording stand-in.
+
+    The production command binding, buffer, stdout handler and exit handler
+    stay in place; only launching and signalling become observable records.
+    """
+    process = block.replace("Process {", "QtObject {", 1)
+    process = process.replace(f"        id: {identifier}\n", f"""        id: {identifier}
+        property var command
+        property bool running: false
+        property QtObject stdout
+        property var launches: []
+        property var signals: []
+        signal exited(int code, int status)
+        function signal(number) {{ signals = signals.concat([number]); }}
+        function complete(raw, code) {{
+            stdout.text = raw;
+            stdout.streamFinished();
+            running = false;
+            exited(code, 0);
+        }}
+        onRunningChanged: if (running) launches = launches.concat([command.slice()]);
+""")
+    return process.replace("StdioCollector {", "QtObject {\n"
+                           "            property string text: \"\"\n"
+                           "            signal streamFinished()", 1)
 
 
 def adapt_theme(source: str) -> str:
@@ -374,6 +406,7 @@ Window {
         id: sharedSurfaces
 
         networksViewEnabled: sharedState.networksViewEnabled
+        nitroViewEnabled: sharedState.nitroViewEnabled
         liveOutputs: ["eDP-1", "HDMI-A-1"]
         activeOutput: {
             const focused = sharedState.focusedOutput;
@@ -392,6 +425,11 @@ Window {
         && sharedSurfaces.subpage === "networks"
     onNetworksFixturePageVisibleChanged:
         sharedState.networksPageVisible = networksFixturePageVisible
+    readonly property bool nitroFixturePageVisible: sharedSurfaces.workspaceOpen
+        && sharedSurfaces.workspaceView === "controls"
+        && sharedSurfaces.subpage === "nitro"
+    onNitroFixturePageVisibleChanged:
+        sharedState.nitroPageVisible = nitroFixturePageVisible
 
     // Transport fixtures. They record intent and perform nothing.
     QtObject {
@@ -1270,6 +1308,415 @@ NETWORKS_LATE = r"""
             check(!sharedState.requestNetworks() && sharedState.networkFixtureLaunches.length === launches,
                   "hidden Networks page polled");
 """
+
+
+# The broker's status envelope as the unprivileged client prints it
+# (hyperlab-nitro-control-client.py: json.dumps(response, sort_keys=True)).
+NITRO_STATUS = {
+    "ok": True,
+    "status": {
+        "capabilities": {"battery_limiter": True, "effect": False,
+                         "fan": True, "per_zone": True},
+        "model": "Nitro AN515-55",
+        "persistence": {"overrides": [], "saved": {"battery_limiter": None,
+                        "fan": None, "per_zone": None},
+                        "scope_default": "runtime", "supported": True},
+        "runtime": {"battery_limiter": True, "fan": "40,55",
+                    "per_zone": "ff0000,00ff00,0000ff,FFFFFF,60"},
+    },
+}
+
+# The exact bytes the common role installs (host_desktop_common_contract).
+NITRO_FEATURES_OFF = r"'{\"networks_view_enabled\": false, \"nitro_view_enabled\": false}\n'"
+NITRO_FEATURES_ON = r"'{\"networks_view_enabled\": false, \"nitro_view_enabled\": true}\n'"
+
+NITRO_HELPERS = r"""
+            const status = @@NITRO_STATUS@@;
+            function nitroVariant(change) {
+                const copy = JSON.parse(JSON.stringify(status));
+                change(copy);
+                return JSON.stringify(copy);
+            }
+            function nitroAnswer(raw, code) {
+                if (!sharedState.nitroInFlight)
+                    sharedState.requestNitro();
+                sharedState.nitroFixtureComplete(raw, code);
+                return sharedState.nitroStatus === "current"
+                    || sharedState.nitroStatus === "unsupported";
+            }
+            function nitroControls(item) {
+                if (!item || item.visible === false)
+                    return 0;
+                const own = item.interactive === true || item.actionable === true
+                    || item.checkable === true || item.editable === true ? 1 : 0;
+                const children = item.children || [];
+                return own + children.reduce((sum, child) => sum + nitroControls(child), 0);
+            }
+            const readbackLabels = ["CPU fan setting: 40%", "GPU fan setting: 55%",
+                "Battery charge limiter readback: on", "Zone 1: #ff0000", "Zone 2: #00ff00",
+                "Zone 3: #0000ff", "Zone 4: #ffffff", "Keyboard brightness: 60%"];
+            function anyReadback() {
+                return readbackLabels.some(label => visibleText(workspaceSurface, label))
+                    || visibleText(workspaceSurface, "Battery charge limiter readback: off");
+            }
+"""
+
+NITRO_DISABLED = r"""
+            sharedSurfaces.openWorkspace("controls");
+            check(!sharedState.nitroViewEnabled, "Nitro starts enabled");
+            check(sharedState.nitroFixtureDeadline === 15000,
+                  "Nitro completion deadline differs from its documented bound");
+            check(!sharedSurfaces.openSubpage("nitro"), "disabled direct Nitro navigation succeeded");
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            check(sharedSurfaces.subpage === "session", "disabled Nitro workspace page opened");
+            check(find(workspaceSurface, "section-nitro") === null
+                  && find(workspaceSurface, "chip-nitro") === null,
+                  "disabled Nitro tab exists");
+            check(!sharedState.requestNitro(), "disabled Nitro read accepted");
+            sharedState.refreshSlowMetrics();
+            check(sharedState.nitroFixtureLaunches.length === 0,
+                  "disabled Nitro page launched a request");
+            sharedState.networkFixtureLoad(@@OFF@@);
+            check(!sharedState.nitroViewEnabled && !sharedState.networksViewEnabled,
+                  "default generated feature document enabled a page");
+            sharedState.networkFixtureLoad(@@ON@@);
+            check(sharedState.nitroViewEnabled && !sharedState.networksViewEnabled,
+                  "generated Nitro opt-in did not enable only Nitro");
+            sharedState.networkFixtureLoad('{"networks_view_enabled": true, "nitro_view_enabled": false}\n');
+            check(sharedState.networksViewEnabled && !sharedState.nitroViewEnabled,
+                  "Networks opt-in enabled Nitro");
+            sharedState.applyFeatures('{"nitro_view_enabled":true}');
+            check(sharedState.nitroViewEnabled && !sharedState.networksViewEnabled,
+                  "single Nitro member was not read independently");
+            for (const invalid of ["", "{", "null", "[]", "{}",
+                                   '{"nitro_view_enabled":"true"}',
+                                   '{"nitro_view_enabled":"false"}',
+                                   '{"nitro_view_enabled":1}',
+                                   '{"nitro_view_enabled":null}',
+                                   '{"nitro_view_enabled":true,"nitro_view_enabled":false}',
+                                   '{"nitro_view_enabled":false,"nitro_view_enabled":true}',
+                                   '{"nitro_view_enabled":true,"extra":false}',
+                                   '{"networks_view_enabled":true}',
+                                   '{"networks_view_enabled":"true","nitro_view_enabled":true}',
+                                   '{"nitro_view_enabled":true,"networks_view_enabled":false,"nitro_view_enabled":true}']) {
+                sharedState.applyFeatures('{"networks_view_enabled":true,"nitro_view_enabled":true}');
+                sharedState.applyFeatures(invalid);
+                check(!sharedState.nitroViewEnabled, "invalid feature document enabled Nitro");
+                check(!sharedSurfaces.openSubpage("nitro"), "invalid Nitro feature permitted direct navigation");
+            }
+            sharedState.applyFeatures('{"networks_view_enabled":true,"nitro_view_enabled":"true"}');
+            check(!sharedState.networksViewEnabled,
+                  "malformed Nitro member left Networks enabled");
+            sharedState.networkFixtureLoad(@@ON@@);
+            sharedState.networkFixtureUnreadable();
+            check(!sharedState.nitroViewEnabled, "unreadable feature document kept Nitro enabled");
+            sharedState.networkFixtureLoad(@@ON@@);
+            sharedState.networkFixtureChanged();
+            check(!sharedState.nitroViewEnabled, "changed feature document kept cached Nitro enablement");
+            sharedState.networkFixtureLoadedWithoutTextChange();
+            check(sharedState.nitroViewEnabled, "unchanged feature reload did not restore Nitro");
+            sharedState.networkFixtureLoad(@@OFF@@);
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            check(sharedSurfaces.subpage === "session", "restored default kept Nitro reachable");
+            check(sharedState.nitroFixtureLaunches.length === 0,
+                  "invalid or disabled features launched a Nitro read");
+"""
+
+NITRO = r"""
+            sharedState.networkFixtureLoad(@@ON@@);
+            check(sharedState.nitroViewEnabled, "generated opt-in did not enable Nitro");
+            sharedState.refreshSlowMetrics();
+            sharedSurfaces.openWorkspace("controls");
+            check(sharedState.nitroFixtureLaunches.length === 0,
+                  "Nitro polled while its page was hidden");
+            check(sharedSurfaces.openSubpage("nitro"), "enabled Nitro navigation refused");
+            check(JSON.stringify(sharedState.nitroFixtureLaunches[0])
+                  === JSON.stringify(["/usr/local/bin/privatestack-hyperlab", "nitro-status"]),
+                  "Nitro transport command differs");
+            check(sharedState.nitroFixtureLaunches.length === 1,
+                  "opening Nitro did not request once");
+            check(sharedState.nitroFixtureDeadlineArmed,
+                  "Nitro request did not arm its completion deadline");
+            check(sharedState.nitroStatus === "loading"
+                  && visibleText(workspaceSurface, "Reading Nitro hardware"),
+                  "Nitro first read is not presented as loading");
+            check(!sharedState.requestNitro() && sharedState.nitroFixtureLaunches.length === 1,
+                  "overlapping Nitro read accepted");
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(!sharedState.nitroFixtureDeadlineArmed,
+                  "settled Nitro read kept its deadline armed");
+            check(sharedState.nitroStatus === "current", "valid Nitro status rejected");
+            const snapshot = sharedState.nitroSnapshot;
+            check(snapshot.model === "Nitro AN515-55" && snapshot.fan.cpu === 40
+                  && snapshot.fan.gpu === 55 && snapshot.battery === true
+                  && JSON.stringify(snapshot.keyboard.zones)
+                     === JSON.stringify(["#ff0000", "#00ff00", "#0000ff", "#ffffff"])
+                  && snapshot.keyboard.brightness === 60,
+                  "Nitro snapshot differs from the validated status");
+            check(!Object.prototype.hasOwnProperty.call(snapshot, "persistence")
+                  && !Object.prototype.hasOwnProperty.call(snapshot, "effect"),
+                  "Nitro persistence or effect data published for presentation");
+            settleTimer.callback = function() {
+                const sidebarTab = find(workspaceSurface, "section-nitro");
+                const tab = sidebarTab && sidebarTab.visible ? sidebarTab
+                    : find(workspaceSurface, "chip-nitro");
+                check(tab !== null && tab.visible, "enabled Nitro tab invisible");
+                for (const name of ["session", "audio", "appearance"]) {
+                    const existing = find(workspaceSurface, "section-" + name)
+                        || find(workspaceSurface, "chip-" + name);
+                    check(existing !== null, "existing Control Center section lost beside Nitro");
+                }
+                check(visibleText(workspaceSurface, "Product: Nitro AN515-55"),
+                      "Nitro product not visible");
+                check(readbackLabels.every(label => visibleText(workspaceSurface, label)),
+                      "Nitro readback labels changed");
+                check(visibleText(workspaceSurface,
+                      "Fan percentages are driver settings, not measured RPM, temperature or performance."),
+                      "Nitro fan settings are not labelled as driver settings");
+                check(!visibleText(workspaceSurface, "Apply")
+                      && nitroControls(find(workspaceSurface, "nitro-page")) === 0,
+                      "Nitro page offers an editable control or Apply action");
+                const page = find(workspaceSurface, "nitro-page");
+                check(page && page.width > 0 && page.width <= workspaceSurface.width,
+                      "Nitro page escapes small viewport");
+                tab.forceActiveFocus();
+                check(tab.activeFocus && tab.activeFocusOnTab, "Nitro tab cannot take keyboard focus");
+                const next = tab.nextItemInFocusChain(true);
+                check(next && next !== tab, "Nitro keyboard navigation is trapped");
+                const last = find(workspaceSurface, "nitro-keyboard");
+                check(last && last.activeFocusOnTab, "Nitro readback cards cannot be reached with Tab");
+                last.forceActiveFocus();
+                check(last.activeFocus, "Nitro readback card did not take keyboard focus");
+                const point = last.mapToItem(window.contentItem, 0, 0);
+                check(point.x >= 0 && point.x + last.width <= window.width
+                      && point.y >= 0 && point.y + last.height <= window.height,
+                      "focused Nitro card remains outside small viewport");
+                sharedSurfaces.openSubpage("session");
+                tab.activate();
+                check(sharedSurfaces.subpage === "nitro", "Nitro keyboard control failed to navigate");
+                const signalsBefore = sharedState.nitroFixtureSignals.length;
+                sharedState.refreshSlowMetrics();
+                check(sharedState.nitroInFlight, "slow cadence did not refresh visible Nitro");
+                sharedState.networkFixtureLoad(@@OFF@@);
+                check(sharedSurfaces.subpage === "session", "disabling Nitro failed to withdraw page");
+                check(!sharedState.nitroPending && sharedState.nitroFixtureSignals.length === signalsBefore + 1,
+                      "disabling an open Nitro page kept its pending observation");
+                check(!anyReadback() && !visibleText(workspaceSurface, "Product: Nitro AN515-55"),
+                      "disabled Nitro content stays visible");
+                Qt.exit(window.firstFailure < 0 ? 0 : 40 + window.firstFailure);
+            };
+            settleTimer.restart();
+            return;
+"""
+
+NITRO_FAILURES = r"""
+            sharedState.networkFixtureLoad(@@ON@@);
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            check(nitroAnswer(nitroVariant(copy => {
+                      copy.status.capabilities.battery_limiter = false;
+                      copy.status.runtime.battery_limiter = false;
+                  }), 0), "status without the battery capability rejected");
+            check(sharedState.nitroSnapshot.battery === null
+                  && !visibleText(workspaceSurface, "Battery charge limiter readback: off")
+                  && !visibleText(workspaceSurface, "Battery charge limiter readback: on"),
+                  "false battery capability shown as an observation");
+            check(visibleText(workspaceSurface, "CPU fan setting: 40%")
+                  && visibleText(workspaceSurface, "Zone 1: #ff0000"),
+                  "battery absence hid other supported readbacks");
+            check(nitroAnswer(nitroVariant(copy => {
+                      copy.status.runtime.battery_limiter = false;
+                  }), 0) && visibleText(workspaceSurface, "Battery charge limiter readback: off"),
+                  "observed disabled battery limiter not shown");
+            check(nitroAnswer(JSON.stringify(status), 0)
+                  && visibleText(workspaceSurface, "Zone 1: #ff0000"),
+                  "Nitro RGB readback missing");
+            check(nitroAnswer(nitroVariant(copy => {
+                      copy.status.capabilities.per_zone = false;
+                  }), 0), "status without the per-zone capability rejected");
+            check(sharedState.nitroSnapshot.keyboard === null
+                  && !visibleText(workspaceSurface, "Zone 1: #ff0000")
+                  && !visibleText(workspaceSurface, "Keyboard brightness: 60%"),
+                  "RGB readback stayed visible after capability loss");
+            check(nitroAnswer(nitroVariant(copy => {
+                      copy.status.capabilities.fan = false;
+                      copy.status.runtime.fan = "bad";
+                  }), 0) && !visibleText(workspaceSurface, "CPU fan setting: 40%"),
+                  "false fan capability consumed or showed a fan readback");
+            check(nitroAnswer(nitroVariant(copy => {
+                      copy.status.capabilities = {battery_limiter: false, effect: false,
+                                                  fan: false, per_zone: false};
+                  }), 0), "valid Nitro status without capabilities rejected");
+            check(sharedState.nitroStatus === "unsupported",
+                  "Nitro status without capabilities is not explicitly unsupported");
+            check(visibleText(workspaceSurface, "No supported Nitro readbacks")
+                  && visibleText(workspaceSurface, "Product: Nitro AN515-55"),
+                  "unsupported Nitro label or validated product missing");
+            check(!anyReadback(), "unsupported Nitro showed readbacks");
+            const bad = [
+                "", "{", "null", "[]", '{"ok":true}',
+                '{"alt":"error","class":"error","text":"?","tooltip":"Nitro status is unavailable"}',
+                JSON.stringify(status) + " ".repeat(16385),
+                nitroVariant(copy => { copy.ok = "true"; }),
+                nitroVariant(copy => { copy.ok = false; }),
+                nitroVariant(copy => { copy.status = null; }),
+                nitroVariant(copy => { copy.status = []; }),
+                nitroVariant(copy => { copy.status.capabilities.fan = "true"; }),
+                nitroVariant(copy => { copy.status.capabilities.battery_limiter = "false"; }),
+                nitroVariant(copy => { copy.status.capabilities.per_zone = 1; }),
+                nitroVariant(copy => { delete copy.status.capabilities.per_zone; }),
+                nitroVariant(copy => { copy.status.capabilities = null; }),
+                nitroVariant(copy => { copy.status.capabilities = [true, true, true]; }),
+                nitroVariant(copy => { delete copy.status.runtime; }),
+                nitroVariant(copy => { copy.status.runtime = "40,55"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "101,40"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "40"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "-1,40"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "40,55,1"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "040,55"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = "40, 55"; }),
+                nitroVariant(copy => { copy.status.runtime.fan = 40; }),
+                nitroVariant(copy => { copy.status.runtime.fan = null; }),
+                nitroVariant(copy => { copy.status.runtime.battery_limiter = "1"; }),
+                nitroVariant(copy => { copy.status.runtime.battery_limiter = 1; }),
+                nitroVariant(copy => { copy.status.runtime.battery_limiter = null; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = "ff0000,00ff00,0000ff,ffffff"; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = "gg0000,00ff00,0000ff,ffffff,60"; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = "ff0000,00ff00,0000ff,ffffff,101"; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = "#ff0000,00ff00,0000ff,ffffff,60"; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = "ff0000,00ff00,0000ff,ffffff,ffffff,60"; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = null; }),
+                nitroVariant(copy => { copy.status.runtime.per_zone = 7; }),
+                nitroVariant(copy => { copy.status.model = ""; }),
+                nitroVariant(copy => { copy.status.model = 3; }),
+                nitroVariant(copy => { copy.status.model = "N".repeat(65); }),
+                nitroVariant(copy => { copy.status.model = "Nitro\nAN515-55"; }),
+                nitroVariant(copy => { copy.status.model = "<b>Nitro</b>"; }),
+                nitroVariant(copy => { delete copy.status.model; }),
+            ];
+            for (const raw of bad) {
+                check(!nitroAnswer(raw, 0), "malformed Nitro status accepted");
+                check(sharedState.nitroStatus === "unavailable" && sharedState.nitroSnapshot === null,
+                      "bad Nitro status published a valid prefix");
+                check(visibleText(workspaceSurface, "Nitro hardware unavailable")
+                      && !visibleText(workspaceSurface, "Product: Nitro AN515-55") && !anyReadback(),
+                      "unavailable Nitro kept old readbacks or lost its label");
+                check(nitroAnswer(JSON.stringify(status), 0), "Nitro did not recover after malformed status");
+            }
+            check(!nitroAnswer(JSON.stringify(status), 1) && sharedState.nitroStatus === "unavailable",
+                  "failed Nitro process published readbacks");
+            check(nitroAnswer(JSON.stringify(status), 0), "Nitro process failure did not recover");
+            sharedState.observationNow = sharedState.nitroObservedAt + 90000;
+            check(sharedState.nitroStatus === "current", "Nitro expired before shared freshness boundary");
+            sharedState.observationNow = sharedState.nitroObservedAt + 90001;
+            check(sharedState.nitroStatus === "stale" && sharedState.nitroSnapshot === null,
+                  "stale Nitro observation appears current");
+            check(visibleText(workspaceSurface, "Nitro observation is stale") && !anyReadback(),
+                  "stale Nitro label missing or old readbacks visible");
+            sharedState.observationNow = Date.now();
+            check(nitroAnswer(JSON.stringify(status), 0) && sharedState.nitroStatus === "current",
+                  "fresh Nitro answer did not recover from stale");
+            sharedState.requestNitro();
+            check(sharedState.nitroFixtureDeadlineArmed, "Nitro refresh did not arm its deadline");
+            sharedState.nitroFixtureTimeout();
+            check(sharedState.nitroStatus === "unavailable" && !anyReadback(),
+                  "Nitro timeout did not become unavailable");
+            check(sharedState.nitroFixtureSignals.indexOf(9) >= 0,
+                  "Nitro timeout did not stop its owned process");
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(sharedState.nitroStatus === "unavailable",
+                  "late answer after Nitro timeout was published");
+            check(nitroAnswer(JSON.stringify(status), 0), "Nitro timeout did not recover");
+            sharedState.refreshSlowMetrics();
+            check(sharedState.nitroInFlight, "slow cadence failed to request visible Nitro");
+            sharedState.nitroFixtureFailedStart();
+            sharedState.nitroFixtureTimeout();
+            check(sharedState.nitroStatus === "unavailable" && !sharedState.nitroInFlight,
+                  "Nitro failed start did not settle within its deadline");
+            check(nitroAnswer(JSON.stringify(status), 0), "Nitro failed start did not recover");
+"""
+
+NITRO_LATE = r"""
+            sharedState.networkFixtureLoad(@@ON@@);
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            const old = sharedState.nitroFlightGeneration;
+            sharedSurfaces.closeWorkspace();
+            check(!sharedState.nitroPending, "hiding Nitro kept a pending observation");
+            check(sharedState.nitroFixtureSignals.indexOf(9) >= 0,
+                  "Nitro hide did not stop its bridge process");
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            check(sharedState.nitroFixtureLaunches.length === 1,
+                  "reopening Nitro overlapped a retiring process");
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(sharedState.nitroSnapshot === null && sharedState.nitroStatus === "loading",
+                  "hidden Nitro answer published on reopen");
+            const next = sharedState.nitroFlightGeneration;
+            check(next !== old && sharedState.nitroFixtureLaunches.length === 2,
+                  "reopened Nitro did not launch a new generation");
+            check(!sharedState.finishNitro(old, JSON.stringify(status), 0),
+                  "old Nitro generation replaced outstanding new request");
+            check(sharedState.nitroPending && sharedState.nitroSnapshot === null,
+                  "old Nitro answer consumed the new request");
+            const signalsBeforeReload = sharedState.nitroFixtureSignals.length;
+            sharedState.networkFixtureChanged();
+            check(sharedState.nitroFixtureSignals.length === signalsBeforeReload + 1
+                  && sharedState.nitroFixtureSignals[signalsBeforeReload] === 9,
+                  "Nitro feature file reload did not stop its bridge process");
+            check(sharedSurfaces.subpage === "session" && !sharedState.nitroPending,
+                  "Nitro feature file reload kept the page or its observation");
+            sharedState.networkFixtureLoadedWithoutTextChange();
+            check(sharedState.nitroViewEnabled && sharedSurfaces.subpage === "session",
+                  "Nitro feature reload re-entered the page by itself");
+            sharedSurfaces.openSubpage("nitro");
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(sharedState.nitroSnapshot === null,
+                  "Nitro reply from before the feature reload was published");
+            const reloaded = sharedState.nitroFlightGeneration;
+            check(reloaded !== next && sharedState.nitroFixtureLaunches.length === 3,
+                  "Nitro feature reload reused request generation");
+            const signalsBeforeDisable = sharedState.nitroFixtureSignals.length;
+            sharedState.applyFeatures(@@OFF@@);
+            check(sharedState.nitroFixtureSignals.length === signalsBeforeDisable + 1
+                  && sharedState.nitroFixtureSignals[signalsBeforeDisable] === 9,
+                  "Nitro disable did not stop its bridge process");
+            check(sharedSurfaces.subpage === "session", "disabled Nitro subpage retained");
+            sharedState.applyFeatures(@@ON@@);
+            sharedSurfaces.openSubpage("nitro");
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(sharedState.nitroSnapshot === null,
+                  "disabled and re-enabled Nitro accepted late answer");
+            const current = sharedState.nitroFlightGeneration;
+            check(current !== reloaded, "Nitro disable/re-enable reused request generation");
+            check(sharedState.finishNitro(current, JSON.stringify(status), 0)
+                  && sharedState.nitroStatus === "current", "current Nitro reply did not recover");
+            sharedSurfaces.openSubpage("audio");
+            const launches = sharedState.nitroFixtureLaunches.length;
+            sharedState.refreshSlowMetrics();
+            check(!sharedState.requestNitro() && sharedState.nitroFixtureLaunches.length === launches,
+                  "hidden Nitro page polled");
+"""
+
+NITRO_LOADING = r"""
+            sharedState.observationNow = sharedState.startedAt + 91000;
+            sharedState.networkFixtureLoad(@@ON@@);
+            sharedSurfaces.openWorkspacePage("controls", "nitro", false);
+            check(sharedState.nitroStatus === "loading"
+                  && visibleText(workspaceSurface, "Reading Nitro hardware")
+                  && !visibleText(workspaceSurface, "Nitro hardware unavailable"),
+                  "Nitro first read after shell uptime became unavailable");
+            sharedState.observationNow = Date.now();
+            sharedState.nitroFixtureComplete(JSON.stringify(status), 0);
+            check(sharedState.nitroStatus === "current",
+                  "Nitro first answer after shell uptime did not become current");
+"""
+
+
+def nitro_scenario(body: str) -> str:
+    return (
+        (NITRO_HELPERS + body)
+        .replace("@@NITRO_STATUS@@", json.dumps(NITRO_STATUS))
+        .replace("@@ON@@", NITRO_FEATURES_ON)
+        .replace("@@OFF@@", NITRO_FEATURES_OFF)
+    )
 
 
 IDLE = """
@@ -3121,6 +3568,9 @@ ROOT_WIRING = (
     "networksPageVisible: sharedSurfaces.workspaceOpen",
     '&& sharedSurfaces.workspaceView === "controls"',
     '&& sharedSurfaces.subpage === "networks"',
+    "nitroViewEnabled: sharedState.nitroViewEnabled",
+    "nitroPageVisible: sharedSurfaces.workspaceOpen",
+    '&& sharedSurfaces.subpage === "nitro"',
     "activeOutput: {",
     "const focused = sharedState.focusedOutput;",
     "liveOutputs: Quickshell.screens.map(screen => String(screen.name))",
@@ -3189,6 +3639,12 @@ def main() -> int:
              NETWORKS_FAILURES.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
             ("networks-late", 800, 600, populated,
              NETWORKS_LATE.replace("@@NETWORK_ROWS@@", json.dumps(NETWORK_ROWS))),
+            ("nitro-disabled", 800, 600, populated, nitro_scenario(NITRO_DISABLED)),
+            ("nitro-loading", 800, 600, populated, nitro_scenario(NITRO_LOADING)),
+            ("nitro", 1920, 1080, populated, nitro_scenario(NITRO)),
+            ("nitro-small", 800, 600, populated, nitro_scenario(NITRO)),
+            ("nitro-failures", 800, 600, populated, nitro_scenario(NITRO_FAILURES)),
+            ("nitro-late", 800, 600, populated, nitro_scenario(NITRO_LATE)),
             ("idle", 1920, 1080, populated, IDLE),
             ("destinations", 1920, 1080, populated, DESTINATIONS),
             ("selection", 1920, 1080, populated, SELECTION),

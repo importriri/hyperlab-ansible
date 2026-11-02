@@ -285,6 +285,11 @@ host_desktop_common_shell_stage:
 # the shell; the runtime document is watched by the existing session.
 host_desktop_common_networks_view_enabled: false
 
+# Read-only Nitro driver readbacks in Control Center through the unprivileged
+# Nitro client. Enabling it installs no driver, client or broker and grants
+# no hardware action; a host without them shows the page as unavailable.
+host_desktop_common_nitro_view_enabled: false
+
 # V447-C7 composition tokens.
 #
 # One reviewed geometry scale for every host surface. Hyprland consumes these
