@@ -2850,3 +2850,28 @@ failed with `release-evidence.md '## 5. Host convergence': release host
 commands are ...`, showing the wrong third argv. Restoring the saved
 runbook bytes passed. The normal `python tests/docs_contract.py` entrypoint
 retains both sets of fixtures and checks; neither proof replaces the other.
+
+The inventory fixtures also reject a Decision field saying `accepted`
+while its record is still proposed, and a source link into a hidden
+directory. The latter points at `.github/workflows/ci.yml`, copied from
+the repository into each scratch tree, so a missing file cannot account
+for the refusal. An unrecognized Status header immediately below a title
+must be refused before a record can be treated as having no Status. The
+fixtures replace a member's header with `**Status:** proposed.` or
+`Status : proposed` and remove its inventory entry. Before the guard was
+added, the first fixture failed with `inventory mutation unrecognized
+Status '**Status:** proposed.' was accepted`; after the guard, both forms
+are refused with the record's name and `unrecognized status line`.
+
+These additional mutations ran in executable copies of the contract, with
+the repository root adjusted only for the copy's directory depth. Each
+copy was saved before mutation, ran the normal entrypoint against the
+repository and its disposable fixtures, exited 1 as shown, then was
+restored from the saved bytes and exited 0 (`documentation contract: OK`).
+No mutation stayed green.
+
+| # | Break in `tests/docs_contract.py` | Observed red diagnostic |
+| --- | --- | --- |
+| I15 | Delete the require that Decision opens with proposed. | `inventory mutation Decision accepted was accepted` |
+| I16 | Remove only the hidden-directory condition from `source_refusal`, retaining the docs-directory refusal. | `inventory mutation source is hidden was accepted` |
+| I17 | Delete the require that rejects an unrecognized Status header before the no-Status return. | `inventory mutation unrecognized Status '**Status:** proposed.' was accepted` |

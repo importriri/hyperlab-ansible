@@ -406,7 +406,8 @@ remain.
     operator's.
   - Activation: opt-in — only `playbooks/measured-boot.yml` runs the role,
     no default playbook imports it, and with `measured_boot_enabled: false`,
-    the default, it builds nothing and removes its rebuild hook.
+    the default, it builds nothing, removes its rebuild hook and records
+    the `measured_boot` brick stamp.
   - Source: [`main.yml`](../../roles/measured_boot/tasks/main.yml),
     [`defaults/main.yml`](../../roles/measured_boot/defaults/main.yml),
     [`hyperlab-uki-build.py`](../../roles/measured_boot/files/hyperlab-uki-build.py),
@@ -414,8 +415,12 @@ remain.
     [`measured_boot_contract.py`](../../tests/measured_boot_contract.py)
   - Prerequisites: the operator's decision; every profile booted from the
     image in the lab host (OVMF in setup mode, swtpm); the record's Nitro
-    hardware test in its order, TPM2 enrollment included. On a host without
-    GPU passthrough the role is not rendered (ADR 0052).
+    hardware test in its order, TPM2 enrollment included.
+    `measured-boot.yml` has no GPU-passthrough condition. On a host without
+    passthrough (ADR 0052), enabling it installs the UKI tooling and, if the
+    Secure Boot key check succeeds, creates the key directory and PCR
+    signing key before refusing the empty VFIO IDs. The UKI configuration
+    is not rendered.
 
 - [ADR 0045](0045-looking-glass-stream-health.md)
   - Decision: proposed; the Nitro test decides it.
@@ -539,7 +544,9 @@ remain.
     `foundation.yml` apply, never picks it and still stops when no profile
     matches completely: there is no automatic fallback. On such a host a
     VFIO Machine's GPU policy step refuses without the `gpu_handoff`
-    directory.
+    directory. The separate `measured-boot.yml` still runs its role on
+    this profile; its VFIO-ID refusal stops it before UKI configuration
+    rendering, after tooling and key setup (ADR 0044).
   - Source: [`select.yml`](../../roles/hardware_probe/tasks/select.yml),
     [`hardware.yml`](../../group_vars/all/hardware.yml),
     [`foundation.yml`](../../playbooks/foundation.yml),

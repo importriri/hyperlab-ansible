@@ -430,15 +430,20 @@ def declared_status(path: Path) -> str | None:
 
     A record without a Status line is neither proposed nor accepted. A
     second Status line, one that is not right below the title, or a status
-    word other than proposed or accepted is a refusal.
+    word other than proposed or accepted is a refusal. An unrecognized
+    Status header below the title cannot silently become a legacy record.
     """
     lines = path.read_text(encoding="utf-8").splitlines()
+    first = next((line for line in lines[1:] if line.strip()), "")
+    require(
+        "status" not in first.lower() or STATUS_LINE.match(first) is not None,
+        f"{path.name}: unrecognized status line {first!r}",
+    )
     statuses = [line for line in lines if STATUS_LINE.match(line)]
     if not statuses:
         return None
     require(len(statuses) == 1, f"{path.name} has {len(statuses)} Status lines, not one")
     require(bool(lines) and lines[0].startswith("# ADR "), f"{path.name} lost its title")
-    first = next((line for line in lines[1:] if line.strip()), "")
     require(first == statuses[0], f"{path.name}: the Status line is not right below the title")
     match = DECLARED_STATUS.match(first)
     require(match is not None, f"{path.name}: unrecognized status line {first!r}")
@@ -617,7 +622,7 @@ def check_inventory_fixtures() -> None:
             if root.exists():
                 shutil.rmtree(root)
             shutil.copytree(DOCS / "adr", adr)
-            for raw in sources:
+            for raw in [*sources, "../../.github/workflows/ci.yml"]:
                 relative = (DOCS / "adr" / unquote(raw.split("#", 1)[0])).resolve().relative_to(ROOT)
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / relative, root / relative)
@@ -745,6 +750,13 @@ def check_inventory_fixtures() -> None:
             f"{target} has 2 Status lines, not one",
             (target, f"{target_status}\n", f"{target_status}\n\nStatus: accepted.\n"),
         )
+        for malformed in ("**Status:** proposed.", "Status : proposed"):
+            refuses(
+                f"unrecognized Status {malformed!r}",
+                f"{target}: unrecognized status line {malformed!r}",
+                (target, target_status, malformed),
+                (index, target_entry, ""),
+            )
         refuses(
             "number mismatched",
             f"links ADR {other[:4]} to a different record",
@@ -768,6 +780,14 @@ def check_inventory_fixtures() -> None:
         for key in INVENTORY_FIELDS:
             refuses(f"{key} removed", f"lacks {key}", (index, target_entry, without(target_entry, key)))
         refuses(
+            "Decision accepted",
+            "Decision does not say proposed",
+            (index, target_entry, re.sub(
+                r"  - Decision: [^\n]+", "  - Decision: accepted; the record remains proposed.",
+                target_entry, count=1,
+            )),
+        )
+        refuses(
             "unknown Built label",
             "Built does not open with one of",
             (index, target_entry, target_entry.replace("  - Built: ", "  - Built: complete, ", 1)),
@@ -785,6 +805,11 @@ def check_inventory_fixtures() -> None:
             relinked(str(scratch / "outside.py")),
         )
         refuses("source is documentation", "is not a source or verification file", relinked(other))
+        refuses(
+            "source is hidden",
+            "is not a source or verification file",
+            relinked("../../.github/workflows/ci.yml"),
+        )
 
 
 def main() -> int:
