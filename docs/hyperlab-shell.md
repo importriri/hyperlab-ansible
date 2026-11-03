@@ -845,6 +845,13 @@ no browser, TCP listener or physical session is needed. The allocation
 entrypoint runs with Xvfb absent from PATH. These checks do not prove the
 installed Nitro bridge cause or its compositor's focus and placement.
 
+`gpu_ladder_parity_contract.py` evaluates the native ladder properties and
+compares them and both Python claim validators with the configured CLI
+ladder. These native consumers retain literal ranks; their runtime-source
+migration is deferred in [ADR 0055](adr/0055-recovery-readback-verification.md).
+A changed configuration therefore requires updating those literals and
+passing parity verification before deployment.
+
 ## Related documents
 
 - [`desktop.md`](desktop.md) — the compositor sessions and their bindings.

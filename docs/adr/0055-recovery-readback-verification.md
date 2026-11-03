@@ -67,3 +67,20 @@ Built and software-verified by `tests/recovery_gpu_ladder_contract.py`,
 Reversing the ranks or restoring the fixed canvas makes the respective
 contract fail; restoring the sources makes it pass. Nitro visual acceptance
 and the operator's decision on this proposal remain open.
+
+## Remaining native ladder literals
+
+The recovery surface consumes the provider ladder at runtime. The native
+shell's `ShellState.gpuLadder` and `OwnershipInstrument.rungs`, and the
+`GPU_LADDER` validators in `tools/hyperlabctl/hyperlabctl/render.py` and
+`tools/focus_accent.py`, still carry literal ranks. Replacing the native
+claim transport and validation schema with a provider-supplied ladder is
+explicitly deferred from this repair. This is a scope limit on the goal
+of one runtime source for every surface, not a completed migration.
+
+`tests/gpu_ladder_parity_contract.py` now executes both QML properties and
+compares them, plus both structurally parsed Python maps, with the real
+CLI trust JSON generated from `gpu_trust_levels`. Changing any literal or
+the configured ranks must fail verification until every consumer agrees.
+This prevents silent divergence while the remaining literals exist; it
+does not make them dynamically follow configuration on an installed host.

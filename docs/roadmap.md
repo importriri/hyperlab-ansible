@@ -103,6 +103,11 @@ the existing host key sheet (see [shell contract](hyperlab-shell.md)). The
 installed Nitro bridge's original cause and physical rechecks of all four
 observations remain open; this adds no hardware acceptance.
 
+Native ladder properties and Python claim validators are now checked
+against the configured CLI ladder as well. They still contain literals;
+their runtime-source consolidation is deferred in
+[ADR 0055](adr/0055-recovery-readback-verification.md).
+
 ## Security rules every milestone keeps
 
 These hold for every item below. A change that weakens one is a design

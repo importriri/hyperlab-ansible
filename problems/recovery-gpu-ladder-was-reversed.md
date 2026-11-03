@@ -34,5 +34,13 @@ three readbacks, proving there is no independent rank table. Missing and
 invalid inputs never produce a fallback ladder. Reintroducing the reversed
 map or a literal rank in either detail fails.
 
+`tests/gpu_ladder_parity_contract.py` also evaluates the native shell's
+`ShellState.gpuLadder` and `OwnershipInstrument.rungs` under Qt and compares
+them, plus the Python claim-validation maps in `render.py` and
+`focus_accent.py`, with the same configured CLI JSON ladder. These four
+consumers still contain literal ranks: changing any one, or changing the
+configured authority without updating them, fails verification. Moving
+them to one runtime source is explicitly deferred in ADR 0055.
+
 Reopen GPU and Networks on Nitro and compare with `hyperlabctl trust`.
 The physical presentation remains unverified here.

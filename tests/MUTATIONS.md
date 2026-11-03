@@ -3022,3 +3022,23 @@ Ubuntu package installation and hosted execution remain CI acceptance.
 Both were red, restored byte-for-byte, then green. Restoring installation
 made the real transport scenarios pass using the privately built `qs`,
 with the system runtime still hidden. A changed archive is refused.
+
+## Native GPU ladder parity
+
+`gpu_ladder_parity_contract.py` executes `ShellState.gpuLadder` and
+`OwnershipInstrument.rungs` under Qt and parses both Python claim maps
+with the AST. All four must agree with the real CLI trust JSON generated
+from `gpu_trust_levels`. Native literals remain; their migration to a
+shared runtime source is explicitly deferred in proposed ADR 0055.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| G1: Reverse OwnershipInstrument's identities and ranks | `gpu_ladder_parity_contract.py` | `OwnershipInstrument.rungs differs from CLI` |
+| G2: Reverse ShellState's rank map | same | `ShellState.gpuLadder differs from CLI` |
+| G3: Reverse `render.GPU_LADDER` | same | `render.py: GPU_LADDER differs from CLI` |
+| G4: Reverse `focus_accent.GPU_LADDER` | same | `focus_accent.py: GPU_LADDER differs from CLI` |
+| G5: Reverse the configured authority without updating native consumers | same | `GPU_LADDER differs from CLI` |
+
+Each source was saved before mutation, restored byte-for-byte, then checked
+green. G5 proves configuration drift is caught; the installed native
+consumers do not yet update dynamically with the provider.
