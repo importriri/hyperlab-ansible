@@ -168,6 +168,12 @@ actions. Diagnostics retains the same raw observation. Running summaries
 include every libvirt domain and distinguish managed from external running.
 The recovery surface retains its existing reviewed actions. None of these
 views grants product lifecycle semantics that were never registered.
+If the registry is unreadable, neither surface calls those domains Not managed
+or assigns an external lifecycle. They appear under **Observed domains ·
+membership unavailable**, with **membership unknown** row metadata and
+**unknown** lifecycle in recovery details. Native rows remain read-only.
+An empty readable registry still offers first-Machine creation guidance when
+legacy domains are present.
 
 ### Workspace presentation is template-owned appearance, not trust
 

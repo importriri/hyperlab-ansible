@@ -541,7 +541,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 - [x] Machines shows external domains read-only in a separate Not managed
       group; Machines, Session and Diagnostics count all observed running
-      domains, split by product membership
+      domains, split by product membership; unreadable membership stays
+      unknown, and an empty registry retains first-Machine creation guidance
       ([ADR 0059](adr/0059-external-machine-visibility.md), software-verified)
 - [ ] external visibility and running counts accepted on Nitro and Predator
 

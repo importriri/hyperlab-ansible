@@ -395,11 +395,14 @@ Item {
                 visible: view.section === "inventory"
                 tokens: view.tokens
                 theme: view.theme
-                label: "Outside the product inventory"
+                label: view.shellState.machinesAvailable
+                    ? "Outside the product inventory" : "Observed domains · membership unavailable"
                 description:
-                    "Libvirt domains with no Machine record: checked-in "
+                    view.shellState.machinesAvailable
+                    ? "Libvirt domains with no Machine record: checked-in "
                     + "fixtures and external domains. They are observed "
                     + "here and in Machines, read-only with lifecycle external."
+                    : "The registry could not be read. Observed domains remain read-only; membership is unknown."
             }
 
             ShellCard {
@@ -453,7 +456,9 @@ Item {
                             theme: view.theme
                             title: modelData.name
                             value: view.icons.machineStateWord(modelData.state)
-                            hint: "external · " + view.shellState.outsideDomainKind(modelData)
+                            hint: view.shellState.machinesAvailable
+                                ? "external · " + view.shellState.outsideDomainKind(modelData)
+                                : view.shellState.outsideDomainKind(modelData)
                         }
                     }
                 }

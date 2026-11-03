@@ -113,6 +113,11 @@ The canonical visual identities remain:
   label; never a trust-domain colour or the HOST grey identity
   ([ADR 0059](adr/0059-external-machine-visibility.md), Proposed visual rule).
 
+Unreadable product membership cannot imply an external lifecycle. Observed
+rows then say `membership unknown` (recovery detail lifecycle `unknown`);
+unclassified identities retain the neutral outline and transparent fill
+specified by ADR 0059.
+
 The selected appearance theme is independent from those meanings.
 
 ### Focus and keyboard trust indication

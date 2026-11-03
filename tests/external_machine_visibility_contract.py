@@ -46,9 +46,13 @@ NATIVE = '''
                   "Machines summary omitted the external running count");
             check(find(stage, "external-machines-heading").label === "Not managed",
                   "external domains have no separate group");
-            function checkExternal() {
-                find(stage, "external-machine-list").forceLayout();
-                for (const row of raw.filter(row => row.product_managed !== true)) {
+            function checkReadOnly(rows, lifecycle, caption) {
+                const list = find(stage, "external-machine-list");
+                list.forceLayout();
+                for (let index = 0; index < rows.length; index++) {
+                    const row = rows[index];
+                    list.positionViewAtIndex(index, ListView.Beginning);
+                    list.forceLayout();
                     const item = find(stage, "external-machine-" + row.name);
                     check(item !== null && item.visible,
                           "an external domain is missing from Machines");
@@ -56,8 +60,10 @@ NATIVE = '''
                     check(item.color.a === 0 && item.border.width > 0
                           && item.border.color === sharedTheme.textSecondary,
                           "native external identity borrowed a colour or fill");
-                    check(item.lifecycle === "external",
-                          "an external row lost its explicit lifecycle");
+                    check(item.lifecycle === lifecycle,
+                          "a read-only row has the wrong membership lifecycle");
+                    check(visibleText(item, caption + " · " + stage.icons.machineStateWord(row.state)),
+                          "a read-only row has the wrong membership caption");
                     function readOnly(node) {
                         check(node.activeFocusOnTab !== true && node.activated === undefined
                               && node.clicked === undefined && node.tapped === undefined,
@@ -67,9 +73,9 @@ NATIVE = '''
                     readOnly(item);
                 }
             }
-            checkExternal();
+            checkReadOnly(raw.filter(row => row.product_managed !== true), "external", "external");
             stage.layoutMode = "list";
-            checkExternal();
+            checkReadOnly(raw.filter(row => row.product_managed !== true), "external", "external");
             stage.query = "hl-lab-host";
             check(stage.filteredOutside.length === 1 && stage.filtered.length === 0,
                   "filtering cannot find an external machine");
@@ -82,6 +88,13 @@ NATIVE = '''
             const session = find(workspaceSurface, "session-running-summary");
             check(session !== null && session.description === "0 managed running · 1 external running",
                   "Session omitted the external running count");
+            let sessionView = session;
+            while (sessionView && typeof sessionView.dangerConsequence !== "function")
+                sessionView = sessionView.parent;
+            for (const action of ["session-poweroff", "session-reboot", "session-logout"])
+                check(sessionView && sessionView.dangerConsequence(action)
+                      .indexOf("0 managed running · 1 external running") >= 0,
+                      "a session confirmation consequence omitted the external running count");
             sharedSurfaces.openWorkspacePage("diagnostics", "inventory");
             check(find(workspaceSurface, "diagnostics-running-summary").value
                   === "0 managed running · 1 external running",
@@ -116,12 +129,51 @@ NATIVE = '''
             sharedState.applyMachinePayload(JSON.stringify({machines_available: true, machines: []}));
             check(sharedState.outsideDomains.length === 7 && sharedState.machinesRunning === 1,
                   "an empty product registry hid libvirt domains");
+            sharedSurfaces.openWorkspace("machines");
+            function firstGuidance(node) {
+                if (node.title === "No Machines yet") return node;
+                for (let index = 0; index < node.children.length; index++) {
+                    const found = firstGuidance(node.children[index]);
+                    if (found) return found;
+                }
+                return null;
+            }
+            observe(raw.slice(3));
+            const guidance = firstGuidance(stage);
+            check(guidance && guidance.visible
+                  && sharedState.outsideDomains.length === 4
+                  && find(stage, "external-machines-heading").visible,
+                  "an empty registry with external domains lost first-Machine guidance");
+            check(guidance.description.indexOf("Not managed") >= 0,
+                  "first-Machine guidance omitted the existing external group");
+            observe([]);
+            check(guidance.visible && guidance.description.indexOf("Not managed") < 0,
+                  "empty guidance claims domains appear below when none exist");
+            observe(raw);
             sharedState.applyMachinePayload("not json");
             check(sharedState.outsideDomains.length === 7,
                   "unavailable product membership hid known raw domains");
+            check(find(stage, "external-machines-heading").label
+                  === "Observed domains · membership unavailable",
+                  "unavailable membership defaulted to Not managed");
+            check(find(stage, "external-machines-heading").description.indexOf("external") < 0,
+                  "unavailable group description claimed external membership");
+            check(sharedState.outsideDomains.every(row => row.lifecycle === "unknown"),
+                  "unavailable membership defaulted to external lifecycle");
+            checkReadOnly(raw, "unknown", "membership unknown");
             check(sharedState.runningMachinesSummary.indexOf("1 running") >= 0
                   && sharedState.runningMachinesSummary.indexOf("unavailable") >= 0,
                   "unavailable product membership hid known running domains");
+            sharedSurfaces.openWorkspacePage("diagnostics", "inventory");
+            check(visibleText(workspaceSurface, "Observed domains · membership unavailable"),
+                  "Diagnostics defaulted unavailable membership to outside product inventory");
+            for (const row of sharedState.outsideDomains)
+                check(sharedState.outsideDomainKind(row) === "Membership unknown",
+                      "Diagnostics inferred membership without the registry");
+            sharedState.applyMachinePayload(JSON.stringify({machines_available: true, machines: product}));
+            check(sharedState.outsideDomains.length === 4
+                  && sharedState.outsideDomains.every(row => row.lifecycle === "external"),
+                  "membership did not recover after the registry became readable");
             sharedState.applyOutsideDomainsPayload("not json");
             check(sharedState.runningMachinesSummary.indexOf("unavailable") >= 0,
                   "malformed inventory became zero running");
@@ -193,6 +245,25 @@ def recovery() -> int:
         labels = [item.get_text() for item in descendants(page) if isinstance(item, gtk.Label)]
         assert all(row["name"] in labels for row in window.model.domains), "GTK hid a CLI domain"
         assert "Not managed" in labels, "GTK lost the external group"
+        header_labels = [item for item in descendants(page)
+                         if isinstance(item, gtk.Label) and item.get_text() == "Not managed"]
+        assert len(header_labels) == 1, "GTK duplicated the external group header"
+        dot = header_labels[0].get_prev_sibling()
+        assert isinstance(dot, gtk.Box) and dot.has_css_class("external-outline") \
+            and not any(name.startswith("domain-dot-") for name in dot.get_css_classes()), \
+            "GTK external group header borrowed a trust colour"
+
+        def detail_lifecycle(row: dict) -> str:
+            detail = gtk.Box()
+            window._render_vm_detail(detail, row)
+            keys = [item for item in descendants(detail)
+                    if isinstance(item, gtk.Label) and item.has_css_class("kv-key")
+                    and item.get_text() == "lifecycle"]
+            assert len(keys) == 1, "GTK detail lost its lifecycle field"
+            return keys[0].get_next_sibling().get_text()
+
+        assert detail_lifecycle(window.model.domains[0]) == "permanent"
+        assert detail_lifecycle(window.model.domains[3]) == "external"
         for row in FIXTURE["external"]:
             assert window._domain_for_vm(row) == "external", "GTK assigned trust without a reviewed spec"
             tile = window._mock_vm_tile(row)
@@ -218,13 +289,34 @@ def recovery() -> int:
         unclassified = window._build_vm_showcase(columns=4)
         assert "Unclassified" in [item.get_text() for item in descendants(unclassified)
                                   if isinstance(item, gtk.Label)], "GTK lost its unclassified product group"
+        window.model.specs = [{"spec": {"name": row["name"], "network_profile": "dev",
+                                       "lifecycle": "permanent"}} for row in FIXTURE["managed"]]
         for payload in ({}, {"machines_available": False, "machines": FIXTURE["managed"]},
                         {"machines_available": True, "machines": FIXTURE["managed"] * 2},
                         {"machines_available": True, "machines": [{"name": None}]}):
             window.model.product_inventory = payload
             assert window.model.product_names is None, "GTK accepted ambiguous product membership"
             assert window.model.running_summary == "1 running · managed membership unavailable"
+            observed = window._build_vm_showcase(columns=4)
+            labels = [item.get_text() for item in descendants(observed) if isinstance(item, gtk.Label)]
+            assert "Not managed" not in labels \
+                and "Observed domains · membership unavailable" in labels, \
+                "GTK unavailable membership defaulted to Not managed"
+            assert all(row["name"] in labels for row in window.model.domains), \
+                "GTK unavailable membership hid known raw domains"
+            for row in window.model.domains:
+                assert detail_lifecycle(row) == "unknown", \
+                    "GTK unavailable membership defaulted to external detail lifecycle"
+                for widget, css_class in ((window._mock_vm_tile(row), "vm-facts"),
+                                          (window._drawer_vm_row(row), "caption")):
+                    captions = [item.get_text() for item in descendants(widget)
+                                if isinstance(item, gtk.Label) and item.has_css_class(css_class)]
+                    assert captions and all("membership unknown" in caption for caption in captions), \
+                        "GTK unavailable membership defaulted to external row lifecycle"
         window.model.product_inventory = {"machines_available": True, "machines": FIXTURE["managed"]}
+        restored = window._build_vm_showcase(columns=4)
+        assert "Not managed" in [item.get_text() for item in descendants(restored) if isinstance(item, gtk.Label)]
+        assert detail_lifecycle(window.model.domains[0]) == "permanent", "GTK membership did not recover"
         window.model.load_errors = ["domains: fixture unreadable"]
         assert window.model.running_summary == "Running inventory unavailable"
         window.model.load_errors = []

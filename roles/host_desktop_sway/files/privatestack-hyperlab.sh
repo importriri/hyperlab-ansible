@@ -64,8 +64,8 @@ once() {
             return 0
         fi
     elif [[ ${field} == diagnostics-domains ]]; then
-        # Raw libvirt observation for Diagnostics. It never feeds the Machines
-        # workspace: a domain is not a product Machine because it exists.
+        # Raw libvirt observation feeds Diagnostics, read-only Not managed
+        # rows in Machines and running counts. Existence is not membership.
         if ! payload="$(${cli} waybar --field vms 2>/dev/null)"; then
             fallback "hyperlabctl domain observation failed"
             return 0

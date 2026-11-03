@@ -109,8 +109,12 @@ running · 1 external running**. A failed observation says unavailable and a
 stale observation says Last observed. An unreadable domain state makes the
 summary Running state unknown. If product membership cannot be read,
 known raw domains remain visible read-only and their total running count
-names the missing membership. A clean registry with no libvirt domains is
-still empty.
+names the missing membership. Their group is **Observed domains · membership
+unavailable**, their row metadata says **membership unknown**, and the recovery
+detail lifecycle is **unknown**. They become Not managed only when a readable
+registry establishes that they are outside the product. A readable empty
+registry keeps the first-Machine creation guidance even when legacy domains
+exist; it mentions Not managed below only when there are domains to show.
 
 Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the
@@ -535,7 +539,8 @@ Read-only, ordered by the questions an operator asks.
   The diagram explains policy; it performs no handoff.
 - **Inventory** — whether the inventory can be trusted right now, and the
   per-provenance product counts, plus the same Not managed domains and split
-  running counts as Machines, shown only when their sources are known.
+  running counts as Machines, shown only when their sources are known. Missing
+  membership uses the same Observed domains heading and unknown row metadata.
 - **Session** — the compositor's identity for the focused surface (with its
   PID and window), the resolved provenance with its state, source, domain and
   reason code, host telemetry, and the appearance state including whether the

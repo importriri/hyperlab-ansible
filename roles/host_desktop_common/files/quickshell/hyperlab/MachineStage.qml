@@ -102,7 +102,8 @@ Item {
         return (stage.stateFilter !== "running" || running)
             && (stage.stateFilter !== "stopped" || !running)
             && (needle.length === 0
-                || (row.name + " external " + row.state).toLowerCase().indexOf(needle) >= 0);
+                || (row.name + " " + (stage.inventoryAvailable ? "external" : "membership unknown")
+                    + " " + row.state).toLowerCase().indexOf(needle) >= 0);
     })
 
     readonly property var groups: {
@@ -360,15 +361,15 @@ Item {
 
                 EmptyState {
                     width: parent.width
-                    visible: stage.inventoryAvailable && stage.total === 0
-                        && stage.shellState.outsideDomainsAvailable
+                    visible: stage.inventoryAvailable && stage.shellState.machines.length === 0
                     tokens: stage.tokens
                     theme: stage.theme
                     kind: "empty"
                     title: "No Machines yet"
                     description:
-                        "Create a Machine from a reviewed Template. "
-                        + "Other libvirt domains appear below as Not managed."
+                        "Create a Machine from a reviewed Template."
+                        + (stage.shellState.outsideDomains.length > 0
+                            ? " Other libvirt domains appear below as Not managed." : "")
                 }
 
                 EmptyState {
@@ -511,8 +512,10 @@ Item {
                     visible: stage.filteredOutside.length > 0
                     tokens: stage.tokens
                     theme: stage.theme
-                    label: "Not managed"
-                    description: "Read-only · lifecycle external · "
+                    label: stage.inventoryAvailable
+                        ? "Not managed" : "Observed domains · membership unavailable"
+                    description: "Read-only · "
+                        + (stage.inventoryAvailable ? "lifecycle external" : "membership unknown") + " · "
                         + stage.filteredOutside.length + " domains"
                 }
 
@@ -562,7 +565,8 @@ Item {
                                 width: parent.width
                                 tokens: stage.tokens
                                 role: "meta"
-                                text: "external · " + stage.icons.machineStateWord(modelData.state)
+                                text: (stage.inventoryAvailable ? "external" : "membership unknown")
+                                    + " · " + stage.icons.machineStateWord(modelData.state)
                                 color: stage.theme.textSecondary
                             }
                         }

@@ -2526,7 +2526,7 @@ class HyperlabWindow(Gtk.Window):
             "%s · %s · %s" % (
                 domain.get("state", "unknown"),
                 domain.get("device_profile") or ("vfio" if domain.get("vfio") else "standard"),
-                "external" if not self.model.is_product_domain(domain) else domain.get("lifecycle") or "unknown",
+                "membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain),
             ),
             "caption",
             wrap=False,
@@ -2541,7 +2541,8 @@ class HyperlabWindow(Gtk.Window):
         if identity in DOMAIN_META:
             row.append(text_label(identity, "domain-badge-%s" % identity, wrap=False))
         else:
-            row.append(text_label("external", "external-outline", wrap=False))
+            row.append(text_label("membership unknown" if self.model.product_names is None else "external",
+                                  "external-outline", wrap=False))
         open_button = Gtk.Button(label="Open")
         open_button.connect("clicked", lambda _button, vm=domain: self._primary_vm_action(vm))
         row.append(open_button)
@@ -3099,6 +3100,15 @@ class HyperlabWindow(Gtk.Window):
                    and row["spec"].get("name") == name]
         return matches[0] if len(matches) == 1 else None
 
+    def _lifecycle_for_vm(self, domain: dict[str, Any]) -> str:
+        if self.model.product_names is None:
+            return "unknown"
+        if not self.model.is_product_domain(domain):
+            return "external"
+        row = self._spec_by_name(str(domain.get("name", "")))
+        spec = row["spec"] if row else {}
+        return str(domain.get("lifecycle") or spec.get("lifecycle") or "unknown")
+
     def _domain_for_vm(self, domain: dict[str, Any]) -> str:
         row = self._spec_by_name(str(domain.get("name", "")))
         profile = row["spec"].get("network_profile") if row else None
@@ -3118,9 +3128,11 @@ class HyperlabWindow(Gtk.Window):
         dot.add_css_class("domain-dot-%s" % domain_id if domain_id in DOMAIN_META else "external-outline")
         row.append(dot)
         title = (DOMAIN_META[domain_id]["title"] if domain_id in DOMAIN_META
+                 else "Observed domains · membership unavailable" if domain_id == "unknown"
                  else "Not managed" if domain_id == "external" else "Unclassified")
         row.append(text_label(title, "mock-section-title", wrap=False))
-        row.append(text_label(domain_id, "mock-section-net", wrap=False))
+        row.append(text_label("membership unknown" if domain_id == "unknown" else domain_id,
+                              "mock-section-net", wrap=False))
         line = Gtk.Box()
         line.add_css_class("mock-section-line")
         line.set_hexpand(True)
@@ -3228,7 +3240,7 @@ class HyperlabWindow(Gtk.Window):
         memory = domain.get("memory_mb")
         mem = ("%.0f GiB" % (int(memory) / 1024)) if isinstance(memory, int) and memory else "— GiB"
         vcpus = str(domain.get("vcpus") or domain.get("vcpu") or "—")
-        lifecycle = "external" if not self.model.is_product_domain(domain) else str(domain.get("lifecycle") or "unknown")
+        lifecycle = "membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain)
         meta.append(text_label("%s · %s vCPU · %s · %s" % (mem, vcpus, domain_id, lifecycle), "vm-facts", wrap=False))
         tile.append(meta)
 
@@ -3244,13 +3256,14 @@ class HyperlabWindow(Gtk.Window):
     def _build_vm_showcase(self, columns: int, compact: bool = False) -> Gtk.Box:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         first = True
-        order = ("clean", "dev", "services", "dirty", "lab", "unclassified", "external")
+        order = ("clean", "dev", "services", "dirty", "lab", "unclassified", "external", "unknown")
         shown = False
         for domain_id in order:
             machines = [vm for vm in self.model.domains
-                        if (("unclassified" if self._domain_for_vm(vm) == "external"
+                        if ("unknown" if self.model.product_names is None else
+                            (("unclassified" if self._domain_for_vm(vm) == "external"
                              else self._domain_for_vm(vm)) if self.model.is_product_domain(vm)
-                            else "external") == domain_id]
+                             else "external")) == domain_id]
             if not machines:
                 continue
             shown = True
@@ -3474,8 +3487,7 @@ class HyperlabWindow(Gtk.Window):
         details.append(text_label("DETAILS", "mock-kick", "mock-group-title", wrap=False))
         values = (
             ("image", image_id),
-            ("lifecycle", "external" if not self.model.is_product_domain(domain)
-             else str(domain.get("lifecycle") or spec.get("lifecycle") or "unknown")),
+            ("lifecycle", self._lifecycle_for_vm(domain)),
             ("device", str(domain.get("device_profile") or ("vfio" if domain.get("vfio") else "standard"))),
             ("memory", "%s MiB" % domain.get("memory_mb") if domain.get("memory_mb") else "—"),
             ("vCPU", str(domain.get("vcpus") or domain.get("vcpu") or "—")),

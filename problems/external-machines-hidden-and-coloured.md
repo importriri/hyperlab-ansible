@@ -31,6 +31,16 @@ unavailable, and stale counts are labelled as observations. A domain with an
 unreadable state makes the running summary unknown; its recovery badge says
 UNKNOWN, never STOPPED.
 
+A failed registry read initially cleared the product rows and treated every
+remaining raw domain as external. This hid the uncertainty behind a less
+trusted but still false lifecycle, including permanent product Machines.
+Both surfaces now use **Observed domains · membership unavailable** and
+**membership unknown** metadata until the registry can establish membership;
+recovery detail lifecycle is **unknown**. Native rows remain neutral and
+read-only, and Diagnostics makes the same distinction. A readable empty
+registry retains creation guidance even when external domains are present;
+the guidance mentions the lower group only when domains exist.
+
 Recovery classification requires a unique spec and agreement with the observed
 managed identity, trust profile and interfaces. An unclassified row has a
 neutral outline, transparent fill and the external label, distinct from HOST.
@@ -54,7 +64,10 @@ the existing offscreen harness and real GTK builders on a private Broadway
 display, using the same seven-domain fixture. It checks names, grouping,
 counts, neutral unfilled external identity, native absence of actions and
 preservation of recovery Shut down, plus duplicate, unavailable and stale
-inputs and absent/ambiguous/drifting specs. Mutations are in
+inputs and absent/ambiguous/drifting specs. It also checks unknown membership
+on headings, rows and recovery detail lifecycles, the external group header's
+neutral identity, all three session confirmation consequences and creation
+guidance with an empty registry. Mutations are in
 [`tests/MUTATIONS.md`](../tests/MUTATIONS.md).
 
 The display-free shell structure fixtures also reuse the production Model's

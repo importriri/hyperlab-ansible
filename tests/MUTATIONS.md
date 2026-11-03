@@ -3788,8 +3788,8 @@ with the shared seven-domain fixture. No lifecycle action is executed.
 ### External 13: External lifecycle changes to permanent
 
 - Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
-- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'            "lifecycle": "external",'"'"') == 1; p.write_text(s.replace('"'"'            "lifecycle": "external",'"'"', '"'"'            "lifecycle": "permanent",'"'"', 1))'`
-- Red: `an external row lost its explicit lifecycle`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'                "lifecycle": state.machinesAvailable ? "external" : "unknown"'"'"') == 1; p.write_text(s.replace('"'"'                "lifecycle": state.machinesAvailable ? "external" : "unknown"'"'"', '"'"'                "lifecycle": state.machinesAvailable ? "permanent" : "unknown"'"'"', 1))'`
+- Red: `a read-only row has the wrong membership lifecycle`.
 - Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
 
 ### External 14: Stale counts look current
@@ -3882,3 +3882,105 @@ with the shared seven-domain fixture. No lifecycle action is executed.
 - Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"') == 1; p.write_text(s.replace('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"', '"'"'state = text_label("RUNNING" if running else "STOPPED",'"'"', 1))'`
 - Red: `GTK rendered an unreadable state as stopped`.
 - Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### Membership uncertainty, creation guidance and confirmation coverage
+
+The following mutations use the same backup, check and restore procedure.
+
+### External 27: Native unavailable heading claims Not managed
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'label: stage.inventoryAvailable\n                        ? "Not managed" : "Observed domains · membership unavailable"'"'"') == 1; p.write_text(s.replace('"'"'label: stage.inventoryAvailable\n                        ? "Not managed" : "Observed domains · membership unavailable"'"'"', '"'"'label: "Not managed"'"'"', 1))'`
+- Red: `unavailable membership defaulted to Not managed`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 28: Native unavailable lifecycle claims external
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'"lifecycle": state.machinesAvailable ? "external" : "unknown"'"'"') == 1; p.write_text(s.replace('"'"'"lifecycle": state.machinesAvailable ? "external" : "unknown"'"'"', '"'"'"lifecycle": "external"'"'"', 1))'`
+- Red: `unavailable membership defaulted to external lifecycle`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 29: GTK unavailable grouping claims Not managed
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'"unknown" if self.model.product_names is None else\n                            (("unclassified"'"'"') == 1; p.write_text(s.replace('"'"'"unknown" if self.model.product_names is None else\n                            (("unclassified"'"'"', '"'"'"external" if self.model.product_names is None else\n                            (("unclassified"'"'"', 1))'`
+- Red: `GTK unavailable membership defaulted to Not managed`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 30: GTK unavailable detail lifecycle claims external
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'if self.model.product_names is None:\n            return "unknown"'"'"') == 1; p.write_text(s.replace('"'"'if self.model.product_names is None:\n            return "unknown"'"'"', '"'"'if self.model.product_names is None:\n            return "external"'"'"', 1))'`
+- Red: `GTK unavailable membership defaulted to external detail lifecycle`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 31: GTK external header dot uses DEV
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'dot.add_css_class("domain-dot-%s" % domain_id if domain_id in DOMAIN_META else "external-outline")'"'"') == 1; p.write_text(s.replace('"'"'dot.add_css_class("domain-dot-%s" % domain_id if domain_id in DOMAIN_META else "external-outline")'"'"', '"'"'dot.add_css_class("domain-dot-dev")'"'"', 1))'`
+- Red: `GTK external group header borrowed a trust colour`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 32: Power-off consequence omits external running
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml'"'"'); s = p.read_text(); assert s.count('"'"'+ "host. " + view.runningSummary;'"'"') == 1; p.write_text(s.replace('"'"'+ "host. " + view.runningSummary;'"'"', '"'"'+ "host. " + view.shellState.managedMachinesRunning + " managed running";'"'"', 1))'`
+- Red: `a session confirmation consequence omitted the external running count`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml`; the same contract turns green.
+
+### External 33: External domains hide first-Machine guidance
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'visible: stage.inventoryAvailable && stage.shellState.machines.length === 0'"'"') == 1; p.write_text(s.replace('"'"'visible: stage.inventoryAvailable && stage.shellState.machines.length === 0'"'"', '"'"'visible: stage.inventoryAvailable && stage.total === 0'"'"', 1))'`
+- Red: `an empty registry with external domains lost first-Machine guidance`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 34: Empty guidance always claims domains below
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'+ (stage.shellState.outsideDomains.length > 0\n                            ? " Other libvirt domains appear below as Not managed." : "")'"'"') == 1; p.write_text(s.replace('"'"'+ (stage.shellState.outsideDomains.length > 0\n                            ? " Other libvirt domains appear below as Not managed." : "")'"'"', '"'"'+ " Other libvirt domains appear below as Not managed."'"'"', 1))'`
+- Red: `empty guidance claims domains appear below when none exist`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 35: Native unavailable description claims external
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'(stage.inventoryAvailable ? "lifecycle external" : "membership unknown")'"'"') == 1; p.write_text(s.replace('"'"'(stage.inventoryAvailable ? "lifecycle external" : "membership unknown")'"'"', '"'"'"lifecycle external"'"'"', 1))'`
+- Red: `unavailable group description claimed external membership`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 36: Native unavailable row caption claims external
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'(stage.inventoryAvailable ? "external" : "membership unknown")\n                                    + " · "'"'"') == 1; p.write_text(s.replace('"'"'(stage.inventoryAvailable ? "external" : "membership unknown")\n                                    + " · "'"'"', '"'"'"external"\n                                    + " · "'"'"', 1))'`
+- Red: `a read-only row has the wrong membership caption`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 37: GTK unavailable tile caption claims external
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'lifecycle = "membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain)'"'"') == 1; p.write_text(s.replace('"'"'lifecycle = "membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain)'"'"', '"'"'lifecycle = "external" if self.model.product_names is None else self._lifecycle_for_vm(domain)'"'"', 1))'`
+- Red: `GTK unavailable membership defaulted to external row lifecycle`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 38: GTK unavailable drawer caption claims external
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'"membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain),'"'"') == 1; p.write_text(s.replace('"'"'"membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain),'"'"', '"'"'"external" if self.model.product_names is None else self._lifecycle_for_vm(domain),'"'"', 1))'`
+- Red: `GTK unavailable membership defaulted to external row lifecycle`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 39: Diagnostics unavailable heading claims outside product inventory
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml'"'"'); s = p.read_text(); assert s.count('"'"'label: view.shellState.machinesAvailable\n                    ? "Outside the product inventory" : "Observed domains · membership unavailable"'"'"') == 1; p.write_text(s.replace('"'"'label: view.shellState.machinesAvailable\n                    ? "Outside the product inventory" : "Observed domains · membership unavailable"'"'"', '"'"'label: "Outside the product inventory"'"'"', 1))'`
+- Red: `Diagnostics defaulted unavailable membership to outside product inventory`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml`; the same contract turns green.
+
+### External 40: Diagnostics infers a kind without membership
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'        if (!state.machinesAvailable)\n            return "Membership unknown";\n\n'"'"') == 1; p.write_text(s.replace('"'"'        if (!state.machinesAvailable)\n            return "Membership unknown";\n\n'"'"', '"'"''"'"', 1))'`
+- Red: `Diagnostics inferred membership without the registry`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.

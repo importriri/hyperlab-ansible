@@ -1095,7 +1095,11 @@ Scope {
 
     readonly property var outsideDomains: {
         const product = new Set(state.machines.map(row => row.name));
-        return state.observedDomains.filter(row => !product.has(row.name));
+        return state.observedDomains.filter(row => !product.has(row.name)).map(row =>
+            Object.assign({}, row, {
+                "lifecycle": state.machinesAvailable ? "external" : "unknown"
+            })
+        );
     }
 
     function uniqueMachineNames(rows) {
@@ -1103,6 +1107,9 @@ Scope {
     }
 
     function outsideDomainKind(row) {
+        if (!state.machinesAvailable)
+            return "Membership unknown";
+
         if (row.managed === true)
             return state.productName + " fixture";
 
@@ -1135,7 +1142,6 @@ Scope {
         state.observedDomains = parsed.machines.map(row => ({
             "name": row.name,
             "state": row.state,
-            "lifecycle": "external",
             "provenance": "unclassified",
             "managed": row.managed === true
                 ? true
