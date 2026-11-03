@@ -96,6 +96,13 @@ or work that is not on `main` does not raise it.
   SSH servers, the GPU lease or the Showcase take, so a campaign sealed on it
   does not qualify those parts. What replaces it is not decided yet.
 
+The 2026-11-02 capture-session repairs are software-verified: bounded Machine
+capability failures retain known causes, GTK recovery ranks share the CLI's
+ladder, Networks tiles use measured grid rows, and the system panel opens
+the existing host key sheet (see [shell contract](hyperlab-shell.md)). The
+installed Nitro bridge's original cause and physical rechecks of all four
+observations remain open; this adds no hardware acceptance.
+
 ## Security rules every milestone keeps
 
 These hold for every item below. A change that weakens one is a design

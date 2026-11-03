@@ -2926,3 +2926,66 @@ another runner. The comparison was restored and the scenario passed again.
 The bridge mutations N6 and N7 executed only the inert client, which
 recorded its argv; the contract requires exactly `["status"]` and no
 `hyperlabctl` call.
+
+### Capture-session capability, recovery layout and key-sheet repairs
+
+The initial regression checks failed on the previous production code:
+stdout-only refusal became "The machine bridge did not answer"; the GTK
+GPU rungs differed from the CLI; real GTK allocated Clean at y=18 with
+height 154 and Services at y=132 with height 154; the system panel had no
+key-sheet entry. A separate real Quickshell failed-start probe produced no
+capability answer, while its successful-process control returned JSON.
+
+The capability contract executes real Quickshell processes against inert
+executables and production validation. Its disposable copy shortens the
+start and completion timers. The GTK contracts execute production AST
+builders with real widgets on a private X server, using the production CSS
+for allocation. The ladder contract executes the real CLI trust command
+and provider with controlled inputs, checks the default and a changed
+provider ladder, and inspects the GPU rungs, Networks dock and Create
+inspector. The key-sheet contract activates the real panel row offscreen.
+No host operation or installed bridge is invoked.
+
+Each source was copied before mutation, restored byte-for-byte afterward,
+and its predicted check rerun. Every row below was red and restored green;
+none stayed green. Check names below are files in `tests/`.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| L1: Replace the provider ladder with a literal reversed rank map | `recovery_gpu_ladder_contract.py` | recovery GPU ladder differs from CLI |
+| L2: Substitute `0` for the Networks dock rank | `recovery_gpu_ladder_contract.py` | clean: recovery rank differs from CLI |
+| L3: Substitute `0` for the Create inspector rank | `recovery_gpu_ladder_contract.py` | clean: recovery rank differs from CLI |
+| L4: Remove integer and unique-rank validation | `recovery_gpu_ladder_contract.py` | unavailable ladder was replaced by invented ranks |
+| L5: Resolve the GPU owner's rung from its network | `recovery_gpu_ladder_contract.py` | GPU owner was ranked by its network instead of its handoff profile |
+| N1: Restore the old fixed-coordinate Networks builder | `recovery_network_layout_contract.py` | Networks tiles overlap at 760x560: (24, 18, 336, 154), (24, 132, 336, 154) |
+| K1: Remove the system panel's host key sheet row | `system_panel_key_sheet_contract.py` | system panel has no available host key sheet entry |
+| B1: Do not arm the capability completion deadline | `machine_capability_transport_contract.py` | capability request never answered |
+| B2: Do not arm the failed-start deadline | `machine_capability_transport_contract.py` | missing: known cause lost: The machine bridge timed out while reading capabilities |
+| B3: Replace the structured refusal with the generic message | `machine_capability_transport_contract.py` | refused: known cause lost: The machine bridge did not answer |
+| B4: Do not spend the capability request | `machine_capability_transport_contract.py` | a duplicate callback changed a spent capability result |
+| B5: Discard interrupted exit status | `machine_capability_transport_contract.py` | crash: known cause lost: The machine bridge exited with code -1 |
+| B6: Do not signal the retiring capability process | `machine_capability_transport_contract.py` | supersede: retiring probe survived or replaced the new answer (the inert replacement detects the surviving process and exits 9) |
+| B7: Do not cancel the runner when capabilities are cleared | `machine_capability_transport_contract.py` | clearing capabilities retained a pending runner |
+| P1: Restore the Machine pane's fixed "The machine bridge did not answer" Connect header | `host_quickshell_runtime_contract.py` | capabilities-unavailable: "the Connect header hid the bridge's reported cause" |
+
+B4 first failed through the successful-answer check because the duplicate
+failure replaced it; after adding an explicit before/after comparison, the
+same mutation failed with the more specific diagnostic shown above. Both
+runs restored green. GTK allocation covers requested 760×560, 1000×760 and
+500×560 viewports plus substantially taller tile content. This does not
+accept compositor placement or focus on hardware. A missing and a
+non-executable bridge both report failed start: the Quickshell process
+interface does not distinguish their causes for the caller, and the text
+names both installation and execute-permission checks instead of guessing.
+
+The existing operation QML contract also retains the production capability
+component and its timers, replacing only its process transport. Its earlier
+inert object exposed just `running`; the whole verifier caught that fixture
+mismatch after deadline ownership was added. The adapted lifecycle scenario
+passes without removing or relaxing any assertion.
+
+P1 covers the second place the observed text came from. Even with a
+known cause in `ShellState`, `MachineContextPane.qml` printed the fixed
+generic sentence as its Connect description whenever capabilities were
+unavailable. The runtime contract's `capabilities-unavailable` scenario now
+reads that header after a stderr failure and after a stdout-only refusal.
