@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`trust-pool-packed-colour-literals.md`](trust-pool-packed-colour-literals.md):
+  packed numeric colour constants matched the current palette and escaped
+  both the source check and exact rendering; numeric values are now checked.
 - [`capability-contract-missed-the-ci-runtime.md`](capability-contract-missed-the-ci-runtime.md):
   the real-process capability contract required Quickshell, but the hosted
   toolchain and contributor prerequisites did not supply it.

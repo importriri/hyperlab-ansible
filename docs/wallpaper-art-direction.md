@@ -114,7 +114,9 @@ rasteriser captures the materials, with fixed integer noise seeds and no clock
 input. Output is byte-stable for a given Qt release. The generated contract
 compares all twelve renders and the manifest, probes geometry and material
 boundaries, refuses typography and extra drawing primitives, and checks the
-host and guest deployment sources.
+host and guest deployment sources. Its source check rejects identity colours
+as strings, RGB triples or packed numeric literals in Python and QML, so a
+constant matching today's palette cannot silently replace palette input.
 
 `hyperlab-trust-v2` stays unchanged as reviewed rollback material, just as
 Contained Planes does for the product family. Its typography predates the

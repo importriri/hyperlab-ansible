@@ -3236,6 +3236,9 @@ stage was rerun for each other source mutation. V3-03 uses
 | V3-16: omit the explicit dirty rectangle from `putImageData`, then render HOST 01 | material | `capture differs from material: host/01` |
 | V3-17: alter the last pixel of LAB 02, preserving a valid PNG, and update its manifest digest | full generated contract | `generated output drift: images/lab/02.png` |
 | V3-18: add an unused Python `[91, 140, 255]` colour triple | source | `hardcoded identity RGB: dev` |
+| V3-19: replace palette-derived DEV tint with a used Python `0x5b8cff` packed value | full generated contract | `hardcoded packed identity RGB: dev` |
+| V3-20: override DEV tint with a used QML `0x5b8cff` packed value | full generated contract | `hardcoded packed identity RGB: dev` |
+| V3-21: repeat packed values for all six identities in Python and QML using nine numeric spellings (108 cases) | source | `hardcoded packed identity RGB: <identity>` in every case |
 
 V3-16 saves and restores both the renderer and the captured PNG. With Qt
 6.11.2 the shortened call produced a blank capture despite correct material
@@ -3246,3 +3249,35 @@ red byte modulo 256, recompresses IDAT and recalculates its CRC. Updating the
 manifest hash deliberately makes a hash-only check insufficient: only the
 comparison against freshly generated output detects the changed artwork.
 Both the PNG and manifest are restored before the green run.
+
+V3-19 replaces the renderer's palette-to-tint list comprehension with:
+
+```python
+packed = 0x5b8cff if identity == "dev" else int(colour[1:], 16)
+tint = [(packed >> shift) & 255 for shift in (16, 8, 0)]
+```
+
+V3-20 separates `tint` from the shader closure's combined `width`, `height`
+and `quiet` declaration, then substitutes this QML expression for `art.tint`:
+
+```javascript
+const packed = 0x5b8cff;
+const tint = art.tint[0] === (packed >> 16)
+    ? [(packed >> 16) & 255, (packed >> 8) & 255, packed & 255]
+    : art.tint;
+```
+
+Both used-constant mutations initially survived the full contract: twelve
+exact renders, material samples, palette inputs and deployment checks all
+stayed green. The duplicated value still matched the current palette. With
+numeric literal checking, both fail before rendering; restoring each returns
+the source stage to green. The complete contract passes after restoration.
+
+V3-21 uses each domain's packed value in both substitutions. The nine forms
+are hexadecimal, uppercase hexadecimal, decimal, octal, binary, decimal with
+digit separators, hexadecimal with digit separators, integral decimal with
+`.0`, and exponential notation. All 108 source-stage checks were red, and all
+108 restored checks were green. Python values come from the AST; numeric
+tokens in QML strings are converted to values before comparison with the
+palette. These cases check literal refusal without requiring Qt to execute
+every spelling.

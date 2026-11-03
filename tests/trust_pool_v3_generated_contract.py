@@ -38,6 +38,17 @@ def source_contract() -> None:
                if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     names = [node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)]
     names.extend(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
+    numbers = {node.value for node in ast.walk(tree)
+               if isinstance(node, ast.Constant) and type(node.value) in (int, float)}
+    # QML lives inside Python strings. Compare numeric token values, including
+    # base prefixes and separators, rather than their spelling in the source.
+    for token in re.findall(
+            r"(?<![\w.])(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+"
+            r"|(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9][0-9_]*)"
+            r"(?:[eE][+-]?[0-9][0-9_]*)?)(?![\w.])", "\n".join(strings)):
+        literal = token.replace("_", "")
+        numbers.add(int(literal, 0) if literal.lower().startswith(("0x", "0o", "0b"))
+                    else float(literal))
     numeric_triples = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.List, ast.Tuple)) and len(node.elts) == 3 and all(
@@ -64,6 +75,7 @@ def source_contract() -> None:
         require(rgb not in numeric_triples and not re.search(
                     r"\b" + r"\s*,\s*".join(map(str, rgb)) + r"\b", content),
                 f"hardcoded identity RGB: {identity}")
+        require(int(colour[1:], 16) not in numbers, f"hardcoded packed identity RGB: {identity}")
 
 
 def input_contract(module: object, directory: Path) -> None:
