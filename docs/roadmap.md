@@ -727,6 +727,12 @@ Measured with the complete security plane active.
 
 ### 14. Release qualification and the Doppiari release
 
+- [x] Sfere display name from one shared repository value: native shell,
+      CLI help/version and notification application names; internal names
+      stay unchanged (`tests/product_display_name_contract.py`,
+      software-verified)
+- [ ] Sfere presentation on Nitro: bar, idle desktop, workspace,
+      notification and CLI help; then the frozen Predator replay
 - [x] C10, C11: a read-only readiness check before install and a host
       profile proposal to review (`hyperlabctl doctor --hardware [--profile
       NAME]`, [ADR 0050](adr/0050-hardware-readiness-and-profile.md),

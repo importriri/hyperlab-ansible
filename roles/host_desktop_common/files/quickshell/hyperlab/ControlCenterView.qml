@@ -791,7 +791,7 @@ Item {
                             view.shellState.themeState.known
                             && view.shellState.themeState.value === "trust-model"
                             ? "trust pool"
-                            : "public · personal · HyperLab"
+                            : "public · personal · " + view.shellState.productName
                         interactive: true
                         busy: view.shellActions.busy
                         onActivated: {

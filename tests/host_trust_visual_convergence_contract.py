@@ -49,10 +49,10 @@ def main() -> int:
 
     for marker, corpus in (
         ("id: barChrome", bar),
-        ('text: "HyperLab"', identity),
+        ('text: identity.productName', identity),
         # One circular product symbol, one wordmark, one subtitle.
         ("IsolationGlyph {", identity),
-        ('text: "Platform"', identity),
+        ('text: identity.productByline', identity),
         ("badge.claim.claimed", gpu),
         (
             "provenanceColor(badge.claim.identity)",

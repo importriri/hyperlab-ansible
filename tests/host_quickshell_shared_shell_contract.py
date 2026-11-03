@@ -343,7 +343,7 @@ def main() -> int:
         "37px shared shell reserve changed",
     )
     require(
-        'text: "HyperLab"' in identity,
+        'text: identity.productName' in identity,
         "HyperLab identity marker moved unexpectedly",
     )
     require(

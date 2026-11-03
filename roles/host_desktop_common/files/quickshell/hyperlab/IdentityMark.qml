@@ -2,7 +2,7 @@
 //
 // The mark is the product symbol: a split circular isolation boundary
 // containing a core. Beside it sits the wordmark, and where there is room,
-// the "Platform" subtitle. One geometry family carries the identity from the
+// the maker byline. One geometry family carries the identity from the
 // 18-unit rail mark to the wallpaper relief, so the product is recognisable
 // at every size without a second logo.
 //
@@ -18,6 +18,8 @@ Item {
 
     required property var tokens
     required property var theme
+    property string productName: ""
+    property string productByline: ""
 
     property bool wordmarkVisible: true
     property bool subtitleVisible: false
@@ -32,8 +34,8 @@ Item {
     activeFocusOnTab: true
 
     Accessible.role: Accessible.Button
-    Accessible.name: "HyperLab Platform"
-    Accessible.description: "Open the HyperLab command surface"
+    Accessible.name: identity.productName
+    Accessible.description: "Open the " + identity.productName + " command surface"
     Accessible.onPressAction: identity.launcherRequested()
 
     Rectangle {
@@ -73,7 +75,7 @@ Item {
                 tokens: identity.tokens
                 role: "bar"
                 font.weight: Font.DemiBold
-                text: "HyperLab"
+                text: identity.productName
                 color: identity.theme.textPrimary
             }
 
@@ -82,7 +84,8 @@ Item {
                 tokens: identity.tokens
                 role: "label"
                 font.pixelSize: identity.tokens.fontLabel - 2
-                text: "Platform"
+                text: identity.productByline
+                font.capitalization: Font.MixedCase
                 color: identity.theme.textQuiet
             }
         }

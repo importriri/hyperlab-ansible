@@ -184,11 +184,11 @@ Scope {
             theme.palette = parsed;
             theme.paletteAvailable = true;
             console.info(
-                "HyperLab palette loaded: " + parsed.name
+                "Semantic palette loaded: " + parsed.name
             );
         } catch (error) {
             console.warn(
-                "HyperLab semantic palette parse failed"
+                "Semantic palette parse failed"
             );
         }
     }

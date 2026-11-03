@@ -1,13 +1,15 @@
-# HyperLab Platform — the shell
+# Sfere — the shell
 
-One long-running Quickshell process owns every HyperLab surface on both
+The product was called HyperLab before 2026-11.
+
+One long-running Quickshell process owns every Sfere surface on both
 compositors. This document is the design and behaviour contract for those
 surfaces. The security boundaries are restated at the end and are not
 negotiable by any of the design decisions above them.
 
 ## What the product is
 
-HyperLab is an enterprise virtualization and isolation platform. The
+Sfere is an enterprise virtualization and isolation platform. The
 interface has one job: let an operator see and operate machines, configure
 the host, and understand what the host actually knows — without ever
 implying a guarantee the host has not made.
@@ -27,7 +29,7 @@ Three rules shape everything else:
 ## Surfaces
 
 ```text
-HyperLab Platform
+Sfere
   Desktop                  wallpaper + rail, per output
   Top rail                 identity · workspaces | context · clock | host state
   Workspace                one ordinary window, five destinations
@@ -57,7 +59,7 @@ no click is ever intercepted by something invisible.
 At full width the rail has three bounded regions:
 
 ```text
-[symbol HyperLab] [workspaces]   [focused surface] | 09:41 Thu 4 Sep |   [provenance] [GPU] [net audio battery] [settings]
+[symbol Sfere] [workspaces]   [focused surface] | 09:41 Thu 4 Sep |   [provenance] [GPU] [net audio battery] [settings]
 ```
 
 The clock holds the display centre while both side regions still fit beside
@@ -122,7 +124,7 @@ becomes "No longer available" with every operation disabled.
 Operations are grouped by the decision being made — **Connect**, **Power**,
 **Advanced** — and availability is never guessed. The shell asks
 `privatestack-machine-actions capabilities NAME`, which re-derives the answer
-from the live libvirt inventory, the checked HyperLab spec, the strict
+from the live libvirt inventory, the checked Sfere spec, the strict
 runtime SSH inventory and the reviewed action registry. A disabled control
 shows the bridge's own reason: *"Looking Glass is disabled by the machine
 spec"*, *"runtime SSH inventory has the wrong mode"*.
@@ -641,7 +643,7 @@ The historical independent review for this design is recorded in
 `ShellState` turns every focus snapshot from the compositor adapter into one
 numbered request to `privatestack-surface-provenance stream`, a read-only
 bridge to the reviewed resolver (`tools/surface_provenance.py`) in the
-HyperLab checkout. The request carries the PID, app id and window id; the
+Sfere checkout. The request carries the PID, app id and window id; the
 window title never leaves the adapter.
 
 - Only the answer to the latest request is accepted. A different surface
@@ -741,7 +743,7 @@ the launcher shows them under **Applications**. Choosing one sends only its
 id; the bridge checks it against the catalogue again and runs `gio launch`
 on the desktop entry's path. Adding an application is a reviewed edit of
 that list. Rofi stays on `SUPER + D` as a transitional launcher for
-anything outside the catalogue, with no HyperLab route.
+anything outside the catalogue, with no Sfere route.
 
 ## Design system
 
@@ -811,7 +813,7 @@ The existing `size`, `stroke`, `core` and `strokeScale` properties remain:
 keeping the outer radius and cuts fixed. `tools/wallpaper/render_isolation_ring.py`
 renders the full form as engraved relief at wallpaper scale from the same
 constants, checked by `tests/product_symbol_geometry_contract.py`.
-"HyperLab" is the wordmark and "Platform" the subtitle; neither is a trust
+"Sfere" is the wordmark and "by Doppiari" the byline; neither is a trust
 claim. There is no second logo. Software verification does not close physical
 Nitro acceptance under both compositors or Predator replay.
 

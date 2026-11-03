@@ -223,7 +223,7 @@ def main() -> int:
         )
 
     for marker, corpus in (
-        ('text: "HyperLab"', identity),
+        ('text: identity.productName', identity),
         ("badge.claim.claimed", gpu),
         (
             "provenanceColor(badge.claim.identity)",

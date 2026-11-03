@@ -286,7 +286,7 @@ def main() -> int:
         'title: "Keyboard"',
         'title: "Theme"',
         'title: "Wallpaper"',
-        'text: "HyperLab"',
+        'text: identity.productName',
         "badge.claim.claimed",
         "toggleLauncher(",
         "toggleSystemPanel(",

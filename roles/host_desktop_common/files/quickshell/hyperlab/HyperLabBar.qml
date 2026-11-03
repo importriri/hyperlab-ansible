@@ -85,6 +85,8 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 tokens: bar.tokens
                 theme: bar.theme
+                productName: bar.shellState.productName
+                productByline: bar.shellState.productByline
                 wordmarkVisible: bar.mediumRail
                 subtitleVisible: false
 

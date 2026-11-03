@@ -83,14 +83,15 @@ PanelWindow {
                 ShellLabel {
                     tokens: desktop.tokens
                     role: "section"
-                    text: "HyperLab"
+                    text: desktop.shellState.productName
                     color: desktop.theme.textPrimary
                 }
 
                 ShellLabel {
                     tokens: desktop.tokens
                     role: "label"
-                    text: "Platform"
+                    text: desktop.shellState.productByline
+                    font.capitalization: Font.MixedCase
                     color: desktop.theme.textSecondary
                 }
             }

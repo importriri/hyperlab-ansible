@@ -386,7 +386,7 @@ PanelWindow {
                         panel.shellState.themeState.known
                         && panel.shellState.themeState.value === "trust-model"
                         ? "next"
-                        : "public · personal · HyperLab"
+                        : "public · personal · " + panel.shellState.productName
                     interactive: true
                     busy: panel.shellActions.busy
                     onActivated: {

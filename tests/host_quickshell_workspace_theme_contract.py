@@ -209,7 +209,7 @@ def main() -> int:
         "FileView {",
         "function refreshPalette()",
         "palette-quickshell.json",
-        "HyperLab palette loaded:",
+        "Semantic palette loaded:",
         "semanticStatusColor",
         "function provenanceColor(identity)",
         "function alpha(candidate, level)",

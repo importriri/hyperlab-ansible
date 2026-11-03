@@ -4,6 +4,12 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`product-help-kept-discovered-names.md`](product-help-kept-discovered-names.md):
+  changing the root CLI banner left the previous product name in discovered
+  command help and nested options; shared help formatting now covers both.
+- [`product-window-rename-broke-focus.md`](product-window-rename-broke-focus.md):
+  the compositor adapter's fixed title prefix could not match renamed
+  workspaces; it now uses the shared name and retains process ownership.
 - [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
   compressed PNG equality was runtime-dependent; arithmetic marks and product
   geometry drift escaped a contract that checked too few image pixels.

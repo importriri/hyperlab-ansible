@@ -31,6 +31,22 @@ import QtQuick
 Scope {
     id: state
 
+    // The same single-field JSON subset of YAML is read by the CLI.
+    // An unavailable or invalid input never supplies a fallback identity.
+    readonly property string productName: state.parseProductName(productFile.text())
+    readonly property string productByline: "by Doppiari"
+
+    function parseProductName(raw) {
+        const match = /^\s*\{\s*"name"\s*:\s*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"\s*\}\s*$/.exec(raw);
+        return match && match[1].length <= 64 ? match[1] : "";
+    }
+
+    FileView {
+        id: productFile
+        path: "/etc/xdg/quickshell/hyperlab/product.yml"
+        blockLoading: true
+    }
+
     readonly property string statusBridge:
         "/usr/local/bin/privatestack-hyperlab"
 
@@ -1063,7 +1079,7 @@ Scope {
 
     function outsideDomainKind(row) {
         if (row.managed === true)
-            return "HyperLab fixture";
+            return state.productName + " fixture";
 
         if (row.managed === false)
             return "External domain";
@@ -2118,7 +2134,7 @@ Scope {
         // An explicit product selection wins over every theme's own pool,
         // exactly as the theme controller resolves it.
         if (state.wallpaperState.value === "product")
-            return "HyperLab";
+            return state.productName;
 
         if (!state.themeState.known)
             return "Unknown";
@@ -2235,7 +2251,7 @@ Scope {
         if (parsed === null) {
             return {
                 "text": fallbackText,
-                "tooltip": "HyperLab status payload unavailable",
+                "tooltip": state.productName + " status payload unavailable",
                 "class": "error"
             };
         }
@@ -2727,7 +2743,7 @@ Scope {
 
             if (error !== FileViewError.FileNotFound) {
                 console.warn(
-                    "HyperLab reduced-motion state read failed: "
+                    state.productName + " reduced-motion state read failed: "
                     + FileViewError.toString(error)
                 );
             }

@@ -38,9 +38,13 @@ readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privat
 mkdir -p "${config_dir}" "${state_dir}" "${personal_wallpaper_root}"
 
 notify() {
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send "HyperLab" "$1" || true
-    fi
+    command -v notify-send >/dev/null 2>&1 || return 0
+    local product_name
+    product_name=$(hyperlabctl --version) || return 1
+    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
+    product_name=${product_name% (hyperlabctl *)}
+    [[ -n ${product_name} ]] || return 1
+    notify-send --app-name "${product_name}" "${product_name}" "$1" || return 1
 }
 
 valid_theme() { case ${1:-} in green|violet|blue|red|trust-model) return 0 ;; *) return 1 ;; esac; }

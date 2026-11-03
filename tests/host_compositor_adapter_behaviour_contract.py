@@ -17,6 +17,7 @@ written outside that directory. It proves four things the shell relies on:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -26,6 +27,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "roles/host_desktop_common/files/privatestack-compositor-adapter.sh"
 LOCK = ROOT / "roles/host_desktop_common/files/privatestack-lock.sh"
+
+PRODUCT_NAME = json.loads((ROOT / "tools/product.yml").read_text())["name"]
 
 FAILURES: list[str] = []
 
@@ -50,7 +53,7 @@ case "$*" in
     echo "{{\\"id\\":1,\\"nodes\\":[{{\\"id\\":42,\\"pid\\":$FAKE_OWNER,\\"name\\":\\"HyperLab · Machines\\",\\"nodes\\":[]}},{{\\"id\\":7,\\"pid\\":99999,\\"name\\":\\"HyperLab · guest\\"}}],\\"floating_nodes\\":[]}}" ;;
   *) echo "SWAY $*" ;;
 esac
-""")
+""".replace("HyperLab", PRODUCT_NAME))
 
 
 def fake_hyprland(bindir: Path) -> None:
@@ -60,7 +63,7 @@ if [[ $1 == clients ]]; then
 else
   echo "DISPATCH $*"
 fi
-""")
+""".replace("HyperLab", PRODUCT_NAME))
 
 
 def watch_lines(env: dict, seconds: float) -> list[str]:
@@ -108,6 +111,8 @@ def heartbeat_and_output(base_env: dict, bindir: Path) -> None:
 
 
 def owner_bound_focus(base_env: dict, bindir: Path, scratch: Path) -> None:
+    write_executable(bindir / "hyperlabctl",
+                     f"#!/bin/sh\nprintf '%s\\n' '{PRODUCT_NAME} (hyperlabctl fixture)'\n")
     fake_hyprland(bindir)
     fake_sway(bindir, '"eDP-1"')
     caller = scratch / "caller.sh"

@@ -3360,3 +3360,70 @@ V3-30 compares the copied and original pools through `pool_manifest`, with
 `require(original == copied, "generated manifest policy drift")`, then
 restores the saved manifest and requires equality. These temporary-copy
 fixtures leave the versioned pool untouched.
+
+## Product display name
+
+`tests/product_display_name_contract.py` tokenizes QML string literals,
+executes every discovered CLI help parser and the version banner, parses
+Ansible deployment data, records real notification argv, and executes the
+production name binding with Quickshell's real FileView. The existing
+Qt offscreen harness evaluates the bar, desktop, byline, key-sheet heading
+and all five workspace titles at desktop and narrow sizes. Compositor
+fixtures execute the real owner-bound focus selector on both backends.
+No real compositor, notification service or host action is contacted.
+
+For an individual stage, run from the repository root:
+
+```python
+import sys
+sys.path.insert(0, "tests")
+import product_display_name_contract as contract
+
+contract.qml_strings()                 # QML string tokens, including escapes
+contract.cli_contract()                # real parser tree and input refusals
+contract.deployment_contract()         # parsed role and config data
+contract.docs_contract("Sfere")
+contract.notification_contract("Sfere")
+contract.native_name_contract("Sfere")  # real FileView, no host observations
+contract.shell_contract("Sfere")        # evaluated presentation
+contract.focus_contract()               # owner-bound compositor fixtures
+```
+
+Save the affected file before each source mutation and restore its exact
+bytes afterward. Every red case below was executed separately, then the
+same stage passed after restoration. PD-19 is an intentional green control:
+a valid new shared value must reach every runtime consumer. Twenty-three broken
+invariants were red; no unexpected green survivor occurred.
+
+| ID | Mutation | Stage | Observed result |
+| --- | --- | --- | --- |
+| PD-01 | Replace the bar's `IdentityMark` text binding with `"HyperLab"` | QML | red: old product display string |
+| PD-02 | Put `"HYPERLAB"` in the idle desktop label | QML | red: old product display string |
+| PD-03 | Put `"Hyperlab · Control Center"` in a workspace title | QML | red: old product display string |
+| PD-04 | Put `"HyperLab"` in the nested key-sheet group data | QML | red: old product display string |
+| PD-05 | Hardcode `"Sfere"` in the bar instead of its shared binding | QML | red: product name duplicated outside shared input |
+| PD-06 | Return ordinary argparse help without shared product formatting | CLI | red: CLI help uses old product name |
+| PD-07 | Remove the product name from the version banner | CLI | red: CLI version banner drift |
+| PD-08 | Change parser `prog` to `sferectl` | CLI | red: CLI command name changed |
+| PD-09 | Change the configured Quickshell directory name to `sfere` | deployment | red: Quickshell config name changed |
+| PD-10 | Change the rail namespace to `sfere-bar` | deployment | red: internal namespace changed |
+| PD-11 | Hardcode notification `--app-name` as `HyperLab` | notification | red: wrong notification app name |
+| PD-12 | Disable the CLI's file and parent symlink rejection | CLI | red: accepted redirected input |
+| PD-13 | Replace strict shell parsing with ordinary JSON parsing and last-key-wins behavior | native name | red: duplicate name published as `B` instead of withheld |
+| PD-14 | Restore the old product name in the README heading | docs | red: product heading missing |
+| PD-15 | Change the shared byline to `by Someone` | shell | red: product byline drift |
+| PD-16 | Put `"\u0048yperLab"` in the bar text | QML | red: decoded old product display string |
+| PD-17 | Supply `Sfere` as the shell's invalid-input fallback | native name | red: invalid input published a default identity |
+| PD-18 | Change the role's product source to a missing file | deployment | red: shared name not deployed exactly once |
+| PD-19 | Change only the canonical name to `Example Name` | CLI, native name, shell, notification, focus | green control: all consumers use the changed value; restored green |
+| PD-20 | Restore `HyperLab · ` as the adapter's focus prefix | focus | red: neither backend can focus the renamed workspace |
+| PD-21 | Remove the notification banner-format guard | notification | red: notification defaulted after an invalid name read |
+| PD-22 | Remove the key-sheet name binding in the launcher | shell | red: key-sheet name binding missing |
+| PD-23 | Bypass the keyboard notification helper with a direct old-name notification | notification | red: old notification product string |
+| PD-24 | Install the product input after the QML source instead of before it | deployment | red: product input installed after its consumers |
+
+The complete product contract passed after restoring all source mutations.
+Input fixtures also refuse missing, unreadable, malformed, duplicate and
+redirected CLI input, missing/malformed/duplicate native input, and failed
+or malformed CLI banners before notification or focus dispatch. The
+physical Nitro and Predator presentation gates remain separate.

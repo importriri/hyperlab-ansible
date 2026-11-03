@@ -213,6 +213,15 @@
     group: root
     mode: "0755"
 
+- name: Install the shared product display name
+  tags: [hyperlab_provenance]
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../tools/product.yml"
+    dest: "{{ host_desktop_common_shell_stage.config_root }}/product.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Install the non-active shared HyperLab Quickshell source
   tags: [hyperlab_provenance]
   ansible.builtin.copy:

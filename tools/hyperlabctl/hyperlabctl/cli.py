@@ -1,6 +1,9 @@
 """Argument parsing. The subcommand list is discovered, never typed here."""
 
 import argparse
+from pathlib import Path
+import re
+import stat
 import sys
 
 from . import __version__
@@ -8,6 +11,36 @@ from .commands import commands
 from .config import Config, Context
 from .errors import HyperlabError
 from .runner import Runner
+
+
+def _product_name(path: Path) -> str:
+    """Read the single display value; refuse missing or redirected inputs.
+
+    This deliberately small JSON subset of YAML is also read by the shell.
+    Exactly one field prevents duplicate mappings without a second parser.
+    """
+    if any(parent.is_symlink() for parent in (path, *path.parents)):
+        raise ValueError("redirected product name input")
+    mode = path.stat().st_mode
+    if not stat.S_ISREG(mode) or not mode & 0o444:
+        raise ValueError("unreadable product name input")
+    match = re.fullmatch(
+        r'\s*\{\s*"name"\s*:\s*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"\s*\}\s*',
+        path.read_text(encoding="utf-8"),
+    )
+    if match is None or len(match[1]) > 64:
+        raise ValueError("invalid product name input")
+    return match[1]
+
+
+PRODUCT_NAME = _product_name(Path(__file__).absolute().parents[2] / "product.yml")
+
+
+class _ProductParser(argparse.ArgumentParser):
+    def format_help(self) -> str:
+        """Keep discovered command help in the current product vocabulary."""
+        return re.sub(r"\b(?:HyperLab|Hyperlab|HYPERLAB)\b", PRODUCT_NAME,
+                      super().format_help())
 
 
 def _normalize_global_options(argv):
@@ -40,12 +73,13 @@ def _normalize_global_options(argv):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(
+    parser = _ProductParser(
         prog="hyperlabctl",
-        description="Control surface for the HyperLab. Reads the repository "
+        description=f"Control surface for {PRODUCT_NAME}. Reads the repository "
                     "contract and libvirt; owns no policy of its own.",
     )
-    parser.add_argument("--version", action="version", version="hyperlabctl %s" % __version__)
+    parser.add_argument("--version", action="version",
+                        version=f"{PRODUCT_NAME} (hyperlabctl {__version__})")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument("--no-color", dest="color", action="store_false", default=None,
                         help="never emit colour")

@@ -198,7 +198,7 @@ Item {
                 kind: "empty"
                 title: "No operations this session"
                 description:
-                    "Host and machine operations started from HyperLab are "
+                    "Host and machine operations started from " + view.shellState.productName + " are "
                     + "recorded here with what the bridge reported."
             }
 

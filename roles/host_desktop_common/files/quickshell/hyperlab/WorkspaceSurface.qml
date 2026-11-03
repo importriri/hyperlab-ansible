@@ -41,15 +41,15 @@ FloatingWindow {
     title: {
         switch (workspace.view) {
         case "controls":
-            return "HyperLab · Control Center";
+            return workspace.shellState.productName + " · Control Center";
         case "diagnostics":
-            return "HyperLab · Diagnostics";
+            return workspace.shellState.productName + " · Diagnostics";
         case "workbench":
-            return "HyperLab · Workbench";
+            return workspace.shellState.productName + " · Workbench";
         case "devices":
-            return "HyperLab · USB devices";
+            return workspace.shellState.productName + " · USB devices";
         default:
-            return "HyperLab · Machines";
+            return workspace.shellState.productName + " · Machines";
         }
     }
 

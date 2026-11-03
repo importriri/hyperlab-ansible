@@ -661,7 +661,7 @@ Item {
                             return "";
 
                         if (pane.machine.managed === true)
-                            return "HyperLab spec";
+                            return pane.shellState.productName + " spec";
 
                         return pane.machine.managed === false
                             ? "External domain"
@@ -826,7 +826,7 @@ Item {
                 wrapMode: Text.WordWrap
                 text:
                     pane.present && pane.machine.managed === true
-                    ? "Power operations for this machine run its HyperLab spec as a durable operation; its window only observes it."
+                    ? "Power operations for this machine run its " + pane.shellState.productName + " spec as a durable operation; its window only observes it."
                     : "Power operations for this external machine go directly to the host."
                 color: pane.theme.textQuiet
             }

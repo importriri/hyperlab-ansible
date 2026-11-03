@@ -56,7 +56,9 @@ PanelWindow {
     readonly property bool keysMode:
         launcher.shellSurfaces.launcherMode === "keys"
 
-    readonly property HostKeys hostKeys: HostKeys {}
+    readonly property HostKeys hostKeys: HostKeys {
+        productName: launcher.shellState.productName
+    }
 
     // Native destinations. Aliases resolve to the destination they name, so
     // "workstation controls" and "power" reach the Control Center without
@@ -412,7 +414,7 @@ PanelWindow {
         opacity: launcher.open ? 1 : 0
 
         Accessible.role: Accessible.Dialog
-        Accessible.name: "HyperLab command surface"
+        Accessible.name: launcher.shellState.productName + " command surface"
 
         Behavior on opacity {
             NumberAnimation {

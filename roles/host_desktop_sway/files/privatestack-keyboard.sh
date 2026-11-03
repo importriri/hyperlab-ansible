@@ -116,10 +116,17 @@ apply_layout() {
     if [[ ${2:-} != --quiet ]] &&
        command -v notify-send >/dev/null 2>&1
     then
-        notify-send \
-            'HyperLab keyboard' \
-            "Layout: $(layout_name "${layout}")"
+        notify_layout "$(layout_name "${layout}")" || return 1
     fi
+}
+
+notify_layout() {
+    local product_name
+    product_name=$(hyperlabctl --version) || return 1
+    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
+    product_name=${product_name% (hyperlabctl *)}
+    [[ -n ${product_name} ]] || return 1
+    notify-send --app-name "${product_name}" "${product_name} keyboard" "Layout: $1" || return 1
 }
 
 cycle_layout() {

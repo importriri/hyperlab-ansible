@@ -674,10 +674,13 @@ workspace_select() {
 # (this adapter's parent, because the reviewed action bridge execs it) whose
 # title carries the workspace prefix. A same-titled window from any other
 # process -- an operation terminal, a guest -- can never match.
-readonly shell_window_title_prefix='HyperLab · '
-
 shell_window_focus() {
-    local owner=${PPID} target
+    local owner=${PPID} target product_name shell_window_title_prefix
+    product_name=$(hyperlabctl --version) || return 1
+    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
+    product_name=${product_name% (hyperlabctl *)}
+    [[ -n ${product_name} ]] || return 1
+    shell_window_title_prefix="${product_name} · "
 
     case ${backend} in
         sway)
@@ -710,7 +713,7 @@ if len(found) != 1:
 print(found[0])
 ' "${owner}" "${shell_window_title_prefix}"
             )" || {
-                printf 'HyperLab workspace window not found\n' >&2
+                printf '%s workspace window not found\n' "${product_name}" >&2
                 return 3
             }
 
@@ -738,7 +741,7 @@ if len(found) != 1 or not re.fullmatch(r"[0-9a-fA-F]{1,16}", found[0]):
 print(found[0])
 ' "${owner}" "${shell_window_title_prefix}"
             )" || {
-                printf 'HyperLab workspace window not found\n' >&2
+                printf '%s workspace window not found\n' "${product_name}" >&2
                 return 3
             }
 

@@ -1,8 +1,10 @@
-# hyperlab-ansible
+# Sfere — host automation
+
+The product was called HyperLab before 2026-11.
 
 [![ci](https://github.com/importriri/hyperlab-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/importriri/hyperlab-ansible/actions/workflows/ci.yml)
 
-Stage 2 of HyperLab. `arch-bootstrap` installs the encrypted Arch host; this
+Stage 2 of Sfere. `arch-bootstrap` installs the encrypted Arch host; this
 repository turns that host into the KVM/VFIO laptop lab and owns explicit image,
 VM and service transactions. `arch-hypervisor-lab` records architecture, failure
 writeups and hardware evidence.
@@ -72,7 +74,7 @@ with the managed session lifecycle switched on for that import only, then
 `host-sleep-guard.yml`. It copies no role.
 
 The Hyprland step stages files: the reviewed Hyprland configuration, the
-HyperLab Hyprland and HyperLab Sway sessions in Ly's private catalog, their
+managed Hyprland and Sway sessions in Ly's private catalog, their
 user session targets and the Quickshell shell bound to the Hyprland session.
 It starts no compositor or display manager, selects no Ly default and leaves
 the global shell replacement gates closed. Sway, Waybar and the GTK surfaces
@@ -102,11 +104,11 @@ The foundation owns:
 - KVM/libvirt and the stage-1 storage contract;
 - VFIO boot policy and GPU ownership checks;
 - the five trust-domain networks and host isolation;
-- the HyperLab image-store layout.
+- the Sfere image-store layout.
 
 The interactive target adds:
 
-- Sway, Waybar and the compact HyperLab drawer;
+- Sway, Waybar and the compact Sfere drawer;
 - the full Control Center;
 - the host-side Looking Glass/kvmfr transport.
 
@@ -183,7 +185,7 @@ Operator and architecture references:
 - [`docs/nitro-control-panel.md`](docs/nitro-control-panel.md) — normal-user Nitro Control Board and desktop-theme integration;
 - [`docs/visual-trust-contract.md`](docs/visual-trust-contract.md) — semantic trust colors and their separation from appearance themes;
 - [`docs/theme-system.md`](docs/theme-system.md) — declarative theme registry, the Trust Model theme and host-owned presentation provenance;
-- [`docs/hyperlab-shell.md`](docs/hyperlab-shell.md) — the HyperLab Platform shell: surfaces, design system and presentation boundaries;
+- [`docs/hyperlab-shell.md`](docs/hyperlab-shell.md) — the Sfere shell: surfaces, design system and presentation boundaries;
 - [`docs/wallpaper-art-direction.md`](docs/wallpaper-art-direction.md) — the generated product identity assets and the rules any wallpaper keeps;
 - [`docs/nitro-arch-dev-vfio-campaign.md`](docs/nitro-arch-dev-vfio-campaign.md) — ordered Nitro VFIO campaign;
 - [`docs/windows-image-workshop.md`](docs/windows-image-workshop.md) — Windows image sealing;

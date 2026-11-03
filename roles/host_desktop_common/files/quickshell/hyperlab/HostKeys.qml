@@ -1,17 +1,24 @@
 // HyperLab host key sheet.
 //
-// The keys the host compositor binds, in the operator's words. The groups
-// below are plain JSON between the markers so the host keybinding contract
-// can compare them with the bindings in both directions: every host key is
-// on the sheet, and the sheet promises no key that is not bound. Host keys
-// only: guest keys (ALT) live on each guest's own sheet, ALT + H.
+// The keys the host compositor binds, in the operator's words. Key bindings
+// remain plain JSON between the markers so the host keybinding contract can
+// compare them in both directions: every host key is on the sheet, and the
+// sheet promises no key that is not bound. Host keys only: guest keys (ALT)
+// live on each guest's own sheet, ALT + H.
 
 import QtQuick
 
 QtObject {
+    property string productName: ""
+
+    readonly property var groups: bindings.map((group, index) => ({
+        "title": index === 0 ? productName : group.title,
+        "keys": group.keys
+    }))
+
     // HOST-KEYS-BEGIN
-    readonly property var groups: [
-        { "title": "HyperLab", "keys": [
+    readonly property var bindings: [
+        { "title": "", "keys": [
             { "keys": "SUPER+SPACE", "does": "Command palette: destinations, Machines and host commands" },
             { "keys": "SUPER+F1", "does": "This key sheet" },
             { "keys": "SUPER+F4", "does": "Machines" },

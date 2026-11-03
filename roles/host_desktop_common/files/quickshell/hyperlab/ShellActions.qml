@@ -106,7 +106,7 @@ Scope {
         const identifier = String(action);
 
         if (actions.allowedActions.indexOf(identifier) < 0) {
-            console.warn("HyperLab refused an unknown shell action");
+            console.warn("Refused an unknown shell action");
             actions.actionResult(
                 identifier,
                 false,

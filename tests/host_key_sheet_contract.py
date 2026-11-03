@@ -230,7 +230,7 @@ def sheet_chords() -> list[dict]:
     source = SHEET.read_text(encoding="utf-8")
     try:
         block = source.split("// HOST-KEYS-BEGIN", 1)[1].split("// HOST-KEYS-END", 1)[0]
-        groups = json.loads(block.split("readonly property var groups:", 1)[1])
+        groups = json.loads(block.split("readonly property var bindings:", 1)[1])
     except (IndexError, json.JSONDecodeError) as exc:
         fail(f"HostKeys.qml groups are not JSON between the markers: {exc}")
     rows = [entry for group in groups for entry in group["keys"]]

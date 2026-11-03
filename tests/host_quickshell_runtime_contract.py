@@ -161,6 +161,10 @@ def adapt_state(source: str) -> str:
                                source, re.M | re.S)
     source = strip_blocks(source, "Process", "FileView", "SystemClock", "Timer")
     source = source.replace(
+        "productFile.text()",
+        json.dumps((ROOT / "tools/product.yml").read_text(encoding="utf-8")),
+    )
+    source = source.replace(
         "    readonly property alias clock: shellClock\n",
         "    property var clock: QtObject {\n"
         "        readonly property date date: new Date(2026, 8, 22, 9, 41)\n"
@@ -2131,7 +2135,7 @@ TRUTH = """
                   && sharedState.machines[0].name === "development-01",
                   "an observed fixture joined the product inventory");
             check(sharedState.outsideDomainKind(
-                      sharedState.outsideDomains[0]) === "HyperLab fixture"
+                      sharedState.outsideDomains[0]) === sharedState.productName + " fixture"
                   && sharedState.outsideDomainKind(
                       sharedState.outsideDomains[1]) === "External domain",
                   "outside domain kinds were misclassified");

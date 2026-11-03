@@ -13,6 +13,16 @@ child_pid=""
 stopping=0
 compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privatestack-compositor-adapter}
 
+notify_bar_failure() {
+    local product_name
+    product_name=$(hyperlabctl --version) || return 1
+    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
+    product_name=${product_name% (hyperlabctl *)}
+    [[ -n ${product_name} ]] || return 1
+    notify-send --app-name "${product_name}" -u critical "${product_name} bar" \
+        'Waybar is unstable; the compositor fallback was restored where available.' || return 1
+}
+
 native_bar() {
     "${compositor_adapter}" native-bar show >/dev/null 2>&1 || true
 }
@@ -133,8 +143,7 @@ start() {
         if (( failures >= 3 )); then
             native_bar
             if command -v notify-send >/dev/null 2>&1; then
-                notify-send -u critical 'HyperLab bar' \
-                    'Waybar is unstable; the compositor fallback was restored where available.'
+                notify_bar_failure || return 1
             fi
             return 0
         fi
