@@ -3281,3 +3281,82 @@ digit separators, hexadecimal with digit separators, integral decimal with
 tokens in QML strings are converted to values before comparison with the
 palette. These cases check literal refusal without requiring Qt to execute
 every spelling.
+
+### Trust pool runtime, negative space and product geometry
+
+These cases exercise `tests/trust_pool_v3_generated_contract.py`; source and
+material stages from V3-01 through V3-21 remain in place. Save the renderer,
+product renderer, every affected PNG and `manifest.yml` before each case,
+then restore their saved bytes after it. Recompression is an explicit green
+control, not an undisclosed surviving artwork mutation. ADR 0057 explains
+why compressed-byte equality across runtimes was the wrong requirement.
+
+| ID | Break or control | Check | Observed result |
+| --- | --- | --- | --- |
+| V3-22 | Decode `images/lab/02.png`, encode the identical RGB scanlines with filter 0 and zlib level 0, update only its manifest SHA-256 | complete generated contract | old check red (`generated output drift`); corrected check green |
+| V3-23 | As V3-22, increment the final pixel's red channel by one, encode with zlib level 1, update its manifest SHA-256 | complete generated contract | red: `generated pixel drift: images/lab/02.png`; restored complete check green |
+| V3-24 | Insert the arithmetic mark below in `pixel()`, then regenerate the entire versioned pool | complete generated contract | old check green; corrected check red: `non-ground pixel in geometry gap`, `(39, 30)`; restored check green |
+| V3-25 | Insert the gap mark below at each of `position = 0.46`, `0.63`, `0.9`; render HOST/01 to a temporary PNG | `png_pixels`, `ground_offsets`, `ground_contract` | three red refusals at `(835, 612)`, `(835, 665)`, `(835, 749)`; each restored check green |
+| V3-26 | Change only product renderer `cutRatio: 0.41` to `cutRatio: 0.42` | complete generated contract | old check green; corrected check red: `pool geometry differs from product symbol`; restored geometry and complete check green |
+| V3-27 | Append `changed` to `images/lab/02.png` without updating its manifest hash | `pool_manifest` | red: `manifest hash mismatch`; restored hash check green |
+| V3-28 | Re-encode the original RGB values as RGBA, set only the final alpha to 254 and update the manifest hash | `png_pixels` | red: `nonopaque capture`; restored opacity check green |
+| V3-29 | In temporary copies, corrupt an IDAT CRC, duplicate IEND, truncate IEND or truncate an IDAT payload | `png_pixels` | four red refusals: `invalid PNG CRC`, `invalid PNG structure`, `truncated PNG chunk`, `truncated PNG payload`; each restored decoder green |
+| V3-30 | Copy the pool, change only rotation `interval_minutes: 30` to `31`, keep all image hashes correct | compare both `pool_manifest` results | red: `generated manifest policy drift`; restored policy comparison green |
+
+For V3-22/V3-23, reuse `png_pixels(path)` to obtain the entire RGB buffer.
+Build each scanline as a zero filter byte followed by `1672 * 3` RGB bytes;
+compress their concatenation with `zlib.compress(scanlines, level)`. Write
+PNG signature, IHDR (`1672, 941, 8, 2, 0, 0, 0`), IDAT and IEND, computing
+each chunk's CRC over its type and payload. For V3-23 increment `rgb[-3]`
+modulo 256 before encoding. Replace the original file's SHA-256 with the
+new digest in the saved manifest. V3-22 additionally checks normalization
+from the committed opaque RGBA format to RGB: all decoded values must agree.
+The original red compression control kept RGBA and its existing filters while
+changing only zlib compression. The corrected green control additionally
+changes to RGB and filter 0. The committed captures exercise PNG filters 1–4;
+this control exercises 0.
+
+V3-24 inserts this at the start of `function pixel(x, y) {`:
+
+```javascript
+if (x > 30 && x < 90 && Math.abs(y - 40) < 1
+        || y > 30 && y < 90 && Math.abs(x - 40) < 1)
+    return [200, 200, 200];
+```
+
+Run `python3 tools/wallpaper/render_trust_pool.py` before the contract so
+all hashes and temporary renders would agree. It must still reject the
+mark, which uses no forbidden keyword or extra Canvas call. The full-image
+check rejects it before spending time on another regeneration.
+
+V3-25 instead inserts, with one numeric `position` substituted per case:
+
+```javascript
+if (Math.abs(x - centreX) < 1
+        && Math.abs(y - centreY - radius * position) < 1)
+    return [200, 200, 200];
+```
+
+Use the renderer's `render()` with the palette's HOST colour, identity
+`host`, variant `01` and a temporary output. Decode it with `png_pixels()`
+and call `ground_contract(pixels, ground_offsets("01", geometry_contract()),
+path)`. These coordinates cover core/ring space, ring/arc space and the
+vertical arc cut. Restore the renderer and check the original HOST/01 PNG
+after each refusal. V3-28 uses IHDR colour type 6 with 255 alpha everywhere
+except the final pixel, while keeping all RGB values identical.
+
+The complete corrected contract also passed with Arch Qt 6.11.2 and Ubuntu
+26.04 Qt 6.10.2 packages in an unprivileged Ubuntu Base runtime restricted
+to two CPUs. Exact pixels matched for all twelve images. Twelve renders took
+79.7 s and 78.8 s respectively; the Ubuntu contract took 111.92 s overall.
+The regeneration budget is 600 s, retaining the renderer's 120 s per-image
+limit. This evidence does not establish a hosted workflow or hardware gate.
+
+V3-29 changes only the first IDAT chunk's final CRC byte by XOR with 1;
+appends a second valid empty IEND chunk; removes the final IEND CRC byte;
+or truncates after three of an IDAT chunk's four CRC bytes. Each starts
+from its own copied valid PNG and restores it before the green decode.
+V3-30 compares the copied and original pools through `pool_manifest`, with
+`require(original == copied, "generated manifest policy drift")`, then
+restores the saved manifest and requires equality. These temporary-copy
+fixtures leave the versioned pool untouched.

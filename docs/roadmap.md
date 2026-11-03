@@ -643,7 +643,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 - [x] generated, text-free `trust-pool-v3` on geometry B: twelve 1672×941
       wallpapers, palette-owned sphere tints with packed literal rejection,
-      exact render/hash and authority contracts; v2 retained as rollback
+      exact pixel/hash, full negative-space and shared-geometry contracts;
+      authority unchanged, v2 retained as rollback
       (software-verified)
 - [ ] trust pool v3 accepted on Nitro at 1920×1080 for every identity:
       distinguishable sphere tints, no text, host shell as the only trust signal

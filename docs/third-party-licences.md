@@ -131,8 +131,18 @@ its `manifest.yml` are produced by the repository's own
 `tools/wallpaper/render_trust_pool.py`, using only geometry B and
 `tools/palette/palette.yml`. They contain no third-party asset, font or image
 input. The output and manifest were re-rendered byte-for-byte with Qt 6.11.2
-`qmlscene` through its software rasteriser. The generated contract checks all
-twelve images, the manifest, text-free drawing operations and palette input.
+`qmlscene` through its software rasteriser; that remains the byte reference.
+The contract also passed with Ubuntu 26.04's Qt 6.10.2 packages in a local
+unprivileged Ubuntu Base runtime restricted to two CPUs. It compares every
+decoded RGB pixel exactly, independently verifies each file's manifest hash,
+and checks parsed manifest policy, all negative space, shared product
+geometry, text-free drawing operations and palette input. PNG compression
+and metadata need not match between Qt releases; pixels must. The twelve
+renders took 79.7 s on Arch and 78.8 s in that Ubuntu runtime (111.92 s for
+the whole contract). The regeneration budget is 600 s, with the existing
+120 s per-image renderer limit. A hosted workflow run remains unverified.
+[ADR 0057](adr/0057-trust-pool-pixel-verification.md) records the proposed
+cross-runtime verification policy.
 Their terms rest on the root MIT declaration for the generator and palette.
 The new renderer, contract and generated pool have supplemental rows in the
 inventory, dated 2026-11-03; earlier rows and summary counts remain the original

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+from itertools import accumulate
 import importlib.util
 import json
 import math
@@ -14,6 +15,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import zlib
 
 import yaml
@@ -23,6 +25,9 @@ RENDERER = ROOT / "tools/wallpaper/render_trust_pool.py"
 POOL = ROOT / "themes/assets/trust-pool-v3"
 PALETTE = ROOT / "tools/palette/palette.yml"
 IDENTITIES = ("host", "clean", "dev", "services", "dirty", "lab")
+GEOMETRY_KEYS = ("arcInnerRatio", "cutRatio", "ringRadiusRatio", "ringStrokeRatio", "coreRadiusRatio")
+# Twelve renders measured below 80 s on Qt 6.10.2/6.11.2; allow slow CI CPUs.
+RENDER_TIMEOUT_SECONDS = 600
 
 
 def require(condition: bool, message: str) -> None:
@@ -119,57 +124,153 @@ def input_contract(module: object, directory: Path) -> None:
         require(False, "accepted redirected palette directory")
 
 
-def png_samples(path: Path, coordinates: list[tuple[int, int]]) -> list[list[int]]:
-    """Read real capture pixels, including Qt's adaptive PNG scanline filters."""
+def geometry_contract() -> dict[str, float]:
+    """Link the pool to the product source pinned by the geometry B contract."""
+    ratios = []
+    for path in (ROOT / "tools/wallpaper/render_isolation_ring.py", RENDERER):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        scenes = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                  and any(isinstance(target, ast.Name) and target.id == "SCENE"
+                          for target in node.targets)]
+        require(len(scenes) == 1, f"missing or duplicate scene: {path}")
+        scene = ast.literal_eval(scenes[0])
+        values = {}
+        for key in GEOMETRY_KEYS:
+            matches = re.findall(r"(?m)^\s*readonly property real " + key
+                                 + r":\s*([0-9]+(?:\.[0-9]+)?)\s*$", scene)
+            require(len(matches) == 1, f"missing or duplicate geometry ratio: {path}/{key}")
+            values[key] = float(matches[0])
+        ratios.append(values)
+    require(ratios[0] == ratios[1], "pool geometry differs from product symbol")
+    return ratios[0]
+
+
+def png_pixels(path: Path) -> bytes:
+    """Decode the entire opaque capture to RGB, independent of PNG compression."""
     source = path.read_bytes()
-    require(source[:8] == b"\x89PNG\r\n\x1a\n", "invalid PNG capture")
+    require(source[:8] == b"\x89PNG\r\n\x1a\n" and len(source) >= 33, "invalid PNG capture")
     width, height, depth, kind, compression, filtering, interlace = struct.unpack(
         ">IIBBBBB", source[16:29])
     require((width, height, depth, compression, filtering, interlace) == (1672, 941, 8, 0, 0, 0)
             and kind in (2, 6), "unexpected capture geometry or pixel format")
     compressed = bytearray()
     offset = 8
+    kinds = []
     while offset < len(source):
+        require(offset + 12 <= len(source), "truncated PNG chunk")
         length = struct.unpack(">I", source[offset:offset + 4])[0]
-        if source[offset + 4:offset + 8] == b"IDAT":
-            compressed.extend(source[offset + 8:offset + 8 + length])
-        offset += 12 + length
+        end = offset + 8 + length
+        require(end + 4 <= len(source), "truncated PNG payload")
+        chunk = source[offset + 4:end]
+        require(zlib.crc32(chunk) == struct.unpack(">I", source[end:end + 4])[0], "invalid PNG CRC")
+        kinds.append(chunk[:4])
+        if kinds[-1] == b"IDAT":
+            compressed.extend(chunk[4:])
+        offset = end + 4
+    require(kinds[0] == b"IHDR" and kinds.count(b"IHDR") == 1
+            and kinds[-1] == b"IEND" and kinds.count(b"IEND") == 1, "invalid PNG structure")
     data = zlib.decompress(compressed)
     channels = 4 if kind == 6 else 3
     stride = width * channels
     require(len(data) == (stride + 1) * height, "truncated capture pixels")
     previous = bytearray(stride)
-    rows = {}
-    wanted = {y for _, y in coordinates}
-    for y in range(max(wanted) + 1):
+    pixels = bytearray()
+    opaque = b"\xff" * width
+    for y in range(height):
         start = y * (stride + 1)
         method = data[start]
         row = bytearray(data[start + 1:start + 1 + stride])
         require(method in range(5), "invalid PNG filter")
-        for i in range(stride):
-            left = row[i - channels] if i >= channels else 0
-            up = previous[i]
-            corner = previous[i - channels] if i >= channels else 0
-            if method == 1:
-                prediction = left
-            elif method == 2:
-                prediction = up
-            elif method == 3:
-                prediction = (left + up) // 2
-            elif method == 4:
-                estimate = left + up - corner
-                candidates = (left, up, corner)
-                prediction = min(candidates, key=lambda value: abs(estimate - value))
-            else:
-                prediction = 0
-            row[i] = (row[i] + prediction) % 256
-        if y in wanted:
-            rows[y] = row
+        if method == 1:
+            for channel in range(channels):
+                row[channel::channels] = bytes(value % 256 for value in accumulate(row[channel::channels]))
+        elif method == 2:
+            row = bytearray((value + up) % 256 for value, up in zip(row, previous, strict=True))
+        elif method in (3, 4):
+            for i in range(stride):
+                left = row[i - channels] if i >= channels else 0
+                up = previous[i]
+                corner = previous[i - channels] if i >= channels else 0
+                if method == 3:
+                    prediction = (left + up) // 2
+                else:
+                    estimate = left + up - corner
+                    a, b, c = abs(estimate - left), abs(estimate - up), abs(estimate - corner)
+                    prediction = left if a <= b and a <= c else up if b <= c else corner
+                row[i] = (row[i] + prediction) % 256
+        if channels == 4:
+            require(row[3::4] == opaque, f"nonopaque capture: {path}/{y}")
+            rgb = bytearray(width * 3)
+            for channel in range(3):
+                rgb[channel::3] = row[channel::4]
+            pixels.extend(rgb)
+        else:
+            pixels.extend(row)
         previous = row
-    return [list(rows[y][x * channels:x * channels + 3]) for x, y in coordinates]
+    return bytes(pixels)
+
+
+def png_samples(path: Path, coordinates: list[tuple[int, int]]) -> list[list[int]]:
+    pixels = png_pixels(path)
+    return [list(pixels[(y * 1672 + x) * 3:(y * 1672 + x) * 3 + 3]) for x, y in coordinates]
+
+
+def ground_offsets(variant: str, ratios: dict[str, float]) -> list[int]:
+    """Every negative-space pixel, leaving one pixel for surface antialiasing."""
+    cx, radius = ((1672 * 0.5, 941 * 0.33) if variant == "01"
+                  else (1672 * 0.75, 941 * 0.26))
+    core = (radius * ratios["coreRadiusRatio"] + 1) ** 2
+    ring_inner = (radius * (ratios["ringRadiusRatio"] - ratios["ringStrokeRatio"] / 2) - 1) ** 2
+    ring_outer = (radius * (ratios["ringRadiusRatio"] + ratios["ringStrokeRatio"] / 2) + 1) ** 2
+    arc_inner = (radius * ratios["arcInnerRatio"] - 1) ** 2
+    arc_outer = (radius + 1) ** 2
+    cut = radius * ratios["cutRatio"] - 1
+    offsets = []
+    for y in range(941):
+        dy2 = (y + 0.5 - 941 * 0.5) ** 2
+        for x in range(1672):
+            dx = x + 0.5 - cx
+            d2 = dx * dx + dy2
+            if (d2 <= core or ring_inner <= d2 <= ring_outer
+                    or (arc_inner <= d2 <= arc_outer and abs(dx) >= cut)):
+                continue
+            offsets.append((y * 1672 + x) * 3)
+    return offsets
+
+
+def ground_contract(pixels: bytes, offsets: list[int], where: Path) -> None:
+    # Documented #07090d–#151b23 ground, plus 1.1 grain and byte rounding:
+    # two integer levels of margin per channel, including silhouettes.
+    for offset in offsets:
+        if not (5 <= pixels[offset] <= 23 and 7 <= pixels[offset + 1] <= 29
+                and 11 <= pixels[offset + 2] <= 37):
+            y, x = divmod(offset // 3, 1672)
+            require(False, f"non-ground pixel in geometry gap: {where} at ({x}, {y})")
+
+
+def pool_manifest(root: Path, expected: set[Path], output: str | None = None) -> dict:
+    """Pin each file's own compressed bytes; compare policy independently."""
+    require({path.relative_to(root) for path in root.rglob("*") if path.is_file()} == expected,
+            f"pool file set: {root}")
+    doc = yaml.safe_load((root / "manifest.yml").read_text(encoding="utf-8"))
+    files = []
+    for identity in IDENTITIES:
+        for entry in doc["identities"][identity]["wallpapers"]:
+            relative = Path(entry["file"])
+            require(relative in expected and relative.suffix == ".png", "unexpected manifest image")
+            files.append(relative)
+            digest = hashlib.sha256((root / relative).read_bytes()).hexdigest()
+            require(entry["sha256"] == digest, f"manifest hash mismatch: {root / relative}")
+            if output is not None:
+                require(f"{digest}  {relative.as_posix()}" in output, "--print-hashes drift")
+            del entry["sha256"]
+    require(len(files) == 12 and set(files) == expected - {Path("manifest.yml")},
+            "missing or duplicate manifest images")
+    return doc
 
 
 def material_contract(module: object, directory: Path) -> None:
+    ratios = geometry_contract()
     runner = shutil.which("qmlscene", path="/usr/lib/qt6/bin") or shutil.which("qmlscene6")
     require(bool(runner), "Qt 6 qmlscene is required")
     palette = module.load_palette(PALETTE)
@@ -215,15 +316,16 @@ def material_contract(module: object, directory: Path) -> None:
             require(math.isclose(row["cx"], 1672 * cx) and row["cy"] == 941 * 0.5
                     and math.isclose(row["radius"], 941 * radius), "variant scale or placement")
             require([row[key] for key in ("cut", "inner", "ring", "stroke", "core")]
-                    == [0.41, 0.685, 0.555, 0.057, 0.413], "geometry B ratios")
+                    == [ratios[key] for key in ("cutRatio", "arcInnerRatio", "ringRadiusRatio",
+                                              "ringStrokeRatio", "coreRadiusRatio")], "geometry B ratios")
             for x, rgb in row["points"]:
-                if identity == "host" and x < 0.413:
+                if identity == "host" and x < ratios["coreRadiusRatio"]:
                     # At the half-pixel silhouette the neutral material blends
                     # with the slightly blue-black ground through coverage.
-                    coverage = min(1, max(0, 941 * radius * (0.413 - x) + 0.5))
+                    coverage = min(1, max(0, 941 * radius * (ratios["coreRadiusRatio"] - x) + 0.5))
                     require(max(rgb) - min(rgb) <= 8 * (1 - coverage) + 1e-6,
                             "HOST sphere is tinted")
-                if x > 0.413 or identity == "host":
+                if x > ratios["coreRadiusRatio"] or identity == "host":
                     require(max(rgb) - min(rgb) <= 8, "tint escaped sphere or HOST is tinted")
                 if x in (0.43, 0.5, 0.6, 0.68, 1.01):
                     require(max(rgb) <= 35, f"geometry gap filled at {x}")
@@ -253,6 +355,7 @@ def deployment_contract() -> None:
 
 def main() -> int:
     source_contract()
+    ratios = geometry_contract()
     require((POOL / "manifest.yml").is_file(), "manifest missing")
     doc = yaml.safe_load((POOL / "manifest.yml").read_text(encoding="utf-8"))
     domains = yaml.safe_load(PALETTE.read_text(encoding="utf-8"))["domains"]
@@ -261,6 +364,15 @@ def main() -> int:
         require(doc["identities"][identity]["trust_color"] == domains[f"dom_{identity}"],
                 f"palette/manifest drift: {identity}")
     deployment_contract()
+    expected = {Path("manifest.yml")} | {Path(f"images/{identity}/{variant}.png")
+               for identity in IDENTITIES for variant in ("01", "02")}
+    committed_manifest = pool_manifest(POOL, expected)
+    offsets = {variant: ground_offsets(variant, ratios) for variant in ("01", "02")}
+    committed_pixels = {}
+    for relative in sorted(expected - {Path("manifest.yml")}):
+        pixels = png_pixels(POOL / relative)
+        ground_contract(pixels, offsets[relative.stem], relative)
+        committed_pixels[relative] = pixels
     spec = importlib.util.spec_from_file_location("trust_pool_renderer", RENDERER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -268,22 +380,18 @@ def main() -> int:
         directory = Path(temporary)
         input_contract(module, directory)
         material_contract(module, directory)
+        started = time.monotonic()
         result = subprocess.run(["python3", str(RENDERER), "--out", str(directory / "pool"),
-                                 "--print-hashes"], capture_output=True, text=True, timeout=180, check=False)
+                                 "--print-hashes"], capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
+        elapsed = time.monotonic() - started
         require(result.returncode == 0, result.stdout + result.stderr)
         generated = directory / "pool"
-        expected = {Path("manifest.yml")} | {Path(f"images/{identity}/{variant}.png")
-                   for identity in IDENTITIES for variant in ("01", "02")}
-        for root in (POOL, generated):
-            require({path.relative_to(root) for path in root.rglob("*") if path.is_file()} == expected,
-                    f"pool file set: {root}")
-        for relative in sorted(expected):
-            require((POOL / relative).read_bytes() == (generated / relative).read_bytes(),
-                    f"generated output drift: {relative}")
-            if relative.suffix == ".png":
-                digest = hashlib.sha256((generated / relative).read_bytes()).hexdigest()
-                require(f"{digest}  {relative.as_posix()}" in result.stdout, "--print-hashes drift")
-    print("Trust pool v3 generated contract: OK (12 exact renders, materials, palette, deployment)")
+        require(committed_manifest == pool_manifest(generated, expected, result.stdout),
+                "generated manifest policy drift")
+        for relative, committed in committed_pixels.items():
+            require(committed == png_pixels(generated / relative), f"generated pixel drift: {relative}")
+    print(f"Trust pool v3 generated contract: OK (12 pixel-exact renders in {elapsed:.1f}s, "
+          "hashes, negative space, shared geometry, materials, palette, deployment)")
     return 0
 
 

@@ -98,7 +98,7 @@ The palette must be a regular, readable file with unique keys and all six
 explicit domain colours; missing or redirected input is refused.
 
 Geometry B stands on a near-black ground with fine, fixed-seed coordinate
-grain. Its filled arcs are light neutral grey with stone grain and upper-left
+grain (amplitude 1.1 per channel). Its filled arcs are light neutral grey with stone grain and upper-left
 light; its containment ring is thinner grey. The core is a textured sphere
 with a soft identity-coloured rim and dark centre. Colour is clipped to the
 sphere, with no bloom or light outside its edge. HOST's sphere is entirely
@@ -112,9 +112,15 @@ neutral grey, derived by desaturating its palette colour.
 There are no words, labels, crosshairs or corner marks. Qt's software Canvas
 rasteriser captures the materials, with fixed integer noise seeds and no clock
 input. Output is byte-stable for a given Qt release. The generated contract
-compares all twelve renders and the manifest, probes geometry and material
-boundaries, refuses typography and extra drawing primitives, and checks the
-host and guest deployment sources. Its source check rejects identity colours
+compares every decoded RGB pixel of all twelve renders, independently checks
+committed and temporary PNG hashes against their own manifests, and compares
+the parsed manifest policy. Compression and metadata bytes may differ between
+Qt releases; image pixels may not. Every pixel outside the symbol or in its
+core/ring/arc gaps and vertical cuts must remain within the documented ground
+range plus two byte levels for grain and rounding, with a one-pixel margin
+around material edges. The contract also links the geometry ratios directly
+to the product renderer, probes material boundaries, refuses typography and
+extra drawing primitives, and checks host and guest deployment sources. Its source check rejects identity colours
 as strings, RGB triples or packed numeric literals in Python and QML, so a
 constant matching today's palette cannot silently replace palette input.
 

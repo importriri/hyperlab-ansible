@@ -158,6 +158,10 @@ entered the pipeline.
     — accepted operator decision: filled arcs with vertical cuts, top/bottom
     gaps and a small form shared by the shell and identity relief.
 
+57. [`0057-trust-pool-pixel-verification.md`](0057-trust-pool-pixel-verification.md)
+    — proposed: compare every trust pool pixel across Qt releases, retain
+    compressed-file hashes and check all negative space and shared geometry.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
@@ -607,3 +611,14 @@ remain.
     [`privatestack-hyperlab-domains.py`](../../roles/host_desktop_sway/files/privatestack-hyperlab-domains.py)
   - Prerequisites: the operator's decision; installed Nitro visual rechecks
     and the frozen Predator replay remain open.
+
+- [ADR 0057](0057-trust-pool-pixel-verification.md)
+  - Decision: proposed.
+  - Built: built — exact decoded-pixel regeneration, independent manifest
+    hashes, full negative-space checks and product geometry parity.
+  - Activation: default — the discovered contract runs through repository
+    verification and CI; no deployment or authority rule changes.
+  - Source: [`trust_pool_v3_generated_contract.py`](../../tests/trust_pool_v3_generated_contract.py),
+    [`render_trust_pool.py`](../../tools/wallpaper/render_trust_pool.py)
+  - Prerequisites: the operator's decision; a hosted workflow run remains
+    separate from local Arch and Ubuntu runtime evidence.

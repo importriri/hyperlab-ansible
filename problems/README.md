@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
+  compressed PNG equality was runtime-dependent; arithmetic marks and product
+  geometry drift escaped a contract that checked too few image pixels.
 - [`trust-pool-packed-colour-literals.md`](trust-pool-packed-colour-literals.md):
   packed numeric colour constants matched the current palette and escaped
   both the source check and exact rendering; numeric values are now checked.
