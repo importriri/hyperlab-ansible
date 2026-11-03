@@ -3476,3 +3476,36 @@ fallback-bar function bodies with inert actuation. No notification is sent
 when the name is missing, stderr reports it, and completed operations succeed.
 The CLI fixture runs the actual entry point against missing, malformed and
 redirected product inputs and requires exit 2, `hyperlabctl:` and no traceback.
+
+### Display-only CLI input and complete deferral inventory
+
+Identity is now loaded only by help/version presentation. The copied real
+entry point must run `panic status` against an empty isolated runtime directory
+with missing, malformed, duplicate, accented or symlinked identity input.
+For each input, root help, nested panic help and version must still refuse
+with exit 2, the usual diagnostic and no traceback. No emergency stop is
+engaged and no live runtime state is read by these fixtures.
+
+The deferred-surface check requires every inventoried file in ADR 0058 and
+specifically in the open roadmap item. An AST scan inventories old-name
+`Refused(...)` literals from the machine-action bridge. The Bash-reader
+stage compares all four extracted `product_name()` bodies and exercises
+parent-directory symlink refusal for each. Notification fixtures also refuse
+a redirected parent before dispatch.
+
+Each case below was backed up, mutated, checked red, restored byte-for-byte
+and checked green. All seven negative cases failed as predicted; PD-49 was
+checked independently through both structure and notification behavior.
+
+| ID | Mutation | Stage | Observed result |
+| --- | --- | --- | --- |
+| PD-45 | Remove `privatestack-operation.py` from the open roadmap item | deferred inventory | red: operation surface omitted from open roadmap item; restored green |
+| PD-46 | Remove one old-name bridge refusal from ADR 0058 | AST refusal inventory | red: bridge refusal omitted from ADR inventory; restored green |
+| PD-47 | Read identity in `build_parser()` again | CLI entry point | red: missing display input blocks emergency-stop status dispatch; restored green |
+| PD-48 | Change one character in the Waybar reader's document pattern | Bash reader equality | red: product readers differ; restored green |
+| PD-49 | Replace the theme reader's parent loop with leaf-only symlink refusal | Bash equality and notification argv | both red: reader drift and notification accepts redirected parent; both restored green |
+| PD-50 | Make the same leaf-only change in all four Bash readers | Bash parent refusal | equality stays green as expected, runtime refusal red: adapter reader accepts redirected parent; restored green |
+| PD-51 | Add an unlisted old-name `Refused(...)` literal to the machine bridge | AST refusal inventory | red: new old-name bridge refusal outside inventory; restored green |
+
+The display-only behavior supersedes the previous whole-parser refusal;
+ADR 0058 explains why emergency stop cannot depend on cosmetic identity.

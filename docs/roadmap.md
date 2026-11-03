@@ -727,19 +727,30 @@ Measured with the complete security plane active.
 
 ### 14. Release qualification and the Doppiari release
 
-- [x] Sfere display name from one shared repository value: native shell,
-      CLI help/version and notification application names; shared maker byline,
-      deployed-file focus and notification identity; internal names
+- [x] Sfere display name from one shared repository value: QML-owned shell
+      labels/titles and CLI help/version; application names in the host theme,
+      keyboard and fallback-bar notification helpers; shared maker byline,
+      deployed-file focus and notification identity. Bridge-provided reasons,
+      operation terminals, vault dialogs, guest notifications and CLI runtime
+      diagnostics remain in the open migration below. Internal names
       stay unchanged (`tests/product_display_name_contract.py`,
       software-verified)
-- [ ] Finish the visible name migration outside the native shell: Ly's
+- [ ] Finish the visible name migration, including bridge-provided shell text: Ly's
       `hyperlab-hyprland.desktop` and `hyperlab-sway.desktop` session names and
       comments; the `hyperlab-control-center.desktop` application name/keywords
       and GTK title in `privatestack-hyperlab-domains.py`; Waybar's brand and
       drawer tooltip in `waybar.jsonc`; the native Sway bar brand in
       `privatestack-swaybar-status.py`; wallpaper product tooltips in
       `privatestack-theme.sh`; rofi's title, entries and matching dispatch in
-      `privatestack-controls.sh`. These still display the previous name
+      `privatestack-controls.sh`; machine spec refusal reasons in
+      `privatestack-machine-actions.py` shown by the native Machines pane,
+      plus its checkout refusal and command-line refusal prefix;
+      the operation terminal title, transcript header and completion text in
+      `privatestack-operation.py`; the vault confirmation dialog title in
+      `hyperlab-vault-confirm.py`; guest clipboard notification application name
+      and refusal prefix in `hyperlab-clipboard-receive.py`; runtime hardware
+      diagnostic reasons from `hyperlabctl doctor --hardware` in `hardware.py`.
+      These still display the previous name
       ([ADR 0058](adr/0058-visible-name-migration-boundary.md), proposed).
 - [ ] Sfere presentation on Nitro: bar, idle desktop, workspace,
       notification and CLI help; then the frozen Predator replay

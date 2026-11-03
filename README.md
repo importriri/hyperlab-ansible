@@ -108,7 +108,7 @@ The foundation owns:
 
 The interactive target adds:
 
-- Sway, Waybar and the compact Sfere drawer;
+- Sway, Waybar and the compact Waybar drawer;
 - the full Control Center;
 - the host-side Looking Glass/kvmfr transport.
 

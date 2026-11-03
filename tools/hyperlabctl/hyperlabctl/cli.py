@@ -41,8 +41,16 @@ def _product_path() -> Path:
 class _ProductParser(argparse.ArgumentParser):
     def format_help(self) -> str:
         """Keep discovered command help in the current product vocabulary."""
-        return re.sub(r"\b(?:HyperLab|Hyperlab|HYPERLAB)\b", _product_info(_product_path())[0],
-                      super().format_help())
+        name, _byline = _product_info(_product_path())
+        return re.sub(r"\b(?:HyperLab|Hyperlab|HYPERLAB)\b", name,
+                      super().format_help().replace("{product_name}", name))
+
+
+class _ProductVersion(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        name, _byline = _product_info(_product_path())
+        print(f"{name} (hyperlabctl {__version__})")
+        parser.exit()
 
 
 def _normalize_global_options(argv):
@@ -75,14 +83,13 @@ def _normalize_global_options(argv):
 
 
 def build_parser():
-    product_name, _byline = _product_info(_product_path())
     parser = _ProductParser(
         prog="hyperlabctl",
-        description=f"Control surface for {product_name}. Reads the repository "
+        description="Control surface for {product_name}. Reads the repository "
                     "contract and libvirt; owns no policy of its own.",
     )
-    parser.add_argument("--version", action="version",
-                        version=f"{product_name} (hyperlabctl {__version__})")
+    parser.add_argument("--version", action=_ProductVersion, nargs=0,
+                        help="show program's version number and exit")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument("--no-color", dest="color", action="store_false", default=None,
                         help="never emit colour")

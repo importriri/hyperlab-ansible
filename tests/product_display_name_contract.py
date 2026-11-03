@@ -165,20 +165,53 @@ def deferred_surface_contract() -> None:
         "roles/host_desktop_hyprland/files/hyperlab-sway.desktop": "HyperLab Sway",
         "roles/host_desktop_sway/files/hyperlab-control-center.desktop": "HyperLab Control Center",
     }
+    inventory = [*entries,
+        "roles/host_desktop_sway/files/waybar.jsonc",
+        "roles/host_desktop_sway/files/privatestack-swaybar-status.py",
+        "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py",
+        "roles/host_desktop_sway/files/privatestack-theme.sh",
+        "roles/host_desktop_sway/files/privatestack-controls.sh",
+        "roles/host_desktop_common/files/privatestack-machine-actions.py",
+        "roles/host_desktop_common/files/privatestack-operation.py",
+        "roles/host_vault/files/hyperlab-vault-confirm.py",
+        "roles/guest_desktop_hyprland/files/hyperlab-clipboard-receive.py",
+        "tools/hyperlabctl/hyperlabctl/hardware.py",
+    ]
     roadmap = (ROOT / "docs/roadmap.md").read_text()
+    open_items = re.findall(r"(?m)^- \[ \] Finish the visible name migration[^\n]*(?:\n +[^\n]*)*", roadmap)
+    require(len(open_items) == 1, "deferred visible migration is not open exactly once")
+    adr = (ROOT / "docs/adr/0058-visible-name-migration-boundary.md").read_text()
+    for filename in inventory:
+        require((ROOT / filename).is_file(), f"missing deferred surface: {filename}")
+        for label, source in (("open roadmap item", open_items[0]), ("ADR 0058", adr)):
+            require(f"`{Path(filename).name}`" in source,
+                    f"visible legacy surface omitted from {label}: {filename}")
+    bridge = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py"
+    reasons = {
+        "invalid HyperLab spec inventory",
+        "machine maps to more than one HyperLab spec",
+        "managed action has no HyperLab spec",
+        "this managed machine's HyperLab spec is unavailable",
+        "machine metadata and HyperLab spec disagree",
+        "invalid HyperLab checkout",
+    }
+    for node in ast.walk(ast.parse(bridge.read_text())):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != "Refused":
+            continue
+        for argument in node.args:
+            text = "".join(part.value for part in ast.walk(argument)
+                           if isinstance(part, ast.Constant) and isinstance(part.value, str))
+            if OLD.search(text):
+                require(text in reasons, f"new old-name bridge refusal outside inventory: {text}")
+                require(f"`{text}`" in adr, f"bridge refusal omitted from ADR inventory: {text}")
     for filename, expected in entries.items():
         parser = configparser.ConfigParser(interpolation=None, strict=True)
         parser.read_string((ROOT / filename).read_text())
         require(parser["Desktop Entry"]["Name"] == expected, f"undocumented greeter/application name: {filename}")
-        require(Path(filename).name in roadmap, f"visible session/application omitted from roadmap: {filename}")
     source = (SWAY_FILES / "waybar.jsonc").read_text()
     bar = json.loads(re.sub(r"(?m)^\s*//[^\n]*", "", source))["custom/brand"]
     require(bar["format"] == "  HyperLab" and bar["tooltip-format"] == "Open the compact HyperLab drawer",
             "undocumented fallback bar brand/tooltip")
-    for filename in ("waybar.jsonc", "privatestack-swaybar-status.py", "privatestack-hyperlab-domains.py",
-                     "privatestack-theme.sh", "privatestack-controls.sh"):
-        require(filename in roadmap, f"visible legacy surface omitted from roadmap: {filename}")
-    require("- [ ] Finish the visible name migration" in roadmap, "deferred visible migration is not open")
 
 
 DEPLOYED_PRODUCT = "/etc/xdg/quickshell/hyperlab/product.yml"
@@ -189,6 +222,26 @@ def bash_function(source: str, function: str) -> str:
     match = re.search(r"^" + function + r"\(\) \{\n.*?^\}", source, re.M | re.S)
     require(match is not None, f"missing Bash function: {function}")
     return match[0]
+
+
+def bash_reader_contract() -> None:
+    """Keep standalone deployed readers identical and reject redirected parents."""
+    readers = [ROOT / "roles/host_desktop_common/files/privatestack-compositor-adapter.sh",
+               *(SWAY_FILES / name for name in ("privatestack-keyboard.sh", "privatestack-theme.sh",
+                                               "privatestack-waybar.sh"))]
+    bodies = [bash_function(path.read_text(), "product_name") for path in readers]
+    require(all(body == bodies[0] for body in bodies), "Bash product_name readers differ")
+    with tempfile.TemporaryDirectory(prefix="product-parent-") as temporary:
+        directory = Path(temporary)
+        product = directory / "product.yml"
+        product.write_bytes(PRODUCT.read_bytes())
+        parent = directory / "redirected"
+        parent.symlink_to(directory, target_is_directory=True)
+        for path, body in zip(readers, bodies, strict=True):
+            script = body.replace(DEPLOYED_PRODUCT, str(parent / product.name)) + "\nproduct_name"
+            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
+            require(result.returncode != 0 and not result.stdout,
+                    f"{path.name}: symlinked product parent accepted")
 
 
 def notification_contract(name: str) -> None:
@@ -254,6 +307,13 @@ def notification_contract(name: str) -> None:
             require(refused.returncode != 0 and not refused.stdout, f"{filename}: redirected name accepted")
             product.unlink()
             saved.rename(product)
+            parent = directory / "redirected"
+            parent.symlink_to(directory, target_is_directory=True)
+            refused = subprocess.run(["bash", "-c", script.replace(str(product), str(parent / product.name))],
+                                     env=env, capture_output=True, text=True, check=False)
+            require(refused.returncode != 0 and not refused.stdout,
+                    f"{filename}: notification accepted symlinked product parent")
+            parent.unlink()
             product.unlink()
             missing = subprocess.run(["bash", "-c", script], env=env, capture_output=True,
                                      text=True, check=False)
@@ -357,20 +417,35 @@ def cli_refusal_contract() -> None:
         shutil.copytree(ROOT / "tools/hyperlabctl", directory / "hyperlabctl",
                         ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
         path = directory / "product.yml"
-        for raw in (None, "{}", '{"name":"A","name":"B","byline":"by C"}', '{"name":"A","byline":null}'):
+        runtime_dir = directory / "run"
+        runtime_dir.mkdir(mode=0o700)
+        env = {**os.environ, "XDG_RUNTIME_DIR": str(runtime_dir),
+               "XDG_CONFIG_HOME": str(directory / "config")}
+        command = [sys.executable, str(directory / "hyperlabctl/bin/hyperlabctl")]
+
+        def check_dispatch() -> None:
+            # Status reads only this fixture's empty runtime directory, with no
+            # compositor, libvirt or emergency-stop actuation.
+            result = subprocess.run([*command, "panic", "status"], env=env,
+                                    capture_output=True, text=True, check=False)
+            require(result.returncode == 0 and result.stdout.strip() == "No emergency stop is engaged."
+                    and not result.stderr,
+                    f"display input blocked emergency-stop dispatch: {result.stdout}{result.stderr}")
+            for args in (("--version",), ("--help",), ("panic", "--help")):
+                result = subprocess.run([*command, *args], env=env,
+                                        capture_output=True, text=True, check=False)
+                require(result.returncode == 2
+                        and result.stderr.strip() == "hyperlabctl: invalid product name input" and not result.stdout,
+                        f"invalid display input escaped CLI refusal boundary ({args}): {result.stderr}")
+
+        for raw in (None, "{}", '{"name":"A","name":"B","byline":"by C"}',
+                    '{"name":"A","byline":null}', '{"name":"Sfère","byline":"by D"}'):
             if raw is not None:
                 path.write_text(raw)
-            result = subprocess.run([sys.executable, str(directory / "hyperlabctl/bin/hyperlabctl"), "--version"],
-                                    capture_output=True, text=True, check=False)
-            require(result.returncode == 2 and result.stderr.startswith("hyperlabctl:")
-                    and "Traceback" not in result.stderr and not result.stdout,
-                    f"invalid display input escaped CLI refusal boundary: {result.stderr}")
+            check_dispatch()
         path.unlink()
         path.symlink_to(PRODUCT)
-        result = subprocess.run([sys.executable, str(directory / "hyperlabctl/bin/hyperlabctl"), "--version"],
-                                capture_output=True, text=True, check=False)
-        require(result.returncode == 2 and result.stderr.startswith("hyperlabctl:")
-                and "Traceback" not in result.stderr, "redirected input escaped CLI refusal boundary")
+        check_dispatch()
 
 
 def help_source_contract() -> None:
@@ -534,6 +609,7 @@ def main() -> int:
     deployment_contract()
     docs_contract(name)
     deferred_surface_contract()
+    bash_reader_contract()
     notification_contract(name)
     focus_contract()
     operation_contract()

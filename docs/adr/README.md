@@ -164,7 +164,8 @@ entered the pipeline.
 
 58. [`0058-visible-name-migration-boundary.md`](0058-visible-name-migration-boundary.md)
     — proposed: document the remaining visible surfaces and pin accurate session
-    names while their shared-identity migration remains open.
+    names while their shared-identity migration remains open; load cosmetic
+    CLI identity only for help/version so emergency stop stays independent.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
@@ -630,9 +631,11 @@ remain.
 - [ADR 0058](0058-visible-name-migration-boundary.md)
   - Decision: proposed.
   - Built: built — explicit remaining visible-surface inventory, accurate
-    session documentation and narrowly pinned documentation exceptions.
+    session documentation and narrowly pinned documentation exceptions;
+    lazy help/version identity leaves operational dispatch independent.
   - Activation: default — product contract checks documentation and existing
-    desktop/Waybar labels; no session, recovery or authority change.
+    desktop/Waybar labels and operational independence from cosmetic input;
+    no session or authority change.
   - Source: [`product_display_name_contract.py`](../../tests/product_display_name_contract.py).
   - Prerequisites: the operator's decision; the remaining visible migration
     and physical Nitro/Predator gates remain open.

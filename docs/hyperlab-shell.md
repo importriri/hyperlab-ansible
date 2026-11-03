@@ -643,7 +643,7 @@ The historical independent review for this design is recorded in
 `ShellState` turns every focus snapshot from the compositor adapter into one
 numbered request to `privatestack-surface-provenance stream`, a read-only
 bridge to the reviewed resolver (`tools/surface_provenance.py`) in the
-Sfere checkout. The request carries the PID, app id and window id; the
+repository checkout. The request carries the PID, app id and window id; the
 window title never leaves the adapter.
 
 - Only the answer to the latest request is accepted. A different surface
