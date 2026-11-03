@@ -120,7 +120,7 @@ def main() -> int:
     wallpaper = visual["wallpaper"]
 
     require(
-        wallpaper["asset_set"] == "hyperlab-trust-v2",
+        wallpaper["asset_set"] == "trust-pool-v3",
         "wrong canonical visual asset set",
     )
     require(

@@ -16,7 +16,7 @@ choices:
       trust-model: >-
         Near-black HyperLab presentation driven by host-owned trust
         provenance, canonical trust colours and the reviewed
-        hyperlab-trust-v2 wallpaper pool.
+        trust-pool-v3 wallpaper pool.
   lab_marking:
     question: Should the Lab domain use colour only or colour plus shape?
     value: colour_and_shape

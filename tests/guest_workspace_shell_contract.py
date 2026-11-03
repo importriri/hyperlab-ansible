@@ -227,7 +227,7 @@ def check_role() -> None:
         require(profile["theme"] in themes, f"{name} starts on an unknown theme")
         require(re.fullmatch(r"images/[a-z]+/02\.png", profile["wallpaper"]),
                 f"{name} must use a wordless 02 identity wallpaper")
-        require((ROOT / "themes/assets/hyperlab-trust-v2" / profile["wallpaper"]).is_file(),
+        require((ROOT / "themes/assets/trust-pool-v3" / profile["wallpaper"]).is_file(),
                 f"{name} wallpaper is missing from the identity set")
     # Store accounts live only in gaming-clean; dirty never gets a store client.
     require("steam" in profiles["gaming-clean"]["packages"], "gaming-clean lost Steam")

@@ -95,7 +95,7 @@ def main() -> int:
 
     require(
         theme["wallpaper"]["asset_set"]
-        == "hyperlab-trust-v2",
+        == "trust-pool-v3",
         "trust-model references wrong asset set",
     )
 

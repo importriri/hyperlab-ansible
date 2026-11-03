@@ -409,4 +409,8 @@ proof.
 - [`system-panel-did-not-link-the-key-sheet.md`](system-panel-did-not-link-the-key-sheet.md):
   the system panel had no route to the existing complete host key sheet.
 
+- [`trust-pool-pixel-capture.md`](trust-pool-pixel-capture.md):
+  a reproducible Qt pixel-buffer capture was empty despite correct material
+  samples; explicit bounds and real PNG pixel checks now cover the capture.
+
 Author: [importriri](https://github.com/importriri).

@@ -3170,3 +3170,79 @@ later red sample depends on that byte, so only that pixel's red channel
 changes. Recompressing IDAT and recalculating its CRC preserves a valid PNG;
 `python tests/host_identity_asset_contract.py` must reject it. Restore the
 saved PNG and require the same command to pass.
+
+## Generated trust pool v3
+
+`trust_pool_v3_generated_contract.py` regenerates all twelve PNGs and their
+manifest with Qt's software rasteriser, compares exact bytes and checks the
+printed hashes. Its material probe samples the evaluated geometry B scene
+and reads real PNG pixels for HOST and DEV in both variants. It checks
+sphere clipping, neutral HOST, grey arc/ring material, dark gaps and both
+placements. Its AST/source check permits only pixel-buffer painting and
+refuses text/font primitives and palette colour literals. Its input fixtures
+exercise missing domains, duplicate mappings, invalid colours, missing files
+and symlink redirection. Host and guest source paths are parsed as YAML.
+
+For the stage checks below, import the contract and call the named function.
+This is the same code that the full contract runs, without repeating twelve
+renders for a source, input or deployment failure:
+
+```python
+import importlib.util
+from pathlib import Path
+import tempfile
+
+
+def load(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+contract = load(Path("tests/trust_pool_v3_generated_contract.py"), "v3_contract")
+contract.source_contract()                  # source stage
+contract.deployment_contract()              # deployment stage
+renderer = load(contract.RENDERER, "v3_renderer")
+with tempfile.TemporaryDirectory(prefix="trust-pool-mutation-") as temporary:
+    directory = Path(temporary)
+    contract.input_contract(renderer, directory)       # input stage
+    contract.material_contract(renderer, directory)    # material stage
+```
+
+Save copies before each mutation and restore them byte-for-byte afterward.
+The checks below were red, then green after restoration. The full generated
+contract was rerun after restoring V3-01, V3-02 and V3-17; the same named
+stage was rerun for each other source mutation. V3-03 uses
+`python tests/trust_wallpaper_engine_contract.py` for both runs.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| V3-01: insert `ctx.fillText("bad", 0, 0)` before painting | full generated contract | `text or reticle primitive in renderer` |
+| V3-02: change palette `dom_dev` from `#5b8cff` to `#5b8cfe` without regenerating | full generated contract | `palette/manifest drift: dev` |
+| V3-03: set v3 `wallpaper_may_set_trust: true` | engine contract | `trust authority boundary changed` |
+| V3-04: add `ctx.moveTo(0, 0); ctx.lineTo(100, 0)` | source | `unexpected Canvas drawing operations` |
+| V3-05: assign `ctx.font = "12px sans-serif"` | source | `text or reticle primitive in renderer` |
+| V3-06: add an unused `"#5b8cff"` literal to the renderer | source | `hardcoded identity colour: dev` |
+| V3-07: change `cutRatio` from `0.41` to `0.42` | material | `geometry B ratios` |
+| V3-08: disable the HOST desaturation branch | material | `capture differs from material: host/01` |
+| V3-09: replace the sphere's clipped coverage with `1` | material | `capture differs from material: host/01` |
+| V3-10: move variant 02 from 75% to 70% of image width | material | `capture differs from material: host/02` |
+| V3-11: disable duplicate-key rejection in the YAML loader | input | `accepted duplicate domain` |
+| V3-12: check only the palette file's symlink flag, omitting its parents | input | `accepted redirected palette directory` |
+| V3-13: revert the guest asset source to v2 | deployment | `guest deploys old pool` |
+| V3-14: revert the host wallpaper copy source to v2 | deployment | `host deploys old pool` |
+| V3-15: revert the theme asset set to v2 | deployment | `v3 not selected: themes/trust-model/theme.yml` |
+| V3-16: omit the explicit dirty rectangle from `putImageData`, then render HOST 01 | material | `capture differs from material: host/01` |
+| V3-17: alter the last pixel of LAB 02, preserving a valid PNG, and update its manifest digest | full generated contract | `generated output drift: images/lab/02.png` |
+| V3-18: add an unused Python `[91, 140, 255]` colour triple | source | `hardcoded identity RGB: dev` |
+
+V3-16 saves and restores both the renderer and the captured PNG. With Qt
+6.11.2 the shortened call produced a blank capture despite correct material
+samples, so this case checks the actual saved image.
+
+V3-17 decompresses IDAT, increments the last scanline's final pixel's filtered
+red byte modulo 256, recompresses IDAT and recalculates its CRC. Updating the
+manifest hash deliberately makes a hash-only check insufficient: only the
+comparison against freshly generated output detects the changed artwork.
+Both the PNG and manifest are restored before the green run.

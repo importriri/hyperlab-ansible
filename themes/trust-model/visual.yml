@@ -59,7 +59,7 @@ quickshell:
   telemetry_uses_trust_colors: false
 
 wallpaper:
-  asset_set: hyperlab-trust-v2
+  asset_set: trust-pool-v3
   geometry: "1672x941"
   fit: fill
   rotation: true

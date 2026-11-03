@@ -2,7 +2,7 @@
 
 The shell owns every word on screen. A HyperLab wallpaper is a **ground**,
 not a poster: it carries depth and identity without carrying text, badges or
-a second logo, and it never encodes trust.
+a second logo, and it never establishes trust.
 
 ## The product identity: "Isolation Ring"
 
@@ -77,17 +77,57 @@ name, no guest content, no provenance.
 installed and keeps the historical rotation offset only as a fallback for an
 installation that does not have it.
 
-## The trust pool (unchanged, opt-in)
+## The trust pool
 
-Trust wallpapers are selected by the host's explicit trust identity through
-the reviewed manifest, and remain an opt-in presentation policy that
-establishes nothing. The `hyperlab-trust-v2` pool predates this shell and
-prints "HYPERLAB", "HOST" and "TRUST" typography into regions the product now
-occupies; it stays reviewed material, but it is not the platform identity and
-it is not used on the lock surface.
+`trust-pool-v3` is the generated, text-free pool used by Trust Model and the
+managed guest profiles. Trust wallpapers are selected by the host's explicit
+trust identity through the reviewed manifest. They remain opt-in presentation
+that establishes nothing: the shell's host-owned indicators are the only trust
+signal. The product and lock backgrounds remain their neutral static family.
 
-A trust variant may carry **one** quiet tint of its identity in the light —
-never a colour field, never a badge.
+```sh
+python3 tools/wallpaper/render_trust_pool.py --print-hashes
+python3 tests/trust_pool_v3_generated_contract.py
+```
+
+The renderer writes twelve 1672×941 PNGs and their SHA-256 manifest. The schema,
+six identities, two variants each, 30-minute rotation within the current
+identity and authority fields are unchanged from v2. Every `trust_color` is
+read from `tools/palette/palette.yml` (`domains`), never inferred from artwork.
+The palette must be a regular, readable file with unique keys and all six
+explicit domain colours; missing or redirected input is refused.
+
+Geometry B stands on a near-black ground with fine, fixed-seed coordinate
+grain. Its filled arcs are light neutral grey with stone grain and upper-left
+light; its containment ring is thinner grey. The core is a textured sphere
+with a soft identity-coloured rim and dark centre. Colour is clipped to the
+sphere, with no bloom or light outside its edge. HOST's sphere is entirely
+neutral grey, derived by desaturating its palette colour.
+
+| Variant | Placement | Outer radius | Treatment |
+| --- | --- | --- | --- |
+| `01` | centre | 33% of image height | visible arc height about 60% |
+| `02` | right third (75% of width) | 26% of image height | quieter, at 66% material strength |
+
+There are no words, labels, crosshairs or corner marks. Qt's software Canvas
+rasteriser captures the materials, with fixed integer noise seeds and no clock
+input. Output is byte-stable for a given Qt release. The generated contract
+compares all twelve renders and the manifest, probes geometry and material
+boundaries, refuses typography and extra drawing primitives, and checks the
+host and guest deployment sources.
+
+`hyperlab-trust-v2` stays unchanged as reviewed rollback material, just as
+Contained Planes does for the product family. Its typography predates the
+current shell. It is no longer deployed by default. Rolling back means
+reviewing the theme/visual asset-set references, guest identity asset source,
+host palette copy source and coordinator default together; the planner still
+validates v2 under the same authority rules. V2's unresolved asset provenance
+is unchanged; see [the licence record](third-party-licences.md).
+
+Software verification does not establish physical acceptance. On Nitro, inspect
+one guest per identity at 1920×1080: distinguish the sphere tint, check both
+variants for absent text, and confirm only the host shell claims trust. Keep
+that hardware gate and Predator replay open.
 
 ## Acceptance
 

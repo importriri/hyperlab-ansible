@@ -67,7 +67,7 @@
 - name: Install the reviewed trust-model wallpaper pool
   ansible.builtin.copy:
     src: >-
-      {{ playbook_dir | dirname }}/themes/assets/hyperlab-trust-v2/images/{{ item.0 }}/{{ item.1 }}.png
+      {{ playbook_dir | dirname }}/themes/assets/trust-pool-v3/images/{{ item.0 }}/{{ item.1 }}.png
     dest: >-
       /usr/share/hyperlab/themes/trust-model/wallpapers/{{ item.0 }}/{{ item.1 }}.png
     owner: root

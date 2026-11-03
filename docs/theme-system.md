@@ -102,9 +102,12 @@ indication.
 
 The keyboard remains an output, never a source of security state.
 
-The trust wallpaper set is `hyperlab-symbols-v1`, but exact symbol-to-trust
-assignment remains pending visual review. Filenames and image colours are
-explicitly forbidden from becoming trust authority.
+The trust wallpaper set is `trust-pool-v3`: twelve wordless images generated
+by `tools/wallpaper/render_trust_pool.py` from geometry B and the canonical
+palette domains. The manifest explicitly maps each pair to its identity.
+Filenames and image colours never become trust authority. `hyperlab-trust-v2`
+stays unchanged as reviewed rollback material and is no longer deployed by
+default; the unrelated `hyperlab-symbols-v1` semantic assignment stays pending.
 
 The product identity is separate and neutral: the generated "Isolation Ring"
 family is the default product wallpaper and the lock surface asset, and it
@@ -138,7 +141,7 @@ the theme. It exists only for visual review before runtime deployment.
 `tools/trust_wallpaper_engine.py` is a pure presentation planner.
 
 It receives an already host-resolved trust identity and the reviewed
-`hyperlab-trust-v2` pool and returns the wallpaper/RGB presentation plan.
+`trust-pool-v3` pool and returns the wallpaper/RGB presentation plan.
 
 It does not discover trust itself and it performs no compositor, hardware or
 privileged mutation.

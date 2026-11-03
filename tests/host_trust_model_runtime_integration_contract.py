@@ -44,14 +44,14 @@ def main() -> int:
     )
     require(
         theme["wallpaper"]["asset_set"]
-        == "hyperlab-trust-v2",
+        == "trust-pool-v3",
         "wrong reviewed wallpaper pool",
     )
 
     wallpaper = visual["wallpaper"]
 
     require(
-        wallpaper["asset_set"] == "hyperlab-trust-v2",
+        wallpaper["asset_set"] == "trust-pool-v3",
         "visual references wrong wallpaper pool",
     )
     require(
@@ -119,7 +119,7 @@ def main() -> int:
         "Install the rendered trust-model runtime palette",
         "Install the reviewed trust-model wallpaper pool",
         "themes/trust-model/rendered",
-        "themes/assets/hyperlab-trust-v2/images",
+        "themes/assets/trust-pool-v3/images",
     ):
         require(
             marker in tasks,
@@ -210,7 +210,7 @@ def main() -> int:
     pool = (
         ROOT
         / "themes/assets/"
-        "hyperlab-trust-v2/images"
+        "trust-pool-v3/images"
     )
 
     for identity in expected:

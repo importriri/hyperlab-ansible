@@ -475,7 +475,7 @@ def main() -> int:
     require(
         doc["wallpaper"] == {
             "policy": "trust-aware",
-            "asset_set": "hyperlab-trust-v2",
+            "asset_set": "trust-pool-v3",
         },
         "trust-model wallpaper policy changed",
     )

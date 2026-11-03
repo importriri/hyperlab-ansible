@@ -12,7 +12,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 POOL = ROOT / "themes/assets/hyperlab-trust-v2"
-MANIFEST = POOL / "manifest.yml"
 
 COLORS = {
     "host": "#8b949e",
@@ -49,16 +48,17 @@ def size(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", data[16:24])
 
 
-def main() -> int:
-    require(MANIFEST.is_file(), "manifest missing")
+def check_pool(pool: Path, pool_id: str, colours: dict[str, str]) -> None:
+    manifest = pool / "manifest.yml"
+    require(manifest.is_file(), "manifest missing")
 
     doc = yaml.safe_load(
-        MANIFEST.read_text(encoding="utf-8")
+        manifest.read_text(encoding="utf-8")
     )
 
     require(doc["version"] == 2, "version changed")
     require(
-        doc["id"] == "hyperlab-trust-v2",
+        doc["id"] == pool_id,
         "pool id changed",
     )
     require(
@@ -90,13 +90,13 @@ def main() -> int:
     identities = doc["identities"]
 
     require(
-        set(identities) == set(COLORS),
+        set(identities) == set(colours),
         "trust identity set changed",
     )
 
     count = 0
 
-    for identity, colour in COLORS.items():
+    for identity, colour in colours.items():
         entry = identities[identity]
 
         require(
@@ -130,7 +130,7 @@ def main() -> int:
         )
 
         for item in entry["wallpapers"]:
-            wallpaper = POOL / item["file"]
+            wallpaper = pool / item["file"]
 
             require(
                 wallpaper.is_file(),
@@ -152,7 +152,7 @@ def main() -> int:
     require(count == 12, "total pool size changed")
 
     filesystem = list(
-        (POOL / "images").glob("*/*.png")
+        (pool / "images").glob("*/*.png")
     )
 
     require(
@@ -160,9 +160,13 @@ def main() -> int:
         "unexpected wallpaper filesystem count",
     )
 
-    print(
-        "HyperLab candidate rotating trust wallpaper pool contract: OK"
-    )
+
+def main() -> int:
+    check_pool(POOL, "hyperlab-trust-v2", COLORS)
+    domains = yaml.safe_load((ROOT / "tools/palette/palette.yml").read_text())["domains"]
+    colours = {identity: domains[f"dom_{identity}"] for identity in COLORS}
+    check_pool(ROOT / "themes/assets/trust-pool-v3", "trust-pool-v3", colours)
+    print("HyperLab candidate rotating trust wallpaper pools contract: OK (v2 rollback, v3)")
 
     return 0
 

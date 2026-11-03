@@ -63,12 +63,12 @@ guest_desktop_hyprland_quickshell_series: "0.3"
 # from the same rice instead of being riced again by hand.
 guest_desktop_hyprland_profile: dev
 
-# Wallpapers come from the reviewed product identity set in this repository
+# Wallpapers come from the generated trust pool in this repository
 # and are verified against its manifest digest before they are installed.
-# Only the 02 variants are used: they carry no words, so the guest paints no
-# trust label of its own.
+# The quiet, right-third 02 variants leave room for the desktop shell.
+# Neither variant carries words, so the guest paints no trust label of its own.
 guest_desktop_hyprland_identity_assets: >-
-  {{ guest_repository_root }}/themes/assets/hyperlab-trust-v2
+  {{ guest_repository_root }}/themes/assets/trust-pool-v3
 
 guest_desktop_hyprland_profiles:
   dev:

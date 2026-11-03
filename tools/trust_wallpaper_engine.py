@@ -100,7 +100,7 @@ def load_pool(root: Path) -> dict[str, Any]:
 
     require(doc.get("version") == 2, "pool version changed")
     require(
-        doc.get("id") == "hyperlab-trust-v2",
+        doc.get("id") in ("hyperlab-trust-v2", "trust-pool-v3"),
         "unexpected pool id",
     )
 
@@ -372,7 +372,7 @@ def parser() -> argparse.ArgumentParser:
         "--pool-root",
         type=Path,
         required=True,
-        help="Root containing hyperlab-trust-v2 manifest.yml",
+        help="Root containing a reviewed trust wallpaper manifest.yml",
     )
 
     sub = result.add_subparsers(

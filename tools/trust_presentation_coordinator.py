@@ -371,7 +371,7 @@ def main() -> int:
         if args.pool_root is not None
         else (
             args.repo
-            / "themes/assets/hyperlab-trust-v2"
+            / "themes/assets/trust-pool-v3"
         )
     )
 

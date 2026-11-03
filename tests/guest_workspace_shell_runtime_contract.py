@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SHELL = ROOT / "roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace"
 STUBS = ROOT / "tests/quickshell_stubs"
-WALLPAPER = ROOT / "themes/assets/hyperlab-trust-v2/images/dev/02.png"
+WALLPAPER = ROOT / "themes/assets/trust-pool-v3/images/dev/02.png"
 OUT = os.environ.get("HYPERLAB_RENDER_OUT")
 
 MODEL = {

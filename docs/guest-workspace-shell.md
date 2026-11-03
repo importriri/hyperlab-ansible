@@ -27,7 +27,7 @@ never installs a store client. The VM specs `arch-gaming-clean` and
 `arch-gaming-dirty` place them on their networks, take the GPU at their own
 class of the handoff ladder and do not share the clipboard.
 
-Wallpapers are the wordless `02` images of the reviewed `hyperlab-trust-v2`
+Wallpapers are the wordless `02` images of the reviewed `trust-pool-v3`
 identity set in this repository. The role checks each one against the
 manifest digest before installing it. A guest carries only its own
 profile's identity theme: the identity of another kind of Machine is never

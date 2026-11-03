@@ -31,7 +31,7 @@ ENGINE = (
 
 POOL = (
     ROOT
-    / "themes/assets/hyperlab-trust-v2"
+    / "themes/assets/trust-pool-v3"
 )
 
 

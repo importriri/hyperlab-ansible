@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 ENGINE = ROOT / "tools/trust_wallpaper_engine.py"
-POOL = ROOT / "themes/assets/hyperlab-trust-v2"
+POOL = ROOT / "themes/assets/trust-pool-v3"
 
 TRUST_COLORS = {
     "host": "#8b949e",
@@ -82,6 +82,13 @@ def main() -> int:
         "validator did not report PASS",
     )
 
+    rollback = subprocess.run(
+        ["python3", str(ENGINE), "--pool-root",
+         str(ROOT / "themes/assets/hyperlab-trust-v2"), "validate"],
+        check=False, capture_output=True, text=True,
+    )
+    require(rollback.returncode == 0, "reviewed v2 rollback no longer validates")
+
     # Two variants at 30-minute boundaries:
     # slot 0 -> 01
     # slot 1 -> 02
@@ -101,7 +108,7 @@ def main() -> int:
             payload = plan(trust, epoch)
 
             require(
-                payload["schema"] == 1,
+                payload["schema"] == 1 and payload["pool_id"] == "trust-pool-v3",
                 "planner schema changed",
             )
 

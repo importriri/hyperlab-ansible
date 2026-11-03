@@ -474,7 +474,7 @@
         | map(attribute='sha256') | first)
     fail_msg: >-
       {{ item.item.value.wallpaper }} does not match the digest in the
-      hyperlab-trust-v2 manifest.
+      trust-pool-v3 manifest.
     quiet: true
   vars:
     guest_desktop_hyprland_identity_manifest: >-

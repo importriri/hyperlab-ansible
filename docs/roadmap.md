@@ -641,6 +641,13 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 11. Visual provenance and trust model
 
+- [x] generated, text-free `trust-pool-v3` on geometry B: twelve 1672×941
+      wallpapers, palette-owned sphere tints, exact render/hash and authority
+      contracts; v2 retained as rollback (software-verified)
+- [ ] trust pool v3 accepted on Nitro at 1920×1080 for every identity:
+      distinguishable sphere tints, no text, host shell as the only trust signal
+- [ ] trust pool v3 Predator replay
+
 - [x] finish the host-owned visual provenance and trust model: every focused
       surface named by the host, including fullscreen guests
       ([ADR 0039](adr/0039-host-frame-around-fullscreen-guests.md): a host
