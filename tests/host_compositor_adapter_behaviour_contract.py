@@ -111,14 +111,19 @@ def heartbeat_and_output(base_env: dict, bindir: Path) -> None:
 
 
 def owner_bound_focus(base_env: dict, bindir: Path, scratch: Path) -> None:
-    write_executable(bindir / "hyperlabctl",
-                     f"#!/bin/sh\nprintf '%s\\n' '{PRODUCT_NAME} (hyperlabctl fixture)'\n")
+    # Model an apply from a newer tree than the operator's CLI checkout.
+    write_executable(bindir / "hyperlabctl", "#!/bin/sh\nprintf '%s\\n' 'hyperlabctl 0.1.0'\n")
+    product = scratch / "product.yml"
+    product.write_bytes((ROOT / "tools/product.yml").read_bytes())
+    staged_adapter = scratch / "adapter.sh"
+    staged_adapter.write_text(ADAPTER.read_text().replace(
+        "/etc/xdg/quickshell/hyperlab/product.yml", str(product)))
     fake_hyprland(bindir)
     fake_sway(bindir, '"eDP-1"')
     caller = scratch / "caller.sh"
     write_executable(caller, f"""#!/bin/bash
 export FAKE_OWNER=$$
-HYPERLAB_COMPOSITOR_BACKEND=$1 bash {ADAPTER} shell-window-focus
+HYPERLAB_COMPOSITOR_BACKEND=$1 bash {staged_adapter} shell-window-focus
 """)
     for backend, expected, foreign in (
         ("hyprland", 'hl.dsp.focus({ window = "stableid:18000abc" })', "stableid:1 "),
@@ -138,13 +143,27 @@ HYPERLAB_COMPOSITOR_BACKEND=$1 bash {ADAPTER} shell-window-focus
 
     # Called from a process that owns no workspace window: nothing is focused.
     result = subprocess.run(
-        ["bash", str(ADAPTER), "shell-window-focus"],
+        ["bash", str(staged_adapter), "shell-window-focus"],
         capture_output=True, text=True,
         env=dict(base_env, HYPERLAB_COMPOSITOR_BACKEND="sway", FAKE_OWNER="1"),
         timeout=20, check=False,
     )
     check(result.returncode != 0 and "focus" not in result.stdout,
           "shell-window-focus focused something for a process that owns nothing")
+
+    for raw in ("{}", '{"name":"A","name":"B","byline":"by C"}',
+                '{"name":"A","byline":"by B","byline":"by C"}'):
+        product.write_text(raw)
+        for backend in ("sway", "hyprland"):
+            result = subprocess.run(["bash", str(caller), backend], env=base_env,
+                                    capture_output=True, text=True, timeout=10, check=False)
+            check(result.returncode != 0 and not result.stdout,
+                  "%s: focus dispatched with invalid identity" % backend)
+    product.unlink()
+    product.symlink_to(ROOT / "tools/product.yml")
+    result = subprocess.run(["bash", str(caller), "sway"], env=base_env,
+                            capture_output=True, text=True, timeout=10, check=False)
+    check(result.returncode != 0 and not result.stdout, "focus accepted redirected identity")
 
 
 def lock_does_not_wait(base_env: dict, bindir: Path, scratch: Path) -> None:

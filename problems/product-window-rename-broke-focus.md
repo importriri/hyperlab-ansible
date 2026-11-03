@@ -18,16 +18,16 @@ action transport, so they did not execute that selector.
 
 ## Fix
 
-Only the focus route reads the shared product name from the CLI banner and
-builds its title prefix from that value. The process id check, exactly-one
+Only the focus route reads the deployed product file used by QML and builds
+its title prefix from that value. It does not depend on the CLI checkout. The process id check, exactly-one
 match requirement and validated compositor window identifier remain intact.
-A missing or invalid banner refuses focus without dispatching a command.
+A missing, redirected or invalid product file refuses focus without dispatch.
 
 ## Regression proof
 
 `tests/host_compositor_adapter_behaviour_contract.py` uses the shared name
 for its window fixtures and exercises the real adapter on both backends.
 `tests/product_display_name_contract.py` includes those focus scenarios and
-refusal when the banner cannot be read. Restoring the old prefix fails the
+refusal when the deployed input cannot be read, even with a stale CLI checkout. Restoring the old prefix fails the
 new-name focus cases, while restoring the dynamic prefix passes. A similarly
 titled window owned by another process still cannot be focused.

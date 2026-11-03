@@ -26,3 +26,5 @@ arguments, identifiers and execution remain unchanged.
 and every discovered child, formats their help, and rejects the old display
 name. Removing the shared help formatting makes that check fail. The same
 contract checks the version banner, QML presentation and notification argv.
+An AST guard also rejects new old-name help/description literals, with only
+the two existing literals enumerated, so formatting cannot hide source drift.

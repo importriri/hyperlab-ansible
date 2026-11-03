@@ -37,13 +37,32 @@ readonly compositor_adapter=${HYPERLAB_COMPOSITOR_ADAPTER:-/usr/local/bin/privat
 
 mkdir -p "${config_dir}" "${state_dir}" "${personal_wallpaper_root}"
 
+product_name() {
+    local path=/etc/xdg/quickshell/hyperlab/product.yml
+    local parent=${path} raw pattern
+    # Reject redirected parents as well as a redirected leaf.
+    while [[ ${parent} != / ]]; do
+        [[ ! -L ${parent} ]] || return 1
+        parent=${parent%/*}
+        [[ -n ${parent} ]] || parent=/
+    done
+    [[ -f ${path} && -r ${path} ]] || return 1
+    # NUL terminates read successfully and is forbidden. EOF keeps every
+    # newline, letting the pattern reject more than one document line.
+    if IFS= read -r -d '' raw <"${path}"; then
+        return 1
+    fi
+    pattern='^[[:blank:]]*\{[[:blank:]]*"name"[[:blank:]]*:[[:blank:]]*"([A-Za-z][A-Za-z0-9]*( [A-Za-z0-9]+)*)"[[:blank:]]*,[[:blank:]]*"byline"[[:blank:]]*:[[:blank:]]*"([A-Za-z][A-Za-z0-9]*( [A-Za-z0-9]+)*)"[[:blank:]]*\}[[:blank:]]*'
+    pattern+=$'(\r?\n)?$'
+    [[ ${raw} =~ ${pattern} ]] || return 1
+    [[ ${#BASH_REMATCH[1]} -le 64 && ${#BASH_REMATCH[3]} -le 64 ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}" || return 1
+}
+
 notify() {
     command -v notify-send >/dev/null 2>&1 || return 0
     local product_name
-    product_name=$(hyperlabctl --version) || return 1
-    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
-    product_name=${product_name% (hyperlabctl *)}
-    [[ -n ${product_name} ]] || return 1
+    product_name=$(product_name) || return 1
     notify-send --app-name "${product_name}" "${product_name}" "$1" || return 1
 }
 
@@ -233,7 +252,8 @@ set_theme() {
     if [[ ${defer_reload} != 1 ]]; then
         "${compositor_adapter}" reload >/dev/null
     fi
-    notify "Theme: ${theme^^}"
+    notify "Theme: ${theme^^}" ||
+        printf 'notification withheld: product name unavailable or delivery failed\n' >&2
 }
 
 cycle_theme() {
@@ -255,9 +275,11 @@ set_mode() {
     signal_wallpaper_mode
     signal_controls
     if [[ ${mode} == personal ]] && [[ ! -r $(personal_wallpaper_path "${theme}" "${index}") ]]; then
-        notify "PERSONAL mode is active but its local asset is missing; using the ${theme^^} public fallback."
+        notify "PERSONAL mode is active but its local asset is missing; using the ${theme^^} public fallback." ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
     else
-        notify "Wallpaper: ${mode^^}"
+        notify "Wallpaper: ${mode^^}" ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
     fi
 }
 
@@ -317,9 +339,11 @@ set_rgb_mode() {
     write_atomic "${rgb_mode_file}" "${mode}"
     signal_quickshell_appearance
     if [[ ${mode} != off && $(current_theme) != trust-model ]]; then
-        notify "Keyboard lighting: ${mode^^} (applies with the trust-model theme)"
+        notify "Keyboard lighting: ${mode^^} (applies with the trust-model theme)" ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
     else
-        notify "Keyboard lighting: ${mode^^}"
+        notify "Keyboard lighting: ${mode^^}" ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
     fi
 }
 
@@ -338,7 +362,8 @@ next_wallpaper() {
     index=$(( ($(read_index "${theme}") + 1) % count ))
     set_desktop_wallpaper "${theme}" "${index}"
     [[ ${quiet} == --quiet ]] ||
-        notify "Wallpaper ${theme^^}/$(current_mode) $(( index + 1 ))/${count}"
+        notify "Wallpaper ${theme^^}/$(current_mode) $(( index + 1 ))/${count}" ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
 }
 
 lock_image() {

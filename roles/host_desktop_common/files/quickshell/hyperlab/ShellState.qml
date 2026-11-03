@@ -31,14 +31,16 @@ import QtQuick
 Scope {
     id: state
 
-    // The same single-field JSON subset of YAML is read by the CLI.
+    // The same small JSON subset of YAML is read by the CLI and helpers.
     // An unavailable or invalid input never supplies a fallback identity.
-    readonly property string productName: state.parseProductName(productFile.text())
-    readonly property string productByline: "by Doppiari"
+    readonly property var productInfo: state.parseProduct(productFile.text())
+    readonly property string productName: state.productInfo ? state.productInfo.name : ""
+    readonly property string productByline: state.productInfo ? state.productInfo.byline : ""
 
-    function parseProductName(raw) {
-        const match = /^\s*\{\s*"name"\s*:\s*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"\s*\}\s*$/.exec(raw);
-        return match && match[1].length <= 64 ? match[1] : "";
+    function parseProduct(raw) {
+        const match = /^[ \t]*\{[ \t]*"name"[ \t]*:[ \t]*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"[ \t]*,[ \t]*"byline"[ \t]*:[ \t]*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"[ \t]*\}[ \t]*(?:\r?\n)?$/.exec(raw);
+        return match && match[1].length <= 64 && match[2].length <= 64
+            ? {"name": match[1], "byline": match[2]} : null;
     }
 
     FileView {

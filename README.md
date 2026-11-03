@@ -73,8 +73,8 @@ convergence measures. It imports `lab.yml`, then `host-desktop-hyprland.yml`
 with the managed session lifecycle switched on for that import only, then
 `host-sleep-guard.yml`. It copies no role.
 
-The Hyprland step stages files: the reviewed Hyprland configuration, the
-managed Hyprland and Sway sessions in Ly's private catalog, their
+The Hyprland step stages files: the reviewed Hyprland configuration,
+the HyperLab Hyprland and HyperLab Sway sessions in Ly's private catalog, their
 user session targets and the Quickshell shell bound to the Hyprland session.
 It starts no compositor or display manager, selects no Ly default and leaves
 the global shell replacement gates closed. Sway, Waybar and the GTK surfaces

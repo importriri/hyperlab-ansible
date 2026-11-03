@@ -3425,5 +3425,54 @@ invariants were red; no unexpected green survivor occurred.
 The complete product contract passed after restoring all source mutations.
 Input fixtures also refuse missing, unreadable, malformed, duplicate and
 redirected CLI input, missing/malformed/duplicate native input, and failed
-or malformed CLI banners before notification or focus dispatch. The
-physical Nitro and Predator presentation gates remain separate.
+or malformed CLI banners before notification or focus dispatch in that
+initial implementation. The revised deployed-file cases below replace the
+banner transport; PD-15 then referred to the QML-local byline. The physical Nitro and Predator presentation gates remain separate.
+
+
+### Shared deployed identity and presentation regressions
+
+The deployed file now carries both `name` and `byline`. Focus and notification
+helpers validate it directly; CLI banners use only their own checkout. The
+old PD-21 banner-guard mutation is superseded by PD-40's input-guard mutation.
+The byline change that was rejected by PD-15 is now a valid shared-input
+control (PD-41); consumer drift is rejected by PD-32. ADR 0058 explains the
+narrow installed-session documentation exception and the deferred visible
+surfaces, which remain open in the release roadmap.
+
+Each case below was run separately against the revised contract, with exact
+source bytes saved before mutation and restored before the green run. All
+eighteen negative mutation cases were red and all restorations green. The two
+valid shared-value changes stayed green across their listed consumers.
+
+| ID | Mutation | Stage | Observed result |
+| --- | --- | --- | --- |
+| PD-25 | Read focus identity from `hyperlabctl --version` again | focus | red: stale CLI cannot select the owner's window on either backend; restored green |
+| PD-26 | Read theme notification identity from the CLI banner again | notification | red: wrong application name with a stale CLI; restored green |
+| PD-27 | Return 1 when the keyboard notification is withheld | operation | red: saved layout incorrectly reports failure; restored green |
+| PD-28 | Return 1 when the theme notification is withheld | operation | red: successful theme body incorrectly reports failure; restored green |
+| PD-29 | Return 1 after restoring the fallback bar when its notification is withheld | operation | red: restored fallback incorrectly reports failure; restored green |
+| PD-30 | Load product identity during CLI module import | CLI entry point | red: missing product input escapes the normal exit-2 refusal boundary; restored green |
+| PD-31 | Add an unlisted old-name command help literal | AST help source | red: new old-name help source; restored green |
+| PD-32 | Hardcode the QML byline while changing only the shared byline | native FileView and shell | red: native byline differs from the shared input; restored green |
+| PD-33 | Add a desktop label containing `"Hyper" + "Lab"` | QML tokens, then shell | tokens green as expected; evaluated desktop scan red; restored green |
+| PD-34 | Split the old name in the bar's `Accessible.name` | QML tokens, then shell | tokens green as expected; evaluated accessibility scan red; restored green |
+| PD-35 | Split the old name in the launcher's `Accessible.name` | QML tokens, then shell | tokens green as expected; evaluated accessibility scan red; restored green |
+| PD-36 | Replace the README's installed session names with generic names | docs | red: README does not name installed sessions; restored green |
+| PD-37 | Mark the remaining visible-surface migration complete | deferred inventory | red: visible migration is not open; restored green |
+| PD-38 | Change a desktop entry's `Name=` without updating its inventory | parsed desktop entries | red: undocumented session name; restored green |
+| PD-39 | Change the Waybar drawer tooltip without updating its inventory | parsed JSONC | red: undocumented fallback brand/tooltip; restored green |
+| PD-40 | Bypass the notification reader's document-pattern guard | notification | red: invalid product input causes a notification; restored green |
+| PD-41 | Change only the canonical byline to `by Example` | CLI, native FileView, shell, notification, focus | green control: all consumers accept the shared byline; restored green |
+| PD-42 | Change only the canonical name to `Example Name` | CLI, native FileView, shell, notification, focus | green control: all consumers use the changed value; restored green |
+| PD-43 | Bypass the keyboard helper with a direct old-name notification | notification source and argv | red: old notification product string; restored green |
+| PD-44 | Remove the deployed reader's symlink refusal | notification | red: redirected name accepted; restored green |
+
+The notification fixtures cover stale, failing and unavailable CLI stubs plus
+missing, nonregular, redirected, malformed and duplicate product documents.
+They also reject overlong bylines, NUL bytes and extra document lines. The
+operation fixtures execute the real keyboard script and the real theme and
+fallback-bar function bodies with inert actuation. No notification is sent
+when the name is missing, stderr reports it, and completed operations succeed.
+The CLI fixture runs the actual entry point against missing, malformed and
+redirected product inputs and requires exit 2, `hyperlabctl:` and no traceback.

@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`product-identity-split-between-checkouts.md`](product-identity-split-between-checkouts.md):
+  deployed QML and the CLI checkout could disagree about the display name;
+  focus/notifications now use deployed data and cosmetic failures stay cosmetic.
 - [`product-help-kept-discovered-names.md`](product-help-kept-discovered-names.md):
   changing the root CLI banner left the previous product name in discovered
   command help and nested options; shared help formatting now covers both.

@@ -116,16 +116,36 @@ apply_layout() {
     if [[ ${2:-} != --quiet ]] &&
        command -v notify-send >/dev/null 2>&1
     then
-        notify_layout "$(layout_name "${layout}")" || return 1
+        notify_layout "$(layout_name "${layout}")" ||
+            printf 'notification withheld: product name unavailable or delivery failed\n' >&2
     fi
+}
+
+product_name() {
+    local path=/etc/xdg/quickshell/hyperlab/product.yml
+    local parent=${path} raw pattern
+    # Reject redirected parents as well as a redirected leaf.
+    while [[ ${parent} != / ]]; do
+        [[ ! -L ${parent} ]] || return 1
+        parent=${parent%/*}
+        [[ -n ${parent} ]] || parent=/
+    done
+    [[ -f ${path} && -r ${path} ]] || return 1
+    # NUL terminates read successfully and is forbidden. EOF keeps every
+    # newline, letting the pattern reject more than one document line.
+    if IFS= read -r -d '' raw <"${path}"; then
+        return 1
+    fi
+    pattern='^[[:blank:]]*\{[[:blank:]]*"name"[[:blank:]]*:[[:blank:]]*"([A-Za-z][A-Za-z0-9]*( [A-Za-z0-9]+)*)"[[:blank:]]*,[[:blank:]]*"byline"[[:blank:]]*:[[:blank:]]*"([A-Za-z][A-Za-z0-9]*( [A-Za-z0-9]+)*)"[[:blank:]]*\}[[:blank:]]*'
+    pattern+=$'(\r?\n)?$'
+    [[ ${raw} =~ ${pattern} ]] || return 1
+    [[ ${#BASH_REMATCH[1]} -le 64 && ${#BASH_REMATCH[3]} -le 64 ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[1]}" || return 1
 }
 
 notify_layout() {
     local product_name
-    product_name=$(hyperlabctl --version) || return 1
-    [[ ${product_name} == *' (hyperlabctl '*')' ]] || return 1
-    product_name=${product_name% (hyperlabctl *)}
-    [[ -n ${product_name} ]] || return 1
+    product_name=$(product_name) || return 1
     notify-send --app-name "${product_name}" "${product_name} keyboard" "Layout: $1" || return 1
 }
 

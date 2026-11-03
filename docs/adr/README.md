@@ -162,6 +162,10 @@ entered the pipeline.
     — proposed: compare every trust pool pixel across Qt releases, retain
     compressed-file hashes and check all negative space and shared geometry.
 
+58. [`0058-visible-name-migration-boundary.md`](0058-visible-name-migration-boundary.md)
+    — proposed: document the remaining visible surfaces and pin accurate session
+    names while their shared-identity migration remains open.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
@@ -622,3 +626,13 @@ remain.
     [`render_trust_pool.py`](../../tools/wallpaper/render_trust_pool.py)
   - Prerequisites: the operator's decision; a hosted workflow run remains
     separate from local Arch and Ubuntu runtime evidence.
+
+- [ADR 0058](0058-visible-name-migration-boundary.md)
+  - Decision: proposed.
+  - Built: built — explicit remaining visible-surface inventory, accurate
+    session documentation and narrowly pinned documentation exceptions.
+  - Activation: default — product contract checks documentation and existing
+    desktop/Waybar labels; no session, recovery or authority change.
+  - Source: [`product_display_name_contract.py`](../../tests/product_display_name_contract.py).
+  - Prerequisites: the operator's decision; the remaining visible migration
+    and physical Nitro/Predator gates remain open.

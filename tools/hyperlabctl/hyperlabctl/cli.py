@@ -13,33 +13,35 @@ from .errors import HyperlabError
 from .runner import Runner
 
 
-def _product_name(path: Path) -> str:
-    """Read the single display value; refuse missing or redirected inputs.
+def _product_info(path: Path) -> tuple[str, str]:
+    """Read the bounded name and byline; refuse ambiguous or redirected input."""
+    try:
+        if any(parent.is_symlink() for parent in (path, *path.parents)):
+            raise ValueError("redirected input")
+        mode = path.stat().st_mode
+        if not stat.S_ISREG(mode) or not mode & 0o444:
+            raise ValueError("unreadable input")
+        word = r"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"
+        match = re.fullmatch(
+            r'[ \t]*\{[ \t]*"name"[ \t]*:[ \t]*"' + word
+            + r'"[ \t]*,[ \t]*"byline"[ \t]*:[ \t]*"' + word
+            + r'"[ \t]*\}[ \t]*(?:\r?\n)?', path.read_text(encoding="utf-8"),
+        )
+        if match is None or any(len(value) > 64 for value in match.groups()):
+            raise ValueError("invalid fields")
+        return match[1], match[2]
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HyperlabError("invalid product name input") from exc
 
-    This deliberately small JSON subset of YAML is also read by the shell.
-    Exactly one field prevents duplicate mappings without a second parser.
-    """
-    if any(parent.is_symlink() for parent in (path, *path.parents)):
-        raise ValueError("redirected product name input")
-    mode = path.stat().st_mode
-    if not stat.S_ISREG(mode) or not mode & 0o444:
-        raise ValueError("unreadable product name input")
-    match = re.fullmatch(
-        r'\s*\{\s*"name"\s*:\s*"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"\s*\}\s*',
-        path.read_text(encoding="utf-8"),
-    )
-    if match is None or len(match[1]) > 64:
-        raise ValueError("invalid product name input")
-    return match[1]
 
-
-PRODUCT_NAME = _product_name(Path(__file__).absolute().parents[2] / "product.yml")
+def _product_path() -> Path:
+    return Path(__file__).absolute().parents[2] / "product.yml"
 
 
 class _ProductParser(argparse.ArgumentParser):
     def format_help(self) -> str:
         """Keep discovered command help in the current product vocabulary."""
-        return re.sub(r"\b(?:HyperLab|Hyperlab|HYPERLAB)\b", PRODUCT_NAME,
+        return re.sub(r"\b(?:HyperLab|Hyperlab|HYPERLAB)\b", _product_info(_product_path())[0],
                       super().format_help())
 
 
@@ -73,13 +75,14 @@ def _normalize_global_options(argv):
 
 
 def build_parser():
+    product_name, _byline = _product_info(_product_path())
     parser = _ProductParser(
         prog="hyperlabctl",
-        description=f"Control surface for {PRODUCT_NAME}. Reads the repository "
+        description=f"Control surface for {product_name}. Reads the repository "
                     "contract and libvirt; owns no policy of its own.",
     )
     parser.add_argument("--version", action="version",
-                        version=f"{PRODUCT_NAME} (hyperlabctl {__version__})")
+                        version=f"{product_name} (hyperlabctl {__version__})")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument("--no-color", dest="color", action="store_false", default=None,
                         help="never emit colour")
@@ -94,14 +97,14 @@ def build_parser():
 
 def main(argv=None, ctx=None):
     argv = sys.argv[1:] if argv is None else argv
-    parser = build_parser()
-    args = parser.parse_args(_normalize_global_options(list(argv)))
-    if args.color is None:
-        args.color = sys.stdout.isatty()
-
-    if ctx is None:
-        ctx = Context(Config(repo_root=args.repo), Runner())
     try:
+        parser = build_parser()
+        args = parser.parse_args(_normalize_global_options(list(argv)))
+        if args.color is None:
+            args.color = sys.stdout.isatty()
+
+        if ctx is None:
+            ctx = Context(Config(repo_root=args.repo), Runner())
         return args._command.run(args, ctx)
     except HyperlabError as exc:
         print("hyperlabctl: %s" % exc, file=sys.stderr)
