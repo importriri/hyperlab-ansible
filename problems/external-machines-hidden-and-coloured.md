@@ -44,18 +44,36 @@ the guidance mentions the lower group only when domains exist.
 Recovery classification requires a unique spec and agreement with the observed
 managed identity, trust profile and interfaces. An unclassified row has a
 neutral outline, transparent fill and the external label, distinct from HOST.
-A reviewed fixture may retain its verified identity without becoming a product
-Machine. The native read-only group conservatively stays neutral throughout.
+The native read-only group stays neutral throughout.
+
+A review of the first correction found four more places with the same defect:
+
+- The sway Waybar VM pill read the product inventory, whose text counts only
+  registry Machines: **VM 0/3** while `hl-lab-host` ran, **VM 0/0** on a fresh
+  registry. It now reads the raw observation through the bridge and counts
+  every domain. The CLI contract used to accept the pill because its last
+  word, `vms`, is a CLI field name; it now resolves each pill through the real
+  bridge, which routes `vms` to the product inventory.
+- Recovery Networks counted a segment's machines with the identity classifier.
+  Once unspecced domains became external, `arch-dev`, attached to DEV, vanished
+  from every segment. Attachment is now counted from observed interfaces and
+  listed separately from identity.
+- A registry Machine with drifting provenance was labelled **external** in
+  recovery tiles, the drawer badge and detail. It is now **unclassified**.
+- A domain outside the registry with a leftover generated spec kept that
+  spec's colour in recovery. Only registry Machines can now receive a colour,
+  as in the native shell.
 
 ## Is the recovery Shut down action intended?
 
-Yes: the existing recovery manager explicitly sends an external running
-domain's **Shut down** to `_vm_action("vm.stop", domain)`, and the reviewed
-registry resolves `vm.stop` to graceful libvirt shutdown. Managed lifecycle
-uses its separate `vm.managed-shutdown` route. Visibility does not authorize
-removing that existing recovery operation; it remains unchanged. The native
-Not managed group offers no such action. No lifecycle operation was performed
-to verify this change.
+Undecided. What exists: the recovery manager sends an external running
+domain's **Shut down** to `_vm_action("vm.stop", domain)`, and the registry
+resolves `vm.stop` to graceful libvirt shutdown; managed lifecycle uses its
+separate `vm.managed-shutdown` route. The code shows that the button exists,
+not that offering it on a domain such as the `hl-lab-host` test bed was
+decided. It is existing behaviour, kept unchanged; its intent awaits the
+operator's decision. The native Not managed group offers no such action. No
+lifecycle operation was performed to verify this change.
 
 ## Regression proof
 
@@ -67,7 +85,11 @@ preservation of recovery Shut down, plus duplicate, unavailable and stale
 inputs and absent/ambiguous/drifting specs. It also checks unknown membership
 on headings, rows and recovery detail lifecycles, the external group header's
 neutral identity, all three session confirmation consequences and creation
-guidance with an empty registry. Mutations are in
+guidance with an empty registry. The fixture is minimal libvirt facts; the
+real domains provider, `vm list` and `waybar --field vms` build every row on a
+fake host. The same contract runs the Waybar pill's configured argv through
+the real bridge and checks recovery segment attachment, unclassified product
+wording, generated specs and partial or stale totals. Mutations are in
 [`tests/MUTATIONS.md`](../tests/MUTATIONS.md).
 
 The display-free shell structure fixtures also reuse the production Model's

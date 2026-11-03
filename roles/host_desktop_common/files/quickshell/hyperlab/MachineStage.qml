@@ -138,6 +138,18 @@ Item {
     readonly property bool inventoryAvailable:
         stage.shellState.machinesAvailable
 
+    // The total covers every domain only when libvirt answered; otherwise
+    // it names the product part and says the rest is unavailable. A stale
+    // registry read keeps its own age next to that count.
+    readonly property string definedSummary:
+        (stage.shellState.outsideDomainsAvailable
+            ? stage.total + " defined"
+            : stage.shellState.machines.length + " managed · other domains unavailable")
+        + (stage.inventoryState === "stale"
+            ? " · last observed "
+                + stage.shellState.observedAge(stage.shellState.machinesObservedAt)
+            : "")
+
     // Capabilities belong to the selected machine and the generation it was
     // resolved against; a new selection or a new snapshot re-asks the bridge.
     function refreshCapabilities() {
@@ -217,7 +229,7 @@ Item {
 
             subtitle:
                 stage.inventoryAvailable
-                ? stage.total + " defined · " + stage.shellState.runningMachinesSummary
+                ? stage.definedSummary + " · " + stage.shellState.runningMachinesSummary
                 : "Product inventory unavailable · " + stage.shellState.runningMachinesSummary
 
             subtitleClass:

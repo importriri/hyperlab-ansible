@@ -329,6 +329,31 @@ def waybar_config():
     return json.loads(re.sub(r"(?m)^\s*//.*$", "", raw))
 
 
+def bridge_cli_argv(argv):
+    """The hyperlabctl argv the installed bridge runs for one pill command."""
+    bridge = "/usr/local/bin/privatestack-hyperlab"
+    if not argv or argv[0] != bridge:
+        return ["not the bridge"] + argv
+    source = (REPO / "roles/host_desktop_sway/files/privatestack-hyperlab.sh").read_text()
+    needle = "declare -r cli=/usr/local/bin/hyperlabctl"
+    if source.count(needle) != 1:
+        return ["bridge cannot be isolated"]
+    with tempfile.TemporaryDirectory(prefix="hyperlab-pill-") as raw:
+        directory = Path(raw)
+        cli, trace = directory / "hyperlabctl", directory / "trace.jsonl"
+        # An inert stand-in: it records its argv and prints one payload.
+        cli.write_text("#!%s\nimport json, os, sys\n"
+                       "open(os.environ['PILL_TRACE'], 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                       "print('{}')\n" % sys.executable)
+        cli.chmod(0o700)
+        script = directory / "bridge.sh"
+        script.write_text(source.replace(needle, "declare -r cli=" + shlex.quote(str(cli))))
+        subprocess.run(["bash", str(script)] + argv[1:], capture_output=True, timeout=30,
+                       env={**os.environ, "PILL_TRACE": str(trace)}, check=False)
+        calls = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+    return calls[0] if len(calls) == 1 else ["%d CLI calls" % len(calls)]
+
+
 def contract():
     from hyperlabctl import SCHEMA_VERSION
     from hyperlabctl.commands import REGISTRY as COMMANDS
@@ -350,11 +375,15 @@ def contract():
     check("the bar listens on the signal the CLI raises",
           signals == {WAYBAR_SIGNAL}, "bar %s, cli %d" % (signals, WAYBAR_SIGNAL))
 
-    # Every field the bar asks for must be one the CLI can render.
+    # Every field the bar asks for must be one the CLI can render. The bridge
+    # may route a pill name elsewhere, so resolve it through the real bridge.
     from hyperlabctl.commands.waybar import FIELDS
-    asked = {module["exec"].split()[-1] for module in modules}
+    asked = [bridge_cli_argv(shlex.split(module["exec"])) for module in modules]
+    unknown = [argv for argv in asked
+               if len(argv) != 3 or argv[0] not in ("waybar", "watch")
+               or argv[1] != "--field" or argv[2] not in FIELDS]
     check("every pill asks for a field the CLI knows",
-          asked <= set(FIELDS), "bar asks %s" % sorted(asked - set(FIELDS)))
+          not unknown, "bar runs %s" % unknown)
 
     # Nothing the palette can offer may reference a playbook that is not here.
     for action in actions(repo_root=REPO, include_privileged=True):

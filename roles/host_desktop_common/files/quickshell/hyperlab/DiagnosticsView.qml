@@ -294,11 +294,14 @@ Item {
                         width: parent.width
                         tokens: view.tokens
                         theme: view.theme
+                        objectName: "diagnostics-defined-summary"
                         title: "Defined machines"
                         value:
-                            view.shellState.machinesAvailable
+                            !view.shellState.machinesAvailable
+                            ? "Unknown"
+                            : view.shellState.outsideDomainsAvailable
                             ? String(view.shellState.machines.length + view.shellState.outsideDomains.length)
-                            : "Unknown"
+                            : view.shellState.machines.length + " managed · other domains unavailable"
                     }
 
                     PanelRow {

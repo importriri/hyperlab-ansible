@@ -676,6 +676,9 @@ entry, dropdown > button {
     background: alpha(#ffffff, .035);
     border: 1px solid alpha(#ffffff, .09);
 }
+/* One attached domain per row; its identity badge carries any colour. */
+.network-member { padding: 3px 0; }
+.network-member-name { font-family: "JetBrains Mono", monospace; font-size: 11px; color: @hl_text; }
 
 .gpu-rung {
     min-width: 560px;
@@ -2541,8 +2544,7 @@ class HyperlabWindow(Gtk.Window):
         if identity in DOMAIN_META:
             row.append(text_label(identity, "domain-badge-%s" % identity, wrap=False))
         else:
-            row.append(text_label("membership unknown" if self.model.product_names is None else "external",
-                                  "external-outline", wrap=False))
+            row.append(text_label(self._identity_word(domain), "external-outline", wrap=False))
         open_button = Gtk.Button(label="Open")
         open_button.connect("clicked", lambda _button, vm=domain: self._primary_vm_action(vm))
         row.append(open_button)
@@ -3110,6 +3112,10 @@ class HyperlabWindow(Gtk.Window):
         return str(domain.get("lifecycle") or spec.get("lifecycle") or "unknown")
 
     def _domain_for_vm(self, domain: dict[str, Any]) -> str:
+        # Only a registry Machine can carry a trust colour. A spec for any
+        # other domain (a leftover generated one included) is not review.
+        if not self.model.is_product_domain(domain):
+            return "external"
         row = self._spec_by_name(str(domain.get("name", "")))
         profile = row["spec"].get("network_profile") if row else None
         # Attachment, a GPU gate or a name alone cannot grant an identity.
@@ -3118,6 +3124,15 @@ class HyperlabWindow(Gtk.Window):
                 and domain.get("networks") == [profile]):
             return profile
         return "external"
+
+    def _identity_word(self, domain: dict[str, Any]) -> str:
+        """The word beside an identity: never external for a registry Machine."""
+        identity = self._domain_for_vm(domain)
+        if identity in DOMAIN_META:
+            return identity
+        if self.model.product_names is not None and not self.model.is_product_domain(domain):
+            return "external"
+        return "unclassified"
 
     def _mock_section_header(self, domain_id: str, first: bool = False) -> Gtk.Box:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -3241,7 +3256,8 @@ class HyperlabWindow(Gtk.Window):
         mem = ("%.0f GiB" % (int(memory) / 1024)) if isinstance(memory, int) and memory else "— GiB"
         vcpus = str(domain.get("vcpus") or domain.get("vcpu") or "—")
         lifecycle = "membership unknown" if self.model.product_names is None else self._lifecycle_for_vm(domain)
-        meta.append(text_label("%s · %s vCPU · %s · %s" % (mem, vcpus, domain_id, lifecycle), "vm-facts", wrap=False))
+        meta.append(text_label("%s · %s vCPU · %s · %s" % (mem, vcpus, self._identity_word(domain), lifecycle),
+                               "vm-facts", wrap=False))
         tile.append(meta)
 
         motion = Gtk.EventControllerMotion()
@@ -3367,7 +3383,6 @@ class HyperlabWindow(Gtk.Window):
     def _render_vm_detail(self, target: Gtk.Box, domain: dict[str, Any]) -> None:
         clear_box(target)
         name = str(domain.get("name", "unnamed"))
-        domain_id = self._domain_for_vm(domain)
         spec_row = self._spec_by_name(name)
         spec = spec_row.get("spec") if spec_row else {}
         image = spec_row.get("image") if spec_row else {}
@@ -3376,7 +3391,8 @@ class HyperlabWindow(Gtk.Window):
 
         target.append(text_label("SELECTED", "mock-kick", wrap=False))
         target.append(text_label(name, "inspect-title", wrap=False))
-        target.append(text_label("%s · %s · %s" % (domain.get("state", "unknown"), domain_id, image_id), "inspect-subtitle"))
+        target.append(text_label("%s · %s · %s" % (domain.get("state", "unknown"), self._identity_word(domain), image_id),
+                                 "inspect-subtitle"))
 
         connect = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         connect.add_css_class("mock-group")
@@ -4121,7 +4137,7 @@ class HyperlabWindow(Gtk.Window):
             dot = Gtk.Box(); dot.add_css_class("domain-dot-%s" % domain_id); head.append(dot)
             head.append(text_label(DOMAIN_META[domain_id]["title"], "mock-section-title", wrap=False))
             head.append(text_label(subnets[domain_id], "mock-section-net", wrap=False)); zone.append(head)
-            attached = [vm for vm in self.model.domains if self._domain_for_vm(vm) == domain_id]
+            attached = self._attached_to(domain_id)
             node_body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             node_body.append(text_label(domain_id, "network-node-title", wrap=False))
             node_body.append(text_label("%d machines · %s" % (len(attached), "DHCP off" if domain_id == "lab" else "DHCP libvirt"), "network-node-sub", wrap=False))
@@ -4139,6 +4155,11 @@ class HyperlabWindow(Gtk.Window):
         scroll.set_child(content)
         return scroll
 
+    def _attached_to(self, domain_id: str) -> list[dict[str, Any]]:
+        """Domains whose observed interfaces include this segment's network."""
+        return [vm for vm in self.model.domains
+                if isinstance(vm.get("networks"), list) and domain_id in vm["networks"]]
+
     def _select_network(self, domain_id: str) -> None:
         if domain_id in DOMAIN_META:
             self.selected_network = domain_id
@@ -4149,13 +4170,26 @@ class HyperlabWindow(Gtk.Window):
         domain_id = domain_id if domain_id in DOMAIN_META else "dev"
         dock.append(text_label("SEGMENT", "mock-kick", wrap=False))
         dock.append(text_label(DOMAIN_META[domain_id]["title"], "inspect-title", wrap=False))
-        attached = [vm for vm in self.model.domains if self._domain_for_vm(vm) == domain_id]
+        attached = self._attached_to(domain_id)
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._append_kv(details, "domain", domain_id)
         self._append_kv(details, "GPU rank", self.model.gpu_rank(domain_id))
         self._append_kv(details, "DHCP", "none" if domain_id == "lab" else "libvirt")
         self._append_kv(details, "machines", str(len(attached)))
         dock.append(details)
+        # Attachment is shown; identity is separate. A domain without this
+        # segment's identity keeps the neutral outline and its own word.
+        for vm in attached:
+            member = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            member.add_css_class("network-member")
+            name = text_label(str(vm.get("name", "unnamed")), "network-member-name", wrap=False)
+            name.set_hexpand(True)
+            member.append(name)
+            identity = self._domain_for_vm(vm)
+            member.append(text_label(self._identity_word(vm),
+                                     "domain-badge-%s" % identity if identity == domain_id else "external-outline",
+                                     wrap=False))
+            dock.append(member)
         dock.append(text_label("Network create, links and NIC writes remain absent until hyperlabctl exposes reviewed write actions.", "mock-why"))
 
     def _build_gpu(self) -> Gtk.Widget:

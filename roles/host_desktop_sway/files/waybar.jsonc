@@ -70,8 +70,11 @@
         "signal": 8,
         "format": " GPU {}"
     },
+    // Every libvirt domain, external ones included: running/total from the
+    // raw observation. The bar has no registry membership, so the managed
+    // and external split stays in the shell's Machines and Session views.
     "custom/hyperlab-vms": {
-        "exec": "/usr/local/bin/privatestack-hyperlab vms",
+        "exec": "/usr/local/bin/privatestack-hyperlab diagnostics-domains",
         "return-type": "json",
         "interval": 30,
         "signal": 8,

@@ -1,13 +1,12 @@
 {
-  "managed": [
-    {"name": "development-01", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"},
-    {"name": "development-02", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"},
-    {"name": "development-03", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"}
-  ],
-  "external": [
-    {"name": "hl-lab-host", "state": "running", "memory_mb": 4096, "network": "hl-lab-testbed", "networks": ["hl-lab-testbed"], "managed": false, "product_managed": false, "lifecycle": "external"},
-    {"name": "arch-dev", "state": "shut off", "managed": false, "product_managed": false, "network": "dev", "networks": ["dev"], "lifecycle": "external"},
-    {"name": "arch-dev-vfio", "state": "shut off", "managed": false, "product_managed": false, "lifecycle": "external"},
-    {"name": "arch-minimal-ssh", "state": "shut off", "managed": false, "product_managed": false, "lifecycle": "external"}
+  "product": ["development-01", "development-02", "development-03"],
+  "domains": [
+    {"name": "development-01", "state": "shut off", "memory_mb": 2048, "network": "dev"},
+    {"name": "development-02", "state": "shut off", "memory_mb": 2048, "network": "dev"},
+    {"name": "development-03", "state": "shut off", "memory_mb": 2048, "network": "dev"},
+    {"name": "hl-lab-host", "state": "running", "memory_mb": 4096, "network": "hl-lab-testbed"},
+    {"name": "arch-dev", "state": "shut off", "memory_mb": 2048, "network": "dev"},
+    {"name": "arch-dev-vfio", "state": "shut off", "memory_mb": 2048, "network": "dev", "vfio": true},
+    {"name": "arch-minimal-ssh", "state": "shut off", "memory_mb": 1024, "network": "default"}
   ]
 }

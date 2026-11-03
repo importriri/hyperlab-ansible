@@ -146,9 +146,13 @@ from its VM spec into the libvirt metadata, and only while every interface is
 attached to that declared network. `gpu_domain_profiles` stays the VFIO gate
 (`gpu_trust_profile`): a VFIO guest without an entry is still an error, and a
 gate that disagrees with the network identity leaves the guest unclassified
-with `domains.trust_conflict`. A GPU gate may name an unmanaged domain for handoff policy; it does not
-classify its visual identity. A machine without a unique reviewed spec stays
-external even if a GPU gate names it or it attaches to a trust network.
+with `domains.trust_conflict`. A GPU gate may name an unmanaged domain for
+handoff policy; the CLI still reports that gate as the domain's `trust_profile`
+(and `provenance` in `waybar --field vms`), but the shell surfaces ignore it for
+every domain outside the Machine registry
+([ADR 0058](adr/0058-external-machine-visibility.md)). A domain outside the
+registry stays external even with a matching spec, a GPU gate entry or an
+attachment to a trust network.
 
 `services` therefore has a visual trust identity while remaining structurally
 outside GPU handoff. Visual provenance must not infer GPU eligibility from the

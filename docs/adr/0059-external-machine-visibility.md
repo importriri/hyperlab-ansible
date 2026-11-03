@@ -40,6 +40,18 @@ When the registry becomes readable, the ordinary groups and lifecycles return.
 A readable empty registry still shows the first-Machine creation guidance,
 alongside Not managed when raw domains exist.
 
+The defined total covers every domain only when the raw observation answered.
+Otherwise Machines and Diagnostics name the product part and say the rest is
+unavailable (**3 managed · other domains unavailable**). A stale registry read
+keeps its own **last observed** age beside that count.
+
+The Waybar VM pill reads the same raw observation (`hyperlabctl waybar --field
+vms` through the bridge) and shows running/total over every domain, with each
+name and state in its tooltip. The bar has no registry membership, so it does
+not split the count; the split lives in the shell views that read the registry.
+The product inventory's own `running/total` text counts registry Machines only
+and is no longer what the bar shows.
+
 ## External visual state — Proposed
 
 The [visual trust contract](../visual-trust-contract.md) called both host-native
@@ -50,14 +62,31 @@ never a trust-domain token or the HOST grey identity. The native read-only
 group conservatively uses this state for all non-product rows. When registry
 membership is unknown, its neutral outline remains, but **membership unknown**
 replaces the external label: less trust does not justify a false lifecycle.
+For the same reason a registry Machine whose identity does not resolve is
+labelled **unclassified**, never external: the word **external** is reserved
+for domains a readable registry places outside the product.
 
-A recovery domain receives a domain colour only when one unique reviewed spec
-names it, its observed managed identity and trust profile agree with that
-spec's network profile, and every observed interface belongs to that network.
-An absent, duplicate or drifting spec does not fall back to dev. A reviewed
-fixture may keep its verified domain colour in the Not managed group; that
-colour establishes neither product membership nor a product lifecycle.
+A recovery domain receives a domain colour only when the registry lists it as
+a product Machine, one unique spec names it, its observed managed identity and
+trust profile agree with that spec's network profile, and every observed
+interface belongs to that network. An absent, duplicate or drifting spec does
+not fall back to dev. A domain outside the registry is always external in both
+surfaces, even with a matching spec: `compose list` also returns host-local
+`vm-specs/.generated/` files (withdrawn Machines, Workbench candidates), and
+nothing marks those as reviewed.
 GPU gates and network attachment alone cannot classify a machine.
+
+The CLI still reports a GPU-gate fallback for unmanaged domains: the domains
+provider returns the `gpu_domain_profiles` entry as `trust_profile`, and
+`waybar --field vms` publishes it as `provenance`. The shell surfaces ignore
+both for any domain outside the registry; the native shell overwrites the
+incoming provenance with `unclassified`. Changing the provider is a separate
+decision.
+
+Segment attachment is not identity. The recovery Networks page counts every
+domain whose observed interfaces include a segment's network and lists them in
+the segment detail; a domain without that segment's identity keeps the neutral
+outline and its own word (**external** or **unclassified**).
 
 ## Evidence and limits
 
@@ -67,6 +96,10 @@ one running external domain and three stopped legacy domains. It checks all
 seven names, separate groups (including the recovery group header), counts,
 session confirmation consequences, external identity and native read-only rows,
 plus failed/duplicate/stale inputs, unknown membership and lifecycle, empty
-registry creation guidance and missing/duplicate/drifting specs.
+registry creation guidance and missing/duplicate/drifting/generated specs.
+The fixture holds minimal libvirt facts; the rows each surface receives are
+built by the real domains provider, `vm list` and `waybar --field vms` on a
+fake host. The Waybar pill is run through the real bridge with its configured
+argv, and segment attachment is checked on the recovery Networks page.
 The software check does not establish installed-shell behaviour, compositor
 placement or hardware acceptance. Nitro and Predator checks remain open.

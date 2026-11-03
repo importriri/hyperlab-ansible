@@ -115,6 +115,13 @@ detail lifecycle is **unknown**. They become Not managed only when a readable
 registry establishes that they are outside the product. A readable empty
 registry keeps the first-Machine creation guidance even when legacy domains
 exist; it mentions Not managed below only when there are domains to show.
+If the raw observation fails, the total does not pretend to cover every
+domain: it reads **3 managed · other domains unavailable**. A stale registry
+read keeps **last observed** with its age beside the count.
+
+The sway session's Waybar VM pill shows running/total over every libvirt
+domain, from the same raw observation, with each domain and state in its
+tooltip. It has no registry membership and therefore no managed/external split.
 
 Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the
@@ -903,9 +910,16 @@ passing parity verification before deployment.
 The recovery Machines surface reads the same registry-backed `machine
 inventory` alongside `vm list` and `compose list`. It uses registry names for
 grouping and count splits; stale product metadata never adopts a domain.
-It requires a unique reviewed spec and matching observed managed provenance and
-interfaces before applying a domain colour; unknown networks never fall back
-to DEV. Unclassified rows use the proposed external outline and label.
-**Shut down** on an external domain remains an existing recovery action,
-resolved as `vm.stop`; it is not offered by the native read-only group. See
+Only a registry Machine can receive a domain colour, and only with a unique
+spec and matching observed managed provenance and interfaces; unknown networks
+never fall back to DEV, and a domain outside the registry stays external even
+with a matching (for example generated) spec. Unclassified rows use the
+proposed outline. Their word is **external** for a domain outside the registry
+and **unclassified** for a registry Machine whose identity does not resolve.
+The Networks page counts attachment, not identity: each segment counts every
+domain with an interface on its network and lists them in its detail, outlined
+when they lack that segment's identity.
+**Shut down** on an external domain is existing recovery behaviour, resolved
+as `vm.stop` and kept unchanged; whether it is intended there awaits the
+operator's decision. The native read-only group does not offer it. See
 [the defect analysis](../problems/external-machines-hidden-and-coloured.md).

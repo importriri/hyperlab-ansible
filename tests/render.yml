@@ -795,7 +795,9 @@
           - "render_hyper_intervals | min | int >= 15"
           - "render_hyper_signals | unique | length == 1"
           - "render_hyper_signals[0] | int == render_cli_signal | int"
-          - "render_hyper_fields | sort == ['gpu', 'ram', 'trust', 'vms']"
+          # The VM pill reads the bridge's raw domain observation, which
+          # counts every libvirt domain, not the product-only inventory.
+          - "render_hyper_fields | sort == ['diagnostics-domains', 'gpu', 'ram', 'trust']"
           - "render_hyper_css_classes | difference(render_hyper_states) == []"
           - "'hyperlabctl' in render_desk_dests"
           - "render_pointer_mode == '0644'"
