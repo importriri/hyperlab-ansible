@@ -109,6 +109,7 @@ install step and the tools the contracts call.
 | building the Looking Glass sender code in its contracts | `gcc`, `pkgconf`, `libpipewire`, `glib2` | runner `gcc`, `pkg-config`, `libpipewire-0.3-dev`, `libglib2.0-dev` |
 | `lspci` (`tests/foundation_check_mode_contract.py`) | `pciutils` | `pciutils` |
 | offscreen QML runtime contracts (Qt 6 `qmlscene`, QtQuick, Window, Shapes, WorkerScript) | `qt6-declarative` | `qmlscene-qt6` and four `qml6-module-*` packages |
+| recovery GTK widget and allocation contracts (private Broadway display) | `gtk4`, `python-gobject` | `python3-gi`, `gir1.2-gtk-4.0`, `libgtk-4-bin` |
 | `openssl`, `git`, `modprobe` | `openssl`, `git`, `kmod` | runner defaults |
 
 On Arch, in one step:
@@ -116,7 +117,7 @@ On Arch, in one step:
 ```bash
 sudo pacman -S --needed ansible ansible-lint ruff shellcheck bats \
   python python-yaml python-jinja nftables sudo lua poppler \
-  gcc pkgconf libpipewire glib2 pciutils qt6-declarative \
+  gcc pkgconf libpipewire glib2 pciutils qt6-declarative gtk4 python-gobject \
   openssl git kmod
 ```
 

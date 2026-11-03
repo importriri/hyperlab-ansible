@@ -401,6 +401,8 @@ proof.
   GPU, Networks and Create readbacks carried a second, reversed rank table.
 - [`recovery-network-tiles-overlapped.md`](recovery-network-tiles-overlapped.md):
   fixed network row coordinates contradicted the CSS tile minimum height.
+- [`gtk-contracts-required-an-unmanaged-display-server.md`](gtk-contracts-required-an-unmanaged-display-server.md):
+  recovery GTK checks required an undeclared X server and failed in the nested lab.
 - [`system-panel-did-not-link-the-key-sheet.md`](system-panel-did-not-link-the-key-sheet.md):
   the system panel had no route to the existing complete host key sheet.
 

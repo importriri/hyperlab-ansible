@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 import itertools
+import os
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 import time
+from unittest.mock import patch
 
 from recovery_gpu_ladder_contract import descendants, gtk_display, load_manager, run_gtk_worker
+
+
+def run_without_xvfb() -> int:
+    """Require the allocation check to work with only GTK's bundled server."""
+    server = shutil.which("gtk4-broadwayd")
+    assert server, "gtk4-broadwayd from GTK 4 is required for recovery layout allocation"
+    with tempfile.TemporaryDirectory(prefix="hyperlab-gtk-bin-") as directory:
+        (Path(directory) / "gtk4-broadwayd").symlink_to(server)
+        with patch.dict(os.environ, {"PATH": directory, "DISPLAY": ":invalid",
+                                     "WAYLAND_DISPLAY": "invalid"}):
+            return run_gtk_worker(Path(__file__))
 
 
 def main() -> int:
@@ -52,4 +67,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main() if "--gtk-worker" in sys.argv else run_gtk_worker(Path(__file__)))
+    raise SystemExit(main() if "--gtk-worker" in sys.argv else run_without_xvfb())

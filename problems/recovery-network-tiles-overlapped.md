@@ -25,10 +25,12 @@ those literal requirements are replaced by the executable checks below.
 ## Regression proof and remaining gate
 
 `tests/recovery_network_layout_contract.py` builds the production widgets
-with production CSS in a private X server, allocates requested viewports of
-760×560, 1000×760 and 500×560, and repeats with additional multiline tile
-content. Every pair of segment rectangles must be disjoint. Restoring the
-old builder reproduces the measured overlap and fails the contract.
+with production CSS on a private GTK Broadway display, allocates requested
+viewports of 760×560, 1000×760 and 500×560, and repeats with additional
+multiline tile content. Every pair of segment rectangles must be disjoint.
+Restoring the old builder reproduces the overlap and fails the contract.
+The display comes from GTK itself and the allocation entrypoint runs without
+Xvfb on PATH; see the [display prerequisite repair](gtk-contracts-required-an-unmanaged-display-server.md).
 
 The contract proves GTK allocation, not compositor placement on the Nitro.
 Open Networks there and check all five segments and the selected detail.

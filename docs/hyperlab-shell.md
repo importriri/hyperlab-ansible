@@ -839,7 +839,10 @@ The four capture-session repairs are software-verified by
 `recovery_network_layout_contract.py` and `system_panel_key_sheet_contract.py`
 in `tests/`. The bridge check uses real isolated Quickshell processes with
 inert executables. The recovery checks use actual GTK widgets on a private
-X server and require GTK introspection and Xvfb. They do not prove the
+Broadway display, provided by `gtk4-broadwayd` from GTK 4, with GTK
+introspection. Both display sockets stay in a temporary runtime directory;
+no browser, TCP listener or physical session is needed. The allocation
+entrypoint runs with Xvfb absent from PATH. These checks do not prove the
 installed Nitro bridge cause or its compositor's focus and placement.
 
 ## Related documents

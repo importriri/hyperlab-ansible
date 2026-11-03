@@ -9,11 +9,11 @@ import io
 import json
 import os
 from pathlib import Path
-import select
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from types import SimpleNamespace
 from typing import Any, Iterator
 from unittest.mock import patch
@@ -28,30 +28,37 @@ from hyperlabctl.providers.trust import TrustProvider  # noqa: E402
 
 
 def run_gtk_worker(script: Path) -> int:
-    """Keep a private X server alive until all GTK objects have been freed."""
-    server = shutil.which("Xvfb")
-    assert server, "Xvfb is required for recovery layout allocation"
-    read_fd, write_fd = os.pipe()
-    with tempfile.TemporaryDirectory(prefix="hyperlab-gtk-") as directory, subprocess.Popen(
-        [server, "-displayfd", str(write_fd), "-screen", "0", "1920x1080x24", "-nolisten", "tcp"],
-        pass_fds=(write_fd,), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-    ) as process:
-        os.close(write_fd)
-        try:
-            assert select.select([read_fd], [], [], 10)[0], "private X server did not start"
-            display = os.read(read_fd, 64).decode().strip()
-            assert display.isdecimal(), "private X server did not publish a display"
-            return subprocess.run(
-                [sys.executable, str(script), "--gtk-worker"], check=False, timeout=30,
-                env={**os.environ, "DISPLAY": ":" + display, "GDK_BACKEND": "x11",
-                     "XDG_RUNTIME_DIR": directory, "GSETTINGS_BACKEND": "memory",
-                     "GTK_A11Y": "none", "GSK_RENDERER": "cairo",
-                     "DBUS_SESSION_BUS_ADDRESS": "unix:path=/nonexistent"},
-            ).returncode
-        finally:
-            os.close(read_fd)
-            process.terminate()
-            process.wait(timeout=10)
+    """Keep GTK's bundled display server alive until its worker has exited."""
+    server = shutil.which("gtk4-broadwayd")
+    assert server, "gtk4-broadwayd from GTK 4 is required for recovery layout allocation"
+    with tempfile.TemporaryDirectory(prefix="hyperlab-gtk-") as directory:
+        env = {**os.environ, "GDK_BACKEND": "broadway", "BROADWAY_DISPLAY": ":0",
+               "XDG_RUNTIME_DIR": directory, "GSETTINGS_BACKEND": "memory",
+               "GTK_A11Y": "none", "GSK_RENDERER": "cairo",
+               "DBUS_SESSION_BUS_ADDRESS": "unix:path=/nonexistent"}
+        # Both the GTK client socket and Broadway's HTTP socket stay private.
+        # No browser, TCP listener or physical desktop session is needed.
+        with subprocess.Popen(
+            [server, "--unixsocket", str(Path(directory) / "http.socket"), ":0"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        ) as process:
+            try:
+                deadline = time.monotonic() + 10
+                while not (Path(directory) / "broadway1.socket").is_socket():
+                    assert process.poll() is None, "private GTK display server exited before startup"
+                    assert time.monotonic() < deadline, "private GTK display server did not start"
+                    time.sleep(0.01)
+                return subprocess.run(
+                    [sys.executable, str(script), "--gtk-worker"], check=False, timeout=30,
+                    env=env,
+                ).returncode
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=10)
 
 
 @contextmanager

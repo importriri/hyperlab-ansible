@@ -2989,3 +2989,19 @@ known cause in `ShellState`, `MachineContextPane.qml` printed the fixed
 generic sentence as its Connect description whenever capabilities were
 unavailable. The runtime contract's `capabilities-unavailable` scenario now
 reads that header after a stderr failure and after a stdout-only refusal.
+
+## Recovery GTK display prerequisites
+
+The Networks entrypoint runs the actual allocation worker with a PATH
+containing only GTK's bundled `gtk4-broadwayd`, plus invalid inherited X11
+and Wayland displays. It must run without an undeclared Xvfb dependency.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| D1: Restore the Xvfb-based `run_gtk_worker` | `recovery_network_layout_contract.py` | Xvfb is required for recovery layout allocation |
+| N1 repeated on Broadway: restore the old fixed-coordinate Networks builder | `recovery_network_layout_contract.py` | Networks tiles overlap at 760x560: (24, 18, 336, 154), (24, 132, 336, 154) |
+| L1 repeated on Broadway: sort GPU rungs in ascending rank order | `recovery_gpu_ladder_contract.py` | recovery GPU ladder differs from CLI |
+
+All three mutations turned red, then green after restoring the saved
+source bytes. The backend change preserves real GTK geometry and provider
+parity coverage; missing display tools remain a failure.

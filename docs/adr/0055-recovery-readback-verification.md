@@ -19,6 +19,13 @@ tile rectangles. Keeping either literal would preserve a known defect.
 This decision changes verification and presentation, not the GPU handoff
 policy recorded in ADR 0022 or any network or privilege boundary.
 
+The initial allocation harness also required an undeclared Xvfb executable.
+Nested verification stopped at that prerequisite even though GTK was
+installed. Requiring a separate X server was unnecessary for these widget
+and geometry checks: GTK's bundled Broadway server allocates the same
+widgets without a physical session. The display prerequisite changes;
+the parity and non-overlap requirements remain intact.
+
 ## Decision
 
 Proposed: replace those two implementation requirements with executable
@@ -30,9 +37,10 @@ surface, segment dock and inspector visibility.
   against their ranks. A changed provider ladder must change every readback;
   missing or invalid input must never create fallback ranks. Services remains
   outside the ladder. Owner highlighting uses the effective GPU profile.
-- Allocate production Networks widgets with production CSS in a private X
-  server. Require all five segment rectangles to be disjoint at the tested
-  viewport sizes and with taller content. Use measured grid rows instead of
+- Allocate production Networks widgets with production CSS on a private
+  Broadway display using the server bundled with GTK 4. Require all five
+  segment rectangles to be disjoint at the tested viewport sizes and with
+  taller content. Use measured grid rows instead of
   fixed coordinates; keep the existing scroller and selected detail dock.
 - Have the M11 contract invoke both checks, so its standalone entrypoint
   retains GPU and Networks coverage. Neither check may be skipped when its
@@ -41,10 +49,16 @@ surface, segment dock and inspector visibility.
 ## Consequences
 
 The old visual implementation is no longer mandatory. The intended
-readbacks and geometry have stronger, executable evidence. Verification now
-requires GTK introspection and Xvfb as well as the existing Python tools.
-The tests use isolated displays and inert data; they do not accept physical
-Nitro placement or identify the installed Machine bridge failure.
+readbacks and geometry have stronger, executable evidence. Verification
+requires GTK introspection and `gtk4-broadwayd`, shipped with Arch's existing
+`gtk4` desktop dependency, as well as the existing Python tools. Hosted CI
+installs the equivalent GTK tools and bindings. The allocation entrypoint
+also runs with Xvfb absent from PATH: an undeclared X server dependency must
+not return. Both Broadway sockets use a private temporary runtime directory,
+without a TCP listener or browser. Missing tools, failed startup and worker
+failures remain failures. The tests use isolated displays and inert data;
+they do not accept physical Nitro placement or identify the installed
+Machine bridge failure.
 
 ## Implementation status
 
