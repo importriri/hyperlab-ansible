@@ -3064,3 +3064,16 @@ production capability component, timers and assertions intact. These
 diagnoses do not identify the original installed Nitro failure. The
 stdout-only refusal fixture exercises a defensive path; the shipped bridge
 also writes its refusal reason to stderr.
+
+## System-panel key-sheet chord
+
+The panel activation scenario compares its displayed chord with HostKeys'
+existing key-sheet entry. `host_key_sheet_contract.py` separately retains
+the executed compositor binding and bidirectional sheet parity checks.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| K2: Advertise `SUPER + F2` on the key-sheet row | `system_panel_key_sheet_contract.py` | `system panel advertises a different key-sheet chord than HostKeys` |
+
+The mutation was red, restored byte-for-byte, then green at both viewport
+sizes and on both output fixtures. It adds no second shortcut list.

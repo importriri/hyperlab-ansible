@@ -21,6 +21,8 @@ panel offscreen at large and small viewports, checks keys mode and output
 ownership, and requires the existing sheet's rows without dispatching a
 command. Removing the row fails. `tests/host_key_sheet_contract.py` retains
 the two-way sheet/compositor parity check and the real launcher scenario.
+The panel contract also compares the displayed chord with HostKeys' own
+key-sheet entry; advertising SUPER+F2 while the sheet says SUPER+F1 fails.
 
 On Nitro, open the system panel and activate All host shortcuts with the
 pointer and keyboard. Compare it with SUPER+F1; both must open the same

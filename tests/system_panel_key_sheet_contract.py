@@ -11,6 +11,15 @@ SCENARIO = '''
             const entry = find(@@PANEL@@, "system-host-keys");
             check(entry !== null && entry.visible && entry.enabled,
                   "system panel has no available host key sheet entry");
+            const sheetComponent = Qt.createComponent("HostKeys.qml");
+            check(sheetComponent.status === Component.Ready, "HostKeys failed to load");
+            const sheet = sheetComponent.createObject(window);
+            const sheetRows = sheet.groups.reduce((rows, group) => rows.concat(group.keys), []);
+            const keys = sheetRows.filter(row => row.does === "This key sheet");
+            check(keys.length === 1 && entry !== null
+                  && entry.value.replace(/\\s/g, "") === keys[0].keys.replace(/\\s/g, ""),
+                  "system panel advertises a different key-sheet chord than HostKeys");
+            sheet.destroy();
             if (entry !== null) entry.activated();
             check(!sharedSurfaces.systemPanelOpen && @@LAUNCHER@@.open && @@LAUNCHER@@.keysMode,
                   "system panel did not open the existing key sheet");
