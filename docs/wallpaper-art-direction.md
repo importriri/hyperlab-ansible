@@ -9,10 +9,17 @@ a second logo, and it never encodes trust.
 The default product wallpaper is generated, not sourced. One geometry family
 carries the product from the rail to the lock screen:
 
-- a **split circular isolation boundary** — a boundary that can be opened and
-  closed is what HyperLab exists to operate;
-- a **containment ring** inside it;
-- a **contained core** at the centre.
+- two **filled left and right arcs**, the annulus from 0.685 R to R with the
+  vertical band |x| < 0.41 R removed; their straight vertical ends leave gaps
+  at 12 and 6 o'clock, with no round caps or radial cuts;
+- a **containment ring** at radius 0.555 R, stroke 0.057 R (at least 1 px);
+- a **contained core**, a filled disc of radius 0.413 R.
+
+This is geometry B, chosen by the operator on 2026-11-01
+([ADR 0056](adr/0056-product-symbol-geometry-b.md)), replacing the rounded
+stroked boundary split at both sides and its small central dot. R is the
+outer radius: 0.46 times the glyph size, or the wallpaper renderer's existing
+radius. Below 33 units the glyph omits the ring and uses a 0.435 R core.
 
 `IsolationGlyph.qml` draws that geometry at 18 units in the rail and 24 on
 the idle desktop. `tools/wallpaper/render_isolation_ring.py` renders the same
@@ -37,6 +44,9 @@ master is deployed as `/usr/share/backgrounds/hyperlab/product.png` (the
 Rendering goes through Qt's software rasteriser, so output is byte-stable for
 a given Qt release. `tests/host_identity_asset_contract.py` pins every output
 by SHA256: regenerating the family is a reviewed change, never a silent one.
+`tests/product_symbol_geometry_contract.py` executes both implementations to
+check their numerical constants, vertical cuts and actual drawing paths.
+Geometry B is software-verified; its physical acceptance remains open.
 
 "Contained Planes" (`render_contained_planes.py`) stays installed as reviewed
 rollback material until the identity family passes physical acceptance on

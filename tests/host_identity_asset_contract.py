@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Contract for the HyperLab Platform identity asset family.
 
-"Isolation Ring" is the product signature: a split circular boundary
-containing a core, drawn as architectural relief on a graphite ground. It is
-the same geometry the shell draws at 18 units in the rail, so one identity
+"Isolation Ring" is the product signature: geometry B, two filled annulus
+segments with vertical cuts and gaps above and below a ring and core, drawn
+as architectural relief on a graphite ground. It is the same geometry the
+shell draws at 18 units in the rail, so one identity
 carries from the lock screen to the top bar.
 
 Three things are pinned here:
@@ -29,21 +30,21 @@ ROLLBACK = ROOT / "tools/wallpaper/render_contained_planes.py"
 
 EXPECTED = {
     "isolation-ring-1920x1080.png":
-        "40d9e602d7f49358a863d76618ef35919455eaab2247a9feed36df4307e493d5",
+        "e03f345f113be6a6b5828731546372793ed17047257eedeb63e103ca5d5d87f9",
     "isolation-ring-2560x1600.png":
-        "39256c6141a78ca66d554154955adef8039c793bb3010ca89a2eaed4db2150b1",
+        "e82127343308b5668c1316c4ca3b3f04e58ad8168355004ec483191705f519dd",
     "isolation-ring-3440x1440.png":
-        "8b352df8f25f3ca92072722394f853ae8828d97d5486ef0b8873b2f585c23cce",
+        "30cf1e7965eb29371d99326c17c7d4433c45d359b4009088a69db35267bb4f57",
     "isolation-ring-3840x2160.png":
-        "9f17c16d5e31b2be1c5474e41df789fc574353ea6b96d492d0383d51a11aa420",
+        "2b0041b991ea1e18b2cad48a3a193ffee9f27778e7234306479f3e2ff0ceaead",
     "isolation-ring-lock-1920x1080.png":
-        "89953418ef17e15190c8db7e25a28018689f27f370c9b63dd5e79d08dad54852",
+        "0ccb01fd27a53e00e1840e70d5c6f1707268a774b77dd8f11e254af3a8ca8619",
     "isolation-ring-lock-2560x1600.png":
-        "826cf8497913b9dac0702aff88e8c1f06074866dda6c3c73ee1a173a88655e5f",
+        "1796e337f3a1b79279b521047bae4efca9f7c8206c6e6462654c089b7092adba",
     "isolation-ring-lock-3440x1440.png":
-        "424522d63892ed125a0051cb25ab03459cb3bc81a22e96e88e0891d7a2dfe5a7",
+        "39e81fe4b30f0f1af7752384541d81ef9677fdce6dbdc3c672b698676a888cd2",
     "isolation-ring-lock-3840x2160.png":
-        "81d4ebcb9f2db001fd5df5a6fbb60118f3bdf0f988765525cca4dfa72034ebcc",
+        "57f00830a8f651c813a07a68b23494f27079a2e36a3b89fc2bd42b4a511508a7",
 }
 
 
@@ -126,7 +127,7 @@ def main() -> int:
         "IsolationGlyph.qml"
     )
 
-    for marker in ("PathAngleArc", "splitAngle", "Contained core"):
+    for marker in ("PathAngleArc", "cutRatio", "Contained core"):
         require(marker in glyph, f"shell product symbol changed: {marker}")
 
     print(

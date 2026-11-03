@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render the HyperLab product identity wallpaper family deterministically.
 
-"Isolation Ring" is the product signature at wallpaper scale: a split circular
-boundary containing a core, cut into a graphite ground as architectural relief
-under a broad upper-left light. It is the same geometry the shell draws at 18
+"Isolation Ring" is the product signature at wallpaper scale: two vertically cut
+annulus segments with gaps above and below a containment ring and core, cut
+into a graphite ground as architectural relief under a broad upper-left light. It is the same geometry the shell draws at 18
 units in the rail, so the product is recognisable from the lock screen to the
 top bar without a second logo.
 
@@ -66,15 +66,63 @@ Window {
         readonly property real centreY: height * 0.48
         readonly property real radius: Math.min(width, height) * DIAMETER / 2
 
-        // Degrees removed at each side to open the isolation boundary.
-        readonly property real split: 16 * Math.PI / 180
+        // Geometry B, shared numerically with IsolationGlyph.qml (ADR 0056).
+        // The size and small-form constants describe the shared glyph family;
+        // these wallpaper-sized marks always draw the full form.
+        readonly property real radiusRatio: 0.46
+        readonly property real arcInnerRatio: 0.685
+        readonly property real cutRatio: 0.41
+        readonly property real ringRadiusRatio: 0.555
+        readonly property real ringStrokeRatio: 0.057
+        readonly property real coreRadiusRatio: 0.413
+        readonly property real smallCoreRadiusRatio: 0.435
+        readonly property int smallThreshold: 33
+
+        // A filled annulus segment. Both joins have the same x coordinate,
+        // so the opening is a vertical band, never a radial or rounded cut.
+        function arcPath(ctx, side) {
+            const r = art.radius;
+            const inner = r * art.arcInnerRatio;
+            const cut = r * art.cutRatio;
+            const outerY = Math.sqrt(r * r - cut * cut);
+            const innerY = Math.sqrt(inner * inner - cut * cut);
+            const outerAngle = Math.acos(art.cutRatio);
+            const innerAngle = Math.acos(art.cutRatio / art.arcInnerRatio);
+            const left = side < 0;
+            ctx.beginPath();
+            ctx.moveTo(art.centreX + side * cut, art.centreY - outerY);
+            ctx.arc(art.centreX, art.centreY, r,
+                    left ? Math.PI + outerAngle : -outerAngle,
+                    left ? Math.PI - outerAngle : outerAngle, left);
+            ctx.lineTo(art.centreX + side * cut, art.centreY + innerY);
+            ctx.arc(art.centreX, art.centreY, inner,
+                    left ? Math.PI - innerAngle : innerAngle,
+                    left ? Math.PI + innerAngle : -innerAngle, !left);
+            ctx.closePath();
+        }
+
+        function engravedArc(ctx, side, lineWidth, depth, light) {
+            ctx.save();
+            art.arcPath(ctx, side);
+            ctx.fillStyle = "rgba(0, 0, 0, " + depth + ")";
+            ctx.fill();
+            ctx.restore();
+
+            ctx.save();
+            ctx.translate(-lineWidth * 0.22, -lineWidth * 0.22);
+            art.arcPath(ctx, side);
+            ctx.lineWidth = lineWidth * 0.5;
+            ctx.lineJoin = "miter";
+            ctx.strokeStyle = "rgba(226, 232, 238, " + light + ")";
+            ctx.stroke();
+            ctx.restore();
+        }
 
         function ring(ctx, r, lineWidth, from, to, stroke) {
             ctx.beginPath();
             ctx.arc(art.centreX, art.centreY, r, from, to, false);
             ctx.lineWidth = lineWidth;
             ctx.strokeStyle = stroke;
-            ctx.lineCap = "round";
             ctx.stroke();
         }
 
@@ -99,8 +147,7 @@ Window {
             ctx.restore();
         }
 
-        onPaint: {
-            const ctx = getContext("2d");
+        function draw(ctx) {
             const w = width;
             const h = height;
             ctx.reset();
@@ -140,21 +187,20 @@ Window {
             ctx.fillStyle = pool;
             ctx.fill();
 
-            // Outer isolation boundary: two arcs, opened at both sides.
+            // Outer isolation boundary: filled arcs, gaps at top and bottom.
             const outer = 9 * unit;
-            art.engraved(ctx, r, outer, Math.PI + art.split,
-                         Math.PI * 2 - art.split, DEPTH, EDGE);
-            art.engraved(ctx, r, outer, art.split, Math.PI - art.split,
-                         DEPTH, EDGE);
+            art.engravedArc(ctx, -1, outer, DEPTH, EDGE);
+            art.engravedArc(ctx, 1, outer, DEPTH, EDGE);
 
             // Containment ring: closed, thinner, the boundary the core is
             // actually inside.
-            art.engraved(ctx, r * 0.58, 5 * unit, 0, Math.PI * 2,
+            art.engraved(ctx, r * art.ringRadiusRatio,
+                         Math.max(1, r * art.ringStrokeRatio), 0, Math.PI * 2,
                          DEPTH * 0.85, EDGE * 0.8);
 
             // Contained core: a machined disc raised out of the pool, not a
             // glossy sphere. One flat face, one lit lip, one seated shadow.
-            const core = r * 0.15;
+            const core = r * art.coreRadiusRatio;
 
             ctx.beginPath();
             ctx.arc(
@@ -185,7 +231,10 @@ Window {
             ctx.lineWidth = 1.4 * unit;
             ctx.strokeStyle = "rgba(240, 246, 252, " + (CORE * 0.42) + ")";
             ctx.stroke();
+        }
 
+        onPaint: {
+            art.draw(getContext("2d"));
             art.grabToImage(function(result) {
                 result.saveToFile("OUTFILE");
                 Qt.quit();

@@ -3077,3 +3077,96 @@ the executed compositor binding and bidirectional sheet parity checks.
 
 The mutation was red, restored byte-for-byte, then green at both viewport
 sizes and on both output fixtures. It adds no second shortcut list.
+
+## Product symbol geometry B
+
+`product_symbol_geometry_contract.py` instantiates the real QtQuick Shapes
+paths at 16, 24, 32, 33, 48, 64 and 128 units, with `strokeScale` values
+0, 0.75, 1, 1.25 and 3. It extracts the renderer's literal scene with the
+Python AST, reads its evaluated constants and records its actual drawing
+commands. Correct but unused constants therefore cannot conceal drift in
+the painted ring or core. Qt 6 is required; a missing runtime fails.
+
+The following constant mutations were each executed separately in
+`IsolationGlyph.qml` and `render_isolation_ring.py` (16 mutations). The
+geometry contract rejected each with `<glyph|renderer>: <name> must be
+<expected>`, then passed after exact restoration.
+
+| Property | Break value (original → mutation) |
+| --- | --- |
+| `radiusRatio` | `0.46` → `0.47` |
+| `arcInnerRatio` | `0.685` → `0.686` |
+| `cutRatio` | `0.41` → `0` |
+| `ringRadiusRatio` | `0.555` → `0.556` |
+| `ringStrokeRatio` | `0.057` → `0.058` |
+| `coreRadiusRatio` | `0.413` → `0.414` |
+| `smallCoreRadiusRatio` | `0.435` → `0.436` |
+| `smallThreshold` | `33` → `34` |
+
+These additional mutations were also red, restored byte-for-byte, then
+green (33 total, no green survivors). Unless stated otherwise, the check is
+`python tests/product_symbol_geometry_contract.py`.
+
+| Mutation | Observed red result |
+| --- | --- |
+| Change only the glyph cut from `0.41` to `0.4100001` | `glyph: cutRatio must be 0.41` (constants are compared exactly) |
+| Delete `readonly property int smallThreshold: 33` from the glyph | `glyph: smallThreshold must be 33` |
+| Change `glyph.size < glyph.smallThreshold` to `<=` | `glyph: small variant at 33` |
+| Add `capStyle: ShapePath.RoundCap` to the first arc | `glyph: arcs must be filled without caps` |
+| In the first `PathLine`, use `glyph.size / 2 - glyph.innerRadius * glyph.cutRatio` for x | `glyph: a cut is not vertical` |
+| Remove `* glyph.strokeScale` from the inner-radius expression | `glyph: a cut is not vertical` |
+| Remove the `Math.max(glyph.cutOffset, ...)` inner-radius clamp | `glyph: a cut is not vertical` at extreme thickness |
+| Remove `Math.max(1, ...)` from the glyph's ring stroke width | `glyph: strokeScale or one-pixel ring minimum` |
+| Set the first arc's `fillColor` to `glyph.core` | `glyph: arcs must be filled without caps` |
+| Change the first `sweepAngle: 360` to `180` | `glyph: ring/core circle geometry` |
+| Change `fillColor: glyph.core` to `"transparent"` | `glyph: ring/core colour` |
+| Change the first `PathArc.Counterclockwise` direction to `Clockwise` | `glyph: annulus arc` |
+| Replace the default `core: glyph.stroke` binding with `"white"` | `core must follow stroke by default` |
+| In `engravedArc`, replace the recess `ctx.fill()` with `ctx.stroke()` | `renderer: relief must fill both arcs, stroke the ring and fill the core` |
+| Keep the renderer's core constant but paint `const core = r * 0.15` | `renderer: painted core path differs` |
+| Keep the renderer's ring constant but pass `5 * unit` as the painted ring width | `renderer: painted ring stroke` |
+| Change the last pixel's red sample in `isolation-ring-1920x1080.png`, keeping a valid PNG | `host_identity_asset_contract.py`: `identity asset changed without review` |
+
+For example, replay the required source cases from the repository root with
+this helper. It saves a copy before each mutation, restores in `finally`,
+and checks both red and restored green without Git restoration:
+
+```python
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+
+def exercise(path, before, after):
+    with tempfile.TemporaryDirectory(prefix="symbol-mutation-") as tmp:
+        backup = Path(tmp) / path.name
+        shutil.copyfile(path, backup)
+        source = backup.read_text()
+        assert before in source
+        try:
+            path.write_text(source.replace(before, after, 1))
+            red = subprocess.run(
+                ["python", "tests/product_symbol_geometry_contract.py"], check=False
+            )
+        finally:
+            path.write_bytes(backup.read_bytes())
+        assert red.returncode != 0, "mutation stayed green"
+        subprocess.run(
+            ["python", "tests/product_symbol_geometry_contract.py"], check=True
+        )
+
+
+glyph = Path("roles/host_desktop_common/files/quickshell/hyperlab/IsolationGlyph.qml")
+renderer = Path("tools/wallpaper/render_isolation_ring.py")
+exercise(glyph, "cutRatio: 0.41", "cutRatio: 0")
+exercise(glyph, "    readonly property int smallThreshold: 33\n", "")
+exercise(renderer, "ringRadiusRatio: 0.555", "ringRadiusRatio: 0.556")
+```
+
+The pixel mutation used the existing non-interlaced 8-bit PNG's final
+scanline and final pixel's filtered red byte, incremented modulo 256. No
+later red sample depends on that byte, so only that pixel's red channel
+changes. Recompressing IDAT and recalculating its CRC preserves a valid PNG;
+`python tests/host_identity_asset_contract.py` must reject it. Restore the
+saved PNG and require the same command to pass.

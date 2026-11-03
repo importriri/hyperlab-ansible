@@ -797,11 +797,23 @@ colour.
 
 ### Identity
 
-One geometry family: a split circular isolation boundary containing a core.
-`IsolationGlyph.qml` draws it at 18 units in the rail, 24 on the idle
-desktop, and `tools/wallpaper/render_isolation_ring.py` renders it as
-architectural relief at wallpaper scale. "HyperLab" is the wordmark and
-"Platform" the subtitle; neither is a trust claim. There is no second logo.
+One geometry family: geometry B, the operator's 2026-11-01 choice
+([ADR 0056](adr/0056-product-symbol-geometry-b.md)). Two filled annulus
+segments have straight vertical cuts and gaps at top and bottom around a
+closed ring and filled core. `IsolationGlyph.qml` uses an outer radius of
+0.46 times its size, draws the arcs between 0.685 R and R outside |x| <
+0.41 R, the ring at 0.555 R with a 0.057 R stroke (minimum 1 px), and the
+core at 0.413 R. Below 33 units it omits the ring and enlarges the core to
+0.435 R, including the 18-unit rail and 24-unit idle desktop.
+
+The existing `size`, `stroke`, `core` and `strokeScale` properties remain:
+`strokeScale` scales the arc thickness inward and the ring stroke while
+keeping the outer radius and cuts fixed. `tools/wallpaper/render_isolation_ring.py`
+renders the full form as engraved relief at wallpaper scale from the same
+constants, checked by `tests/product_symbol_geometry_contract.py`.
+"HyperLab" is the wordmark and "Platform" the subtitle; neither is a trust
+claim. There is no second logo. Software verification does not close physical
+Nitro acceptance under both compositors or Predator replay.
 
 ## Security boundaries
 

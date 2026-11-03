@@ -878,6 +878,11 @@ work explicitly requires it.
 - [x] typed machine operation boundary with backend-derived capabilities
 - [x] one shared target-bound confirmation for destructive operations
 - [x] HyperLab Platform identity: one circular symbol from rail to lock
+  - [x] geometry B: filled arcs with vertical cuts, top/bottom gaps and the
+        small glyph form; regenerated desktop/lock family and path/hash
+        contracts (software-verified; [ADR 0056](adr/0056-product-symbol-geometry-b.md))
+  - [ ] geometry B physical acceptance on Nitro under both compositors
+  - [ ] geometry B Predator replay
 - [x] physical screenshot and interaction acceptance on Nitro
       (operator-observed, unpublished)
 - [x] reviewed focused-surface provenance resolver wired live into the shell

@@ -154,6 +154,10 @@ entered the pipeline.
     — proposed: recovery trust readbacks match the CLI authority, and
     Networks tile allocation replaces stale implementation literals.
 
+56. [`0056-product-symbol-geometry-b.md`](0056-product-symbol-geometry-b.md)
+    — accepted operator decision: filled arcs with vertical cuts, top/bottom
+    gaps and a small form shared by the shell and identity relief.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
