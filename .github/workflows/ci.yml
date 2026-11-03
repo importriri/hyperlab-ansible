@@ -28,12 +28,35 @@ jobs:
             shellcheck bats nftables lua5.4 poppler-utils \
             pkg-config libpipewire-0.3-dev libglib2.0-dev pciutils \
             python3-gi gir1.2-gtk-4.0 libgtk-4-bin \
+            cmake make g++ libcli11-dev libdrm-dev \
+            qt6-declarative-private-dev qt6-shadertools-dev \
             qmlscene-qt6 \
             qml6-module-qtquick \
             qml6-module-qtquick-window \
             qml6-module-qtquick-shapes \
             qml6-module-qtqml-workerscript
           test -x /usr/lib/qt6/bin/qmlscene
+          # Ubuntu 26.04 has no Quickshell package. Build the process runtime
+          # against this runner's Qt private ABI, without desktop services.
+          curl --fail --location --retry 3 \
+            https://github.com/quickshell-mirror/quickshell/archive/refs/tags/v0.3.2.tar.gz \
+            --output "${RUNNER_TEMP}/quickshell.tar.gz"
+          echo "946a27e2a276917a03c1079e5c60971af84ece73088c3661dee455d92eb420f7  ${RUNNER_TEMP}/quickshell.tar.gz" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/quickshell.tar.gz" -C "${RUNNER_TEMP}"
+          cmake -S "${RUNNER_TEMP}/quickshell-0.3.2" -B "${RUNNER_TEMP}/quickshell-build" \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release -DGIT_REVISION=v0.3.2 \
+            -DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/quickshell-runtime" \
+            -DINSTALL_QML_PREFIX=lib/qt6/qml \
+            -DCRASH_HANDLER=OFF -DUSE_JEMALLOC=OFF -DWAYLAND=OFF -DX11=OFF -DI3=OFF \
+            -DSERVICE_STATUS_NOTIFIER=OFF -DSERVICE_PIPEWIRE=OFF -DSERVICE_MPRIS=OFF \
+            -DSERVICE_PAM=OFF -DSERVICE_POLKIT=OFF -DSERVICE_GREETD=OFF \
+            -DSERVICE_UPOWER=OFF -DSERVICE_NOTIFICATIONS=OFF -DBLUETOOTH=OFF -DNETWORK=OFF
+          cmake --build "${RUNNER_TEMP}/quickshell-build" --parallel 2
+          cmake --install "${RUNNER_TEMP}/quickshell-build"
+          export PATH="${RUNNER_TEMP}/quickshell-runtime/bin:${PATH}"
+          echo "${RUNNER_TEMP}/quickshell-runtime/bin" >> "${GITHUB_PATH}"
+          qs --version
           pip install --user ansible ansible-lint ruff
           ansible-galaxy collection install -r collections/requirements.yml
 

@@ -109,6 +109,7 @@ install step and the tools the contracts call.
 | building the Looking Glass sender code in its contracts | `gcc`, `pkgconf`, `libpipewire`, `glib2` | runner `gcc`, `pkg-config`, `libpipewire-0.3-dev`, `libglib2.0-dev` |
 | `lspci` (`tests/foundation_check_mode_contract.py`) | `pciutils` | `pciutils` |
 | offscreen QML runtime contracts (Qt 6 `qmlscene`, QtQuick, Window, Shapes, WorkerScript) | `qt6-declarative` | `qmlscene-qt6` and four `qml6-module-*` packages |
+| real capability process contract (`qs`, including failed starts and cancellation) | `quickshell` | hash-pinned Quickshell source build against runner Qt; see the fixed toolchain in `.github/workflows/ci.yml` |
 | recovery GTK widget and allocation contracts (private Broadway display) | `gtk4`, `python-gobject` | `python3-gi`, `gir1.2-gtk-4.0`, `libgtk-4-bin` |
 | `openssl`, `git`, `modprobe` | `openssl`, `git`, `kmod` | runner defaults |
 
@@ -117,7 +118,7 @@ On Arch, in one step:
 ```bash
 sudo pacman -S --needed ansible ansible-lint ruff shellcheck bats \
   python python-yaml python-jinja nftables sudo lua poppler \
-  gcc pkgconf libpipewire glib2 pciutils qt6-declarative gtk4 python-gobject \
+  gcc pkgconf libpipewire glib2 pciutils qt6-declarative quickshell gtk4 python-gobject \
   openssl git kmod
 ```
 
@@ -126,6 +127,14 @@ Package names were checked against the official package search,
 does not find it. `ansible-galaxy collection install` fetches
 `community.general` and `community.libvirt` from Ansible Galaxy, so that
 step needs the network.
+
+Ubuntu 26.04 has no official Quickshell package. CI builds release v0.3.2
+from a SHA-256 checked archive into a private toolchain prefix, then requires
+`qs --version`. Its build uses `cmake`, `make`, `g++`, `libcli11-dev`, `libdrm-dev`,
+`qt6-declarative-private-dev` and `qt6-shadertools-dev`; unused compositor
+and desktop services are disabled. Quickshell uses private Qt APIs, so the
+build must use the same Qt libraries as the runtime. This toolchain step
+needs network access too. Missing `qs` is a failed contract, never a skip.
 
 The battery is not guaranteed to run offline either. Level 0i calls plain
 `ansible-lint`, and `.ansible-lint` sets only its profile. Unless it runs

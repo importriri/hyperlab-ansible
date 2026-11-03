@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`capability-contract-missed-the-ci-runtime.md`](capability-contract-missed-the-ci-runtime.md):
+  the real-process capability contract required Quickshell, but the hosted
+  toolchain and contributor prerequisites did not supply it.
 - [`theme-preview-parser-errors.md`](theme-preview-parser-errors.md):
   invalid YAML dates, oversized JSON integers and excessive nesting escaped
   the palette preview diagnostic; parser errors now use the ordinary refusal.

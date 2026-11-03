@@ -3005,3 +3005,20 @@ and Wayland displays. It must run without an undeclared Xvfb dependency.
 All three mutations turned red, then green after restoring the saved
 source bytes. The backend change preserves real GTK geometry and provider
 parity coverage; missing display tools remain a failure.
+
+## Hosted capability runtime
+
+The real capability transport contract still refuses a missing `qs`. With
+the system Quickshell hidden from PATH, the hosted workflow's pinned source
+build supplies its own executable. The same build commands were executed
+locally, using the installed Qt and a private CLI11 dependency prefix;
+Ubuntu package installation and hosted execution remain CI acceptance.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| Q1: Remove `cmake --install` from the fixed toolchain, with a fresh runtime prefix and no system `qs` | workflow version smoke, then `machine_capability_transport_contract.py` | `qs: command not found`, then `real Quickshell is required for capability transport` |
+| Q2: Change the archive SHA-256 digest | workflow source-build commands | checksum `FAILED`, before configuration or compilation |
+
+Both were red, restored byte-for-byte, then green. Restoring installation
+made the real transport scenarios pass using the privately built `qs`,
+with the system runtime still hidden. A changed archive is refused.
