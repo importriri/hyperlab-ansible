@@ -397,5 +397,7 @@ proof.
 
 - [`machine-capability-failures-lost-their-cause.md`](machine-capability-failures-lost-their-cause.md):
   failed capability reads hid known refusal causes or stayed unanswered.
+- [`system-panel-did-not-link-the-key-sheet.md`](system-panel-did-not-link-the-key-sheet.md):
+  the system panel had no route to the existing complete host key sheet.
 
 Author: [importriri](https://github.com/importriri).

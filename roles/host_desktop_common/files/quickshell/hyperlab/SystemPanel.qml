@@ -441,6 +441,19 @@ PanelWindow {
                     theme: panel.theme
                 }
 
+                PanelRow {
+                    objectName: "system-host-keys"
+                    width: parent.width
+                    tokens: panel.tokens
+                    theme: panel.theme
+                    glyph: panel.icons.keyboard
+                    title: "All host shortcuts"
+                    value: "SUPER + F1"
+                    hint: "open key sheet"
+                    interactive: true
+                    onActivated: panel.shellSurfaces.openLauncher(panel.outputName, "keys")
+                }
+
                 Row {
                     anchors.right: parent.right
                     spacing: panel.tokens.spaceSm

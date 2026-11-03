@@ -127,18 +127,19 @@ runtime SSH inventory and the reviewed action registry. A disabled control
 shows the bridge's own reason: *"Looking Glass is disabled by the machine
 spec"*, *"runtime SSH inventory has the wrong mode"*.
 
-The Machine pane's Connect header and every disabled action show that
-cause, never a generic sentence in its place. Capability failures preserve
-a structured backend refusal even when stderr is empty, and distinguish a
-nonzero exit, interruption, empty output and invalid data. A bridge that fails to start reports its installed path after
-5 seconds, with installation and execute-permission checks; the process
-interface does not identify which one failed. A running capability read has
-180 seconds for its sequence of backend queries, each bounded at 15 seconds.
-Replacement or clearing cancels the old bridge process, and a request is
-spent before publication so a late callback cannot replace the result.
-Cancellation does not promise termination of the bridge's CLI descendants.
-The installed Nitro failure observed on 2026-11-02 still needs a readback;
-these software cases do not identify its original cause.
+The Machine pane's Connect header and every disabled action show that cause,
+never a generic sentence in its place. Capability failures preserve a
+structured backend refusal even when stderr is empty, and distinguish a
+nonzero exit, interruption, empty output and invalid data. A bridge that
+fails to start reports its installed path after 5 seconds, with installation
+and execute-permission checks; the process interface does not identify which
+one failed. A running capability read has 180 seconds for its sequence of
+backend queries, each bounded at 15 seconds. Replacement or clearing cancels
+the old bridge process, and a request is spent before publication so a late
+callback cannot replace the result. Cancellation does not promise
+termination of the bridge's CLI descendants. The installed Nitro failure
+observed on 2026-11-02 still needs a readback; these software cases do not
+identify its original cause.
 
 For a VFIO guest the bridge reports the console as its *emulated* display,
 and the pane labels it **Recovery console**: it is real and useful for boot
@@ -716,7 +717,9 @@ destination they mean instead of producing duplicate rows. The query never
 becomes executable text.
 
 `SUPER + F1` opens the launcher as the **host key sheet**: every host
-binding from `HostKeys.qml`, searchable, read-only; a row runs nothing.
+binding from `HostKeys.qml`, searchable, read-only; a row runs nothing. The
+system panel's **All host shortcuts** row opens the same sheet on its
+summoning output and closes the panel, without maintaining another list.
 
 `SUPER + SHIFT + V` opens the launcher in **Send the host clipboard to**
 mode ([ADR 0020](adr/0020-host-to-guest-clipboard.md)): only running
