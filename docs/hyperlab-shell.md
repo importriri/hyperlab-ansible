@@ -131,9 +131,11 @@ The Machine pane's Connect header and every disabled action show that cause,
 never a generic sentence in its place. Capability failures preserve a
 structured backend refusal even when stderr is empty, and distinguish a
 nonzero exit, interruption, empty output and invalid data. A bridge that
-fails to start reports its installed path after 5 seconds, with installation
-and execute-permission checks; the process interface does not identify which
-one failed. A running capability read has 180 seconds for its sequence of
+fails to start is inspected after 5 seconds with bounded existence and
+execute-permission probes. It names an absent/unreadable path, a
+non-executable file, a failure despite an executable path, or an inspection
+failure. Both probes together have a further 5-second bound and show the
+installed path. A running capability read has 180 seconds for its sequence of
 backend queries, each bounded at 15 seconds. Replacement or clearing cancels
 the old bridge process, and a request is spent before publication so a late
 callback cannot replace the result. Cancellation does not promise

@@ -3042,3 +3042,25 @@ shared runtime source is explicitly deferred in proposed ADR 0055.
 Each source was saved before mutation, restored byte-for-byte, then checked
 green. G5 proves configuration drift is caught; the installed native
 consumers do not yet update dynamically with the provider.
+
+## Failed-start bridge diagnoses
+
+The real capability transport contract now requires distinct diagnoses
+after bounded existence and execute-permission probes. It covers a
+missing path, a non-executable file, an executable with a missing
+interpreter, and an unavailable inspection executable, in addition to the
+previous answer, timeout, interruption and cancellation cases.
+
+| Mutation | Check | Observed red result |
+| --- | --- | --- |
+| S1: Replace the missing/unreadable-path reason with a combined failed-start sentence | `machine_capability_transport_contract.py` | `missing: known cause lost` |
+| S2: Replace the non-executable reason with that sentence | same | `denied: known cause lost` |
+| S3: Replace the executable-but-failed reason with that sentence | same | `interpreter: known cause lost` |
+| S4: Do not restart the short deadline for path inspection | same | `inspection-missing: known cause lost` (total timeout hid inspection failure) |
+
+All four were red, restored byte-for-byte, then green. The operation QML
+harness also substitutes the new child Process type while keeping the
+production capability component, timers and assertions intact. These
+diagnoses do not identify the original installed Nitro failure. The
+stdout-only refusal fixture exercises a defensive path; the shipped bridge
+also writes its refusal reason to stderr.

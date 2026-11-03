@@ -161,6 +161,7 @@ Scope {
         runner.answered = true;
         runner.deadline.stop();
         runner.startDeadline.stop();
+        runner.stopStartCheck();
         if (runner.running)
             runner.signal(9);
         else
@@ -228,6 +229,12 @@ Scope {
             property string buffer: ""
             property string detail: ""
             property bool answered: false
+            property string startCheckKind: ""
+
+            function stopStartCheck() {
+                if (probeRunner.startCheck.running)
+                    probeRunner.startCheck.signal(9);
+            }
 
             function answer(raw, code, reason) {
                 if (probeRunner.answered)
@@ -235,6 +242,7 @@ Scope {
                 probeRunner.answered = true;
                 probeRunner.deadline.stop();
                 probeRunner.startDeadline.stop();
+                probeRunner.stopStartCheck();
                 if (machineActions.capabilityRunner === probeRunner)
                     machineActions.capabilityRunner = null;
                 machineActions.capabilityAnswered(probeRunner.serial,
@@ -247,8 +255,41 @@ Scope {
                     // Failed QProcess starts do not emit exited.
                     if (probeRunner.running || probeRunner.answered)
                         return;
-                    probeRunner.answer("", -1, "The machine bridge could not start at "
-                        + machineActions.bridge + "; check installation and execute permission");
+                    if (probeRunner.startCheckKind !== "") {
+                        probeRunner.answer("", -1, "The machine bridge could not start at "
+                            + machineActions.bridge + "; path inspection timed out");
+                        probeRunner.destroy();
+                        return;
+                    }
+                    probeRunner.startCheckKind = "exists";
+                    probeRunner.startCheck.command = ["/usr/bin/test", "-e", machineActions.bridge];
+                    probeRunner.startDeadline.restart();
+                    probeRunner.startCheck.running = true;
+                }
+            }
+
+            // Inspect only after a failed start; never run a shell or change
+            // permissions. The restarted short deadline bounds both tests.
+            property Process startCheck: Process {
+                onExited: (exitCode, exitStatus) => {
+                    if (probeRunner.answered)
+                        return;
+                    if (exitStatus === 0 && exitCode === 0
+                        && probeRunner.startCheckKind === "exists") {
+                        probeRunner.startCheckKind = "executable";
+                        probeRunner.startCheck.command = ["/usr/bin/test", "-x", machineActions.bridge];
+                        Qt.callLater(() => {
+                            if (!probeRunner.answered)
+                                probeRunner.startCheck.running = true;
+                        });
+                        return;
+                    }
+                    const reason = exitStatus !== 0 || (exitCode !== 0 && exitCode !== 1)
+                        ? "could not inspect the bridge path"
+                        : exitCode === 1
+                        ? (probeRunner.startCheckKind === "exists" ? "not installed or its path is unreadable" : "not executable")
+                        : "executable exists but could not start";
+                    probeRunner.answer("", -1, "The machine bridge: " + reason + " at " + machineActions.bridge);
                     probeRunner.destroy();
                 }
             }

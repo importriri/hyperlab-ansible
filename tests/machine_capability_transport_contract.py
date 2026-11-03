@@ -48,6 +48,8 @@ elif mode == "success" or mode.startswith("success-"):
 def run_case(directory: Path, bridge: Path, mode: str) -> dict:
     actions = (QML / "MachineActions.qml").read_text()
     actions = actions.replace("/usr/local/bin/privatestack-machine-actions", str(bridge))
+    if mode == "inspection-missing":
+        actions = actions.replace('"/usr/bin/test"', json.dumps(str(directory / "missing-test")))
     # Exercise real timers without spending minutes in a regression check.
     actions = re.sub(r'(property int capabilityTimeoutMs:) \d+', r'\1 1200', actions)
     actions = re.sub(r'(property int capabilityStartTimeoutMs:) \d+', r'\1 100', actions)
@@ -131,11 +133,16 @@ def main() -> int:
                  (bridge, "exit", "exited with code 7"),
                  (bridge, "crash", "was interrupted"),
                  (bridge, "stall", "timed out"),
-                 (directory / "missing", "missing", "could not start")]
+                 (directory / "missing", "missing", "not installed")]
         denied = directory / "denied"
         denied.write_text(FIXTURE)
         denied.chmod(0o600)
-        cases.append((denied, "denied", "could not start"))
+        cases.append((denied, "denied", "not executable"))
+        invalid_interpreter = directory / "invalid-interpreter"
+        invalid_interpreter.write_text("#!/nonexistent/hyperlab-test-interpreter\n")
+        invalid_interpreter.chmod(0o700)
+        cases.extend([(invalid_interpreter, "interpreter", "executable exists but could not start"),
+                      (directory / "missing", "inspection-missing", "path inspection timed out")])
         for executable, mode, reason in cases:
             answer = run_case(directory, executable, mode)
             assert answer["state"] == "unavailable" and not answer["verbs"], f"{mode}: failed bridge left actionable or unanswered capabilities: {answer}"

@@ -16,6 +16,12 @@ or non-executable bridge never emits `exited`, leaving capabilities loading
 indefinitely. A successful inert bridge returns its JSON normally: there is
 no evidence here of a general stdout ordering failure.
 
+The shipped bridge writes refusals to stderr as well as stdout. On the
+Nitro, the old generic sentence therefore points to empty stderr (for
+example an interrupted process, or invalid output with exit 0) or the
+Connect header's literal; the stdout-only fixture does not identify that
+installed cause.
+
 The observed sentence came from two places. `ShellState` used it as the
 fallback detail when the answer was invalid and stderr was empty, and
 `MachineContextPane.qml` printed it as the Connect header whenever the
@@ -24,9 +30,11 @@ The header now shows the recorded cause, as the disabled action rows do.
 
 The shell now preserves a structured refusal and distinguishes empty data,
 invalid data, nonzero exit and interruption. A failed start is reported after
-5 seconds with the executable path and installation/execute-permission
-checks. Quickshell does not expose which of those checks failed through its
-process interface, so the message does not guess. A running capability read
+5 seconds, followed by bounded `/usr/bin/test -e` and `-x` probes of the
+executable path. The result names an absent/unreadable path, a file without
+execute permission, or a failure despite an executable path. An unavailable
+or stalled inspection reports its own failure; it never enables an action.
+A running capability read
 has a 180-second total budget for the sequence of bounded backend reads.
 A newer selection cancels its previous bridge process, and a spent request
 cannot be overwritten by a duplicate or late callback. Cancellation signals
@@ -41,6 +49,7 @@ It covers success, structured refusal, empty and malformed output, exit,
 interruption, timeout, missing/non-executable bridge, replacement and clear.
 It shortens the timers in the disposable copy; it does not measure Nitro
 latency. Removing either deadline or the refusal reason makes it fail.
+Collapsing absent and non-executable paths into one sentence also fails.
 The `capabilities-unavailable` scenario of
 `tests/host_quickshell_runtime_contract.py` renders the pane and fails if its
 Connect header hides a stderr cause or a stdout-only refusal.

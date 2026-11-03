@@ -457,6 +457,7 @@ def main():
         source = runtime.strip_blocks(source, 'Component', 'Process', 'Timer')
         diagnostics = diagnostics.replace('Process {', 'FixtureProcess {').replace('StdioCollector {', 'FixtureCollector {')
         capabilities = capabilities.replace('Process {', 'FixtureProcess {').replace('StdioCollector {', 'FixtureCollector {')
+        capabilities = capabilities.replace('property Process ', 'property FixtureProcess ')
         source = source.replace('    id: machineActions', '    id: machineActions\n' + diagnostics + capabilities, 1)
         # Keep capability deadlines and runner ownership real too. Only the
         # process transport and unrelated connection runner are inert.
