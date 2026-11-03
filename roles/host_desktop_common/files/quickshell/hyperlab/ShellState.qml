@@ -1335,12 +1335,19 @@ Scope {
         if (serial !== request.serial || String(machine) !== request.machine)
             return false;
 
+        // Spend the request before publishing: a late exit after a timeout
+        // or a duplicate callback cannot replace this result.
+        state.capabilityRequest = { "serial": -1, "machine": "", "generation": -1 };
+
+        const parsed = state.parseJson(raw);
         const answer =
             exitCode === 0
-            ? state.validCapabilityAnswer(state.parseJson(raw), request.machine)
+            ? state.validCapabilityAnswer(parsed, request.machine)
             : null;
 
         if (answer === null) {
+            const refusal = parsed !== null && parsed.phase === "refused"
+                && typeof parsed.reason === "string" ? parsed.reason.trim() : "";
             state.machineCapabilities = {
                 "machine": request.machine,
                 "generation": request.generation,
@@ -1350,7 +1357,10 @@ Scope {
                 "detail":
                     String(detail).length > 0
                     ? String(detail)
-                    : "The machine bridge did not answer",
+                    : refusal.length > 0 ? refusal
+                    : exitCode !== 0 ? "The machine bridge exited with code " + exitCode
+                    : String(raw).trim().length === 0 ? "The machine bridge returned no capability data"
+                    : "The machine bridge returned invalid capability data",
                 "observedAt": 0
             };
             return false;

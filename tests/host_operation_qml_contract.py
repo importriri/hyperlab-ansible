@@ -450,18 +450,17 @@ def main():
         exit_handler = source[start:end]
         diagnostic_start = source.index('    // --------------------------------------------------------- diagnostics')
         diagnostic_end = source.index('    // ------------------------------------------------------- stream health', diagnostic_start)
+        capability_start = source.index('    Component {\n        id: capabilityComponent')
+        capabilities = source[capability_start:diagnostic_start]
         diagnostics = source[diagnostic_start:diagnostic_end]
         source = source[:diagnostic_start] + source[diagnostic_end:]
         source = runtime.strip_blocks(source, 'Component', 'Process', 'Timer')
         diagnostics = diagnostics.replace('Process {', 'FixtureProcess {').replace('StdioCollector {', 'FixtureCollector {')
-        source = source.replace('    id: machineActions', '    id: machineActions\n' + diagnostics, 1)
-        # Capability/connection request handlers stay real; their runners only
-        # record argv and return inert objects.
+        capabilities = capabilities.replace('Process {', 'FixtureProcess {').replace('StdioCollector {', 'FixtureCollector {')
+        source = source.replace('    id: machineActions', '    id: machineActions\n' + diagnostics + capabilities, 1)
+        # Keep capability deadlines and runner ownership real too. Only the
+        # process transport and unrelated connection runner are inert.
         source = source.replace('    id: machineActions', '''    id: machineActions
-    QtObject {
-        id: capabilityComponent
-        function createObject(parent, values) { return {running: false}; }
-    }
     QtObject {
         id: connectionComponent
         function createObject(parent, values) { return {running: false}; }

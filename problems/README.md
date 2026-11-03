@@ -395,4 +395,7 @@ proof.
   CI omitted six shell, palette and choices checks that the local verifier ran;
   execution fixtures now compare both paths and require failure propagation.
 
+- [`machine-capability-failures-lost-their-cause.md`](machine-capability-failures-lost-their-cause.md):
+  failed capability reads hid known refusal causes or stayed unanswered.
+
 Author: [importriri](https://github.com/importriri).

@@ -341,7 +341,10 @@ Item {
             }
 
             // Connect.
+            // An unavailable answer always carries its cause (ShellState):
+            // show it here, never a generic substitute.
             SectionHeader {
+                objectName: "machine-connect-header"
                 width: parent.width
                 visible: pane.present
                 tokens: pane.tokens
@@ -352,7 +355,7 @@ Item {
                     ? "Transports this machine currently supports"
                     : (
                         pane.capabilitiesUnavailable
-                        ? "The machine bridge did not answer"
+                        ? "Unavailable: " + String(pane.capabilities.detail)
                         : "Checking what this machine supports"
                       )
             }

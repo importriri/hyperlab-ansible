@@ -1778,6 +1778,28 @@ SELECTION = """
                   "selection performed an operation");
 """
 
+# The Connect header names the cause the bridge reported: its stderr detail,
+# or its structured refusal when stderr is empty. Never a generic message.
+CAPABILITY_CAUSE = SELECTION + """
+            const header = window.find(workspaceSurface, "machine-connect-header");
+            check(header !== null && header.visible,
+                  "the Connect header is not shown for the selection");
+            check(header !== null
+                  && header.description.indexOf("fixture bridge unavailable") >= 0,
+                  "the Connect header hid the bridge's reported cause");
+            sharedState.beginCapabilityRequest(90, "fixture-001", 1);
+            sharedState.applyCapabilityAnswer(90, "fixture-001", JSON.stringify({
+                phase: "refused", reason: "fixture inventory refused"
+            }), 2, "");
+            check(sharedState.capabilityFor("fixture-001", "shutdown").reason
+                  === "fixture inventory refused",
+                  "a structured refusal lost its reason before presentation");
+            check(header !== null
+                  && header.description.indexOf("fixture inventory refused") >= 0
+                  && header.description.indexOf("did not answer") < 0,
+                  "the Connect header replaced a known refusal with a generic message");
+"""
+
 CONFIRMATION = """
             sharedSurfaces.openWorkspace("machines");
             sharedSurfaces.selectMachine("fixture-001", 1);
@@ -3721,7 +3743,7 @@ def main() -> int:
         # Capabilities the bridge could not read must disable operations and
         # say why, never fall back to a guess.
         source, messages = scenario_source(
-            1920, 1080, machines(3), SELECTION,
+            1920, 1080, machines(3), CAPABILITY_CAUSE,
             capability_state='"unavailable"',
             capability_verbs="({})",
         )

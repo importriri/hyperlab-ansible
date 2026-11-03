@@ -147,6 +147,25 @@ Scope {
     // ------------------------------------------------------- capabilities
 
     property int capabilitySerial: 0
+    // Inventory and per-verb registry reads each have a 15 s backend bound.
+    // Keep a total budget for the whole sequence, not one CLI invocation.
+    readonly property int capabilityTimeoutMs: 180000
+    readonly property int capabilityStartTimeoutMs: 5000
+    property var capabilityRunner: null
+
+    function cancelCapabilityProbe() {
+        const runner = machineActions.capabilityRunner;
+        if (runner === null)
+            return;
+        machineActions.capabilityRunner = null;
+        runner.answered = true;
+        runner.deadline.stop();
+        runner.startDeadline.stop();
+        if (runner.running)
+            runner.signal(9);
+        else
+            runner.destroy();
+    }
 
     function probe(machine, generation) {
         const name = String(machine);
@@ -157,6 +176,7 @@ Scope {
         }
 
         machineActions.capabilitySerial += 1;
+        machineActions.cancelCapabilityProbe();
 
         const serial = machineActions.capabilitySerial;
         const observed = typeof generation === "number" ? generation : -1;
@@ -180,6 +200,9 @@ Scope {
             return false;
         }
 
+        machineActions.capabilityRunner = runner;
+        runner.deadline.start();
+        runner.startDeadline.start();
         runner.running = true;
         return true;
     }
@@ -187,6 +210,7 @@ Scope {
     // Supersedes any request in flight: its reply no longer matches.
     function clearCapabilities() {
         machineActions.capabilitySerial += 1;
+        machineActions.cancelCapabilityProbe();
         machineActions.capabilitiesCleared();
     }
 
@@ -203,6 +227,42 @@ Scope {
 
             property string buffer: ""
             property string detail: ""
+            property bool answered: false
+
+            function answer(raw, code, reason) {
+                if (probeRunner.answered)
+                    return;
+                probeRunner.answered = true;
+                probeRunner.deadline.stop();
+                probeRunner.startDeadline.stop();
+                if (machineActions.capabilityRunner === probeRunner)
+                    machineActions.capabilityRunner = null;
+                machineActions.capabilityAnswered(probeRunner.serial,
+                    probeRunner.machine, raw, code, reason);
+            }
+
+            property Timer startDeadline: Timer {
+                interval: machineActions.capabilityStartTimeoutMs
+                onTriggered: {
+                    // Failed QProcess starts do not emit exited.
+                    if (probeRunner.running || probeRunner.answered)
+                        return;
+                    probeRunner.answer("", -1, "The machine bridge could not start at "
+                        + machineActions.bridge + "; check installation and execute permission");
+                    probeRunner.destroy();
+                }
+            }
+
+            property Timer deadline: Timer {
+                interval: machineActions.capabilityTimeoutMs
+                onTriggered: {
+                    probeRunner.answer("", -1, "The machine bridge timed out while reading capabilities");
+                    if (probeRunner.running)
+                        probeRunner.signal(9);
+                    else
+                        probeRunner.destroy();
+                }
+            }
 
             stdout: StdioCollector {
                 onStreamFinished: {
@@ -217,13 +277,9 @@ Scope {
             }
 
             onExited: (exitCode, exitStatus) => {
-                machineActions.capabilityAnswered(
-                    probeRunner.serial,
-                    probeRunner.machine,
-                    probeRunner.buffer,
-                    exitCode,
-                    probeRunner.detail
-                );
+                probeRunner.answer(probeRunner.buffer,
+                    exitStatus === 0 ? exitCode : -1,
+                    exitStatus === 0 ? probeRunner.detail : "The machine bridge was interrupted");
                 probeRunner.destroy();
             }
         }
