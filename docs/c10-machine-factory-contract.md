@@ -152,15 +152,22 @@ projection is recomputed for each comparison
 
 ### Managed, fixture and external domains are different populations
 
-Normal `Machines` presents only product-managed user-created Machines.
+Machines presents product-managed user-created Machines and every other
+observed libvirt domain in separate groups
+([ADR 0059](adr/0059-external-machine-visibility.md), accepted operator
+population decision, 2026-11-02).
 
 Checked-in campaign domains such as `arch-dev-vfio` remain fixtures during C10
-and do not define first-boot product inventory.
+and do not define first-boot product inventory. A fresh registry still has no
+product Machines; any already-defined domains appear under **Not managed**,
+with lifecycle **external**, without being adopted. This includes Workbench
+candidate domains; their capture operations stay in Workbench.
 
-A libvirt domain absent from the product Machine registry is not silently
-hidden. Diagnostics / Inventory may expose it as a fixture or unmanaged domain
-with observed facts, without granting product lifecycle semantics that were
-never registered.
+The native shell shows these other domains read-only, with no power or console
+actions. Diagnostics retains the same raw observation. Running summaries
+include every libvirt domain and distinguish managed from external running.
+The recovery surface retains its existing reviewed actions. None of these
+views grants product lifecycle semantics that were never registered.
 
 ### Workspace presentation is template-owned appearance, not trust
 

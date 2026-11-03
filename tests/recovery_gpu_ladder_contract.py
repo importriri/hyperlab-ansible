@@ -77,7 +77,7 @@ def load_manager(gtk: Any) -> dict[str, Any]:
         if isinstance(node, ast.ImportFrom) and node.module == "__future__" or isinstance(node, ast.Assign) and any(
                 isinstance(target, ast.Name) and target.id in {"DOMAIN_META", "CSS"}
                 for target in node.targets) or isinstance(node, ast.FunctionDef) and node.name in {
-                "clear_box", "set_css", "text_label", "dropdown_value"}:
+                "clear_box", "set_css", "text_label", "dropdown_value", "card", "button"}:
             nodes.append(node)
         elif isinstance(node, ast.ClassDef) and node.name in {"Model", "HyperlabWindow"}:
             if node.name == "HyperlabWindow":

@@ -94,8 +94,25 @@ survive.
 
 ## Machines
 
-Inventory grouped by host-resolved provenance, with a count per group and an
-explicit Unclassified group last. Cards are 300–420 units wide and carry, in
+Product inventory grouped by host-resolved provenance, with a count per group
+and an explicit Unclassified group last. Every other observed libvirt domain
+appears below in **Not managed**, with lifecycle **external**, name and state.
+Those rows have a neutral outline and transparent fill, never a domain colour
+or HOST grey, and carry no selection, power or console actions. The same raw
+inventory stays in Diagnostics. This is visibility without adoption
+([ADR 0059](adr/0059-external-machine-visibility.md): accepted population
+change; proposed external visual state).
+
+The Machines header, Session and Diagnostics use raw libvirt running state,
+including external domains and product configuration drift: **0 managed
+running · 1 external running**. A failed observation says unavailable and a
+stale observation says Last observed. An unreadable domain state makes the
+summary Running state unknown. If product membership cannot be read,
+known raw domains remain visible read-only and their total running count
+names the missing membership. A clean registry with no libvirt domains is
+still empty.
+
+Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the
 machine was given (memory, vCPU, network), and its relationship to the
 passthrough GPU.
@@ -517,7 +534,8 @@ Read-only, ordered by the questions an operator asks.
   as control plane and SERVICES in its own compartment outside the ladder.
   The diagram explains policy; it performs no handoff.
 - **Inventory** — whether the inventory can be trusted right now, and the
-  per-provenance counts, shown only when the inventory is actually known.
+  per-provenance product counts, plus the same Not managed domains and split
+  running counts as Machines, shown only when their sources are known.
 - **Session** — the compositor's identity for the focused surface (with its
   PID and window), the resolved provenance with its state, source, domain and
   reason code, host telemetry, and the appearance state including whether the
@@ -527,8 +545,8 @@ Read-only, ordered by the questions an operator asks.
 
 Golden Image candidates ([ADR 0015](adr/0015-golden-image-capture.md)):
 domains adopted to be captured into an image. A candidate is never a product
-Machine, so it never appears in Machines, and the Workbench refuses to adopt
-or seal a product Machine. The view reads the machine bridge's `workbench`
+Machine: its domain appears read-only under Not managed in Machines, and the
+Workbench refuses to adopt or seal a product Machine. The view reads the machine bridge's `workbench`
 answer (the root-owned registry joined with live state) when it opens, every
 15 seconds while it is shown and after each operation; a reading that does
 not validate is reported as unavailable, never shown as a list.
@@ -876,3 +894,13 @@ passing parity verification before deployment.
   asset family.
 - [`keybinding-security.md`](keybinding-security.md) — the input ownership
   boundary.
+
+The recovery Machines surface reads the same registry-backed `machine
+inventory` alongside `vm list` and `compose list`. It uses registry names for
+grouping and count splits; stale product metadata never adopts a domain.
+It requires a unique reviewed spec and matching observed managed provenance and
+interfaces before applying a domain colour; unknown networks never fall back
+to DEV. Unclassified rows use the proposed external outline and label.
+**Shut down** on an external domain remains an existing recovery action,
+resolved as `vm.stop`; it is not offered by the native read-only group. See
+[the defect analysis](../problems/external-machines-hidden-and-coloured.md).

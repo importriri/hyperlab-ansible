@@ -108,7 +108,10 @@ The canonical visual identities remain:
 - `services`: cyan;
 - `dirty`: orange;
 - `lab`: violet;
-- host-native/unclassified: neutral.
+- host-native: neutral HOST identity;
+- unclassified machines: neutral outline, transparent fill, explicit `external`
+  label; never a trust-domain colour or the HOST grey identity
+  ([ADR 0059](adr/0059-external-machine-visibility.md), Proposed visual rule).
 
 The selected appearance theme is independent from those meanings.
 
@@ -138,8 +141,9 @@ from its VM spec into the libvirt metadata, and only while every interface is
 attached to that declared network. `gpu_domain_profiles` stays the VFIO gate
 (`gpu_trust_profile`): a VFIO guest without an entry is still an error, and a
 gate that disagrees with the network identity leaves the guest unclassified
-with `domains.trust_conflict`. An unmanaged domain is named only by a GPU gate
-entry; being attached to a trust network does not classify it.
+with `domains.trust_conflict`. A GPU gate may name an unmanaged domain for handoff policy; it does not
+classify its visual identity. A machine without a unique reviewed spec stays
+external even if a GPU gate names it or it attaches to a trust network.
 
 `services` therefore has a visual trust identity while remaining structurally
 outside GPU handoff. Visual provenance must not infer GPU eligibility from the

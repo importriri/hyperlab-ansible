@@ -180,6 +180,10 @@ entered the pipeline.
     align byte/path refusals across shell, CLI and Bash readers; pin host
     login and guest presentation exceptions and require a widening locale.
 
+59. [`0059-external-machine-visibility.md`](0059-external-machine-visibility.md)
+    — accepted operator population decision: every domain visible, external
+    rows read-only in the native shell; proposed external outline and label.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
@@ -592,3 +596,17 @@ remain.
   - Source: [`product_display_name_contract.py`](../../tests/product_display_name_contract.py).
   - Prerequisites: the operator's decision; the remaining visible migration
     and physical Nitro/Predator gates remain open.
+
+- [ADR 0059](0059-external-machine-visibility.md)
+  - Decision: proposed external visual state; population change accepted by
+    the operator on 2026-11-02.
+  - Built: built — native Not managed group, raw running counts on every
+    native readout, and spec-bound recovery identity with an external outline.
+  - Activation: default — the existing desktop roles install the shared
+    shell source and recovery manager; a deployed session must reload them.
+  - Source: [`ShellState.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml),
+    [`MachineStage.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml),
+    [`privatestack-hyperlab-domains.py`](../../roles/host_desktop_sway/files/privatestack-hyperlab-domains.py),
+    [`external_machine_visibility_contract.py`](../../tests/external_machine_visibility_contract.py)
+  - Prerequisites: acceptance of the external visual rule; installed Nitro
+    visibility, colour and counts, then Predator replay.

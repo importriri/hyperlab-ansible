@@ -1724,6 +1724,23 @@ button:hover,
     border-left-color: transparent;
 }
 
+/* Unclassified external identity: outline only, never a host/domain fill. */
+.card.vm-domain-external,
+.card.vm-domain-external:hover,
+.vm-tile.vm-domain-external,
+.vm-tile.vm-domain-external:hover,
+.vm-tile.vm-domain-external.selected,
+.vm-thumb.vm-domain-external,
+.vm-state.vm-domain-external,
+.vm-domain-external .vm-screen,
+.vm-domain-external .vm-screen-line,
+.external-outline {
+    background: transparent;
+    border: 1px solid @hl_text;
+    color: @hl_text;
+    box-shadow: none;
+}
+
 """
 
 
@@ -1737,6 +1754,7 @@ class Model:
     catalog: list[dict[str, Any]] = field(default_factory=list)
     domains: list[dict[str, Any]] = field(default_factory=list)
     specs: list[dict[str, Any]] = field(default_factory=list)
+    product_inventory: dict[str, Any] = field(default_factory=dict)
     actions: list[dict[str, Any]] = field(default_factory=list)
     load_errors: list[str] = field(default_factory=list)
 
@@ -1771,6 +1789,36 @@ class Model:
     @property
     def running_domains(self) -> list[dict[str, Any]]:
         return [item for item in self.domains if str(item.get("state", "")).lower() == "running"]
+
+    @property
+    def product_names(self) -> set[str] | None:
+        payload = self.product_inventory
+        if not isinstance(payload, dict) or payload.get("machines_available") is not True:
+            return None
+        rows = payload.get("machines")
+        if (not isinstance(rows, list) or any(
+                not isinstance(row, dict) or not isinstance(row.get("name"), str)
+                or not row["name"] for row in rows)):
+            return None
+        names = {row["name"] for row in rows}
+        return names if len(names) == len(rows) else None
+
+    def is_product_domain(self, domain: dict[str, Any]) -> bool:
+        names = self.product_names
+        return names is not None and domain.get("name") in names
+
+    @property
+    def running_summary(self) -> str:
+        if any(error.startswith("domains:") for error in self.load_errors):
+            return "Running inventory unavailable"
+        if any(item.get("state", "unknown") == "unknown" for item in self.domains):
+            return "Running state unknown"
+        if self.product_names is None:
+            return "%d running · managed membership unavailable" % len(self.running_domains)
+        managed = sum(self.is_product_domain(item) for item in self.running_domains)
+        return "%d managed running · %d external running" % (
+            managed, len(self.running_domains) - managed,
+        )
 
 
 @dataclass
@@ -2315,8 +2363,7 @@ class HyperlabWindow(Gtk.Window):
                 )
             else:
                 self.header_status.set_text(
-                    "%d running"
-                    % len(self.model.running_domains)
+                    self.model.running_summary
                 )
 
     def _build_drawer_diagnostics(self) -> Gtk.Widget:
@@ -2470,7 +2517,8 @@ class HyperlabWindow(Gtk.Window):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
         row.add_css_class("card")
         name = str(domain.get("name", "unnamed"))
-        network = str(domain.get("network") or (domain.get("networks") or ["-"])[0])
+        identity = self._domain_for_vm(domain)
+        row.add_css_class("vm-domain-%s" % identity)
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         left.set_hexpand(True)
         left.append(text_label(name, "card-title", wrap=False))
@@ -2478,7 +2526,7 @@ class HyperlabWindow(Gtk.Window):
             "%s · %s · %s" % (
                 domain.get("state", "unknown"),
                 domain.get("device_profile") or ("vfio" if domain.get("vfio") else "standard"),
-                domain.get("lifecycle") or "external",
+                "external" if not self.model.is_product_domain(domain) else domain.get("lifecycle") or "unknown",
             ),
             "caption",
             wrap=False,
@@ -2486,12 +2534,14 @@ class HyperlabWindow(Gtk.Window):
         row.append(left)
         running = str(domain.get("state", "")).lower() == "running"
         row.append(text_label(
-            "RUNNING" if running else "STOPPED",
-            "status-ready" if running else "tag",
+            "RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",
+            "external-outline" if identity == "external" else "status-ready" if running else "tag",
             wrap=False,
         ))
-        if network in DOMAIN_META:
-            row.append(text_label(network, "domain-badge-%s" % network, wrap=False))
+        if identity in DOMAIN_META:
+            row.append(text_label(identity, "domain-badge-%s" % identity, wrap=False))
+        else:
+            row.append(text_label("external", "external-outline", wrap=False))
         open_button = Gtk.Button(label="Open")
         open_button.connect("clicked", lambda _button, vm=domain: self._primary_vm_action(vm))
         row.append(open_button)
@@ -2507,7 +2557,7 @@ class HyperlabWindow(Gtk.Window):
         )
         item.append(text_label("Host Health", "card-title", wrap=False))
         item.append(text_label("Good" if errors == 0 else "Check diagnostics", "status-ready" if errors == 0 else "status-blocked", wrap=False))
-        item.append(text_label("Running VMs: %d" % len(self.model.running_domains), "caption"))
+        item.append(text_label(self.model.running_summary, "caption"))
         item.append(text_label("Sealed images: %d/%d" % (len(self.model.ready_images), len(self.model.catalog)), "caption"))
         item.append(text_label("Snapshot/backup: next stage", "caption"))
         return item
@@ -2826,10 +2876,11 @@ class HyperlabWindow(Gtk.Window):
             "catalog": lambda: run_cli_json("catalog"),
             "domains": lambda: run_cli_json("vm", "list"),
             "specs": lambda: run_cli_json("compose", "list"),
+            "product_inventory": lambda: run_cli_json("machine", "inventory"),
             "actions": lambda: run_cli_json("actions"),
         }
         # These reads are independent. Running them concurrently changes the
-        # panel latency from the sum of five CLI calls to the slowest call.
+        # panel latency from the sum of the CLI calls to the slowest call.
         with ThreadPoolExecutor(max_workers=len(calls), thread_name_prefix="hyperlab-read") as pool:
             futures = {pool.submit(callback): key for key, callback in calls.items()}
             for future in as_completed(futures):
@@ -2852,8 +2903,8 @@ class HyperlabWindow(Gtk.Window):
         elif any(p.get("severity") == "warn" for p in model.problems):
             severity = "warn"
         self.header_status.set_text(
-            "%d running · %d/%d images"
-            % (len(model.running_domains), len(model.ready_images), len(model.catalog))
+            "%s · %d/%d images"
+            % (model.running_summary, len(model.ready_images), len(model.catalog))
         )
         if hasattr(self, "header_host"):
             host = model.status.get("host") if isinstance(model.status, dict) else None
@@ -2935,7 +2986,7 @@ class HyperlabWindow(Gtk.Window):
             "The entire lab in one view: host, images, VMs, trust and next actions.",
         )
         metrics = self._grid(4)
-        self._grid_add(metrics, self._metric(str(len(self.model.domains)), "Detected VMs", "%d running" % len(self.model.running_domains)), 0)
+        self._grid_add(metrics, self._metric(str(len(self.model.domains)), "Detected VMs", self.model.running_summary), 0)
         self._grid_add(metrics, self._metric(str(len(self.model.ready_images)), "Ready images", "%d blocked" % (len(self.model.catalog) - len(self.model.ready_images))), 1)
         self._grid_add(metrics, self._metric("5", "Security domains", "clean · dev · lab · dirty · services"), 2)
         self._grid_add(metrics, self._metric(str(len(self.model.problems) + len(self.model.load_errors)), "Problems", "open Diagnostics for details"), 3)
@@ -3043,15 +3094,20 @@ class HyperlabWindow(Gtk.Window):
         return scroll
 
     def _spec_by_name(self, name: str) -> dict[str, Any] | None:
-        for row in self.model.specs:
-            spec = row.get("spec") if isinstance(row, dict) else None
-            if isinstance(spec, dict) and spec.get("name") == name:
-                return row
-        return None
+        matches = [row for row in self.model.specs
+                   if isinstance(row, dict) and isinstance(row.get("spec"), dict)
+                   and row["spec"].get("name") == name]
+        return matches[0] if len(matches) == 1 else None
 
     def _domain_for_vm(self, domain: dict[str, Any]) -> str:
-        network = str(domain.get("network") or ((domain.get("networks") or ["dev"])[0]))
-        return network if network in DOMAIN_META else "dev"
+        row = self._spec_by_name(str(domain.get("name", "")))
+        profile = row["spec"].get("network_profile") if row else None
+        # Attachment, a GPU gate or a name alone cannot grant an identity.
+        if (domain.get("managed") is True and profile in DOMAIN_META
+                and domain.get("trust_profile") == profile
+                and domain.get("networks") == [profile]):
+            return profile
+        return "external"
 
     def _mock_section_header(self, domain_id: str, first: bool = False) -> Gtk.Box:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -3059,9 +3115,11 @@ class HyperlabWindow(Gtk.Window):
         if first:
             row.add_css_class("mock-section-first")
         dot = Gtk.Box()
-        dot.add_css_class("domain-dot-%s" % domain_id)
+        dot.add_css_class("domain-dot-%s" % domain_id if domain_id in DOMAIN_META else "external-outline")
         row.append(dot)
-        row.append(text_label(DOMAIN_META[domain_id]["title"], "mock-section-title", wrap=False))
+        title = (DOMAIN_META[domain_id]["title"] if domain_id in DOMAIN_META
+                 else "Not managed" if domain_id == "external" else "Unclassified")
+        row.append(text_label(title, "mock-section-title", wrap=False))
         row.append(text_label(domain_id, "mock-section-net", wrap=False))
         line = Gtk.Box()
         line.add_css_class("mock-section-line")
@@ -3111,7 +3169,7 @@ class HyperlabWindow(Gtk.Window):
         thumb.add_css_class("vm-thumb")
         thumb.add_css_class("vm-domain-%s" % domain_id)
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        state = text_label("RUNNING" if running else "STOPPED", "vm-state", "running" if running else "stopped", "vm-domain-%s" % domain_id, wrap=False)
+        state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED", "vm-state", "running" if running else "stopped", "vm-domain-%s" % domain_id, wrap=False)
         top.append(state)
         spacer = Gtk.Box(); spacer.set_hexpand(True); top.append(spacer)
         thumb.append(top)
@@ -3170,7 +3228,8 @@ class HyperlabWindow(Gtk.Window):
         memory = domain.get("memory_mb")
         mem = ("%.0f GiB" % (int(memory) / 1024)) if isinstance(memory, int) and memory else "— GiB"
         vcpus = str(domain.get("vcpus") or domain.get("vcpu") or "—")
-        meta.append(text_label("%s · %s vCPU · %s" % (mem, vcpus, domain_id), "vm-facts", wrap=False))
+        lifecycle = "external" if not self.model.is_product_domain(domain) else str(domain.get("lifecycle") or "unknown")
+        meta.append(text_label("%s · %s vCPU · %s · %s" % (mem, vcpus, domain_id, lifecycle), "vm-facts", wrap=False))
         tile.append(meta)
 
         motion = Gtk.EventControllerMotion()
@@ -3185,10 +3244,13 @@ class HyperlabWindow(Gtk.Window):
     def _build_vm_showcase(self, columns: int, compact: bool = False) -> Gtk.Box:
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         first = True
-        order = ("clean", "dev", "services", "dirty", "lab")
+        order = ("clean", "dev", "services", "dirty", "lab", "unclassified", "external")
         shown = False
         for domain_id in order:
-            machines = [vm for vm in self.model.domains if self._domain_for_vm(vm) == domain_id]
+            machines = [vm for vm in self.model.domains
+                        if (("unclassified" if self._domain_for_vm(vm) == "external"
+                             else self._domain_for_vm(vm)) if self.model.is_product_domain(vm)
+                            else "external") == domain_id]
             if not machines:
                 continue
             shown = True
@@ -3412,7 +3474,8 @@ class HyperlabWindow(Gtk.Window):
         details.append(text_label("DETAILS", "mock-kick", "mock-group-title", wrap=False))
         values = (
             ("image", image_id),
-            ("lifecycle", str(domain.get("lifecycle") or (spec.get("lifecycle") if isinstance(spec, dict) else "external") or "external")),
+            ("lifecycle", "external" if not self.model.is_product_domain(domain)
+             else str(domain.get("lifecycle") or spec.get("lifecycle") or "unknown")),
             ("device", str(domain.get("device_profile") or ("vfio" if domain.get("vfio") else "standard"))),
             ("memory", "%s MiB" % domain.get("memory_mb") if domain.get("memory_mb") else "—"),
             ("vCPU", str(domain.get("vcpus") or domain.get("vcpu") or "—")),

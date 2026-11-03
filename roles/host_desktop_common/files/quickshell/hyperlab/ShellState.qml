@@ -1061,32 +1061,45 @@ Scope {
     property int machinesGeneration: 0
     property string machinesSignature: ""
 
-    readonly property int machinesRunning: {
-        let running = 0;
+    // Raw libvirt observations own running state, including product drift.
+    readonly property int machinesRunning:
+        state.observedDomains.filter(row => row.state === "running").length
 
-        for (let index = 0; index < state.machines.length; index++) {
-            if (String(state.machines[index].state) === "running")
-                running += 1;
-        }
+    readonly property int externalMachinesRunning:
+        state.outsideDomains.filter(row => row.state === "running").length
 
-        return running;
+    readonly property int managedMachinesRunning:
+        state.machinesRunning - state.externalMachinesRunning
+
+    readonly property string runningMachinesSummary: {
+        if (!state.outsideDomainsAvailable)
+            return "Running inventory unavailable";
+
+        if (state.observedDomains.some(row => row.state === "unknown"))
+            return "Running state unknown";
+
+        const stale = state.sourceState("ok", state.outsideDomainsObservedAt) === "stale";
+        const prefix = stale ? "Last observed: " : "";
+        if (!state.machinesAvailable)
+            return prefix + state.machinesRunning
+                + " running · managed membership unavailable";
+
+        return prefix + state.managedMachinesRunning + " managed running · "
+            + state.externalMachinesRunning + " external running";
     }
 
-    // Libvirt domains with no product Machine record: checked-in fixtures,
-    // external domains and orphaned managed domains. Diagnostics shows them
-    // read-only; they never join `machines` and carry no actions here.
+    // Product membership stays registry-owned. Other libvirt domains are
+    // visible read-only in Machines and Diagnostics, with no native actions.
     property var observedDomains: []
     property bool outsideDomainsAvailable: false
 
     readonly property var outsideDomains: {
-        const product = {};
+        const product = new Set(state.machines.map(row => row.name));
+        return state.observedDomains.filter(row => !product.has(row.name));
+    }
 
-        for (let index = 0; index < state.machines.length; index++)
-            product[String(state.machines[index].name)] = true;
-
-        return state.observedDomains.filter(
-            row => product[String(row.name)] !== true
-        );
+    function uniqueMachineNames(rows) {
+        return new Set(rows.map(row => row.name)).size === rows.length;
     }
 
     function outsideDomainKind(row) {
@@ -1112,6 +1125,7 @@ Scope {
                     && row.name.length > 0
                     && typeof row.state === "string"
             )
+            || !state.uniqueMachineNames(parsed.machines)
         ) {
             state.observedDomains = [];
             state.outsideDomainsAvailable = false;
@@ -1121,6 +1135,8 @@ Scope {
         state.observedDomains = parsed.machines.map(row => ({
             "name": row.name,
             "state": row.state,
+            "lifecycle": "external",
+            "provenance": "unclassified",
             "managed": row.managed === true
                 ? true
                 : row.managed === false ? false : null
@@ -1197,6 +1213,7 @@ Scope {
             parsed.machines_available !== true
             || !Array.isArray(parsed.machines)
             || !parsed.machines.every(row => state.validMachineRow(row))
+            || !state.uniqueMachineNames(parsed.machines)
         ) {
             state.machines = [];
             state.machinesAvailable = false;

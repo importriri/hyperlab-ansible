@@ -297,7 +297,7 @@ Item {
                         title: "Defined machines"
                         value:
                             view.shellState.machinesAvailable
-                            ? String(view.shellState.machines.length)
+                            ? String(view.shellState.machines.length + view.shellState.outsideDomains.length)
                             : "Unknown"
                     }
 
@@ -305,11 +305,9 @@ Item {
                         width: parent.width
                         tokens: view.tokens
                         theme: view.theme
+                        objectName: "diagnostics-running-summary"
                         title: "Running machines"
-                        value:
-                            view.shellState.machinesAvailable
-                            ? String(view.shellState.machinesRunning)
-                            : "Unknown"
+                        value: view.shellState.runningMachinesSummary
                     }
 
                     PanelRow {
@@ -401,7 +399,7 @@ Item {
                 description:
                     "Libvirt domains with no Machine record: checked-in "
                     + "fixtures and external domains. They are observed "
-                    + "here, never offered as Machines."
+                    + "here and in Machines, read-only with lifecycle external."
             }
 
             ShellCard {
@@ -455,7 +453,7 @@ Item {
                             theme: view.theme
                             title: modelData.name
                             value: view.icons.machineStateWord(modelData.state)
-                            hint: view.shellState.outsideDomainKind(modelData)
+                            hint: "external · " + view.shellState.outsideDomainKind(modelData)
                         }
                     }
                 }

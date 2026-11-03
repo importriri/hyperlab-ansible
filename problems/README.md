@@ -437,4 +437,8 @@ proof.
   a reproducible Qt pixel-buffer capture was empty despite correct material
   samples; explicit bounds and real PNG pixel checks now cover the capture.
 
+- [`external-machines-hidden-and-coloured.md`](external-machines-hidden-and-coloured.md):
+  native Machines hid external domains and undercounted running state, while
+  recovery assigned DEV without a reviewed spec.
+
 Author: [importriri](https://github.com/importriri).

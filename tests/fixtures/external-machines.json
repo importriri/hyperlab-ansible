@@ -1,0 +1,13 @@
+{
+  "managed": [
+    {"name": "development-01", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"},
+    {"name": "development-02", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"},
+    {"name": "development-03", "state": "shut off", "gpu": "No passthrough configured", "provenance": "dev", "product_managed": true, "managed": true, "network": "dev", "networks": ["dev"], "trust_profile": "dev", "lifecycle": "permanent"}
+  ],
+  "external": [
+    {"name": "hl-lab-host", "state": "running", "memory_mb": 4096, "network": "hl-lab-testbed", "networks": ["hl-lab-testbed"], "managed": false, "product_managed": false, "lifecycle": "external"},
+    {"name": "arch-dev", "state": "shut off", "managed": false, "product_managed": false, "network": "dev", "networks": ["dev"], "lifecycle": "external"},
+    {"name": "arch-dev-vfio", "state": "shut off", "managed": false, "product_managed": false, "lifecycle": "external"},
+    {"name": "arch-minimal-ssh", "state": "shut off", "managed": false, "product_managed": false, "lifecycle": "external"}
+  ]
+}

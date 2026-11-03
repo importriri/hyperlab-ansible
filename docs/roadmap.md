@@ -539,6 +539,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       shell action bridge resolves to root-owned desktop files
       (software-verified; also the shell checklist item below)
 
+- [x] Machines shows external domains read-only in a separate Not managed
+      group; Machines, Session and Diagnostics count all observed running
+      domains, split by product membership
+      ([ADR 0059](adr/0059-external-machine-visibility.md), software-verified)
+- [ ] external visibility and running counts accepted on Nitro and Predator
+
 ### 8a. Test infrastructure
 
 - [x] a nested lab host for host-level tests, made without privilege and
@@ -678,6 +684,13 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       HyperLab's own keys is already enabled)
 
 ### 11. Visual provenance and trust model
+
+- [x] external machines never borrow a domain colour or HOST grey: neutral
+      outline, transparent fill, explicit external label; recovery identity
+      requires a unique matching reviewed spec
+      ([ADR 0059](adr/0059-external-machine-visibility.md), proposed visual
+      rule; software-verified)
+- [ ] external visual state accepted on Nitro and Predator
 
 - [x] generated, text-free `trust-pool-v3` on geometry B: twelve 1672×941
       wallpapers, palette-owned sphere tints with packed literal rejection,

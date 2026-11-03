@@ -58,6 +58,14 @@ class FakeModel:
     specs: list = []
     status: dict = {}
 
+    product_inventory = {
+        "machines_available": True,
+        "machines": [{"name": "arch-dev-01"}],
+    }
+    product_names = manager.Model.product_names
+    is_product_domain = manager.Model.is_product_domain
+    running_summary = manager.Model.running_summary
+
     @property
     def running_domains(self):
         return [item for item in self.domains if item["state"] == "running"]
@@ -91,7 +99,8 @@ def main() -> int:
     labels = [widget.label for widget in widgets if widget.label]
 
     check("the drawer title is exactly Machines", labels and labels[0] == "Machines", str(labels[:3]))
-    check("the running badge mirrors the showcase", "2 running" in labels, str(labels[:4]))
+    check("the running badge counts both product and external domains",
+          "1 managed running · 1 external running" in labels, str(labels[:4]))
     check("the legacy drawer tabs are absent",
           not any(widget.has_css_class("nav-button") or widget.has_css_class("drawer-tabs")
                   for widget in widgets))

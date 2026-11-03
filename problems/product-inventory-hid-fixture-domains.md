@@ -43,6 +43,13 @@ Machine because it exists.
 The product Machine states that have no libvirt counterpart now read as
 "Not created", "Configuration drift" and "Runtime unavailable".
 
+The later accepted population decision in
+[ADR 0059](../docs/adr/0059-external-machine-visibility.md) also exposes these
+rows read-only in Machines, with lifecycle external, and includes them in all
+running summaries. They still never join the product registry. The follow-up
+[defect analysis](external-machines-hidden-and-coloured.md) records the count
+and recovery-colour corrections.
+
 ## Regression proof
 
 - `tests/host_quickshell_runtime_contract.py` (truth scenario): a domain that

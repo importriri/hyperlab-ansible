@@ -3,7 +3,8 @@
 // The inventory and the machine an operator is working on, in one page. The
 // inventory is grouped by host-resolved provenance — the grouping the older
 // product got right — with a count per group, an explicit Unclassified group
-// last, and no decorative wall of identical tiles.
+// last. Other libvirt domains remain read-only in their own Not managed
+// group, without gaining product membership or operational controls.
 //
 // Every fact is the host inventory projection. Empty, filtered and
 // unavailable are three different states with three different sentences, and
@@ -17,6 +18,7 @@ import QtQuick
 
 Item {
     id: stage
+    objectName: "machine-stage"
 
     required property var tokens
     required property var theme
@@ -33,7 +35,8 @@ Item {
     // on demand, so every opening reads a fresh creation plan.
     property bool creating: false
 
-    readonly property int total: stage.shellState.machines.length
+    readonly property int total:
+        stage.shellState.machines.length + stage.shellState.outsideDomains.length
 
     // Past this a grid stops being an inventory and starts being wallpaper.
     readonly property int denseThreshold: 60
@@ -92,6 +95,15 @@ Item {
 
         return out;
     }
+
+    readonly property var filteredOutside: stage.shellState.outsideDomains.filter(row => {
+        const running = row.state === "running";
+        const needle = stage.query.trim().toLowerCase();
+        return (stage.stateFilter !== "running" || running)
+            && (stage.stateFilter !== "stopped" || !running)
+            && (needle.length === 0
+                || (row.name + " external " + row.state).toLowerCase().indexOf(needle) >= 0);
+    })
 
     readonly property var groups: {
         const out = [];
@@ -188,6 +200,7 @@ Item {
 
         WorkspaceFrame {
             id: frame
+            objectName: "machine-inventory-summary"
 
             visible: !stage.paneOnly
             width:
@@ -203,18 +216,8 @@ Item {
 
             subtitle:
                 stage.inventoryAvailable
-                ? (
-                    stage.inventoryState === "stale"
-                    ? stage.total + " defined · "
-                        + stage.shellState.machinesRunning
-                        + " running · last observed "
-                        + stage.shellState.observedAge(
-                            stage.shellState.machinesObservedAt
-                        )
-                    : stage.total + " defined · "
-                        + stage.shellState.machinesRunning + " running"
-                  )
-                : "Inventory unavailable"
+                ? stage.total + " defined · " + stage.shellState.runningMachinesSummary
+                : "Product inventory unavailable · " + stage.shellState.runningMachinesSummary
 
             subtitleClass:
                 stage.inventoryAvailable
@@ -358,13 +361,14 @@ Item {
                 EmptyState {
                     width: parent.width
                     visible: stage.inventoryAvailable && stage.total === 0
+                        && stage.shellState.outsideDomainsAvailable
                     tokens: stage.tokens
                     theme: stage.theme
                     kind: "empty"
                     title: "No Machines yet"
                     description:
                         "Create a Machine from a reviewed Template. "
-                        + "Fixture and external libvirt domains stay in Diagnostics."
+                        + "Other libvirt domains appear below as Not managed."
                 }
 
                 EmptyState {
@@ -373,6 +377,7 @@ Item {
                         stage.inventoryAvailable
                         && stage.total > 0
                         && stage.filtered.length === 0
+                        && stage.filteredOutside.length === 0
                     tokens: stage.tokens
                     theme: stage.theme
                     kind: "filtered"
@@ -496,6 +501,70 @@ Item {
                                     stage.shellState.machinesGeneration,
                                     false
                                 )
+                        }
+                    }
+                }
+
+                SectionHeader {
+                    objectName: "external-machines-heading"
+                    width: parent.width
+                    visible: stage.filteredOutside.length > 0
+                    tokens: stage.tokens
+                    theme: stage.theme
+                    label: "Not managed"
+                    description: "Read-only · lifecycle external · "
+                        + stage.filteredOutside.length + " domains"
+                }
+
+                ShellLabel {
+                    width: parent.width
+                    visible: !stage.shellState.outsideDomainsAvailable
+                    tokens: stage.tokens
+                    role: "body"
+                    text: "External inventory unavailable"
+                    color: stage.theme.textSecondary
+                }
+
+                ListView {
+                    objectName: "external-machine-list"
+                    width: parent.width
+                    visible: stage.filteredOutside.length > 0
+                    height: visible ? Math.min(
+                        stage.filteredOutside.length * stage.tokens.listRowHeight,
+                        Math.max(stage.tokens.listRowHeight, stage.height / 2)
+                    ) : 0
+                    model: stage.filteredOutside
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property string lifecycle: modelData.lifecycle
+                        objectName: "external-machine-" + modelData.name
+                        width: ListView.view.width
+                        height: stage.tokens.listRowHeight
+                        radius: stage.tokens.radiusCard
+                        color: "transparent"
+                        border.width: stage.tokens.borderSize
+                        border.color: stage.theme.textSecondary
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: stage.tokens.spaceSm
+                            ShellLabel {
+                                width: parent.width
+                                tokens: stage.tokens
+                                role: "label"
+                                text: modelData.name
+                                color: stage.theme.textPrimary
+                            }
+                            ShellLabel {
+                                width: parent.width
+                                tokens: stage.tokens
+                                role: "meta"
+                                text: "external · " + stage.icons.machineStateWord(modelData.state)
+                                color: stage.theme.textSecondary
+                            }
                         }
                     }
                 }

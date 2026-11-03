@@ -46,13 +46,7 @@ Item {
     readonly property string section: view.shellSurfaces.subpage
 
     readonly property string runningSummary:
-        view.shellState.machinesAvailable
-        ? (
-            view.shellState.machinesRunning === 1
-            ? "1 machine is running."
-            : view.shellState.machinesRunning + " machines are running."
-          )
-        : "The host could not report how many machines are running."
+        view.shellState.runningMachinesSummary
 
     function dangerTitle(action) {
         switch (String(action)) {
@@ -403,6 +397,7 @@ Item {
                 visible: view.section === "session"
                 tokens: view.tokens
                 theme: view.theme
+                objectName: "session-running-summary"
                 label: "Session"
                 description: view.runningSummary
             }

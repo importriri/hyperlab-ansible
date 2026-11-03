@@ -3691,3 +3691,194 @@ PATH. All restored stages were green.
 | PD-77 | Replace the pinned guest idle fallback | recursive QML strings | red: deferred QML label changed; restored green |
 | PD-78 | Remove the guest desktop QML input | QML input coverage | red: host/guest presentation input missing; restored green |
 | PD-79 | Discover a language locale but make its unguarded Bash control refuse the accented word | widening control | red: installed language locales do not exercise Bash range widening; restored green |
+
+## External Machine visibility and identity (ADR 0059)
+
+For each mutation, first copy the named target to a private backup and set
+`backup` to that copy. Run `python tests/external_machine_visibility_contract.py`
+after the break: it must fail for the reason below. Restore with
+`cp "$backup" TARGET` and rerun the same check: it must pass. These mutations
+were each observed red and restored green, using real QML and GTK builders
+with the shared seven-domain fixture. No lifecycle action is executed.
+
+### External 1: Native external identity uses DEV
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'border.color: stage.theme.textSecondary'"'"') == 1; p.write_text(s.replace('"'"'border.color: stage.theme.textSecondary'"'"', '"'"'border.color: stage.theme.provenanceColor("dev")'"'"', 1))'`
+- Red: `native external identity borrowed a colour or fill`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 2: GTK external identity uses DEV
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'        return "external"\n\n    def _mock_section_header'"'"') == 1; p.write_text(s.replace('"'"'        return "external"\n\n    def _mock_section_header'"'"', '"'"'        return "dev"\n\n    def _mock_section_header'"'"', 1))'`
+- Red: `GTK assigned trust without a reviewed spec`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 3: Session omits external running
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml'"'"'); s = p.read_text(); assert s.count('"'"'        view.shellState.runningMachinesSummary'"'"') == 1; p.write_text(s.replace('"'"'        view.shellState.runningMachinesSummary'"'"', '"'"'        view.shellState.managedMachinesRunning + " managed running"'"'"', 1))'`
+- Red: `Session omitted the external running count`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ControlCenterView.qml`; the same contract turns green.
+
+### External 4: Machines hides external domains
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'                    model: stage.filteredOutside'"'"') == 1; p.write_text(s.replace('"'"'                    model: stage.filteredOutside'"'"', '"'"'                    model: []'"'"', 1))'`
+- Red: `an external domain is missing from Machines`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 5: Running totals use only product state
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'state.observedDomains.filter(row => row.state === "running").length'"'"') == 1; p.write_text(s.replace('"'"'state.observedDomains.filter(row => row.state === "running").length'"'"', '"'"'state.machines.filter(row => row.state === "running").length'"'"', 1))'`
+- Red: `running counts omitted or misclassified the external domain`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 6: Raw inventory accepts duplicate names
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'            || !state.uniqueMachineNames(parsed.machines)\n        ) {\n            state.observedDomains'"'"') == 1; p.write_text(s.replace('"'"'            || !state.uniqueMachineNames(parsed.machines)\n        ) {\n            state.observedDomains'"'"', '"'"'        ) {\n            state.observedDomains'"'"', 1))'`
+- Red: `duplicated raw domain names were accepted`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 7: Native external row gains activation
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'                        readonly property string lifecycle: modelData.lifecycle'"'"') == 1; p.write_text(s.replace('"'"'                        readonly property string lifecycle: modelData.lifecycle'"'"', '"'"'                        readonly property string lifecycle: modelData.lifecycle\n                        signal activated()'"'"', 1))'`
+- Red: `a native external row acquired an action`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
+
+### External 8: GTK accepts duplicate specs
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'return matches[0] if len(matches) == 1 else None'"'"') == 1; p.write_text(s.replace('"'"'return matches[0] if len(matches) == 1 else None'"'"', '"'"'return matches[0] if matches else None'"'"', 1))'`
+- Red: `GTK accepted duplicate specs`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 9: GTK ignores observed interface drift
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'                and domain.get("networks") == [profile]'"'"') == 1; p.write_text(s.replace('"'"'                and domain.get("networks") == [profile]'"'"', '"'"'                '"'"', 1))'`
+- Red: `GTK classified drifting provenance`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 10: GTK drawer borrows attachment colour
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'        identity = self._domain_for_vm(domain)'"'"') == 1; p.write_text(s.replace('"'"'        identity = self._domain_for_vm(domain)'"'"', '"'"'        identity = str(domain.get("network") or "dev")'"'"', 1))'`
+- Red: `GTK drawer lost its external identity`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 11: GTK running inventory omits external
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'if str(item.get("state", "")).lower() == "running"]'"'"') == 1; p.write_text(s.replace('"'"'if str(item.get("state", "")).lower() == "running"]'"'"', '"'"'if str(item.get("state", "")).lower() == "running" and item.get("product_managed") is True]'"'"', 1))'`
+- Red: `len(window.model.running_domains) == 1`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 12: GTK external outline gains fill
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'.external-outline {\n    background: transparent;'"'"') == 1; p.write_text(s.replace('"'"'.external-outline {\n    background: transparent;'"'"', '"'"'.external-outline {\n    background: @hl_dom_dev;'"'"', 1))'`
+- Red: `GTK filled the external identity`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 13: External lifecycle changes to permanent
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'            "lifecycle": "external",'"'"') == 1; p.write_text(s.replace('"'"'            "lifecycle": "external",'"'"', '"'"'            "lifecycle": "permanent",'"'"', 1))'`
+- Red: `an external row lost its explicit lifecycle`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 14: Stale counts look current
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'const prefix = stale ? "Last observed: " : "";'"'"') == 1; p.write_text(s.replace('"'"'const prefix = stale ? "Last observed: " : "";'"'"', '"'"'const prefix = "";'"'"', 1))'`
+- Red: `a stale running count was presented as current`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 15: Empty registry hides raw inventory
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'    readonly property var outsideDomains: {'"'"') == 1; p.write_text(s.replace('"'"'    readonly property var outsideDomains: {'"'"', '"'"'    readonly property var outsideDomains: {\n        if (state.machines.length === 0) return [];'"'"', 1))'`
+- Red: `an empty product registry hid libvirt domains`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 16: Product inventory accepts duplicate names
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'            || !state.uniqueMachineNames(parsed.machines)\n        ) {\n            state.machines'"'"') == 1; p.write_text(s.replace('"'"'            || !state.uniqueMachineNames(parsed.machines)\n        ) {\n            state.machines'"'"', '"'"'        ) {\n            state.machines'"'"', 1))'`
+- Red: `duplicated product names were accepted`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 17: Diagnostics omits external running
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml'"'"'); s = p.read_text(); assert s.count('"'"'                        value: view.shellState.runningMachinesSummary'"'"') == 1; p.write_text(s.replace('"'"'                        value: view.shellState.runningMachinesSummary'"'"', '"'"'                        value: String(view.shellState.managedMachinesRunning)'"'"', 1))'`
+- Red: `Diagnostics omitted the external running count`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/DiagnosticsView.qml`; the same contract turns green.
+
+### External 18: GTK trusts orphaned product metadata
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'return names is not None and domain.get("name") in names'"'"') == 1; p.write_text(s.replace('"'"'return names is not None and domain.get("name") in names'"'"', '"'"'return domain.get("product_managed") is True'"'"', 1))'`
+- Red: `GTK adopted an orphan metadata flag`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 19: GTK accepts duplicate product names
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'return names if len(names) == len(rows) else None'"'"') == 1; p.write_text(s.replace('"'"'return names if len(names) == len(rows) else None'"'"', '"'"'return names'"'"', 1))'`
+- Red: `GTK accepted ambiguous product membership`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 20: GTK misgroups unclassified product Machines
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'(("unclassified" if self._domain_for_vm(vm) == "external"'"'"') == 1; p.write_text(s.replace('"'"'(("unclassified" if self._domain_for_vm(vm) == "external"'"'"', '"'"'(("external" if self._domain_for_vm(vm) == "external"'"'"', 1))'`
+- Red: `GTK lost its unclassified product group`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 21: GTK failed runtime read claims zero
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'return "Running inventory unavailable"'"'"') == 1; p.write_text(s.replace('"'"'return "Running inventory unavailable"'"'"', '"'"'return "0 managed running · 0 external running"'"'"', 1))'`
+- Red: `window.model.running_summary == "Running inventory unavailable"`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 22: GTK refresh omits product registry
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'"product_inventory": lambda: run_cli_json("machine", "inventory")'"'"') == 1; p.write_text(s.replace('"'"'"product_inventory": lambda: run_cli_json("machine", "inventory")'"'"', '"'"'"product_inventory": lambda: {}'"'"', 1))'`
+- Red: `GTK refresh does not read product inventory`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 23: Native failed runtime read claims zero
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'return "Running inventory unavailable"'"'"') == 1; p.write_text(s.replace('"'"'return "Running inventory unavailable"'"'"', '"'"'return "0 machines running"'"'"', 1))'`
+- Red: `an unavailable raw inventory claimed a running count`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 24: Native counts unreadable runtime state
+
+- Target: `roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'if (state.observedDomains.some(row => row.state === "unknown"))'"'"') == 1; p.write_text(s.replace('"'"'if (state.observedDomains.some(row => row.state === "unknown"))'"'"', '"'"'if (false)'"'"', 1))'`
+- Red: `an unreadable external state claimed a complete running count`.
+- Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 25: GTK counts unreadable runtime state
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'if any(item.get("state", "unknown") == "unknown" for item in self.domains):'"'"') == 1; p.write_text(s.replace('"'"'if any(item.get("state", "unknown") == "unknown" for item in self.domains):'"'"', '"'"'if False:'"'"', 1))'`
+- Red: `GTK counted an unreadable state as stopped`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
+
+### External 26: GTK labels unreadable state stopped
+
+- Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"') == 1; p.write_text(s.replace('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"', '"'"'state = text_label("RUNNING" if running else "STOPPED",'"'"', 1))'`
+- Red: `GTK rendered an unreadable state as stopped`.
+- Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.

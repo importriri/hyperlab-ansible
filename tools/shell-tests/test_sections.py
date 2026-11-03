@@ -74,6 +74,14 @@ class FakeModel:
     gpu_ladder = manager.Model.gpu_ladder
     gpu_rank = manager.Model.gpu_rank
 
+    product_inventory = {
+        "machines_available": True,
+        "machines": [{"name": "arch-dev-01"}],
+    }
+    product_names = manager.Model.product_names
+    is_product_domain = manager.Model.is_product_domain
+    running_summary = manager.Model.running_summary
+
     @property
     def running_domains(self):
         return [d for d in self.domains if d["state"] == "running"]
