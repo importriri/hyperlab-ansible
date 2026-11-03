@@ -824,6 +824,24 @@ These do not change for any visual reason.
   reach the user action bridge without it, so the reviewed backend remains
   the privilege boundary.
 
+## GTK recovery readbacks
+
+The recovery GPU page, Networks detail and Create inspector read ranks from
+`status.trust.ladder`, published by the same `TrustProvider` as
+`hyperlabctl trust`: `gpu_trust_levels` in `group_vars/all/networks.yml`.
+An unavailable or invalid ladder produces Unknown/unavailable. Services is
+outside the ladder; the owner marker follows a reported GPU handoff profile,
+never a network-derived class. Networks uses measured grid rows so CSS
+minimums and taller content cannot overlap adjacent segments.
+
+The four capture-session repairs are software-verified by
+`machine_capability_transport_contract.py`, `recovery_gpu_ladder_contract.py`,
+`recovery_network_layout_contract.py` and `system_panel_key_sheet_contract.py`
+in `tests/`. The bridge check uses real isolated Quickshell processes with
+inert executables. The recovery checks use actual GTK widgets on a private
+X server and require GTK introspection and Xvfb. They do not prove the
+installed Nitro bridge cause or its compositor's focus and placement.
+
 ## Related documents
 
 - [`desktop.md`](desktop.md) — the compositor sessions and their bindings.

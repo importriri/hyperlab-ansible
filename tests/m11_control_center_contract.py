@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -144,14 +146,15 @@ def main():
         "drawer routing no longer preserves the 2-column Machines surface "
         "and the 4-column full manager",
     )
-    require('canvas = Gtk.Fixed()' in manager and
-            'canvas.add_css_class("network-canvas")' in manager and
+    require('canvas.add_css_class("network-canvas")' in manager and
             'content.append(dock)' in manager and
             'self.inspect_holder.set_visible(section != "policies")' in manager,
             "Networks does not use the agreed full-width graph plus docked inspector")
-    require('rung.add_css_class("gpu-rung")' in manager and
-            'ladder = ((0, ("clean", "dev")), (1, ("services",)), (2, ("dirty",)), (3, ("lab",)))' in manager,
-            "definitive four-rung GPU ladder is missing")
+    # ADR 0055 replaces the stale implementation literals with executed
+    # authority/parity and allocation checks, including the recovery dock.
+    for contract in ("recovery_gpu_ladder_contract.py", "recovery_network_layout_contract.py"):
+        result = subprocess.run([sys.executable, str(ROOT / "tests" / contract)], check=False)
+        require(result.returncode == 0, "recovery readback contract failed: " + contract)
     for capability in (
         "Looking Glass", "SPICE recovery", "linux-experimental",
         "Preview / dry-run", "Write spec and create", "disposable",

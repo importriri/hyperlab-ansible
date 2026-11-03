@@ -1741,6 +1741,25 @@ class Model:
     load_errors: list[str] = field(default_factory=list)
 
     @property
+    def gpu_ladder(self) -> list[tuple[str, int]]:
+        # Status and `hyperlabctl trust` share TrustProvider. Never infer a
+        # handoff class from the visual domain order or substitute defaults.
+        trust = self.status.get("trust") if isinstance(self.status, dict) else None
+        levels = trust.get("ladder") if isinstance(trust, dict) else None
+        if (not isinstance(levels, dict)
+                or set(levels) != set(DOMAIN_META) - {"services"}
+                or any(type(rank) is not int for rank in levels.values())
+                or set(levels.values()) != set(range(len(levels)))):
+            return []
+        return sorted(levels.items(), key=lambda pair: pair[1], reverse=True)
+
+    def gpu_rank(self, domain: str) -> str:
+        if domain == "services":
+            return "Outside GPU ladder"
+        rank = dict(self.gpu_ladder).get(domain)
+        return str(rank) if rank is not None else "Unknown"
+
+    @property
     def problems(self) -> list[dict[str, Any]]:
         problems = self.status.get("problems")
         return problems if isinstance(problems, list) else []
@@ -3728,11 +3747,10 @@ class HyperlabWindow(Gtk.Window):
             label = text_label(line, "mock-why"); label.set_margin_bottom(9); inspect_holder.append(label)
         network = dropdown_value(self.create_widgets.get("network")) if self.create_widgets else None
         if network in DOMAIN_META:
-            rank = {"clean": 0, "dev": 0, "services": 1, "dirty": 2, "lab": 3}[network]
             group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0); group.add_css_class("mock-group")
             group.append(text_label("INHERITED TRUST", "mock-kick", "mock-group-title", wrap=False))
             self._append_kv(group, "domain", network)
-            self._append_kv(group, "GPU rank", str(rank))
+            self._append_kv(group, "GPU rank", self.model.gpu_rank(network))
             self._append_kv(group, "DHCP", "libvirt" if network != "lab" else "none")
             inspect_holder.append(group)
 
@@ -4014,15 +4032,16 @@ class HyperlabWindow(Gtk.Window):
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        canvas = Gtk.Fixed(); canvas.add_css_class("network-canvas"); canvas.set_size_request(760, 470)
-        positions = {
-            "clean": (24, 18), "services": (24, 132), "lab": (24, 246),
-            "dev": (376, 18), "dirty": (376, 132),
-        }
+        # Each row follows the measured height of its children, including
+        # CSS minimums and larger fonts. Fixed coordinates cannot do that.
+        canvas = Gtk.Grid(column_spacing=16, row_spacing=16)
+        canvas.add_css_class("network-canvas")
+        canvas.set_column_homogeneous(True)
+        canvas.set_hexpand(True)
         subnets = {"clean": "10.10.1.0/24", "dirty": "10.10.2.0/24", "dev": "10.10.3.0/24", "lab": "10.10.4.0/24", "services": "10.10.5.0/24"}
-        for domain_id in ("clean", "services", "lab", "dev", "dirty"):
+        for index, domain_id in enumerate(("clean", "dev", "services", "dirty", "lab")):
             zone = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            zone.add_css_class("network-zone"); zone.add_css_class("domain-%s" % domain_id); zone.set_size_request(336, 96)
+            zone.add_css_class("network-zone"); zone.add_css_class("domain-%s" % domain_id)
             head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             dot = Gtk.Box(); dot.add_css_class("domain-dot-%s" % domain_id); head.append(dot)
             head.append(text_label(DOMAIN_META[domain_id]["title"], "mock-section-title", wrap=False))
@@ -4036,7 +4055,7 @@ class HyperlabWindow(Gtk.Window):
                 node.add_css_class("selected")
             node.connect("clicked", lambda _button, value=domain_id: self._select_network(value))
             zone.append(node)
-            x, y = positions[domain_id]; canvas.put(zone, x, y)
+            canvas.attach(zone, index % 2, index // 2, 1, 1)
         content.append(canvas)
         content.append(text_label("Select a segment. Links are explicit; no path exists unless the repository declares one.", "mock-why"))
         dock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8); dock.add_css_class("network-dock")
@@ -4056,10 +4075,9 @@ class HyperlabWindow(Gtk.Window):
         dock.append(text_label("SEGMENT", "mock-kick", wrap=False))
         dock.append(text_label(DOMAIN_META[domain_id]["title"], "inspect-title", wrap=False))
         attached = [vm for vm in self.model.domains if self._domain_for_vm(vm) == domain_id]
-        rank = {"clean": 0, "dev": 0, "services": 1, "dirty": 2, "lab": 3}[domain_id]
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._append_kv(details, "domain", domain_id)
-        self._append_kv(details, "GPU rank", str(rank))
+        self._append_kv(details, "GPU rank", self.model.gpu_rank(domain_id))
         self._append_kv(details, "DHCP", "none" if domain_id == "lab" else "libvirt")
         self._append_kv(details, "machines", str(len(attached)))
         dock.append(details)
@@ -4073,20 +4091,22 @@ class HyperlabWindow(Gtk.Window):
         if isinstance(gpu_state, dict):
             owner = str(gpu_state.get("owner") or gpu_state.get("domain") or "")
         owner_vm = next((vm for vm in self.model.domains if str(vm.get("name")) == owner), None)
-        current_domain = self._domain_for_vm(owner_vm) if owner_vm else ""
-        ladder = ((0, ("clean", "dev")), (1, ("services",)), (2, ("dirty",)), (3, ("lab",)))
-        for level, domains in ladder:
+        current_profile = owner_vm.get("gpu_trust_profile") if owner_vm else None
+        ladder = self.model.gpu_ladder
+        if not ladder:
+            content.append(text_label("GPU ladder unavailable", "warning"))
+        for domain_id, level in ladder:
             rung = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12); rung.add_css_class("gpu-rung")
-            if current_domain in domains: rung.add_css_class("current")
+            if current_profile == domain_id: rung.add_css_class("current")
             number = text_label(str(level), "rung-number", wrap=False); number.set_xalign(.5); rung.append(number)
             chips = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6); chips.set_hexpand(True)
-            for domain_id in domains:
-                chip = text_label(DOMAIN_META[domain_id]["title"], "domain-chip", "domain-chip-%s" % domain_id, wrap=False); chips.append(chip)
+            chip = text_label(DOMAIN_META[domain_id]["title"], "domain-chip", "domain-chip-%s" % domain_id, wrap=False); chips.append(chip)
             rung.append(chips)
-            if current_domain in domains and owner:
+            if current_profile == domain_id and owner:
                 rung.append(text_label(owner, "rung-hold", wrap=False))
             content.append(rung)
         content.append(text_label("The ladder applies only to GPU handoff. Network trust remains an explicit graph.", "mock-why"))
+        content.append(text_label("Services: outside the GPU ladder; a GPU-capable Machine has a separate reviewed handoff profile.", "mock-why"))
         scroll.set_child(content)
         inspect_holder = getattr(self, "inspect_holder", None)
         if inspect_holder is not None:

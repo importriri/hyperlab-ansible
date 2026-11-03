@@ -21,6 +21,12 @@ manager = importlib.util.module_from_spec(spec)
 sys.modules["manager"] = manager
 spec.loader.exec_module(manager)
 from gi.repository import Gtk  # noqa: E402
+import yaml  # noqa: E402
+
+# The status document carries the configured ladder, as `hyperlabctl status`
+# does; the fixture reads it from the same variable instead of restating it.
+NETWORKS = Path(__file__).resolve().parents[2] / "group_vars/all/networks.yml"
+GPU_TRUST_LEVELS = yaml.safe_load(NETWORKS.read_text())["gpu_trust_levels"]
 
 
 class FakeModel:
@@ -53,7 +59,8 @@ class FakeModel:
     load_errors: list = []
     status: dict = {
         "host": {"profile": "nitro", "hostname": "nitro"},
-        "trust": {"level": "medium-high", "percent": 85, "can_rise": True},
+        "trust": {"level": None, "name": None, "claimed": False, "can_ascend": True,
+                  "ladder": GPU_TRUST_LEVELS},
         "memory": {"total_mb": 16384, "available_mb": 7200, "reserved_mb": 2048},
         "gpu": {"model": "RTX 3060", "owner": None, "bound": False, "driver": "550.54"},
         "networks": [{"name": n, "state": "active"}
@@ -62,6 +69,10 @@ class FakeModel:
         "store": {"used_gib": 12, "total_gib": 400, "unsealed": 5},
         "domains": [],
     }
+
+    # Production readers over the fixture status, never a second rank table.
+    gpu_ladder = manager.Model.gpu_ladder
+    gpu_rank = manager.Model.gpu_rank
 
     @property
     def running_domains(self):

@@ -150,6 +150,9 @@ entered the pipeline.
 54. [`0054-private-machine-diagnostics.md`](0054-private-machine-diagnostics.md) —
     proposed, software built: supervise one private diagnostics collection
     through the typed bridge; managed lifecycle stays with the durable runner.
+55. [`0055-recovery-readback-verification.md`](0055-recovery-readback-verification.md)
+    — proposed: recovery trust readbacks match the CLI authority, and
+    Networks tile allocation replaces stale implementation literals.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
@@ -587,3 +590,16 @@ remain.
     [`host_operation_integration_contract.py`](../../tests/host_operation_integration_contract.py)
   - Prerequisites: the operator's decision; collection from the installed
     shell and on hardware, on Nitro and Predator.
+
+- [ADR 0055](0055-recovery-readback-verification.md)
+  - Decision: proposed.
+  - Built: built — M11 invokes the recovery ladder and Networks allocation
+    contracts instead of requiring the inverted tuple and fixed canvas.
+  - Activation: default — the contracts run through M11 and the discovered
+    repository checks; presentation changes require deployment.
+  - Source: [`m11_control_center_contract.py`](../../tests/m11_control_center_contract.py),
+    [`recovery_gpu_ladder_contract.py`](../../tests/recovery_gpu_ladder_contract.py),
+    [`recovery_network_layout_contract.py`](../../tests/recovery_network_layout_contract.py),
+    [`privatestack-hyperlab-domains.py`](../../roles/host_desktop_sway/files/privatestack-hyperlab-domains.py)
+  - Prerequisites: the operator's decision; installed Nitro visual rechecks
+    and the frozen Predator replay remain open.

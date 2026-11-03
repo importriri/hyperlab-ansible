@@ -397,6 +397,10 @@ proof.
 
 - [`machine-capability-failures-lost-their-cause.md`](machine-capability-failures-lost-their-cause.md):
   failed capability reads hid known refusal causes or stayed unanswered.
+- [`recovery-gpu-ladder-was-reversed.md`](recovery-gpu-ladder-was-reversed.md):
+  GPU, Networks and Create readbacks carried a second, reversed rank table.
+- [`recovery-network-tiles-overlapped.md`](recovery-network-tiles-overlapped.md):
+  fixed network row coordinates contradicted the CSS tile minimum height.
 - [`system-panel-did-not-link-the-key-sheet.md`](system-panel-did-not-link-the-key-sheet.md):
   the system panel had no route to the existing complete host key sheet.
 
