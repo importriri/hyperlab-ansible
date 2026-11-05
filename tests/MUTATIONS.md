@@ -4061,3 +4061,105 @@ The following mutations use the same backup, check and restore procedure.
 - Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml'"'"'); s = p.read_text(); assert s.count('"'"'"provenance": "unclassified",'"'"') == 1; p.write_text(s.replace('"'"'"provenance": "unclassified",'"'"', '"'"'"provenance": row.provenance,'"'"', 1))'`
 - Red: `a CLI provenance classified a domain outside the registry`.
 - Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml`; the same contract turns green.
+
+### External 51–56: Provider failure, runtime uncertainty and effective GTK styles
+
+Run the block below from the repository root. Each case copies the affected
+file before editing it, requires the predicted failure from
+`python tests/external_machine_visibility_contract.py`, restores the copy,
+and requires the same full contract to pass. No live inventory is consulted.
+
+| ID | Break | Predicted red |
+| --- | --- | --- |
+| External 51 | Make `vm list` turn an unavailable domains provider into `[]` again | `vm list turned a domains-provider failure into a successful empty inventory` |
+| External 52 | Remove Waybar's unknown-state branch | `the VM pill counted an unreadable state as stopped` |
+| External 53 | Append `.external-outline { background: @hl_dom_dev; border: 1px solid @hl_dom_dev; }` | `GTK filled the external identity` |
+| External 54 | Insert a more specific selected-hover border override before the safe external rule | `GTK external outline borrowed a host or domain colour` |
+| External 55 | Append a DEV border-only override for `.external-outline` | `GTK external outline borrowed a host or domain colour` |
+| External 56 | Append HOST text colour for `.external-outline` | `GTK external identity borrowed a text colour` |
+
+All six were observed red, then green after restoring the saved source.
+External 52 also made `host_quickshell_desktop_cockpit_contract.py` fail with
+`unknown machine state became a complete running count`; restoration returned
+it to green, including its known-state numeric-count control.
+External 53 was first run with the former rule-merging check and stayed green:
+that check ignored the separately named outline selector. The effective-style
+check now asks GTK for each marker's background, border and text, across the
+appearance palettes and normal, hover and selected states. External 54 confirms
+that an earlier rule with higher specificity still overrides the later safe
+rule. These checks need only the existing GTK introspection and private display;
+they add no image-processing dependency.
+
+```python
+import ast
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def replace_once(source, old, new):
+    assert source.count(old) == 1
+    return source.replace(old, new, 1)
+
+
+def append_css(source, rule):
+    assignment = next(node for node in ast.parse(source).body
+                      if isinstance(node, ast.Assign) and any(
+                          isinstance(target, ast.Name) and target.id == "CSS"
+                          for target in node.targets))
+    lines = source.splitlines(keepends=True)
+    lines.insert(assignment.value.end_lineno - 1, rule + "\n")
+    return "".join(lines)
+
+
+vm = Path("tools/hyperlabctl/hyperlabctl/commands/vm.py")
+renderer = Path("tools/hyperlabctl/hyperlabctl/render.py")
+gtk = Path("roles/host_desktop_sway/files/privatestack-hyperlab-domains.py")
+cases = [
+    (51, vm, lambda source: replace_once(source,
+        '        domains = document.get("domains")\n'
+        '        if not isinstance(domains, list):\n'
+        '            raise Unavailable("Machine inventory unavailable; run hyperlabctl doctor")\n',
+        '        domains = document.get("domains") or []\n'),
+     "vm list turned a domains-provider failure"),
+    (52, renderer, lambda source: replace_once(source,
+        '        if any(domain["state"] == "unknown" for domain in domains):\n'
+        '            text, state = "?/%d" % len(domains), "error"\n'
+        '            tooltip += "\\nRunning state unknown"\n', ""),
+     "the VM pill counted an unreadable state as stopped"),
+    (53, gtk, lambda source: append_css(source,
+        ".external-outline { background: @hl_dom_dev; border: 1px solid @hl_dom_dev; }"),
+     "GTK filled the external identity"),
+    (54, gtk, lambda source: replace_once(source,
+        "/* Unclassified external identity:",
+        ".vm-tile.vm-domain-external.selected:hover { border-color: @hl_dom_dev; }\n"
+        "/* Unclassified external identity:"),
+     "GTK external outline borrowed a host or domain colour"),
+    (55, gtk, lambda source: append_css(source,
+        ".external-outline { border-color: @hl_dom_dev; }"),
+     "GTK external outline borrowed a host or domain colour"),
+    (56, gtk, lambda source: append_css(source,
+        ".external-outline { color: @hl_dom_host; }"),
+     "GTK external identity borrowed a text colour"),
+]
+for number, path, mutate, predicted in cases:
+    with tempfile.TemporaryDirectory(prefix="external-machine-mutation-") as directory:
+        backup = Path(directory) / path.name
+        shutil.copyfile(path, backup)
+        try:
+            path.write_text(mutate(path.read_text()))
+            red = subprocess.run(
+                [sys.executable, "tests/external_machine_visibility_contract.py"],
+                text=True, capture_output=True, check=False,
+            )
+            assert red.returncode != 0 and predicted in red.stdout + red.stderr, (
+                number, red.stdout, red.stderr,
+            )
+        finally:
+            shutil.copyfile(backup, path)
+        subprocess.run(
+            [sys.executable, "tests/external_machine_visibility_contract.py"], check=True,
+        )
+```

@@ -1558,7 +1558,9 @@ class VmCommand(Command):
 
     def _list(self, args, ctx):
         document = doc.build(ctx, only={"domains", "memory", "host"})
-        domains = document.get("domains") or []
+        domains = document.get("domains")
+        if not isinstance(domains, list):
+            raise Unavailable("Machine inventory unavailable; run hyperlabctl doctor")
         if args.json:
             print(json.dumps(domains, indent=2))
             return 0

@@ -2,9 +2,10 @@
 """One fixture inventory on the native shell and the GTK recovery surface."""
 from __future__ import annotations
 
+import ast
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 import os
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import host_quickshell_runtime_contract as runtime
 from recovery_gpu_ladder_contract import descendants, gtk_display, load_manager, run_gtk_worker
@@ -25,7 +27,20 @@ FIXTURE = json.loads((ROOT / "tests/fixtures/external-machines.json").read_text(
 PRODUCT = set(FIXTURE["product"])
 
 
-def inventory() -> tuple[list[dict], dict, list[dict]]:
+def fixture_context(*, unknown_state: bool = False) -> object:
+    sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
+    sys.path.append(str(ROOT / "tools/hyperlabctl/tests"))
+    import world
+    facts = [{**row, "metadata": world.managed_metadata(row["network"], product_machine=True)}
+             if row["name"] in PRODUCT else row for row in FIXTURE["domains"]]
+    ctx = world.build(domains=facts)
+    if unknown_state:
+        ctx.runner.register(["/usr/bin/virsh", "-c", "qemu:///system", "-q", "domstate", "hl-lab-host"],
+                            (1, ""))
+    return ctx
+
+
+def inventory(*, unknown_state: bool = False) -> tuple[list[dict], dict, list[dict]]:
     """Build every surface input from minimal libvirt facts, not row shapes.
 
     The fake host runs the real domains provider. `vm list` and
@@ -33,14 +48,9 @@ def inventory() -> tuple[list[dict], dict, list[dict]]:
     extend the same machine card with registry fields, as `machine
     inventory` does for a matching runtime.
     """
-    sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
-    sys.path.append(str(ROOT / "tools/hyperlabctl/tests"))
-    import world
     from hyperlabctl.commands.vm import VmCommand
     from hyperlabctl.commands.waybar import WaybarCommand
-    facts = [{**row, "metadata": world.managed_metadata(row["network"], product_machine=True)}
-             if row["name"] in PRODUCT else row for row in FIXTURE["domains"]]
-    ctx = world.build(domains=facts)
+    ctx = fixture_context(unknown_state=unknown_state)
     with redirect_stdout(io.StringIO()) as listed:
         assert VmCommand()._list(SimpleNamespace(json=True), ctx) == 0
     with redirect_stdout(io.StringIO()) as observed:
@@ -54,6 +64,59 @@ def inventory() -> tuple[list[dict], dict, list[dict]]:
                for card in raw["machines"] if card["name"] in PRODUCT]
     assert len(product) == len(PRODUCT), "a product Machine has no runtime row"
     return vm_list, raw, product
+
+
+def provider_failure(namespace: dict) -> None:
+    """A failed provider must survive vm list, the JSON reader and GTK loading."""
+    from hyperlabctl.cli import main as cli_main
+    import world
+
+    source = ast.parse((ROOT / "roles/host_desktop_sway/files/privatestack-hyperlab-domains.py").read_text())
+    nodes = [node for node in source.body
+             if isinstance(node, ast.ClassDef) and node.name == "ControlError"
+             or isinstance(node, ast.FunctionDef) and node.name == "run_cli_json"]
+    namespace.update(subprocess=subprocess, json=json, CLI="fixture-hyperlabctl")
+    exec(compile(ast.Module(nodes, type_ignores=[]), "recovery-cli-reader", "exec"), namespace)
+    read_cli = namespace["run_cli_json"]
+    list_argv = ["/usr/bin/virsh", "-c", "qemu:///system", "-q", "list", "--all", "--name"]
+    for json_mode in (False, True):
+        ctx = fixture_context()
+        ctx.runner.register(list_argv, (1, ""))
+        output, error = io.StringIO(), io.StringIO()
+        with redirect_stdout(output), redirect_stderr(error):
+            code = cli_main(["vm", "list", *(["--json"] if json_mode else [])], ctx=ctx)
+        assert code == 2 and not output.getvalue() and "unavailable" in error.getvalue().lower(), \
+            "vm list turned a domains-provider failure into a successful empty inventory"
+
+    def invoke(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
+        assert argv == ["fixture-hyperlabctl", "--json", "vm", "list"]
+        ctx = fixture_context()
+        ctx.runner.register(list_argv, (1, ""))
+        output, error = io.StringIO(), io.StringIO()
+        with redirect_stdout(output), redirect_stderr(error):
+            code = cli_main(argv[1:], ctx=ctx)
+        return subprocess.CompletedProcess(argv, code, output.getvalue(), error.getvalue())
+
+    previous = namespace["run_cli_json"]
+    snapshots = []
+    namespace["run_cli_json"] = lambda *args, **kwargs: read_cli(*args, **kwargs) if args == ("vm", "list") else {}
+    reader = namespace["HyperlabWindow"]()
+    reader._apply_model = snapshots.append
+    try:
+        with patch.object(subprocess, "run", side_effect=invoke):
+            reader._load_model()
+    finally:
+        namespace["run_cli_json"] = previous
+    assert len(snapshots) == 1 and snapshots[0].domains == []
+    assert any(error.startswith("domains:") for error in snapshots[0].load_errors), \
+        "GTK loading lost the domains-provider failure"
+    assert snapshots[0].running_summary == "Running inventory unavailable", \
+        "GTK turned a domains-provider failure into zero running"
+    # A readable, genuinely empty inventory remains a successful observation.
+    for json_mode in (False, True):
+        with redirect_stdout(io.StringIO()) as output:
+            code = cli_main(["vm", "list", *(["--json"] if json_mode else [])], ctx=world.build(domains=[]))
+        assert code == 0 and (json.loads(output.getvalue()) == [] if json_mode else output.getvalue() == "")
 
 NATIVE = '''
             const raw = @@RAW@@;
@@ -263,11 +326,70 @@ def native() -> None:
         shutil.rmtree(directory)
 
 
+def identity_styles(gtk: object, source: str, roots: list[object]) -> None:
+    """Ask GTK for effective styles, including specificity, ancestors and states.
+
+    Inspect background and border render nodes without text rasterization or
+    extra graphics bindings. Every external marker, including plain outline
+    badges and group dots, must stay unfilled with an appearance-text border.
+    """
+    from gi.repository import Gdk, Gsk
+
+    widgets = [item for root in roots for item in descendants(root)]
+    markers = [item for item in widgets if item.has_css_class("external-outline")
+               or item.has_css_class("vm-domain-external")
+               or item.has_css_class("vm-screen") or item.has_css_class("vm-screen-line")]
+    assert markers and any(item.has_css_class("external-outline") for item in markers), \
+        "GTK external style probe lost its outline widgets"
+    tiles = [item for item in widgets if item.has_css_class("vm-tile")]
+    selected_before = [item.has_css_class("selected") for item in tiles]
+    display = Gdk.Display.get_default()
+    gtk.Settings.get_default().set_property("gtk-enable-animations", False)
+    palettes = sorted((ROOT / "roles/host_desktop_sway/files/palette").glob("*/hyperlab-palette-gtk.css"))
+    assert palettes, "GTK external style probe has no appearance palettes"
+    for palette in palettes:
+        provider = gtk.CssProvider()
+        provider.load_from_data((palette.read_text() + "\n" + source).encode())
+        gtk.StyleContext.add_provider_for_display(display, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        try:
+            for selected, hover in ((False, False), (False, True), (True, False), (True, True)):
+                for tile in tiles:
+                    (tile.add_css_class if selected else tile.remove_css_class)("selected")
+                for item in widgets:
+                    if hover:
+                        item.set_state_flags(gtk.StateFlags.PRELIGHT, False)
+                    else:
+                        item.unset_state_flags(gtk.StateFlags.PRELIGHT)
+                for item in markers:
+                    context = item.get_style_context()
+                    found, neutral = context.lookup_color("hl_text")
+                    label = "%s %s selected=%s hover=%s" % (palette.parent.name, item.get_css_classes(), selected, hover)
+                    assert found and context.get_color().equal(neutral), \
+                        "GTK external identity borrowed a text colour: " + label
+                    background = gtk.Snapshot()
+                    background.render_background(context, 0, 0, 160, 96)
+                    assert background.to_node() is None, "GTK filled the external identity: " + label
+                    frame = gtk.Snapshot()
+                    frame.render_frame(context, 0, 0, 160, 96)
+                    node = frame.to_node()
+                    assert isinstance(node, Gsk.BorderNode) and all(width > 0 for width in node.get_widths()) \
+                        and all(color.equal(neutral) for color in node.get_colors()), \
+                        "GTK external outline borrowed a host or domain colour: " + label
+        finally:
+            gtk.StyleContext.remove_provider_for_display(display, provider)
+    for tile, selected in zip(tiles, selected_before, strict=True):
+        (tile.add_css_class if selected else tile.remove_css_class)("selected")
+    for item in widgets:
+        item.unset_state_flags(gtk.StateFlags.PRELIGHT)
+
+
 def recovery() -> int:
     with gtk_display() as gtk:
         namespace = load_manager(gtk)
-        namespace.update(Path=Path, os=os, ThreadPoolExecutor=ThreadPoolExecutor, as_completed=as_completed)
+        namespace.update(Path=Path, os=os, ThreadPoolExecutor=ThreadPoolExecutor, as_completed=as_completed,
+                         GLib=SimpleNamespace(idle_add=lambda callback, model: callback(model)))
         vm_list, _raw, product = inventory()
+        provider_failure(namespace)
         calls = []
         snapshots = []
         def cli(*args: str, **_kwargs: bool) -> dict | list:
@@ -456,29 +578,18 @@ def recovery() -> int:
         window._render_vm_detail(detail, host)
         assert any(isinstance(item, gtk.Button) and item.get_label() == "Shut down"
                    for item in descendants(detail)), "existing recovery shutdown was removed"
-        # Parse the production stylesheet through GTK and inspect the external
-        # identity rules separately from the appearance-only card material.
-        css = gtk.CssProvider()
-        css.load_from_data(namespace["CSS"].encode())
-        # These are ordinary qualified CSS rules, without nested at-rules.
-        # Parse selectors and declarations; do not treat comments as policy.
-        source = re.sub(r"/\*.*?\*/", "", namespace["CSS"], flags=re.S)
-        rules = [(selectors.strip().split(","), {
-            key.strip(): value.strip() for entry in body.split(";")
-            if ":" in entry for key, _, value in [entry.partition(":")]
-        }) for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", source)]
-        external = [declarations for selectors, declarations in rules
-                    if any(".vm-domain-external" in selector for selector in selectors)]
-        assert external, "GTK has no external outline style"
-        declarations = {key: value for rule in external for key, value in rule.items()}
-        assert declarations["background"] == "transparent", "GTK filled the external identity"
-        assert "@hl_text" in declarations["border"] and "dom_" not in str(declarations), \
-            "GTK external identity borrowed a host or domain colour"
+        # Preserve each widget's real parent chain so descendant selectors
+        # participate in GTK's cascade as well as direct class selectors.
+        style_roots = [window._mock_section_header("external")]
+        for row in outside:
+            style_roots.extend((window._mock_vm_tile(row), window._drawer_vm_row(row)))
+        style_roots.append(names["arch-dev"])
+        identity_styles(gtk, namespace["CSS"], style_roots)
     print("External Machine recovery contract: OK")
     return 0
 
 
-def waybar_pill(raw: dict, product: list[dict]) -> None:
+def waybar_pill(raw: dict, product: list[dict], *, unknown_state: bool = False) -> None:
     """Run the bar's real VM pill argv through the real bridge, CLI stubbed."""
     config = json.loads(re.sub(r"(?m)^\s*//.*$", "", (
         ROOT / "roles/host_desktop_sway/files/waybar.jsonc").read_text(encoding="utf-8")))
@@ -512,15 +623,28 @@ def waybar_pill(raw: dict, product: list[dict]) -> None:
         calls = [json.loads(line) for line in trace.read_text().splitlines()]
     payload = json.loads(result.stdout)
     assert calls == [["waybar", "--field", "vms"]], "the VM pill does not read every libvirt domain"
-    assert payload["text"] == "1/%d" % len(FIXTURE["domains"]), \
-        "the VM pill does not count the running external domain"
-    assert "hl-lab-host  running" in payload["tooltip"].splitlines(), \
-        "the VM pill tooltip hides the running external domain"
+    if unknown_state:
+        assert payload["text"] == "?/%d" % len(FIXTURE["domains"]) \
+            and payload["class"] == payload["alt"] == "error", \
+            "the VM pill counted an unreadable state as stopped"
+        assert "Running state unknown" in payload["tooltip"].splitlines(), \
+            "the VM pill does not explain its unknown running count"
+    else:
+        assert payload["text"] == "1/%d" % len(FIXTURE["domains"]), \
+            "the VM pill does not count the running external domain"
+    expected_state = "unknown" if unknown_state else "running"
+    assert "hl-lab-host  " + expected_state in payload["tooltip"].splitlines(), \
+        "the VM pill tooltip hides the external domain state"
+    assert len(payload["machines"]) == len(FIXTURE["domains"]) \
+        and payload["machines_available"] is True, "runtime uncertainty hid the known inventory"
+    assert sorted(row["name"] for row in payload["machines"]) == sorted(row["name"] for row in FIXTURE["domains"])
 
 
 def main() -> int:
     _vm_list, raw, product = inventory()
     waybar_pill(raw, product)
+    _vm_list, unknown, product = inventory(unknown_state=True)
+    waybar_pill(unknown, product, unknown_state=True)
     native()
     assert run_gtk_worker(Path(__file__)) == 0, "GTK external Machine contract failed"
     print("External Machine visibility contract: OK")

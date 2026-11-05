@@ -350,9 +350,24 @@ def main() -> int:
     )
 
     require(
-        payload["text"] == "1/3"
-        and payload["machines_available"],
-        "machine summary changed",
+        payload["text"] == "?/3"
+        and payload["machines_available"]
+        and payload["class"] == payload["alt"] == "error"
+        and "Running state unknown" in payload["tooltip"].splitlines(),
+        "unknown machine state became a complete running count",
+    )
+
+    known = render.waybar_field(
+        {"domains": [{**domain, "state": "shut off"} if domain["state"] == "unknown" else domain
+                     for domain in domains]},
+        "vms",
+    )
+    require(
+        known["text"] == "1/3"
+        and known["machines_available"]
+        and known["class"] == known["alt"] == "ok"
+        and len(known["machines"]) == 3,
+        "known machine states lost their complete running count",
     )
 
     rows = payload["machines"]

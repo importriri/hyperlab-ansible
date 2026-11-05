@@ -51,6 +51,11 @@ name and state in its tooltip. The bar has no registry membership, so it does
 not split the count; the split lives in the shell views that read the registry.
 The product inventory's own `running/total` text counts registry Machines only
 and is no longer what the bar shows.
+An unknown runtime state changes the pill to **?/total** with an error state
+and **Running state unknown** in its tooltip; every observed row and the known
+total remain available. `vm list`, in text and JSON modes, refuses an unavailable
+domains provider instead of returning a successful empty list. The recovery
+JSON reader carries that refusal into **Running inventory unavailable**.
 
 ## External visual state — Proposed
 
@@ -101,5 +106,16 @@ The fixture holds minimal libvirt facts; the rows each surface receives are
 built by the real domains provider, `vm list` and `waybar --field vms` on a
 fake host. The Waybar pill is run through the real bridge with its configured
 argv, and segment attachment is checked on the recovery Networks page.
+Provider failure is also exercised through `vm list`, the recovery JSON reader
+and its model loader. An unreadable external state passes through the real
+provider, renderer and configured Waybar pill. GTK resolves the effective
+background, border and text styles for external markers, including group dots,
+drawer badges and network-member badges, across each appearance palette and
+normal, hover and selected states. This includes selector specificity and
+source order, rather than merging rules with a particular class name.
+The earlier desktop cockpit contract expected **1/3** even with an unknown
+fixture state, pinning a partial observation as a complete count. It now
+requires **?/3** and an error state, alongside a **1/3** control when every
+state is known; its inventory and provenance assertions remain in place.
 The software check does not establish installed-shell behaviour, compositor
 placement or hardware acceptance. Nitro and Predator checks remain open.

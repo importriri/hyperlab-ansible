@@ -150,7 +150,7 @@ with `domains.trust_conflict`. A GPU gate may name an unmanaged domain for
 handoff policy; the CLI still reports that gate as the domain's `trust_profile`
 (and `provenance` in `waybar --field vms`), but the shell surfaces ignore it for
 every domain outside the Machine registry
-([ADR 0058](adr/0058-external-machine-visibility.md)). A domain outside the
+([ADR 0059](adr/0059-external-machine-visibility.md)). A domain outside the
 registry stays external even with a matching spec, a GPU gate entry or an
 attachment to a trust network.
 

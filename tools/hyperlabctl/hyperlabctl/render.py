@@ -175,6 +175,9 @@ def waybar_field(document, field):
                             for domain in domains) or "no domains defined"
         if blocked:
             tooltip += "\nblocked: " + ", ".join(domain["name"] for domain in blocked)
+        if any(domain["state"] == "unknown" for domain in domains):
+            text, state = "?/%d" % len(domains), "error"
+            tooltip += "\nRunning state unknown"
     else:
         raise ValueError("unknown waybar field %r" % field)
 

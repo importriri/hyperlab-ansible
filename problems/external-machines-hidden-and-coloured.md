@@ -64,6 +64,32 @@ A review of the first correction found four more places with the same defect:
   spec's colour in recovery. Only registry Machines can now receive a colour,
   as in the native shell.
 
+A later review found that observation failures could still hide running
+domains. `vm list` converted an unavailable domains provider to `[]` and
+returned success. Recovery's JSON reader therefore had no failure to record
+and its summary claimed zero running. Both CLI output modes now refuse that
+unavailable section; a readable empty list remains valid. The regression
+drives the real provider failure through the CLI, recovery JSON reader and
+model loader, which reports **Running inventory unavailable**.
+
+Waybar also counted only known running states: an unreadable external state
+looked like **0/7**, with an OK class. It now shows **?/7** with an error class
+and **Running state unknown**, retaining all domain rows and the known total.
+The check sends a failed external state read through the provider, renderer
+and the pill's configured bridge route.
+The older desktop cockpit contract also expected a definite **1/3** with an
+unknown fixture state. Its assertion now requires uncertainty and an error
+state, plus a known-state control that still requires the complete **1/3**.
+
+The original colour check merged only CSS rules naming `.vm-domain-external`.
+An appended `.external-outline` rule could colour group dots and badges DEV
+while the check stayed green; that surviving mutation was reproduced. The
+contract now asks GTK for effective text, background and border render nodes
+on each external identity widget across all appearance palettes, hover and
+selection. GTK applies selector specificity, source order and ancestor rules.
+The override now fails, as do a border-only override, a HOST text override and
+an earlier, more specific selected-hover rule.
+
 ## Is the recovery Shut down action intended?
 
 Undecided. What exists: the recovery manager sends an external running

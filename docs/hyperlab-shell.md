@@ -122,6 +122,11 @@ read keeps **last observed** with its age beside the count.
 The sway session's Waybar VM pill shows running/total over every libvirt
 domain, from the same raw observation, with each domain and state in its
 tooltip. It has no registry membership and therefore no managed/external split.
+If any runtime state is unknown, the pill shows **?/total** with an error state
+and explains **Running state unknown** in the tooltip, retaining every domain
+row and the known total. An unavailable inventory shows **?**. The recovery
+reader receives a refusal from `vm list` when the domains provider fails, so
+that failure says **Running inventory unavailable**, never zero running.
 
 Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the
