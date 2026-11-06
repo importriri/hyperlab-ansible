@@ -3366,7 +3366,7 @@ fixtures leave the versioned pool untouched.
 `tests/product_display_name_contract.py` tokenizes QML string literals,
 executes every discovered CLI help parser and the version banner, parses
 Ansible deployment data, records real notification argv, and executes the
-production name binding with Quickshell's real FileView. The existing
+production name binding with Quickshell's real read-only process transport. The existing
 Qt offscreen harness evaluates the bar, desktop, byline, key-sheet heading
 and all five workspace titles at desktop and narrow sizes. Compositor
 fixtures execute the real owner-bound focus selector on both backends.
@@ -3384,7 +3384,8 @@ contract.cli_contract()                # real parser tree and input refusals
 contract.deployment_contract()         # parsed role and config data
 contract.docs_contract("Sfere")
 contract.notification_contract("Sfere")
-contract.native_name_contract("Sfere")  # real FileView, no host observations
+contract.reader_contract()             # shared byte/path table, Python and Bash
+contract.native_name_contract("Sfere")  # real byte transport, no host observations
 contract.shell_contract("Sfere")        # evaluated presentation
 contract.focus_contract()               # owner-bound compositor fixtures
 ```
@@ -3509,3 +3510,48 @@ checked independently through both structure and notification behavior.
 
 The display-only behavior supersedes the previous whole-parser refusal;
 ADR 0058 explains why emergency stop cannot depend on cosmetic identity.
+
+### Shared reader edges and known deferred surfaces
+
+One byte/path fixture table now drives the CLI reader, all four Bash readers
+and the native Quickshell bridge transport. It includes valid LF, CRLF and
+no-newline documents, a changed identity, accented words, lone CR, extra lines,
+NUL, duplicate/missing/null/long fields, redirected leaves and parents,
+nonregular files, missing paths and zero-mode files. Bash runs every case in
+C and each installed UTF-8 locale. The native fixture also withholds valid
+output from a failed bridge and handles a missing bridge. The fixed adapter
+route also runs with an invalid compositor backend and refuses extra arguments.
+Document-mode output must preserve the exact validated bytes.
+
+The deferred inventory is known at `233b046`, not exhaustive. Its contract
+now checks the host lock template, shell-action stderr, provisioning, Gaming
+Mode, session failure and guest lock/Ly files. It parses lock label blocks,
+the guest task YAML and the guest lock-label function; an AST scan checks all
+five old-name shell-action stderr prefixes.
+
+Each target below was copied before mutation, restored byte-for-byte, and its
+stage rerun green. PD-01 was repeated: restoring the old bar label was red.
+PD-62 intentionally records a surviving mutation under the unprivileged test
+identity; it is not evidence of a root-runtime refusal.
+
+| ID | Mutation | Stage | Observed result |
+| --- | --- | --- | --- |
+| PD-52 | Remove `hyprlock.conf.j2` from the open roadmap item | deferred inventory | red: lock surface omitted; restored green |
+| PD-53 | Remove `privatestack-shell-actions.py` from the open roadmap item | deferred inventory | red: shell-action surface omitted; restored green |
+| PD-54 | Add an unlisted old-name `print(..., file=sys.stderr)` to the shell-action bridge | AST stderr inventory | red: new old-name shell stderr outside inventory; restored green |
+| PD-55 | Change the deferred host lock subtitle | parsed lock labels | red: host lock labels changed without updating inventory; restored green |
+| PD-56 | Change a guest lock-label fallback | guest function AST | red: guest lock labels changed without updating inventory; restored green |
+| PD-57 | Change guest Ly `initial_info_text` | parsed task YAML | red: guest Ly text changed without updating inventory; restored green |
+| PD-58 | Restore Python universal-newline translation | shared reader table | red: CLI accepts lone CR; restored green |
+| PD-59 | Remove the function-local C locale from all four Bash readers | shared reader table | reader equality green as expected; runtime red: accented name accepted under `en_US.utf8`; restored green |
+| PD-60 | Remove the adapter identity reader's parent/leaf symlink guard | native shared table | red: redirected identity published; restored green |
+| PD-61 | Publish the native child buffer regardless of exit status | native failed-child fixture | red: failed transport published an identity; restored green |
+| PD-62 | Remove the explicit readable-mode guard from all four Bash readers | shared reader table, equality and native bridge | green: this user's kernel read still refuses the zero-mode file; restored green; root-runtime behavior not established |
+| PD-63 | Add a newline to document-mode output in all four readers | shared document bytes | red: validated identity bytes changed; restored green |
+| PD-64 | Detect the compositor before the fixed identity route | native bridge with invalid backend | red: valid identity unavailable without a compositor; restored green |
+| PD-65 | Remove the fixed identity route's argument-count guard | real adapter argv | red: caller-supplied path accepted; restored green |
+
+The native bridge cases execute the real adapter while the existing
+provenance restrictions remain unchanged. PD-62 kept both reader
+equality and every unprivileged refusal case green, because kernel permission
+checks still deny the zero-mode document to this user.

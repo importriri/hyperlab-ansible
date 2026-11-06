@@ -15,7 +15,8 @@ from shlex import quote as shlex_quote
 import subprocess
 import sys
 import tempfile
-from contextlib import redirect_stdout
+from collections.abc import Iterator
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
 import yaml
@@ -33,6 +34,103 @@ OLD = re.compile(r"HyperLab|Hyperlab|HYPERLAB")
 # Tokenize comments separately: internal component identifiers and input
 # parsing regexes are not presentation strings. Include nested JS strings.
 TOKENS = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`', re.S)
+
+
+@contextmanager
+def reader_inputs() -> Iterator[list[tuple[str, Path, tuple[str, str] | None]]]:
+    """One byte/path fixture table for CLI, Bash and native shell readers."""
+    canonical = PRODUCT.read_bytes().rstrip(b"\n")
+    identity = json.loads(canonical)
+    expected = (identity["name"], identity["byline"])
+    documents = [
+        ("canonical", PRODUCT.read_bytes(), expected),
+        ("no-newline", canonical, expected),
+        ("crlf", canonical + b"\r\n", expected),
+        ("changed", b'{"name":"Example Name","byline":"by Example"}', ("Example Name", "by Example")),
+        ("accented", '{"name":"Sfère","byline":"by D"}'.encode(), None),
+        ("lone-cr", canonical + b"\r", None),
+        ("extra-line", canonical + b"\n\n", None),
+        ("nul", canonical + b"\0", None),
+        ("empty", b"", None),
+        ("missing-fields", b"{}", None),
+        ("duplicate-name", b'{"name":"A","name":"B","byline":"by C"}', None),
+        ("duplicate-byline", b'{"name":"A","byline":"by B","byline":"by C"}', None),
+        ("null-byline", b'{"name":"A","byline":null}', None),
+        ("long-byline", b'{"name":"A","byline":"' + b"B" * 65 + b'"}', None),
+    ]
+    with tempfile.TemporaryDirectory(prefix="product-readers-") as temporary:
+        directory = Path(temporary)
+        cases = []
+        for label, raw, result in documents:
+            path = directory / (label + ".yml")
+            path.write_bytes(raw)
+            cases.append((label, path, result))
+        valid = cases[0][1]
+        leaf = directory / "redirect.yml"
+        leaf.symlink_to(valid)
+        parent = directory / "redirected"
+        parent.symlink_to(directory, target_is_directory=True)
+        unreadable = directory / "unreadable.yml"
+        unreadable.write_bytes(PRODUCT.read_bytes())
+        unreadable.chmod(0)
+        cases.extend([
+            ("symlink-leaf", leaf, None),
+            ("symlink-parent", parent / valid.name, None),
+            ("unreadable", unreadable, None),
+            ("missing", directory / "missing.yml", None),
+            ("directory", directory, None),
+        ])
+        try:
+            yield cases
+        finally:
+            unreadable.chmod(0o600)
+
+
+def reader_contract() -> None:
+    from hyperlabctl import cli
+
+    readers = [ROOT / "roles/host_desktop_common/files/privatestack-compositor-adapter.sh",
+               *(SWAY_FILES / name for name in ("privatestack-keyboard.sh", "privatestack-theme.sh",
+                                               "privatestack-waybar.sh"))]
+    locales = subprocess.run(["locale", "-a"], capture_output=True, text=True, check=True).stdout.splitlines()
+    # Exercise C and every installed UTF-8 locale: language collation can
+    # widen Bash's ASCII-looking ranges.
+    utf8 = [value for value in locales if "utf" in value.lower()]
+    require(bool(utf8), "UTF-8 locale required for product reader parity")
+    with reader_inputs() as cases:
+        for label, path, expected in cases:
+            try:
+                actual = cli._product_info(path)
+            except cli.HyperlabError:
+                actual = None
+            require(actual == expected, f"CLI reader {label}: {actual!r} != {expected!r}")
+        for path in readers:
+            body = bash_function(path.read_text(), "product_name")
+            for locale in ["C", *utf8]:
+                for label, input_path, expected in cases:
+                    script = body.replace(DEPLOYED_PRODUCT, shlex_quote(str(input_path))) + "\nproduct_name"
+                    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                                            env={**os.environ, "LC_ALL": locale}, check=False)
+                    if expected is None:
+                        require(result.returncode != 0 and not result.stdout,
+                                f"{path.name} reader {label} ({locale}): invalid input accepted")
+                    else:
+                        require(result.returncode == 0 and result.stdout == expected[0] + "\n",
+                                f"{path.name} reader {label} ({locale}): valid input refused: {result.stderr}")
+
+                    document = subprocess.run(["bash", "-c", script + " --document"], capture_output=True,
+                                              env={**os.environ, "LC_ALL": locale}, check=False)
+                    if expected is None:
+                        require(document.returncode != 0 and not document.stdout,
+                                f"{path.name} document {label} ({locale}): invalid input accepted")
+                    else:
+                        require(document.returncode == 0 and document.stdout.lstrip().startswith(b"{"),
+                                f"{path.name} document {label} ({locale}): identity document missing")
+                        require(document.stdout == input_path.read_bytes(),
+                                f"{path.name} document {label} ({locale}): identity bytes changed")
+                        identity = json.loads(document.stdout)
+                        require((identity["name"], identity["byline"]) == expected,
+                                f"{path.name} document {label} ({locale}): identity document drift")
 
 
 def require(condition: bool, message: str) -> None:
@@ -176,6 +274,13 @@ def deferred_surface_contract() -> None:
         "roles/host_vault/files/hyperlab-vault-confirm.py",
         "roles/guest_desktop_hyprland/files/hyperlab-clipboard-receive.py",
         "tools/hyperlabctl/hyperlabctl/hardware.py",
+        "roles/host_desktop_hyprland/templates/hyprlock.conf.j2",
+        "roles/host_desktop_common/files/privatestack-shell-actions.py",
+        "roles/host_desktop_common/files/privatestack-machine-provision.py",
+        "roles/host_gaming_mode/files/hyperlab-gaming-mode.py",
+        "roles/host_desktop_sway/files/privatestack-hyperlab-session.sh",
+        "roles/guest_desktop_hyprland/files/hyperlab-desk.py",
+        "roles/guest_desktop_hyprland/tasks/main.yml",
     ]
     roadmap = (ROOT / "docs/roadmap.md").read_text()
     open_items = re.findall(r"(?m)^- \[ \] Finish the visible name migration[^\n]*(?:\n +[^\n]*)*", roadmap)
@@ -184,7 +289,8 @@ def deferred_surface_contract() -> None:
     for filename in inventory:
         require((ROOT / filename).is_file(), f"missing deferred surface: {filename}")
         for label, source in (("open roadmap item", open_items[0]), ("ADR 0058", adr)):
-            require(f"`{Path(filename).name}`" in source,
+            label_path = filename if filename.endswith("tasks/main.yml") else Path(filename).name
+            require(f"`{label_path}`" in source,
                     f"visible legacy surface omitted from {label}: {filename}")
     bridge = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py"
     reasons = {
@@ -204,6 +310,49 @@ def deferred_surface_contract() -> None:
             if OLD.search(text):
                 require(text in reasons, f"new old-name bridge refusal outside inventory: {text}")
                 require(f"`{text}`" in adr, f"bridge refusal omitted from ADR inventory: {text}")
+    shell_actions = ROOT / "roles/host_desktop_common/files/privatestack-shell-actions.py"
+    errors = {
+        "HyperLab: rejected arguments for fixed action:",
+        "HyperLab: rejected unknown shell action:",
+        "HyperLab: rejected invalid argument for action:",
+        "HyperLab: rejected an application outside the reviewed catalogue or not installed:",
+        "HyperLab: rejected unavailable or untrusted target:",
+    }
+    seen = set()
+    for node in ast.walk(ast.parse(shell_actions.read_text())):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != "print":
+            continue
+        if not any(keyword.arg == "file" and isinstance(keyword.value, ast.Attribute)
+                   and isinstance(keyword.value.value, ast.Name) and keyword.value.value.id == "sys"
+                   and keyword.value.attr == "stderr" for keyword in node.keywords):
+            continue
+        for argument in node.args:
+            text = "".join(part.value for part in ast.walk(argument)
+                           if isinstance(part, ast.Constant) and isinstance(part.value, str)).strip()
+            if OLD.search(text):
+                require(text in errors, f"new old-name shell stderr outside inventory: {text}")
+                require(f"`{text}`" in adr, f"shell stderr omitted from ADR inventory: {text}")
+                seen.add(text)
+    require(seen == errors, "deferred shell stderr changed without updating inventory")
+    lock = (ROOT / "roles/host_desktop_hyprland/templates/hyprlock.conf.j2").read_text()
+    labels = [dict(tuple(part.strip() for part in line.split("=", 1))
+                   for line in block.splitlines() if "=" in line)
+              for block in re.findall(r"(?m)^label \{\n(.*?)^\}", lock, re.S)]
+    texts = [label["text"] for label in labels if "text" in label]
+    require([value for value in texts if OLD.search(value)] == ["HyperLab"] and "Platform" in texts,
+            "deferred host lock labels changed without updating inventory")
+    guest = ast.parse((ROOT / "roles/guest_desktop_hyprland/files/hyperlab-desk.py").read_text())
+    lock_label = next(node for node in guest.body if isinstance(node, ast.FunctionDef)
+                      and node.name == "command_lock_label")
+    require({node.value for node in ast.walk(lock_label) if isinstance(node, ast.Constant)
+             and isinstance(node.value, str) and OLD.search(node.value)}
+            == {"HyperLab Workstation", "HyperLab Workstation · Desk "},
+            "deferred guest lock labels changed without updating inventory")
+    tasks = yaml.safe_load((ROOT / "roles/guest_desktop_hyprland/tasks/main.yml").read_text())
+    ly = [task for task in tasks if task.get("name") == "Configure Ly for the guest workstation"]
+    require(len(ly) == 1 and [item["value"] for item in ly[0]["loop"]
+                             if item["key"] == "initial_info_text"] == ["HyperLab guest workstation"],
+            "deferred guest Ly text changed without updating inventory")
     for filename, expected in entries.items():
         parser = configparser.ConfigParser(interpolation=None, strict=True)
         parser.read_string((ROOT / filename).read_text())
@@ -545,48 +694,62 @@ def shell_contract(name: str) -> None:
 
 
 def native_name_contract(name: str) -> None:
-    """Execute the production name binding with the real FileView API only."""
+    """Execute the production byte transport and QML grammar without host probes."""
     runner = shutil.which("qs")
     require(runner is not None, "Quickshell required for product file transport")
     source = (QML / "ShellState.qml").read_text()
-    # Keep the complete production binding, parser and FileView, excluding
+    # Keep the complete production binding, parser and read-only transport, excluding
     # every host observation process. Only the file path is substituted.
     source = source.split("    readonly property string statusBridge:", 1)[0]
-    require("id: productFile" in source, "product file transport missing")
+    require("id: productProcess" in source, "product file transport missing")
     with tempfile.TemporaryDirectory(prefix="product-file-") as temporary:
         directory = Path(temporary)
         (directory / "run").mkdir(mode=0o700)
-        path = directory / "product.yml"
-        scene = source.replace('"/etc/xdg/quickshell/hyperlab/product.yml"', json.dumps(str(path)))
+        bridge = directory / "adapter"
+        adapter_source = adapter.ADAPTER.read_text()
+        scene = source.replace('"/usr/local/bin/privatestack-compositor-adapter"', json.dumps(str(bridge)))
         scene += '''
     Timer {
-        interval: 50; running: true
+        interval: 10; running: !productProcess.running
         onTriggered: { console.log("PRODUCT_RESULT=" + JSON.stringify([state.productName, state.productByline])); Qt.quit(); }
     }
 }
 '''
-        (directory / "shell.qml").write_text(scene)
-        for raw, expected in ((PRODUCT.read_text(), [name, yaml.safe_load(PRODUCT.read_text())["byline"]]),
-                              ('{"name":"Example Name","byline":"by Example"}', ["Example Name", "by Example"]),
-                              ('{"name":"A","name":"B","byline":"by C"}', ["", ""]),
-                              ('{"name":"A","byline":"by B","byline":"by C"}', ["", ""]),
-                              ('{"name":"A","byline":null}', ["", ""]),
-                              ("{}", ["", ""]), (None, ["", ""])):
-            if raw is None:
-                path.unlink()
-            else:
-                path.write_text(raw)
+        env = {**os.environ, "QT_QPA_PLATFORM": "offscreen",
+               "QT_QUICK_BACKEND": "software", "QT_FORCE_STDERR_LOGGING": "1",
+               "WAYLAND_DISPLAY": "", "XDG_RUNTIME_DIR": str(directory / "run"),
+               "XDG_CACHE_HOME": str(directory / "cache"),
+               "HYPERLAB_COMPOSITOR_BACKEND": "unsupported-fixture",
+               "HYPRLAND_INSTANCE_SIGNATURE": "", "SWAYSOCK": ""}
+
+        def check_scene(label: str, current_scene: str, expected: list[str], current_env: dict[str, str]) -> None:
+            (directory / "shell.qml").write_text(current_scene)
             result = subprocess.run([runner, "-p", str(directory), "--no-color"],
-                                    capture_output=True, text=True, timeout=10, check=False,
-                                    env={**os.environ, "QT_QPA_PLATFORM": "offscreen",
-                                         "QT_QUICK_BACKEND": "software", "QT_FORCE_STDERR_LOGGING": "1",
-                                         "WAYLAND_DISPLAY": "", "XDG_RUNTIME_DIR": str(directory / "run"),
-                                         "XDG_CACHE_HOME": str(directory / "cache")})
+                                    capture_output=True, text=True, timeout=10, check=False, env=current_env)
             output = result.stdout + result.stderr
             records = re.findall(r'PRODUCT_RESULT=(\[[^\n]*\])', output)
-            require(result.returncode == 0 and len(records) == 1, f"native product read failed: {output}")
-            require(json.loads(records[0]) == expected, f"native product read/default drift: {output}")
+            require(result.returncode == 0 and len(records) == 1, f"native product read failed ({label}): {output}")
+            require(json.loads(records[0]) == expected, f"native product read/default drift ({label}): {output}")
             require(not re.search(r"ReferenceError|TypeError|Error loading configuration", output), output)
+
+        with reader_inputs() as cases:
+            require(cases[0][2][0] == name, "CLI/native product name drift")
+            for label, input_path, identity in cases:
+                expected = list(identity) if identity else ["", ""]
+                adapter.write_executable(bridge, adapter_source.replace(DEPLOYED_PRODUCT, str(input_path)))
+                check_scene(label, scene, expected, env)
+            adapter.write_executable(bridge, adapter_source.replace(DEPLOYED_PRODUCT, str(cases[0][1])))
+            refused = subprocess.run([str(bridge), "product-identity", str(cases[0][1])],
+                                     capture_output=True, text=True, env=env, check=False)
+            require(refused.returncode == 2 and not refused.stdout,
+                    "identity route accepted a caller-supplied path")
+        # A failed bridge may have emitted valid-looking bytes. They must
+        # never become the published identity. A missing bridge stays empty.
+        adapter.write_executable(bridge, "#!/bin/sh\nprintf '%s' "
+                                 + shlex_quote(PRODUCT.read_text()) + "\nexit 1\n")
+        check_scene("failed-transport", scene, ["", ""], env)
+        bridge.unlink()
+        check_scene("missing-bridge", scene, ["", ""], env)
 
 
 def focus_contract() -> None:
@@ -610,6 +773,7 @@ def main() -> int:
     docs_contract(name)
     deferred_surface_contract()
     bash_reader_contract()
+    reader_contract()
     notification_contract(name)
     focus_contract()
     operation_contract()

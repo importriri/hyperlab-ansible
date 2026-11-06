@@ -4,6 +4,12 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`product-reader-edge-divergence.md`](product-reader-edge-divergence.md):
+  newline translation, locale ranges and symlink following made product
+  identity readers disagree on the same input.
+- [`product-visible-inventory-omissions.md`](product-visible-inventory-omissions.md):
+  the deferred migration list omitted known lock/login labels and helper
+  diagnostics, including stderr recorded in Diagnostics operation details.
 - [`product-identity-split-between-checkouts.md`](product-identity-split-between-checkouts.md):
   deployed QML and the CLI checkout could disagree about the display name;
   focus/notifications now use deployed data and cosmetic failures stay cosmetic.

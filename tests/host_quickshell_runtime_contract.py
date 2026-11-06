@@ -161,8 +161,8 @@ def adapt_state(source: str) -> str:
                                source, re.M | re.S)
     source = strip_blocks(source, "Process", "FileView", "SystemClock", "Timer")
     source = source.replace(
-        "productFile.text()",
-        json.dumps((ROOT / "tools/product.yml").read_text(encoding="utf-8")),
+        '    property string productRaw: ""',
+        "    property string productRaw: " + json.dumps((ROOT / "tools/product.yml").read_text(encoding="utf-8")),
     )
     source = source.replace(
         "    readonly property alias clock: shellClock\n",

@@ -122,8 +122,10 @@ apply_layout() {
 }
 
 product_name() {
+    local LC_ALL=C
     local path=/etc/xdg/quickshell/hyperlab/product.yml
-    local parent=${path} raw pattern
+    local parent=${path} raw pattern mode
+    [[ $# -le 1 && ( $# -eq 0 || ${1:-} == --name || ${1:-} == --document ) ]] || return 1
     # Reject redirected parents as well as a redirected leaf.
     while [[ ${parent} != / ]]; do
         [[ ! -L ${parent} ]] || return 1
@@ -131,6 +133,8 @@ product_name() {
         [[ -n ${parent} ]] || parent=/
     done
     [[ -f ${path} && -r ${path} ]] || return 1
+    mode=$(stat -c %a -- "${path}") || return 1
+    (( (8#${mode} & 0444) != 0 )) || return 1
     # NUL terminates read successfully and is forbidden. EOF keeps every
     # newline, letting the pattern reject more than one document line.
     if IFS= read -r -d '' raw <"${path}"; then
@@ -140,12 +144,16 @@ product_name() {
     pattern+=$'(\r?\n)?$'
     [[ ${raw} =~ ${pattern} ]] || return 1
     [[ ${#BASH_REMATCH[1]} -le 64 && ${#BASH_REMATCH[3]} -le 64 ]] || return 1
-    printf '%s\n' "${BASH_REMATCH[1]}" || return 1
+    if [[ ${1:-} == --document ]]; then
+        printf '%s' "${raw}" || return 1
+    else
+        printf '%s\n' "${BASH_REMATCH[1]}" || return 1
+    fi
 }
 
 notify_layout() {
     local product_name
-    product_name=$(product_name) || return 1
+    product_name=$(product_name --name) || return 1
     notify-send --app-name "${product_name}" "${product_name} keyboard" "Layout: $1" || return 1
 }
 

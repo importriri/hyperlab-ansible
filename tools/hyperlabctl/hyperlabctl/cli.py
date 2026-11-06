@@ -21,11 +21,13 @@ def _product_info(path: Path) -> tuple[str, str]:
         mode = path.stat().st_mode
         if not stat.S_ISREG(mode) or not mode & 0o444:
             raise ValueError("unreadable input")
+        with path.open(encoding="utf-8", newline="") as stream:
+            raw = stream.read()
         word = r"([A-Za-z][A-Za-z0-9]*(?: [A-Za-z0-9]+)*)"
         match = re.fullmatch(
             r'[ \t]*\{[ \t]*"name"[ \t]*:[ \t]*"' + word
             + r'"[ \t]*,[ \t]*"byline"[ \t]*:[ \t]*"' + word
-            + r'"[ \t]*\}[ \t]*(?:\r?\n)?', path.read_text(encoding="utf-8"),
+            + r'"[ \t]*\}[ \t]*(?:\r?\n)?', raw,
         )
         if match is None or any(len(value) > 64 for value in match.groups()):
             raise ValueError("invalid fields")

@@ -33,7 +33,8 @@ Scope {
 
     // The same small JSON subset of YAML is read by the CLI and helpers.
     // An unavailable or invalid input never supplies a fallback identity.
-    readonly property var productInfo: state.parseProduct(productFile.text())
+    property string productRaw: ""
+    readonly property var productInfo: state.parseProduct(state.productRaw)
     readonly property string productName: state.productInfo ? state.productInfo.name : ""
     readonly property string productByline: state.productInfo ? state.productInfo.byline : ""
 
@@ -43,10 +44,19 @@ Scope {
             ? {"name": match[1], "byline": match[2]} : null;
     }
 
-    FileView {
-        id: productFile
-        path: "/etc/xdg/quickshell/hyperlab/product.yml"
-        blockLoading: true
+    // The existing bridge validates and reads the deployed identity once.
+    // QML receives display bytes, never a path or an interpreter command.
+    Process {
+        id: productProcess
+        running: true
+        property string buffer: ""
+        command: ["/usr/local/bin/privatestack-compositor-adapter", "product-identity"]
+        stdout: StdioCollector {
+            onStreamFinished: productProcess.buffer = String(this.text)
+        }
+        onExited: (exitCode, exitStatus) => {
+            state.productRaw = exitCode === 0 && exitStatus === 0 ? productProcess.buffer : "";
+        }
     }
 
     readonly property string statusBridge:

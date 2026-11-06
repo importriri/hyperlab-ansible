@@ -22,8 +22,9 @@ each one in an open release-roadmap item. Keep the physical presentation
 gate open. The software checkbox covers QML-owned labels/titles, CLI
 help/version and application names in the three host theme, keyboard and
 fallback-bar notification helpers. It excludes bridge-provided reasons,
-operation terminals, vault dialogs, guest notifications and CLI runtime
-diagnostics; the visible migration remains incomplete.
+operation terminals, lock and login labels, helper diagnostics, vault dialogs,
+guest notifications and CLI runtime diagnostics; the visible migration remains
+incomplete.
 
 Read the CLI identity only while formatting help or executing `--version`.
 Invalid display input refuses those presentations with exit 2 and no fallback
@@ -34,6 +35,25 @@ outside it refuses help/version, shell identity, focus and host notifications
 until the readers are updated together; it does not disable CLI operations.
 Product identity is display input, not a policy authority.
 
+Keep the same byte grammar and path refusals in every reader. Python preserves
+line endings with `newline=""`; Bash uses a function-local `LC_ALL=C` so ranges
+do not widen under a language locale. The shell replaces its unguarded
+FileView identity read with the existing compositor adapter's fixed,
+read-only `product-identity` route. That route accepts no arguments or paths,
+needs no active compositor, and reuses the focus reader's leaf/parent,
+regular-file and readable-mode checks. Its internal `--document` mode returns
+the exact validated bytes, including their original line ending. Every Bash
+reader retains the same function body; notification/focus callers keep the
+name-only result. Explicit mode bits also refuse zero-mode files when running
+as root. QML retains its grammar and publishes identity only after a successful
+normal bridge exit. Failed startup or reading leaves identity empty. This adds
+one short-lived bridge process at shell startup and no deployment path. QML
+still cannot start an interpreter or bypass the existing provenance bridge.
+No reader supplies a default name. The shared fixture table checks LF, CRLF,
+no newline, lone CR, accented words, malformed/duplicate fields, extra lines,
+NUL bytes, long fields and missing, unreadable, nonregular or redirected paths.
+Bash runs the table under C and every installed UTF-8 locale.
+
 Correct the documentation check with one exact README sentence naming the
 installed Ly sessions. Parse the desktop entries to pin those names, and
 parse the Waybar brand/tooltip to keep the deferred inventory explicit.
@@ -42,6 +62,12 @@ This exception documents existing behavior; it does not permit additional
 old-name strings or change command names, paths or session identifiers.
 
 ## Deferred surface inventory
+
+These are known remaining surfaces at `233b046`, including the additional
+lock, stderr and guest labels identified below. This is a baseline inventory,
+not an exhaustive claim about every visible string in the tree. The contract
+requires each known file in the open roadmap item; later discoveries must be
+added to both records before the physical presentation gate can close.
 
 - `hyperlab-hyprland.desktop` and `hyperlab-sway.desktop`: Ly session names
   and comments under `roles/host_desktop_hyprland/files/`.
@@ -70,14 +96,39 @@ old-name strings or change command names, paths or session identifiers.
 - `hardware.py`: runtime reasons from `hyperlabctl doctor --hardware` under
   `tools/hyperlabctl/hyperlabctl/`, including UEFI, IOMMU, GPU, memory and
   Secure Boot diagnostics.
+- `hyprlock.conf.j2`: the host lock wordmark `HyperLab` and subtitle `Platform`
+  under `roles/host_desktop_hyprland/templates/`. Its deployment and label
+  reader remain deferred with the other lock/login surfaces.
+- `privatestack-shell-actions.py`: stderr carried through ShellActions into
+  Diagnostics operation details under `roles/host_desktop_common/files/`.
+  ShellSurfaces also retains it in failure-OSD state; the OSD displays
+  `Failed` rather than the full reason:
+  `HyperLab: rejected arguments for fixed action:`,
+  `HyperLab: rejected unknown shell action:`,
+  `HyperLab: rejected invalid argument for action:`,
+  `HyperLab: rejected an application outside the reviewed catalogue or not installed:`,
+  and `HyperLab: rejected unavailable or untrusted target:`.
+- `privatestack-machine-provision.py`: provisioning refused, cancelled and
+  stopped stderr under `roles/host_desktop_common/files/`.
+- `hyperlab-gaming-mode.py`: the Gaming Mode `--help` description under
+  `roles/host_gaming_mode/files/`.
+- `privatestack-hyperlab-session.sh`: the manager-did-not-stop refusal under
+  `roles/host_desktop_sway/files/`.
+- `hyperlab-desk.py`: the guest lock-label fallback `HyperLab Workstation`
+  and the desk-qualified lock label under `roles/guest_desktop_hyprland/files/`.
+- `roles/guest_desktop_hyprland/tasks/main.yml`: the guest Ly
+  `initial_info_text` value `HyperLab guest workstation`.
 
 ## Evidence and consequences
 
 The product contract requires the exact session-label sentence, every file
 in this inventory in the open roadmap item, and these bridge refusal literals
-through an AST scan. Removing an entry fails. New help literals naming the old product
-also fail through an AST check; the two existing literals rewritten by the
-CLI formatter are enumerated explicitly. QML presentation fixtures reject old
+through an AST scan. The same scan checks shell-action stderr prefixes;
+parsed host hyprlock label blocks, the guest lock-label function and guest
+Ly task data pin the known lock/login strings. Removing an entry fails. New
+help literals naming the old product also fail through an AST check; the two
+existing literals rewritten by the CLI formatter are enumerated explicitly.
+QML presentation fixtures reject old
 names in evaluated text and accessibility attributes; their inert bridge data
 does not verify the deferred live refusal messages. Isolated entry-point
 fixtures require `panic status` to work with invalid identity while help and
