@@ -22,6 +22,12 @@ proof.
 - [`product-window-rename-broke-focus.md`](product-window-rename-broke-focus.md):
   the compositor adapter's fixed title prefix could not match renamed
   workspaces; it now uses the shared name and retains process ownership.
+
+
+- [`running-desktop-keeps-old-installed-code.md`](running-desktop-keeps-old-installed-code.md):
+  installed QML and recovery Python updates left older presentation processes
+  resident; changed code now notifies deferred refresh handlers.
+
 - [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
   compressed PNG equality was runtime-dependent; arithmetic marks and product
   geometry drift escaped a contract that checked too few image pixels.

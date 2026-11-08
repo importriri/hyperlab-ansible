@@ -4390,3 +4390,51 @@ for number, new, predicted in cases:
             [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
         )
 ```
+
+## Resident desktop updates after apply
+
+`tests/shell_reload_after_apply_contract.py` parses the real copy tasks and
+handlers, exercises the deployment-only refresh script with fake transports,
+and runs unprivileged Ansible copies and deferred handlers in a temporary
+fixture. No production role, live user manager or desktop bus is contacted.
+The fixture covers one refresh after several QML copies, independent Python
+changes, an unrelated helper, check mode and an unchanged second apply with
+`changed=0`. The GTK action check executes the actual application's startup
+method with inert GTK objects and verifies that its existing quit action
+still calls `quit()`.
+
+For focused mutation replay, load the contract with `runpy.run_path()`.
+Call `deployment_contract()` for the deployment stage;
+`refresh_contract(load_refresh())` for the refresh stage;
+`gtk_transport_contract(load_refresh())` for the GTK transport stage; or
+`runtime_contract(load_refresh(), Path(temporary_directory))` inside a fresh
+`TemporaryDirectory` for the runtime stage. These are the same checks the
+complete contract invokes. Save each source before mutation and restore its
+exact saved bytes before the green run.
+
+All cases below were red, then green after restoration. The complete
+contract was also green with all sources restored. No mutation survived.
+
+| ID | Break | Stage | Observed red result |
+| --- | --- | --- | --- |
+| R1 | Remove the QML source copy's `notify` | deployment | `shell copy has no deferred refresh notification` |
+| R2 | Remove the recovery Python copy's `notify` | deployment | `recovery copy has no retirement notification` |
+| R3 | Replace `try-restart` with `restart` | refresh | `inactive or unrelated unit started, or active shell not refreshed` (actual argv differs) |
+| R4 | Bypass the absent-GTK-owner guard | refresh | unexpected `gapplication ... quit` call when no owner exists |
+| R5 | Remove common handler `become_user` | deployment | `refresh must run as the configured desktop user` |
+| R6 | Replace runtime directory `lstat()` with `stat()` | runtime | `redirected runtime accepted` |
+| R7 | Replace bus socket `lstat()` with `stat()` | runtime | `redirected bus accepted` |
+| R8 | Replace the GTK owner-exit loop with `while False` | refresh | `resident owner retained after quit` |
+| R9 | Remove the shell probe's `timeout=10` | refresh | missing `timeout` in the real subprocess call arguments |
+| R10 | Set restart `check=False` | refresh | `shell restart failure ignored` |
+| R11 | Replace `NO_AUTO_START` with zero in the owner query | GTK transport | actual D-Bus flags differ from the required no-activation query |
+| R12 | Remove the entrypoint's `refresh_quickshell(env)` call | refresh | expected refresh once, called zero times |
+| R13 | Set unit `QS_DISABLE_FILE_WATCHER=0` | deployment | `partial deployment can trigger a file-watcher reload` |
+| R14 | Omit starting the connection-authentication deadline | GTK transport | expected timer `start()` once, called zero times |
+| R15 | Replace the GTK handler's registered changed-source condition with `true` | complete contract | `unexpected handler execution` on the unrelated-helper apply |
+
+The runtime fixtures also refuse root, foreign ownership, public directory
+permissions and a regular file in place of the bus. Missing runtime and bus
+have explicit no-session results. Refresh fixtures retain distinct inactive,
+missing-unit, bus-error, command-failure, command-timeout and retained-owner
+outcomes. These software cases do not establish an installed Nitro refresh.

@@ -184,6 +184,10 @@ entered the pipeline.
     — accepted operator population decision: every domain visible, external
     rows read-only in the native shell; proposed external outline and label.
 
+59. [`0059-resident-desktop-updates.md`](0059-resident-desktop-updates.md)
+    — proposed: changed desktop code refreshes resident presentation through
+    deferred handlers in the configured user's existing session.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
@@ -611,3 +615,18 @@ remain.
     [`external_machine_visibility_contract.py`](../../tests/external_machine_visibility_contract.py)
   - Prerequisites: acceptance of the external visual rule; installed Nitro
     visibility, colour and counts, then Predator replay.
+
+- [ADR 0059](0059-resident-desktop-updates.md)
+  - Decision: proposed.
+  - Built: built — changed-only notifications, user-session validation,
+    active-shell refresh and resident recovery retirement, with isolated
+    Ansible idempotence and transport failure checks.
+  - Activation: default — changed source copies in `host_desktop_common`
+    and `host_desktop_sway` through `playbooks/v1-host.yml`; only existing
+    presentation processes are refreshed.
+  - Source: [`refresh.py`](../../roles/host_desktop_common/handlers/refresh.py),
+    [`common handlers`](../../roles/host_desktop_common/handlers/main.yml),
+    [`recovery handlers`](../../roles/host_desktop_sway/handlers/main.yml),
+    [`shell_reload_after_apply_contract.py`](../../tests/shell_reload_after_apply_contract.py)
+  - Prerequisites: the operator's decision; installed Nitro apply/readback
+    and unchanged second pass, then Predator replay.

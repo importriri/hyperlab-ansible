@@ -230,6 +230,7 @@
     owner: root
     group: root
     mode: "0644"
+  notify: Refresh the running HyperLab shell
 
 - name: Install the shared HyperLab runtime features
   ansible.builtin.copy:

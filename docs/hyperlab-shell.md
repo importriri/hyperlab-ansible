@@ -7,6 +7,57 @@ compositors. This document is the design and behaviour contract for those
 surfaces. The security boundaries are restated at the end and are not
 negotiable by any of the design decisions above them.
 
+## Installed updates and resident code
+
+An apply that changes shared Quickshell source notifies one deferred
+`host_desktop_common` handler. After the play's copies finish, it runs as
+`admin_user`, checks `hyperlab-quickshell.service` in that user's manager,
+and uses `try-restart` only if it is already active. An inactive or absent
+service stays inactive. This also refreshes older running versions that
+have no deployment IPC receiver. Manually launched shell processes are
+outside this managed-service refresh path.
+
+The unit keeps `QS_DISABLE_FILE_WATCHER=1`: a tree of files is not deployed
+as one transaction, even though Ansible replaces each file atomically.
+Reloading between copies can combine incompatible versions. The cause of
+the stale installed shell was the missing post-copy refresh, not a failed
+watcher. [ADR 0059](adr/0059-resident-desktop-updates.md) records the
+deployment boundary.
+
+The recovery Control Center keeps the existing helper-copy loop in
+`host_desktop_sway`. Its handler checks the registered copy results and
+runs only when the Python manager changed. It uses the resident GApplication's existing
+`quit` action and waits until its bus owner leaves. An absent application
+is not launched. The next ordinary `hyperlabctl open manager` starts the
+installed version; `--reload-theme` alone only refreshes the palette of
+the existing process. Changes to unrelated cockpit helpers do not retire it.
+
+These handlers refresh presentation processes only. Open shell surfaces,
+selection and unsaved forms are lost; a visible recovery UI closes. Shell
+child transports, including connections and diagnostics, may be interrupted.
+Durable operations keep their separate runner and are rediscovered by the
+new shell. Apply desktop updates between interactive operations. Neither
+handler sends a compositor reload, logs out the session or requests a
+Machine lifecycle operation.
+
+The refresh script is transferred for the handler, not installed as a
+runtime helper. It derives the bus address from the executing user's
+`/run/user/UID`, requires a user-owned mode-0700 directory and user-owned
+socket without symlink redirection, and ignores inherited session addresses.
+An absent runtime or bus explicitly reports no session. Unsafe transports,
+command failures, timeouts or a retained GTK bus owner fail the handler.
+GTK bus authentication has a five-second cancellation deadline, separate
+from the five-second owner queries and ten-second owner-exit wait.
+Check mode dispatches neither handler. An unchanged second apply dispatches
+nothing; live `features.json` changes still use the existing file observer
+without restarting the shell.
+
+`tests/shell_reload_after_apply_contract.py` verifies the parsed deployment
+wiring, session refusals, fixed commands and failure paths. An isolated
+Ansible fixture checks deferred coalescing, individual source changes,
+unrelated helpers, check mode and `changed=0` on the second apply. This is
+software verification; the installed Nitro and Predator checks remain open.
+
 ## What the product is
 
 Sfere is an enterprise virtualization and isolation platform. The

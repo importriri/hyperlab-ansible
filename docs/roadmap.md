@@ -568,6 +568,14 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 8b. Reliability
 
+- [x] changed shared shell and recovery Python code refresh resident
+      presentation through deferred, user-scoped deployment handlers;
+      inactive surfaces stay inactive and an unchanged second apply sends
+      nothing ([ADR 0059](adr/0059-resident-desktop-updates.md), proposed;
+      `tests/shell_reload_after_apply_contract.py`, software-verified)
+- [ ] the same installed on Nitro: changed symbol visible after apply
+      without a manual shell restart, recovery manager running the new code,
+      then Predator replay
 - [x] Looking Glass stream health in the host shell: the guest agent's
       answer, the sender and the stream state on the selected Machine's pane,
       and a capture restart (sender and portals, the guest keeps running)
@@ -838,6 +846,12 @@ Measured with the complete security plane active.
       ([ADR 0059](adr/0059-visible-name-migration-boundary.md), proposed).
 - [ ] Sfere presentation on Nitro: bar, idle desktop, workspace,
       notification and CLI help; then the frozen Predator replay
+
+- [x] software gate for installed-versus-resident desktop code: deferred
+      refresh, check-mode silence and unchanged-copy idempotence
+      (`tests/shell_reload_after_apply_contract.py`, software-verified)
+- [ ] installed desktop refresh observed after host apply on Nitro and
+      replayed on Predator; see [the shell update contract](hyperlab-shell.md#installed-updates-and-resident-code)
 - [x] C10, C11: a read-only readiness check before install and a host
       profile proposal to review (`hyperlabctl doctor --hardware [--profile
       NAME]`, [ADR 0050](adr/0050-hardware-readiness-and-profile.md),

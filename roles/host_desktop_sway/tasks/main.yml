@@ -166,6 +166,8 @@
     - { src: privatestack-screenshot.sh, dest: privatestack-screenshot }
     - { src: privatestack-swaybar-status.py, dest: privatestack-swaybar-status }
     - { src: hyperlabctl-wrapper.sh, dest: hyperlabctl }
+  register: host_desktop_sway_cockpit_helpers
+  notify: Retire the resident HyperLab Control Center
 
 - name: Remove retired desktop artifacts
   ansible.builtin.file:
