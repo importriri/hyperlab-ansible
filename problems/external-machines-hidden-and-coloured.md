@@ -99,6 +99,28 @@ failure, timeout or malformed input shows **VM ?**. Recovery Overview had a
 similar residual false zero: the subtitle reported unavailable while the large
 Detected VMs value was zero. That value is now **?** on a domains load error.
 
+The shared fallback read initially inherited the 1.2-second command timeout
+used for cheaper bar fields and ran every five seconds. That read builds the
+full CLI document, including per-domain XML and state queries plus other
+providers. The short deadline risked a permanent **VM ?**, while the frequent
+refresh repeated the full inventory even when the fallback bar was hidden.
+The VM reader now has an explicit 30-second budget and the same 30-second
+refresh interval as Waybar. The contract checks the actual subprocess timeout
+and compares the interval with the Waybar configuration. This bounds the wait
+and reduces polling; live read latency still needs measurement on Nitro.
+
+The effective GTK style check also initially accepted a palette whose
+`hl_text` itself equalled HOST grey: its text and borders still matched that
+token. This mutation stayed green before the additional assertion. GTK now
+resolves HOST and every domain token in each palette and rejects any equality
+with the neutral token. Both HOST and DEV substitutions now turn the contract
+red; transparent fill and effective text/border checks remain in place.
+The probe also used application-level CSS priority, allowing installed user
+theme definitions to mask every fixture palette. It now matches the production
+provider's priority above the user theme and checks the resolved neutral colour
+against the selected appearance. Reusing the first palette for every iteration
+must fail, so a shadowed fixture cannot produce false palette coverage.
+
 Counting only running states also hid paused, in shutdown and pmsuspended
 domains. Both shell summaries now append separate managed/external **active
 (not running)** counts. The bars show **running+other-active/total**, preserving

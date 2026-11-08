@@ -140,7 +140,10 @@ a readable empty inventory. Other active states add a separate numerator to
 the bar, for example **0+1/7**, explained as **1 active (not running)** in the
 tooltip. Unknown runtime state takes precedence over these numeric counts.
 The automatic Swaybar fallback reads the same CLI payload and displays the
-same count. Command failure, timeout and malformed JSON show **VM ?**.
+same count. Its inventory refresh interval is 30 seconds, matching the Waybar
+VM pill, with a separate 30-second command timeout for the full document
+build. Command failure, timeout and malformed JSON show **VM ?**. Installed
+read latency still needs measurement on Nitro.
 
 Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the

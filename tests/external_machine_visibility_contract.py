@@ -73,6 +73,10 @@ def inventory(*, unknown_state: bool = False, host_state: str = "running") -> tu
 def fallback_bar(raw: dict) -> None:
     """The automatic fallback reads the same count and never invents a zero."""
     namespace = runpy.run_path(str(ROOT / "roles/host_desktop_sway/files/privatestack-swaybar-status.py"))
+    config = json.loads(re.sub(r"(?m)^\s*//.*$", "", (
+        ROOT / "roles/host_desktop_sway/files/waybar.jsonc").read_text(encoding="utf-8")))
+    assert namespace["VMS"].interval == config["custom/hyperlab-vms"]["interval"], \
+        "fallback bar inventory refresh interval differs from Waybar"
     read_vms = namespace["read_vms"]
     argv = ["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"]
     failures = [subprocess.CompletedProcess(argv, 1, "", "refused"),
@@ -83,6 +87,8 @@ def fallback_bar(raw: dict) -> None:
             assert read_vms() == "VM ?", "fallback bar turned a failed observation into zero"
         assert run.call_count == 1 and run.call_args.args[0] == argv, \
             "fallback bar bypassed the shared inventory or read it twice"
+        assert run.call_args.kwargs["timeout"] >= 30.0, \
+            "fallback bar gives a full inventory read less than 30 seconds"
     for payload, expected in ((raw, "VM " + raw["text"]),
                               ({"machines_available": True, "text": "0/0"}, "VM 0/0"),
                               ({"machines_available": False, "text": "0/0"}, "VM ?"),
@@ -92,6 +98,8 @@ def fallback_bar(raw: dict) -> None:
         with patch.object(subprocess, "run", return_value=result) as run:
             assert read_vms() == expected, "fallback bar lost the shared running/total or uncertainty"
         assert run.call_count == 1 and run.call_args.args[0] == argv
+        assert run.call_args.kwargs["timeout"] >= 30.0, \
+            "fallback bar gives a full inventory read less than 30 seconds"
     for output in ("", "not json"):
         with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0, output, "")):
             assert read_vms() == "VM ?", "fallback bar accepted an unreadable payload"
@@ -444,10 +452,14 @@ def identity_styles(gtk: object, source: str, roots: list[object]) -> None:
     gtk.Settings.get_default().set_property("gtk-enable-animations", False)
     palettes = sorted((ROOT / "roles/host_desktop_sway/files/palette").glob("*/hyperlab-palette-gtk.css"))
     assert palettes, "GTK external style probe has no appearance palettes"
+    palette_spec = yaml.safe_load((ROOT / "tools/palette/palette.yml").read_text())
+    identities = palette_spec["domains"]
+    assert "dom_host" in identities, "GTK external style probe lost HOST identity"
     for palette in palettes:
         provider = gtk.CssProvider()
         provider.load_from_data((palette.read_text() + "\n" + source).encode())
-        gtk.StyleContext.add_provider_for_display(display, provider, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        # Match production's provider priority above the installed user theme.
+        gtk.StyleContext.add_provider_for_display(display, provider, gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         try:
             for selected, hover in ((False, False), (False, True), (True, False), (True, True)):
                 for tile in tiles:
@@ -463,6 +475,15 @@ def identity_styles(gtk: object, source: str, roots: list[object]) -> None:
                     label = "%s %s selected=%s hover=%s" % (palette.parent.name, item.get_css_classes(), selected, hover)
                     assert found and context.get_color().equal(neutral), \
                         "GTK external identity borrowed a text colour: " + label
+                    for identity in identities:
+                        found_identity, color = context.lookup_color("hl_" + identity)
+                        assert found_identity, "GTK external style probe lost identity token: " + identity
+                        assert not neutral.equal(color), \
+                            "GTK external neutral token borrowed a host or domain colour: " + label
+                    expected_neutral = Gdk.RGBA()
+                    assert expected_neutral.parse(palette_spec["variants"][palette.parent.name]["text"])
+                    assert neutral.equal(expected_neutral), \
+                        "GTK external style probe ignored its appearance palette: " + label
                     background = gtk.Snapshot()
                     background.render_background(context, 0, 0, 160, 96)
                     assert background.to_node() is None, "GTK filled the external identity: " + label

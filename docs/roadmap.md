@@ -545,7 +545,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       unknown, and an empty registry retains first-Machine creation guidance
       (Waybar and fallback count every domain and preserve runtime uncertainty;
       non-running active states are counted separately; recovery refuses
-      unavailable observations and totals)
+      unavailable observations and totals; fallback inventory reads have a
+      30-second command budget and match Waybar's 30-second refresh)
       ([ADR 0059](adr/0059-external-machine-visibility.md), software-verified)
 - [ ] external visibility and running counts accepted on Nitro and Predator
 
@@ -693,7 +694,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       outline, transparent fill, explicit external label; recovery identity
       requires a unique matching reviewed spec; GTK effective styles are
       checked across palettes, hover and selection; native primary-text
-      outlines are checked against every provenance colour, including HOST
+      outlines and GTK neutral tokens are checked against every provenance
+      colour, including HOST
       ([ADR 0059](adr/0059-external-machine-visibility.md), proposed visual
       rule; software-verified)
 - [ ] external visual state accepted on Nitro and Predator

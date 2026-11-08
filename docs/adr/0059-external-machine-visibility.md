@@ -68,8 +68,11 @@ With other active states the pill shows **running+other-active/total** (for
 example **0+1/7**) and explains **1 active (not running)** in the tooltip,
 alongside every observed state. An unknown state still takes precedence.
 The automatic Swaybar fallback reads this same raw CLI payload once per
-refresh and uses the same count, including **?/total**. A failed command,
-timeout or malformed response shows **VM ?**, never **VM 0**.
+30-second refresh, matching the Waybar VM pill, and uses the same count,
+including **?/total**. Its explicit 30-second command timeout allows for a
+full document build rather than the short timeout for other bar fields.
+A failed command, timeout or malformed response shows **VM ?**, never
+**VM 0**. Installed read latency remains an operator measurement.
 
 ## External visual state — Proposed
 
@@ -130,6 +133,13 @@ background, border and text styles for external markers, including group dots,
 drawer badges and network-member badges, across each appearance palette and
 normal, hover and selected states. This includes selector specificity and
 source order, rather than merging rules with a particular class name.
+The resolved neutral token must also differ from HOST and every domain
+identity token in every GTK palette. The fallback check asserts its actual
+subprocess budget and compares its refresh interval with Waybar's configuration;
+it does not measure live inventory latency.
+The GTK probe uses the production provider priority above the user theme and
+checks the resolved neutral against the selected appearance, so installed
+theme CSS cannot mask the fixture palettes.
 The earlier desktop cockpit contract expected **1/3** even with an unknown
 fixture state, pinning a partial observation as a complete count. It now
 requires **?/3** and an error state, alongside a **1/3** control when every

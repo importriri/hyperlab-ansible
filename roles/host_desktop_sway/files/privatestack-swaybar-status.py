@@ -107,7 +107,7 @@ class TimedValue:
 
 
 def read_vms() -> str:
-    output = run_text(["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"])
+    output = run_text(["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"], timeout=30.0)
     try:
         payload = json.loads(output)
     except json.JSONDecodeError:
@@ -175,7 +175,7 @@ def read_battery() -> str:
     return f"BAT {mark}{capacity}%"
 
 
-VMS = TimedValue(5.0, read_vms, "VM ?")
+VMS = TimedValue(30.0, read_vms, "VM ?")
 GPU = TimedValue(10.0, read_gpu, "GPU ?")
 NETWORK = TimedValue(5.0, read_network, "NET ?")
 VOLUME = TimedValue(2.0, read_volume, "VOL ?")

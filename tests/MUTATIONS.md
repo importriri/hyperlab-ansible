@@ -4262,3 +4262,79 @@ for number, path, old, new, predicted in cases:
             [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
         )
 ```
+
+### External 69–73: Fallback read budget, cadence and GTK neutral tokens
+
+The fallback VM reader builds the full CLI document. Its command budget is
+30 seconds and its refresh interval matches the Waybar VM pill, rather than
+using the short timeout and fast polling of cheaper status fields. The GTK
+probe also rejects a neutral text token equal to HOST or any domain colour.
+It uses the production CSS provider priority above the user theme and verifies
+the resolved neutral against the selected appearance.
+
+| ID | Break | Predicted red |
+| --- | --- | --- |
+| External 69 | Restore the implicit 1.2-second fallback timeout | `fallback bar gives a full inventory read less than 30 seconds` |
+| External 70 | Restore the fallback's 5-second inventory refresh | `fallback bar inventory refresh interval differs from Waybar` |
+| External 71 | Set one GTK palette's neutral text token to HOST grey | `GTK external neutral token borrowed a host or domain colour` |
+| External 72 | Set one GTK palette's neutral text token to DEV blue | `GTK external neutral token borrowed a host or domain colour` |
+| External 73 | Load only the first GTK palette on every iteration | `GTK external style probe ignored its appearance palette` |
+
+External 71 stayed green under the old contract. Adding only token comparisons
+also stayed green when installed user CSS masked the fixture palettes. After
+matching the production provider priority, all five mutations were observed
+red for the stated assertion and green after exact restoration. No generated
+palette changes are retained. These are fixture and configured-budget checks;
+they do not establish live CLI latency or physical colour recognition.
+
+```python
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def replace_once(source, old, new):
+    assert source.count(old) == 1, old
+    return source.replace(old, new, 1)
+
+
+fallback = Path('roles/host_desktop_sway/files/privatestack-swaybar-status.py')
+palette = Path('roles/host_desktop_sway/files/palette/green/hyperlab-palette-gtk.css')
+contract = Path('tests/external_machine_visibility_contract.py')
+cases = [
+    (69, fallback,
+     'run_text(["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"], timeout=30.0)',
+     'run_text(["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"])',
+     'fallback bar gives a full inventory read less than 30 seconds'),
+    (70, fallback, 'VMS = TimedValue(30.0, read_vms, "VM ?")',
+     'VMS = TimedValue(5.0, read_vms, "VM ?")',
+     'fallback bar inventory refresh interval differs from Waybar'),
+    (71, palette, '@define-color hl_text #dcf3e4;', '@define-color hl_text #8b949e;',
+     'GTK external neutral token borrowed a host or domain colour'),
+    (72, palette, '@define-color hl_text #dcf3e4;', '@define-color hl_text #5b8cff;',
+     'GTK external neutral token borrowed a host or domain colour'),
+    (73, contract, 'provider.load_from_data((palette.read_text() + "\\n" + source).encode())',
+     'provider.load_from_data((palettes[0].read_text() + "\\n" + source).encode())',
+     'GTK external style probe ignored its appearance palette'),
+]
+for number, path, old, new, predicted in cases:
+    with tempfile.TemporaryDirectory(prefix='external-machine-mutation-') as directory:
+        backup = Path(directory) / path.name
+        shutil.copyfile(path, backup)
+        try:
+            path.write_text(replace_once(path.read_text(), old, new))
+            red = subprocess.run(
+                [sys.executable, 'tests/external_machine_visibility_contract.py'],
+                text=True, capture_output=True, check=False,
+            )
+            assert red.returncode != 0 and predicted in red.stdout + red.stderr, (
+                number, red.stdout, red.stderr,
+            )
+        finally:
+            shutil.copyfile(backup, path)
+        subprocess.run(
+            [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
+        )
+```
