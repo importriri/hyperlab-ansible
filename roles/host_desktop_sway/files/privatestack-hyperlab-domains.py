@@ -4,9 +4,6 @@
 A native GTK4 control plane for the complete laptop lab. Every operation is
 resolved by hyperlabctl; this process never assembles a shell command from user
 input and never duplicates the policy encoded by the CLI and playbooks.
-
-Changed deployments retire the resident owner; the next invocation loads
-the installed source instead of forwarding to an earlier interpreter.
 """
 
 from __future__ import annotations

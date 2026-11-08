@@ -1,8 +1,0 @@
----
-- name: Refresh the running HyperLab shell
-  become: true
-  become_user: "{{ admin_user }}"
-  ansible.builtin.script:
-    cmd: "{{ role_path }}/handlers/refresh.py quickshell"
-    executable: /usr/bin/python
-  when: not ansible_check_mode

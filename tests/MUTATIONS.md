@@ -4393,48 +4393,66 @@ for number, new, predicted in cases:
 
 ## Resident desktop updates after apply
 
-`tests/shell_reload_after_apply_contract.py` parses the real copy tasks and
-handlers, exercises the deployment-only refresh script with fake transports,
-and runs unprivileged Ansible copies and deferred handlers in a temporary
-fixture. No production role, live user manager or desktop bus is contacted.
-The fixture covers one refresh after several QML copies, independent Python
-changes, an unrelated helper, check mode and an unchanged second apply with
-`changed=0`. The GTK action check executes the actual application's startup
-method with inert GTK objects and verifies that its existing quit action
-still calls `quit()`.
+`tests/shell_reload_after_apply_contract.py` parses the real copy and
+reconciliation tasks, resolves the observer commands from `ShellState.qml`,
+exercises the deployment-only refresh script with fake transports, fake
+`/proc` and fake cgroup trees, and runs unprivileged Ansible copies and the
+real freshness decision in a temporary fixture. No production role, live
+user manager, cgroup or desktop bus is contacted. The fixture covers a
+first apply with stale residents, a later failing task followed by a retry,
+a failed refresh followed by a retry, a unit-only change picked up by the
+next apply, an unrelated
+helper, check mode and unchanged passes with `changed=0`. The GTK action
+check executes the actual application's startup method with inert GTK
+objects and verifies that its existing quit action still calls `quit()`.
 
 For focused mutation replay, load the contract with `runpy.run_path()`.
 Call `deployment_contract()` for the deployment stage;
 `refresh_contract(load_refresh())` for the refresh stage;
-`gtk_transport_contract(load_refresh())` for the GTK transport stage; or
-`runtime_contract(load_refresh(), Path(temporary_directory))` inside a fresh
-`TemporaryDirectory` for the runtime stage. These are the same checks the
-complete contract invokes. Save each source before mutation and restore its
-exact saved bytes before the green run.
+`state_contract(load_refresh(), Path(temporary_directory))` for timestamps
+and control groups; `gtk_transport_contract(load_refresh())` for the GTK
+transport stage; or `runtime_contract(load_refresh(), Path(temporary_directory))`
+for the runtime stage, each inside a fresh `TemporaryDirectory`. These are
+the same checks the complete contract invokes. Save each source before
+mutation and restore its exact saved bytes before the green run.
 
-All cases below were red, then green after restoration. The complete
-contract was also green with all sources restored. No mutation survived.
+All cases below were run against the complete contract: each was red, the
+restored bytes matched the saved copy, and the complete contract was green
+afterwards. No mutation survived. The notification-only cases of the first
+version (removing a copy's `notify`, or a handler condition on the helper
+loop) no longer apply: R1, R2 and R15 are replaced by N1, N2 and N8.
 
 | ID | Break | Stage | Observed red result |
 | --- | --- | --- | --- |
-| R1 | Remove the QML source copy's `notify` | deployment | `shell copy has no deferred refresh notification` |
-| R2 | Remove the recovery Python copy's `notify` | deployment | `recovery copy has no retirement notification` |
-| R3 | Replace `try-restart` with `restart` | refresh | `inactive or unrelated unit started, or active shell not refreshed` (actual argv differs) |
-| R4 | Bypass the absent-GTK-owner guard | refresh | unexpected `gapplication ... quit` call when no owner exists |
-| R5 | Remove common handler `become_user` | deployment | `refresh must run as the configured desktop user` |
+| N1 | Condition the QML reconciliation on the copy having changed (notify-only behaviour) | deployment | `reconciliation must retry unchanged copies and skip check mode` |
+| N2 | Compare a different unit path than the one the Hyprland role installs | deployment | `installed freshness does not compare the deployed unit` |
+| N3 | Omit the unit file from the installed time | state | `service unit omitted from installed freshness` |
+| N4 | Skip the control-group sample (`while busy := []`) | state | `shell cgroup child would be killed` |
+| N5 | Stop descending into child cgroups | state | `shell cgroup child would be killed` |
+| N6 | Accept any direct shell child as an observer | state | `shell cgroup child would be killed` |
+| N7 | Add a non-`ShellState.qml` command to the observer list | state | `refresh may end exactly the read-only observers ShellState.qml starts` |
+| N8 | Ignore the GTK owner's start time (`if False:`) | refresh | `StopIteration`: the current owner was quit and the owner-query sequence ran out |
+| N9 | Refuse a busy shell without waiting | state | `busy shell refused without waiting for short work to finish` |
+| N10 | Add an un-reconciled copy into the shell config root after the check | deployment | `shell config write has no subsequent resident-state reconciliation` |
+| N11 | Drop `hyperlab_provenance` from the QML reconciliation | deployment | `a tagged apply can install shell code without reconciliation` |
+| N12 | Count the live-watched `features.json` as installed code | state | `live-watched features trigger shell restart` |
+| N13 | Use modification time only | state | `preserved modification time hides a replacement` |
+| R3 | Replace `try-restart` with `restart` | refresh | `unsafe restart argv` |
+| R4 | Bypass the absent-GTK-owner guard | refresh | `GTK age did not determine retirement` |
+| R5 | Remove the QML reconciliation's `become_user` | deployment | `refresh must run as the configured desktop user` |
 | R6 | Replace runtime directory `lstat()` with `stat()` | runtime | `redirected runtime accepted` |
 | R7 | Replace bus socket `lstat()` with `stat()` | runtime | `redirected bus accepted` |
 | R8 | Replace the GTK owner-exit loop with `while False` | refresh | `resident owner retained after quit` |
-| R9 | Remove the shell probe's `timeout=10` | refresh | missing `timeout` in the real subprocess call arguments |
-| R10 | Set restart `check=False` | refresh | `shell restart failure ignored` |
+| R9 | Remove the service-state probe's `timeout=10` | state | `KeyError: 'timeout'` in the real subprocess call arguments |
+| R10 | Set restart `check=False` | refresh | `refresh failure/deadline lost` |
 | R11 | Replace `NO_AUTO_START` with zero in the owner query | GTK transport | actual D-Bus flags differ from the required no-activation query |
 | R12 | Remove the entrypoint's `refresh_quickshell(env)` call | refresh | expected refresh once, called zero times |
 | R13 | Set unit `QS_DISABLE_FILE_WATCHER=0` | deployment | `partial deployment can trigger a file-watcher reload` |
 | R14 | Omit starting the connection-authentication deadline | GTK transport | expected timer `start()` once, called zero times |
-| R15 | Replace the GTK handler's registered changed-source condition with `true` | complete contract | `unexpected handler execution` on the unrelated-helper apply |
 
 The runtime fixtures also refuse root, foreign ownership, public directory
 permissions and a regular file in place of the bus. Missing runtime and bus
 have explicit no-session results. Refresh fixtures retain distinct inactive,
-missing-unit, bus-error, command-failure, command-timeout and retained-owner
-outcomes. These software cases do not establish an installed Nitro refresh.
+missing-unit, transitional, bus-error, command-failure, command-timeout,
+busy-cgroup and retained-owner outcomes. These software cases do not
+establish an installed Nitro refresh.

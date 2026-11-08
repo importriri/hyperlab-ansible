@@ -230,7 +230,6 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Refresh the running HyperLab shell
 
 - name: Install the shared HyperLab runtime features
   ansible.builtin.copy:
@@ -240,6 +239,18 @@
     owner: root
     group: root
     mode: "0644"
+
+# Reconcile running state even when a prior apply installed these files and failed.
+- name: Refresh the running HyperLab shell
+  tags: [hyperlab_provenance]
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.script:
+    cmd: "{{ role_path }}/handlers/refresh.py quickshell"
+    executable: /usr/bin/python
+  register: host_desktop_common_resident_refresh
+  changed_when: (host_desktop_common_resident_refresh.stdout | from_json).changed
+  when: not ansible_check_mode
 
 - name: Inspect installed shared HyperLab Quickshell files
   ansible.builtin.stat:

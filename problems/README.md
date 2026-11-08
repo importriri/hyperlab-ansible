@@ -26,7 +26,7 @@ proof.
 
 - [`running-desktop-keeps-old-installed-code.md`](running-desktop-keeps-old-installed-code.md):
   installed QML and recovery Python updates left older presentation processes
-  resident; changed code now notifies deferred refresh handlers.
+  resident; every apply now refreshes residents older than the installed code.
 
 - [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
   compressed PNG equality was runtime-dependent; arithmetic marks and product

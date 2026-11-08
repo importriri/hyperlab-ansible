@@ -2,9 +2,6 @@
 
 // HyperLab Platform shell entry point (V447-C9.3).
 //
-// The managed service disables source watching during multi-file updates.
-// Changed deployments refresh that active service after the copies finish.
-//
 // One long-running shell process owns every HyperLab surface. One state
 // layer, one action layer, one machine-operation layer, one theme, one token
 // set and one surface coordinator are created for the session and injected

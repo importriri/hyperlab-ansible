@@ -7,8 +7,9 @@ After=graphical-session.target
 Type=simple
 # The shell source is deployed as many files. A live file watcher would
 # reload the shell part-way through a deployment and fail on a missing type,
-# so the deployment handler refreshes this unit after the copies finish,
-# and only if it is already active.
+# so deployment compares the shell's age with the installed files after the
+# copies finish. It restarts only an active, older unit whose control group
+# holds nothing but the shell and its read-only observers.
 Environment=QS_DISABLE_FILE_WATCHER=1
 ExecStart=/usr/bin/qs -c hyperlab
 Restart=on-failure

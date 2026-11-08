@@ -166,8 +166,17 @@
     - { src: privatestack-screenshot.sh, dest: privatestack-screenshot }
     - { src: privatestack-swaybar-status.py, dest: privatestack-swaybar-status }
     - { src: hyperlabctl-wrapper.sh, dest: hyperlabctl }
-  register: host_desktop_sway_cockpit_helpers
-  notify: Retire the resident HyperLab Control Center
+
+# Reconcile running state even when a prior apply installed these files and failed.
+- name: Retire the resident HyperLab Control Center
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.script:
+    cmd: "{{ role_path }}/../host_desktop_common/handlers/refresh.py control-center"
+    executable: /usr/bin/python
+  register: host_desktop_sway_resident_refresh
+  changed_when: (host_desktop_sway_resident_refresh.stdout | from_json).changed
+  when: not ansible_check_mode
 
 - name: Remove retired desktop artifacts
   ansible.builtin.file:

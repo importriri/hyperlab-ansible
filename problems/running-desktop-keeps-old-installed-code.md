@@ -34,23 +34,35 @@ preferred compositor has its own session path.
 
 ## Fix and verification
 
-Changed QML now notifies a deferred handler that try-restarts only the
-active shell service as the desktop user. Changed recovery Python notifies
-a separate handler that uses its existing quit action and waits for the
-resident bus owner to leave. The next manager open loads the new file.
-The helper-copy loop stays intact; its registered per-file change results
-gate the GTK handler so unrelated helper changes cannot close the UI.
-Both source headers change with this correction, so its first deployment
-also notifies already stale residents whose installed files were current.
-No compositor reload or Machine operation is requested. The handlers work
-with the older resident versions because they use existing control routes.
+A first fix notified deferred handlers from the changed copies. Review
+showed that it could repeat the failure: Ansible runs notified handlers at
+the end of the play, so a later failing task drops them, and the next apply
+finds the copies unchanged and never notifies again. The fix now decides
+from state on every apply. After the copies, a task run as the desktop user
+compares the newest installed shell file and the unit file with the start
+time of the active shell's main process, and restarts only an active,
+older shell. A second task compares the recovery manager executable with
+the start time of the GApplication bus owner and uses its existing quit
+action only when that owner is older. Either task reports `changed` only
+after an actual refresh, so an unchanged pass stays `changed=0`, and a
+failed earlier apply or an already stale resident is corrected next time.
+
+The same review found that the restart ends every process in the unit's
+control group, and the shell always runs watcher children there. The
+refresh therefore ends only the read-only observers that `ShellState.qml`
+starts (and their own helpers). Any other child makes it wait briefly and
+then refuse with the PIDs, killing nothing. No compositor reload or
+Machine operation is requested. Both tasks work with the older resident
+versions because they use existing control routes.
 
 The proposed deployment boundary and UI-state consequences are in
 [ADR 0059](../docs/adr/0059-resident-desktop-updates.md). The structural and
 behavioral contract is `tests/shell_reload_after_apply_contract.py`;
-mutations are recorded in `tests/MUTATIONS.md`. Software checks cover
-changed-only dispatch, an unchanged second apply, check mode, inactive
-surfaces, redirected transports and failed refreshes. Physical acceptance
-still requires a changed symbol appearing after a host apply without an
-operator restart, then an unchanged pass with no refresh, and a recovery
-manager open that displays the newly installed code.
+mutations are recorded in `tests/MUTATIONS.md`. Software checks cover a
+later failure and retry, a failed refresh and retry, a unit-only change
+picked up by the next apply,
+already stale residents, check mode, inactive surfaces, busy control
+groups, redirected transports and an unchanged second apply. Physical
+acceptance still requires a changed symbol appearing after a host apply
+without an operator restart, then an unchanged pass with no refresh, and a
+recovery manager open that displays the newly installed code.
