@@ -646,6 +646,13 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       exact pixel/hash, full negative-space and shared-geometry contracts;
       authority unchanged, v2 retained as rollback
       (software-verified)
+- [x] product and dedicated lock wallpapers share the v3 stone/sphere
+      materials at all four native output sizes, with neutral cores and a
+      quieter lock; pool stays at its engine-pinned 1672×941 geometry
+      (software-verified; [ADR 0058](adr/0058-product-wallpaper-pool-materials.md))
+- [ ] product and lock v3 materials accepted on Nitro at 1920×1080 under both
+      compositors: sharp detail, neutral sphere, no words or HUD marks
+- [ ] product and lock v3 materials Predator replay
 - [ ] trust pool v3 accepted on Nitro at 1920×1080 for every identity:
       distinguishable sphere tints, no text, host shell as the only trust signal
 - [ ] trust pool v3 Predator replay
@@ -890,6 +897,9 @@ work explicitly requires it.
   - [x] geometry B: filled arcs with vertical cuts, top/bottom gaps and the
         small glyph form; regenerated desktop/lock family and path/hash
         contracts (software-verified; [ADR 0056](adr/0056-product-symbol-geometry-b.md))
+  - [x] native desktop and lock family in the v3 stone and sphere materials,
+        sharing one shader with neutral cores and pixel regeneration checks
+        (software-verified; [ADR 0058](adr/0058-product-wallpaper-pool-materials.md))
   - [ ] geometry B physical acceptance on Nitro under both compositors
   - [ ] geometry B Predator replay
 - [x] physical screenshot and interaction acceptance on Nitro

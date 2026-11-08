@@ -3360,3 +3360,71 @@ V3-30 compares the copied and original pools through `pool_manifest`, with
 `require(original == copied, "generated manifest policy drift")`, then
 restores the saved manifest and requires equality. These temporary-copy
 fixtures leave the versioned pool untouched.
+
+## Native product and lock wallpapers with shared v3 materials
+
+ADR 0058 supersedes the wallpaper relief treatment in ADR 0056. The glyph
+path checks above remain intact. Wallpaper-only relief command mutations
+are replaced by executed native shader masks and saved-pixel checks; the
+shared helper now owns the five full-form geometry ratios. Pool source
+mutations target that helper where the literal scene formerly lived in
+`render_trust_pool.py`. No pool geometry, policy, hash or pixel tolerance
+was broadened.
+
+Before extraction, the extended source and identity contracts both failed
+with `shared v3 material missing`. After extraction, all twelve pool
+renders remained pixel-exact against the unchanged committed images.
+The product contract checks all eight native renders, independent pinned
+hashes, negative space and every fully covered neutral core pixel. Product
+material probes cover all four sizes and both variants, vertical cuts,
+circular gaps and captured pixels. Source checks cover the shared helper
+and both entry points.
+
+Each mutation below was applied after copying the changed file, rejected
+by the named check, restored byte-for-byte and observed green on that same
+check. Stage checks are the same functions called by the complete contracts;
+they avoid regenerating all native outputs for a source or configuration
+failure. The full contracts run again after restoration through verification.
+There were 18 red mutations and no surviving broken invariant. P-19 is an
+explicit green compression control.
+
+| Mutation | Check | Observed result |
+| --- | --- | --- |
+| P-01: add `ctx.fillText("bad", 0, 0)` to shared `draw` | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-02: add a `ctx.fillText` expression string in the product entry point | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-03: add a `ctx.fillText` expression string in the pool entry point | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-04: add `ctx.stroke()` to shared `draw` | pool `source_contract()` | red: `unexpected Canvas drawing operations`; restored green |
+| P-05: add a `reticle` declaration in shared `draw` | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-06: change product neutral RGB from `(147, 147, 147)` to `(147, 159, 147)` | product executed material probe, `check_renderer` at 1920×1080 | red: `renderer: neutral sphere is tinted`; restored green |
+| P-07: disable the pool HOST desaturation branch | pool `material_contract()` | red: `capture differs from material: host/01`; restored green |
+| P-08: change shared `cutRatio` from `0.41` to `0.42` | product material probe | red: `renderer: cutRatio must be 0.41`; restored green |
+| P-09: change shared `ringRadiusRatio` from `0.555` to `0.556` | product material probe | red: `renderer: ringRadiusRatio must be 0.555`; restored green |
+| P-10: change shared `coreRadiusRatio` from `0.413` to `0.414` | product material probe | red: `renderer: coreRadiusRatio must be 0.413`; restored green |
+| P-11: map the product 1920×1080 filename to `(1672, 941)` | identity `configuration_contract()` | red: `native output sizes changed`; restored green |
+| P-12: replace shared native canvas width with `1672` | product material probe | red: `renderer: mark scale or centre changed`; restored green |
+| P-13: remove lock attenuation by changing `0.55` to `1.0` | lock material probe | red: `renderer: lock material attenuation`; restored green |
+| P-14: keep output dimensions but pass `(1672, 941)` to the product's shared scene builder | identity `configuration_contract()` | red: `product bypasses shared v3 drawing`; restored green |
+| P-15: replace the shared ground's coordinate grain with `Math.random()` | pool `source_contract()` | red: `non-deterministic material input`; restored green |
+| P-16: change the last pixel of a copied native product PNG to `(12, 15, 20)`, with valid chunks and CRCs | identity `capture_contract()` against the unchanged original | red: `native generated pixel drift`; restored green |
+| P-17: add a grey `(90, 90, 90)` corner pixel at `(2, 2)` in a copied native product PNG | `ground_contract()` with native dimensions and product placement | red: `non-ground pixel in geometry gap`; restored green |
+| P-18: tint the copied native product's interior core pixel at `(998, 518)` to `(80, 82, 80)` | identity `neutral_core_contract()` | red: `neutral sphere is tinted`; restored green |
+| P-19: encode the original native pixels as opaque RGB with unfiltered scanlines and new compression | identity `capture_contract()` | green: identical decoded pixels, ground and neutral core |
+
+To replay the source stages, import the listed contract with `tests/` and
+`tools/wallpaper/` on `sys.path`. For product/lock material stages, load the
+production `scene((1920, 1080), variant, output)`, remove its `onPaint`
+capture handler, append `RENDERER_CHECK` and execute it with the contract's
+`run`; pass its record to `check_renderer`. This is the identical inspection
+used for each native size in `main`. Save and restore the source around
+one mutation at a time.
+
+P-16 through P-19 use a copied original PNG. Decode its RGB with
+`png_pixels(path, (1920, 1080))`, change only the specified pixel, then encode
+a complete non-interlaced eight-bit RGB PNG with filter-zero scanlines and
+valid CRCs. Restore from the saved copy before checking green. P-16 passes
+the original and copied paths to `capture_contract`; P-17 supplies product
+placement `(0.52, 0.48, 0.23)` to `ground_offsets`; P-18 passes diameter
+`0.46` to `neutral_core_contract`. These fixtures leave committed images
+untouched. SHA pinning remains a separate earlier gate in the full identity
+contract; the native pixel stages do not depend on a stale hash to detect
+artwork changes.

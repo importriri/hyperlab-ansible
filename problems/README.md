@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`product-wallpaper-material-and-resolution.md`](product-wallpaper-material-and-resolution.md):
+  product relief lacked the preferred stone and sphere materials; native
+  product rendering now shares v3, while the engine pins pool resolution.
 - [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
   compressed PNG equality was runtime-dependent; arithmetic marks and product
   geometry drift escaped a contract that checked too few image pixels.
