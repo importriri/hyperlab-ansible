@@ -1816,12 +1816,20 @@ class Model:
             return "Running inventory unavailable"
         if any(item.get("state", "unknown") == "unknown" for item in self.domains):
             return "Running state unknown"
+        active = [item for item in self.domains
+                  if item.get("state", "unknown") not in {"running", "shut off", "crashed", "unknown"}]
         if self.product_names is None:
-            return "%d running · managed membership unavailable" % len(self.running_domains)
+            summary = "%d running · managed membership unavailable" % len(self.running_domains)
+            return summary + (" · %d active (not running)" % len(active) if active else "")
         managed = sum(self.is_product_domain(item) for item in self.running_domains)
-        return "%d managed running · %d external running" % (
+        summary = "%d managed running · %d external running" % (
             managed, len(self.running_domains) - managed,
         )
+        for membership, count in (("managed", sum(self.is_product_domain(item) for item in active)),
+                                  ("external", sum(not self.is_product_domain(item) for item in active))):
+            if count:
+                summary += " · %d %s active (not running)" % (count, membership)
+        return summary
 
 
 @dataclass
@@ -2537,7 +2545,7 @@ class HyperlabWindow(Gtk.Window):
         row.append(left)
         running = str(domain.get("state", "")).lower() == "running"
         row.append(text_label(
-            "RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",
+            "STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(),
             "external-outline" if identity == "external" else "status-ready" if running else "tag",
             wrap=False,
         ))
@@ -2989,7 +2997,8 @@ class HyperlabWindow(Gtk.Window):
             "The entire lab in one view: host, images, VMs, trust and next actions.",
         )
         metrics = self._grid(4)
-        self._grid_add(metrics, self._metric(str(len(self.model.domains)), "Detected VMs", self.model.running_summary), 0)
+        detected = "?" if any(error.startswith("domains:") for error in self.model.load_errors) else str(len(self.model.domains))
+        self._grid_add(metrics, self._metric(detected, "Detected VMs", self.model.running_summary), 0)
         self._grid_add(metrics, self._metric(str(len(self.model.ready_images)), "Ready images", "%d blocked" % (len(self.model.catalog) - len(self.model.ready_images))), 1)
         self._grid_add(metrics, self._metric("5", "Security domains", "clean · dev · lab · dirty · services"), 2)
         self._grid_add(metrics, self._metric(str(len(self.model.problems) + len(self.model.load_errors)), "Problems", "open Diagnostics for details"), 3)
@@ -3118,10 +3127,11 @@ class HyperlabWindow(Gtk.Window):
             return "external"
         row = self._spec_by_name(str(domain.get("name", "")))
         profile = row["spec"].get("network_profile") if row else None
+        networks = domain.get("networks")
         # Attachment, a GPU gate or a name alone cannot grant an identity.
         if (domain.get("managed") is True and profile in DOMAIN_META
                 and domain.get("trust_profile") == profile
-                and domain.get("networks") == [profile]):
+                and networks and all(network == profile for network in networks)):
             return profile
         return "external"
 
@@ -3196,7 +3206,7 @@ class HyperlabWindow(Gtk.Window):
         thumb.add_css_class("vm-thumb")
         thumb.add_css_class("vm-domain-%s" % domain_id)
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED", "vm-state", "running" if running else "stopped", "vm-domain-%s" % domain_id, wrap=False)
+        state = text_label("STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(), "vm-state", "running" if running else "stopped", "vm-domain-%s" % domain_id, wrap=False)
         top.append(state)
         spacer = Gtk.Box(); spacer.set_hexpand(True); top.append(spacer)
         thumb.append(top)

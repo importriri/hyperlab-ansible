@@ -3704,7 +3704,7 @@ with the shared seven-domain fixture. No lifecycle action is executed.
 ### External 1: Native external identity uses DEV
 
 - Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
-- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'border.color: stage.theme.textSecondary'"'"') == 1; p.write_text(s.replace('"'"'border.color: stage.theme.textSecondary'"'"', '"'"'border.color: stage.theme.provenanceColor("dev")'"'"', 1))'`
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'border.color: stage.theme.textPrimary'"'"') == 1; p.write_text(s.replace('"'"'border.color: stage.theme.textPrimary'"'"', '"'"'border.color: stage.theme.provenanceColor("dev")'"'"', 1))'`
 - Red: `native external identity borrowed a colour or fill`.
 - Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
 
@@ -3760,7 +3760,7 @@ with the shared seven-domain fixture. No lifecycle action is executed.
 ### External 9: GTK ignores observed interface drift
 
 - Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
-- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'                and domain.get("networks") == [profile]'"'"') == 1; p.write_text(s.replace('"'"'                and domain.get("networks") == [profile]'"'"', '"'"'                '"'"', 1))'`
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'                and networks and all(network == profile for network in networks)'"'"') == 1; p.write_text(s.replace('"'"'                and networks and all(network == profile for network in networks)'"'"', '"'"'                '"'"', 1))'`
 - Red: `GTK classified drifting provenance`.
 - Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
 
@@ -3879,7 +3879,7 @@ with the shared seven-domain fixture. No lifecycle action is executed.
 ### External 26: GTK labels unreadable state stopped
 
 - Target: `roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`.
-- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"') == 1; p.write_text(s.replace('"'"'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",'"'"', '"'"'state = text_label("RUNNING" if running else "STOPPED",'"'"', 1))'`
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_sway/files/privatestack-hyperlab-domains.py'"'"'); s = p.read_text(); assert s.count('"'"'state = text_label("STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(),'"'"') == 1; p.write_text(s.replace('"'"'state = text_label("STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(),'"'"', '"'"'state = text_label("STOPPED" if domain.get("state") in {"shut off", "unknown"} else str(domain.get("state") or "unknown").upper(),'"'"', 1))'`
 - Red: `GTK rendered an unreadable state as stopped`.
 - Restore: `cp "$backup" roles/host_desktop_sway/files/privatestack-hyperlab-domains.py`; the same contract turns green.
 
@@ -4030,7 +4030,7 @@ The following mutations use the same backup, check and restore procedure.
 ### External 46: Native external row gains a tap handler
 
 - Target: `roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`.
-- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'                        border.color: stage.theme.textSecondary\n\n                        Column {'"'"') == 1; p.write_text(s.replace('"'"'                        border.color: stage.theme.textSecondary\n\n                        Column {'"'"', '"'"'                        border.color: stage.theme.textSecondary\n\n                        TapHandler { onTapped: stage.shellSurfaces.selectMachine(modelData.name) }\n\n                        Column {'"'"', 1))'`
+- Break: `python -c 'from pathlib import Path; p = Path('"'"'roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml'"'"'); s = p.read_text(); assert s.count('"'"'                        border.color: stage.theme.textPrimary\n\n                        Column {'"'"') == 1; p.write_text(s.replace('"'"'                        border.color: stage.theme.textPrimary\n\n                        Column {'"'"', '"'"'                        border.color: stage.theme.textPrimary\n\n                        TapHandler { onTapped: stage.shellSurfaces.selectMachine(modelData.name) }\n\n                        Column {'"'"', 1))'`
 - Red: `a native external row acquired an action`.
 - Restore: `cp "$backup" roles/host_desktop_common/files/quickshell/hyperlab/MachineStage.qml`; the same contract turns green.
 
@@ -4161,5 +4161,104 @@ for number, path, mutate, predicted in cases:
             shutil.copyfile(backup, path)
         subprocess.run(
             [sys.executable, "tests/external_machine_visibility_contract.py"], check=True,
+        )
+```
+
+
+### External 57–68: Fallback failure, totals, active states and neutral outlines
+
+The following block uses the same backup, red, restore and green procedure as
+External 51–56. All cases were observed red for the stated assertion and green
+after restoration. Each runs the whole visibility contract with fake subprocess
+results and libvirt facts, real QML and private GTK builders.
+
+| ID | Break | Predicted red |
+| --- | --- | --- |
+| External 57 | Restore zero for a failed fallback read | `fallback bar turned a failed observation into zero` |
+| External 58 | Always count GTK domains after a failed load | `GTK Overview turned a failed inventory into zero Detected VMs` |
+| External 59 | Set the green palette's primary text to HOST | `native external outline borrowed a provenance colour including HOST` |
+| External 60 | Exclude non-running active domains from native counts | `native summary counted an active external domain as stopped` |
+| External 61 | Exclude non-running active domains from GTK counts | `GTK summary counted an active external domain as stopped` |
+| External 62 | Remove the active-state Waybar contribution | `Waybar counted an active external domain as stopped` |
+| External 63 | Require exactly one matching interface in GTK | `GTK rejected multiple interfaces on the reviewed network` |
+| External 64 | Label active tile states STOPPED | `GTK labelled an active domain STOPPED` |
+| External 65 | Label active drawer states STOPPED | `GTK labelled an active domain STOPPED` |
+| External 66 | Discard a successful shared count in the fallback | `fallback bar lost the shared running/total or uncertainty` |
+| External 67 | Accept any matching interface instead of every one | `GTK classified drifting provenance` |
+| External 68 | Restore the secondary-text native border | `native external identity borrowed a colour or fill` |
+
+A control changed only the green palette's `subtext` to HOST. The visibility
+contract stayed green: external borders now use primary text, so secondary
+text no longer controls that identity marker. External 59 mutates the token
+the border actually uses, and is red. The contract compares every native
+external border with every provenance colour, including HOST, in all palette
+variants. The unrelated palette control is not claimed as a killed mutation.
+
+```python
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def replace_once(source, old, new):
+    assert source.count(old) == 1, old
+    return source.replace(old, new, 1)
+
+
+gtk = Path('roles/host_desktop_sway/files/privatestack-hyperlab-domains.py')
+native = Path('roles/host_desktop_common/files/quickshell/hyperlab')
+fallback = Path('roles/host_desktop_sway/files/privatestack-swaybar-status.py')
+renderer = Path('tools/hyperlabctl/hyperlabctl/render.py')
+cases = [
+    (57, fallback, 'except json.JSONDecodeError:\n        return "VM ?"',
+     'except json.JSONDecodeError:\n        return "VM 0"',
+     'fallback bar turned a failed observation into zero'),
+    (58, gtk, 'detected = "?" if any(error.startswith("domains:") for error in self.model.load_errors) else str(len(self.model.domains))',
+     'detected = str(len(self.model.domains))',
+     'GTK Overview turned a failed inventory into zero Detected VMs'),
+    (59, Path('tools/palette/palette.yml'), "text: '#dcf3e4'", "text: '#8b949e'",
+     'native external outline borrowed a provenance colour including HOST'),
+    (60, native / 'ShellState.qml',
+     'const active = row => ["running", "shut off", "crashed", "unknown"].indexOf(row.state) < 0;',
+     'const active = row => false;',
+     'native summary counted an active external domain as stopped'),
+    (61, gtk, 'active = [item for item in self.domains\n                  if item.get("state", "unknown") not in {"running", "shut off", "crashed", "unknown"}]',
+     'active = []', 'GTK summary counted an active external domain as stopped'),
+    (62, renderer, '        if active:\n            text = "%d+%d/%d" % (len(running), len(active), len(domains))\n            tooltip += "\\n%d active (not running)" % len(active)\n',
+     '', 'Waybar counted an active external domain as stopped'),
+    (63, gtk, 'and networks and all(network == profile for network in networks)',
+     'and networks == [profile]', 'GTK rejected multiple interfaces on the reviewed network'),
+    (64, gtk, 'state = text_label("STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(),',
+     'state = text_label("RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",',
+     'GTK labelled an active domain STOPPED'),
+    (65, gtk, '            "STOPPED" if domain.get("state") == "shut off" else str(domain.get("state") or "unknown").upper(),',
+     '            "RUNNING" if running else "UNKNOWN" if domain.get("state", "unknown") == "unknown" else "STOPPED",',
+     'GTK labelled an active domain STOPPED'),
+    (66, fallback, 'return "VM " + payload["text"]', 'return "VM 0"',
+     'fallback bar lost the shared running/total or uncertainty'),
+    (67, gtk, 'all(network == profile for network in networks)',
+     'any(network == profile for network in networks)', 'GTK classified drifting provenance'),
+    (68, native / 'MachineStage.qml', 'border.color: stage.theme.textPrimary',
+     'border.color: stage.theme.textSecondary', 'native external identity borrowed a colour or fill'),
+]
+for number, path, old, new, predicted in cases:
+    with tempfile.TemporaryDirectory(prefix='external-machine-mutation-') as directory:
+        backup = Path(directory) / path.name
+        shutil.copyfile(path, backup)
+        try:
+            path.write_text(replace_once(path.read_text(), old, new))
+            red = subprocess.run(
+                [sys.executable, 'tests/external_machine_visibility_contract.py'],
+                text=True, capture_output=True, check=False,
+            )
+            assert red.returncode != 0 and predicted in red.stdout + red.stderr, (
+                number, red.stdout, red.stderr,
+            )
+        finally:
+            shutil.copyfile(backup, path)
+        subprocess.run(
+            [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
         )
 ```

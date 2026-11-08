@@ -543,8 +543,9 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       group; Machines, Session and Diagnostics count all observed running
       domains, split by product membership; unreadable membership stays
       unknown, and an empty registry retains first-Machine creation guidance
-      (Waybar counts every domain and preserves runtime uncertainty; recovery
-      refuses unavailable observations)
+      (Waybar and fallback count every domain and preserve runtime uncertainty;
+      non-running active states are counted separately; recovery refuses
+      unavailable observations and totals)
       ([ADR 0059](adr/0059-external-machine-visibility.md), software-verified)
 - [ ] external visibility and running counts accepted on Nitro and Predator
 
@@ -691,7 +692,8 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 - [x] external machines never borrow a domain colour or HOST grey: neutral
       outline, transparent fill, explicit external label; recovery identity
       requires a unique matching reviewed spec; GTK effective styles are
-      checked across palettes, hover and selection
+      checked across palettes, hover and selection; native primary-text
+      outlines are checked against every provenance colour, including HOST
       ([ADR 0059](adr/0059-external-machine-visibility.md), proposed visual
       rule; software-verified)
 - [ ] external visual state accepted on Nitro and Predator

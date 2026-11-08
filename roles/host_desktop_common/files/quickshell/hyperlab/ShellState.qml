@@ -1080,12 +1080,22 @@ Scope {
 
         const stale = state.sourceState("ok", state.outsideDomainsObservedAt) === "stale";
         const prefix = stale ? "Last observed: " : "";
+        const active = row => ["running", "shut off", "crashed", "unknown"].indexOf(row.state) < 0;
+        const otherActive = state.observedDomains.filter(active).length;
         if (!state.machinesAvailable)
             return prefix + state.machinesRunning
-                + " running · managed membership unavailable";
+                + " running · managed membership unavailable"
+                + (otherActive ? " · " + otherActive + " active (not running)" : "");
 
-        return prefix + state.managedMachinesRunning + " managed running · "
+        let summary = prefix + state.managedMachinesRunning + " managed running · "
             + state.externalMachinesRunning + " external running";
+        const externalActive = state.outsideDomains.filter(active).length;
+        const managedActive = otherActive - externalActive;
+        if (managedActive)
+            summary += " · " + managedActive + " managed active (not running)";
+        if (externalActive)
+            summary += " · " + externalActive + " external active (not running)";
+        return summary;
     }
 
     // Product membership stays registry-owned. Other libvirt domains are

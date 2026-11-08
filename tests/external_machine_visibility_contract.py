@@ -11,6 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -18,6 +19,8 @@ import sys
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
+
+import yaml
 
 import host_quickshell_runtime_contract as runtime
 from recovery_gpu_ladder_contract import descendants, gtk_display, load_manager, run_gtk_worker
@@ -27,12 +30,13 @@ FIXTURE = json.loads((ROOT / "tests/fixtures/external-machines.json").read_text(
 PRODUCT = set(FIXTURE["product"])
 
 
-def fixture_context(*, unknown_state: bool = False) -> object:
+def fixture_context(*, unknown_state: bool = False, host_state: str = "running") -> object:
     sys.path.insert(0, str(ROOT / "tools/hyperlabctl"))
     sys.path.append(str(ROOT / "tools/hyperlabctl/tests"))
     import world
     facts = [{**row, "metadata": world.managed_metadata(row["network"], product_machine=True)}
              if row["name"] in PRODUCT else row for row in FIXTURE["domains"]]
+    facts = [{**row, "state": host_state} if row["name"] == "hl-lab-host" else row for row in facts]
     ctx = world.build(domains=facts)
     if unknown_state:
         ctx.runner.register(["/usr/bin/virsh", "-c", "qemu:///system", "-q", "domstate", "hl-lab-host"],
@@ -40,7 +44,7 @@ def fixture_context(*, unknown_state: bool = False) -> object:
     return ctx
 
 
-def inventory(*, unknown_state: bool = False) -> tuple[list[dict], dict, list[dict]]:
+def inventory(*, unknown_state: bool = False, host_state: str = "running") -> tuple[list[dict], dict, list[dict]]:
     """Build every surface input from minimal libvirt facts, not row shapes.
 
     The fake host runs the real domains provider. `vm list` and
@@ -50,7 +54,7 @@ def inventory(*, unknown_state: bool = False) -> tuple[list[dict], dict, list[di
     """
     from hyperlabctl.commands.vm import VmCommand
     from hyperlabctl.commands.waybar import WaybarCommand
-    ctx = fixture_context(unknown_state=unknown_state)
+    ctx = fixture_context(unknown_state=unknown_state, host_state=host_state)
     with redirect_stdout(io.StringIO()) as listed:
         assert VmCommand()._list(SimpleNamespace(json=True), ctx) == 0
     with redirect_stdout(io.StringIO()) as observed:
@@ -64,6 +68,33 @@ def inventory(*, unknown_state: bool = False) -> tuple[list[dict], dict, list[di
                for card in raw["machines"] if card["name"] in PRODUCT]
     assert len(product) == len(PRODUCT), "a product Machine has no runtime row"
     return vm_list, raw, product
+
+
+def fallback_bar(raw: dict) -> None:
+    """The automatic fallback reads the same count and never invents a zero."""
+    namespace = runpy.run_path(str(ROOT / "roles/host_desktop_sway/files/privatestack-swaybar-status.py"))
+    read_vms = namespace["read_vms"]
+    argv = ["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"]
+    failures = [subprocess.CompletedProcess(argv, 1, "", "refused"),
+                subprocess.TimeoutExpired(argv, 1.2), OSError("missing executable")]
+    for failure in failures:
+        kwargs = {"side_effect": failure} if isinstance(failure, Exception) else {"return_value": failure}
+        with patch.object(subprocess, "run", **kwargs) as run:
+            assert read_vms() == "VM ?", "fallback bar turned a failed observation into zero"
+        assert run.call_count == 1 and run.call_args.args[0] == argv, \
+            "fallback bar bypassed the shared inventory or read it twice"
+    for payload, expected in ((raw, "VM " + raw["text"]),
+                              ({"machines_available": True, "text": "0/0"}, "VM 0/0"),
+                              ({"machines_available": False, "text": "0/0"}, "VM ?"),
+                              ({"text": "0/0"}, "VM ?"), ([], "VM ?"),
+                              ({"machines_available": True, "text": "no inventory"}, "VM ?")):
+        result = subprocess.CompletedProcess(argv, 0, json.dumps(payload), "")
+        with patch.object(subprocess, "run", return_value=result) as run:
+            assert read_vms() == expected, "fallback bar lost the shared running/total or uncertainty"
+        assert run.call_count == 1 and run.call_args.args[0] == argv
+    for output in ("", "not json"):
+        with patch.object(subprocess, "run", return_value=subprocess.CompletedProcess(argv, 0, output, "")):
+            assert read_vms() == "VM ?", "fallback bar accepted an unreadable payload"
 
 
 def provider_failure(namespace: dict) -> None:
@@ -112,6 +143,20 @@ def provider_failure(namespace: dict) -> None:
         "GTK loading lost the domains-provider failure"
     assert snapshots[0].running_summary == "Running inventory unavailable", \
         "GTK turned a domains-provider failure into zero running"
+    reader.model = snapshots[0]
+    reader._grid_columns = {}
+    metric_values = []
+    metric = reader._metric
+    def record_metric(value: str, label: str, detail: str = "") -> object:
+        if label == "Detected VMs":
+            metric_values.append(value)
+        return metric(value, label, detail)
+    reader._metric = record_metric
+    reader._build_overview()
+    assert metric_values == ["?"], "GTK Overview turned a failed inventory into zero Detected VMs"
+    reader.model.load_errors = []
+    reader._build_overview()
+    assert metric_values == ["?", "0"], "GTK Overview lost a genuinely empty total"
     # A readable, genuinely empty inventory remains a successful observation.
     for json_mode in (False, True):
         with redirect_stdout(io.StringIO()) as output:
@@ -167,8 +212,11 @@ NATIVE = '''
                           "an external domain is missing from Machines");
                     if (item === null) continue;
                     check(item.color.a === 0 && item.border.width > 0
-                          && item.border.color === sharedTheme.textSecondary,
+                          && item.border.color === sharedTheme.textPrimary,
                           "native external identity borrowed a colour or fill");
+                    for (const identity of sharedTheme.provenanceIdentities)
+                        check(!Qt.colorEqual(item.border.color, sharedTheme.provenanceColor(identity)),
+                              "native external outline borrowed a provenance colour including HOST");
                     check(item.lifecycle === lifecycle,
                           "a read-only row has the wrong membership lifecycle");
                     check(visibleText(item, caption + " · " + stage.icons.machineStateWord(row.state)),
@@ -190,6 +238,12 @@ NATIVE = '''
                 }
             }
             checkReadOnly(outside, "external", "external");
+            const originalPalette = sharedTheme.palette;
+            for (const palette of @@PALETTES@@) {
+                sharedTheme.palette = palette;
+                checkReadOnly(outside, "external", "external");
+            }
+            sharedTheme.palette = originalPalette;
             stage.layoutMode = "list";
             checkReadOnly(outside, "external", "external");
             stage.query = "hl-lab-host";
@@ -215,6 +269,44 @@ NATIVE = '''
             check(find(workspaceSurface, "diagnostics-running-summary").value
                   === "0 managed running · 1 external running",
                   "Diagnostics omitted the external running count");
+            for (const status of ["paused", "in shutdown", "pmsuspended", "blocked"]) {
+                raw[hostIndex].state = status;
+                observe(raw);
+                const expected = "0 managed running · 0 external running · 1 external active (not running)";
+                check(sharedState.runningMachinesSummary === expected,
+                      "native summary counted an active external domain as stopped");
+                sharedSurfaces.openWorkspace("machines");
+                check(find(stage, "machine-inventory-summary").subtitle.indexOf(expected) >= 0,
+                      "Machines omitted a non-running active domain");
+                sharedSurfaces.openWorkspacePage("controls", "session");
+                check(find(workspaceSurface, "session-running-summary").description === expected,
+                      "Session omitted a non-running active domain");
+                for (const action of ["session-poweroff", "session-reboot", "session-logout"])
+                    check(sessionView.dangerConsequence(action).indexOf(expected) >= 0,
+                          "a confirmation omitted a non-running active domain");
+                sharedSurfaces.openWorkspacePage("diagnostics", "inventory");
+                check(find(workspaceSurface, "diagnostics-running-summary").value === expected,
+                      "Diagnostics omitted a non-running active domain");
+                sharedState.applyMachinePayload("not json");
+                check(sharedState.runningMachinesSummary ===
+                      "0 running · managed membership unavailable · 1 active (not running)",
+                      "native unknown membership hid an active domain");
+                sharedState.applyMachinePayload(JSON.stringify({machines_available: true, machines: product}));
+            }
+            raw[firstIndex].state = "paused";
+            observe(raw);
+            check(sharedState.runningMachinesSummary ===
+                  "0 managed running · 0 external running · 1 managed active (not running) · 1 external active (not running)",
+                  "native summary lost managed active membership");
+            raw[firstIndex].state = "shut off";
+            for (const status of ["shut off", "crashed"]) {
+                raw[hostIndex].state = status;
+                observe(raw);
+                check(sharedState.runningMachinesSummary === "0 managed running · 0 external running",
+                      "native summary counted an inactive domain as active");
+            }
+            raw[hostIndex].state = "running";
+            observe(raw);
             // Actual runtime wins even when a product row reports drift.
             raw[firstIndex].state = "running";
             observe(raw);
@@ -318,8 +410,13 @@ def native() -> None:
     _vm_list, raw, product = inventory()
     directory = runtime.stage()
     try:
+        palette = yaml.safe_load((ROOT / "tools/palette/palette.yml").read_text())
+        palettes = [{**variant, **palette["domains"], "name": name}
+                    for name, variant in palette["variants"].items()]
+        palettes.append(json.loads(runtime.PALETTE.read_text()))
         for width, height in ((1920, 1080), (800, 600)):
-            body = NATIVE.replace("@@RAW@@", json.dumps(raw["machines"]))
+            body = NATIVE.replace("@@RAW@@", json.dumps(raw["machines"])) \
+                .replace("@@PALETTES@@", json.dumps(palettes))
             source, messages = runtime.scenario_source(width, height, product, body)
             runtime.run(runner, directory, "external-machines", source, messages)
     finally:
@@ -477,7 +574,10 @@ def recovery() -> int:
                        if isinstance(item, gtk.Label)), "GTK external lifecycle is not visible"
         trusted = by_name["development-01"]
         assert window._domain_for_vm(trusted) == "dev", "a reviewed Machine lost its identity"
-        for edits in ({"managed": False}, {"trust_profile": None}, {"networks": ["dirty"]}):
+        assert window._domain_for_vm({**trusted, "networks": ["dev", "dev"]}) == "dev", \
+            "GTK rejected multiple interfaces on the reviewed network"
+        for edits in ({"managed": False}, {"trust_profile": None}, {"networks": ["dirty"]},
+                      {"networks": ["dev", "dirty"]}, {"networks": []}, {"networks": None}):
             assert window._domain_for_vm({**trusted, **edits}) == "external", "GTK classified drifting provenance"
 
         def identity_words(widget: object, css_class: str) -> list[str]:
@@ -564,6 +664,32 @@ def recovery() -> int:
         restored = window._build_vm_showcase(columns=4)
         assert "Not managed" in [item.get_text() for item in descendants(restored) if isinstance(item, gtk.Label)]
         assert detail_lifecycle(by_name["development-01"]) == "permanent", "GTK membership did not recover"
+        for status in ("paused", "in shutdown", "pmsuspended", "blocked"):
+            host["state"] = status
+            expected_active = "0 managed running · 0 external running · 1 external active (not running)"
+            assert window.model.running_summary == expected_active, \
+                "GTK summary counted an active external domain as stopped"
+            for widget in (window._system_summary_card(), window._build_overview()):
+                assert expected_active in [item.get_text() for item in descendants(widget)
+                                           if isinstance(item, gtk.Label)], "GTK hid active domains in a summary"
+            window._rebuild_drawer()
+            assert window.header_status.get_text() == expected_active
+            for widget in (window._mock_vm_tile(host), window._drawer_vm_row(host)):
+                assert status.upper() in [item.get_text() for item in descendants(widget)
+                                          if isinstance(item, gtk.Label)], "GTK labelled an active domain STOPPED"
+            window.model.product_inventory = {}
+            assert window.model.running_summary == "0 running · managed membership unavailable · 1 active (not running)", \
+                "GTK unknown membership hid an active domain"
+            window.model.product_inventory = {"machines_available": True, "machines": product}
+        trusted["state"] = "paused"
+        assert window.model.running_summary == (
+            "0 managed running · 0 external running · 1 managed active (not running) · 1 external active (not running)"
+        ), "GTK summary lost managed active membership"
+        trusted["state"] = "shut off"
+        for status in ("shut off", "crashed"):
+            host["state"] = status
+            assert window.model.running_summary == "0 managed running · 0 external running", \
+                "GTK summary counted an inactive domain as active"
         window.model.load_errors = ["domains: fixture unreadable"]
         assert window.model.running_summary == "Running inventory unavailable"
         window.model.load_errors = []
@@ -589,7 +715,7 @@ def recovery() -> int:
     return 0
 
 
-def waybar_pill(raw: dict, product: list[dict], *, unknown_state: bool = False) -> None:
+def waybar_pill(raw: dict, product: list[dict], *, unknown_state: bool = False, host_state: str = "running") -> None:
     """Run the bar's real VM pill argv through the real bridge, CLI stubbed."""
     config = json.loads(re.sub(r"(?m)^\s*//.*$", "", (
         ROOT / "roles/host_desktop_sway/files/waybar.jsonc").read_text(encoding="utf-8")))
@@ -630,9 +756,10 @@ def waybar_pill(raw: dict, product: list[dict], *, unknown_state: bool = False) 
         assert "Running state unknown" in payload["tooltip"].splitlines(), \
             "the VM pill does not explain its unknown running count"
     else:
-        assert payload["text"] == "1/%d" % len(FIXTURE["domains"]), \
+        numerator = "1" if host_state == "running" else "0+1"
+        assert payload["text"] == "%s/%d" % (numerator, len(FIXTURE["domains"])), \
             "the VM pill does not count the running external domain"
-    expected_state = "unknown" if unknown_state else "running"
+    expected_state = "unknown" if unknown_state else host_state
     assert "hl-lab-host  " + expected_state in payload["tooltip"].splitlines(), \
         "the VM pill tooltip hides the external domain state"
     assert len(payload["machines"]) == len(FIXTURE["domains"]) \
@@ -642,9 +769,22 @@ def waybar_pill(raw: dict, product: list[dict], *, unknown_state: bool = False) 
 
 def main() -> int:
     _vm_list, raw, product = inventory()
+    fallback_bar(raw)
     waybar_pill(raw, product)
     _vm_list, unknown, product = inventory(unknown_state=True)
     waybar_pill(unknown, product, unknown_state=True)
+    fallback_bar(unknown)
+    for status in ("paused", "in shutdown", "pmsuspended", "blocked"):
+        _vm_list, active, _product = inventory(host_state=status)
+        assert active["text"] == "0+1/7", "Waybar counted an active external domain as stopped"
+        assert "1 active (not running)" in active["tooltip"].splitlines(), "Waybar did not explain active count"
+        assert "hl-lab-host  " + status in active["tooltip"].splitlines()
+        assert active["machines_available"] and len(active["machines"]) == 7
+        waybar_pill(active, _product, host_state=status)
+        fallback_bar(active)
+    for status in ("shut off", "crashed"):
+        _vm_list, stopped, _product = inventory(host_state=status)
+        assert stopped["text"] == "0/7", "Waybar counted an inactive domain as active"
     native()
     assert run_gtk_worker(Path(__file__)) == 0, "GTK external Machine contract failed"
     print("External Machine visibility contract: OK")

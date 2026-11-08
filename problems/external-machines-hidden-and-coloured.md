@@ -43,7 +43,9 @@ the guidance mentions the lower group only when domains exist.
 
 Recovery classification requires a unique spec and agreement with the observed
 managed identity, trust profile and interfaces. An unclassified row has a
-neutral outline, transparent fill and the external label, distinct from HOST.
+neutral outline and transparent fill, distinct from HOST. The word is external
+only outside a readable registry; a registry Machine without an identity says
+unclassified, and an unreadable registry requires membership unknown.
 The native read-only group stays neutral throughout.
 
 A review of the first correction found four more places with the same defect:
@@ -89,6 +91,27 @@ on each external identity widget across all appearance palettes, hover and
 selection. GTK applies selector specificity, source order and ancestor rules.
 The override now fails, as do a border-only override, a HOST text override and
 an earlier, more specific selected-hover rule.
+
+The fallback Swaybar still counted lines after a failed `virsh` call had become
+an empty string. It could therefore say **VM 0** precisely when the primary
+bar was unavailable. It now reads the same raw CLI projection as Waybar;
+failure, timeout or malformed input shows **VM ?**. Recovery Overview had a
+similar residual false zero: the subtitle reported unavailable while the large
+Detected VMs value was zero. That value is now **?** on a domains load error.
+
+Counting only running states also hid paused, in shutdown and pmsuspended
+domains. Both shell summaries now append separate managed/external **active
+(not running)** counts. The bars show **running+other-active/total**, preserving
+the observed states and explaining the extra count. Shut off and crashed are
+inactive; unknown still makes the count uncertain. GTK badges preserve the
+observed state instead of saying STOPPED. Lifecycle actions are unchanged.
+
+Native external borders used secondary appearance text while recovery used
+primary text. They now both use primary text, and the QML contract checks each
+border against every provenance colour, HOST included, across all palettes.
+Recovery also unnecessarily required exactly one interface for a reviewed
+identity. It now accepts any nonempty set of interfaces all on the reviewed
+network, as the CLI does; mixed or missing interfaces remain unclassified.
 
 ## Is the recovery Shut down action intended?
 

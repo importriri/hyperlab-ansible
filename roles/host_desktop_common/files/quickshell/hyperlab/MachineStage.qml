@@ -561,7 +561,7 @@ Item {
                         radius: stage.tokens.radiusCard
                         color: "transparent"
                         border.width: stage.tokens.borderSize
-                        border.color: stage.theme.textSecondary
+                        border.color: stage.theme.textPrimary
 
                         Column {
                             anchors.fill: parent

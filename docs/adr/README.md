@@ -600,8 +600,9 @@ remain.
 - [ADR 0059](0059-external-machine-visibility.md)
   - Decision: proposed external visual state; population change accepted by
     the operator on 2026-11-02.
-  - Built: built — native Not managed group, raw running counts on every
-    native readout, and spec-bound recovery identity with an external outline.
+  - Built: built — native Not managed group, raw runtime counts with separate
+    non-running activity and explicit uncertainty through the fallback bar,
+    and spec-bound recovery identity with a primary-text external outline.
   - Activation: default — the existing desktop roles install the shared
     shell source and recovery manager; a deployed session must reload them.
   - Source: [`ShellState.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/ShellState.qml),

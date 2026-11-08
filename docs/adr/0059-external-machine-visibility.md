@@ -31,6 +31,12 @@ flag never makes an orphaned domain a product Machine. Neither count grants
 trust. A failed raw observation says unavailable; a stale one says Last
 observed. If any domain's runtime state is unknown, the running summary says
 Running state unknown rather than counting that domain as stopped.
+Known active states other than running (including paused, in shutdown and
+pmsuspended) appear as a separate **active (not running)** count, split by
+membership when the registry is readable. Only **shut off** and **crashed**
+are considered inactive; **unknown** still makes the running summary unknown.
+This preserves the meaning of running without implying that a paused guest
+has stopped. Presentation counts do not change lifecycle action eligibility.
 If registry membership is unavailable, both surfaces show the known raw domains
 under **Observed domains · membership unavailable**, with **membership unknown**
 on the rows and lifecycle **unknown** in recovery details. The native rows stay
@@ -56,15 +62,24 @@ and **Running state unknown** in its tooltip; every observed row and the known
 total remain available. `vm list`, in text and JSON modes, refuses an unavailable
 domains provider instead of returning a successful empty list. The recovery
 JSON reader carries that refusal into **Running inventory unavailable**.
+Its Overview also shows **? Detected VMs** when the domains read fails;
+**0 Detected VMs** is reserved for a readable empty inventory.
+With other active states the pill shows **running+other-active/total** (for
+example **0+1/7**) and explains **1 active (not running)** in the tooltip,
+alongside every observed state. An unknown state still takes precedence.
+The automatic Swaybar fallback reads this same raw CLI payload once per
+refresh and uses the same count, including **?/total**. A failed command,
+timeout or malformed response shows **VM ?**, never **VM 0**.
 
 ## External visual state — Proposed
 
 The [visual trust contract](../visual-trust-contract.md) called both host-native
 and unclassified identities neutral but did not distinguish their shapes.
 Proposed: an unclassified machine uses a neutral outline, transparent fill and
-the literal word **external** beside it. Use appearance text for the outline,
-never a trust-domain token or the HOST grey identity. The native read-only
-group conservatively uses this state for all non-product rows. When registry
+the appropriate membership word beside it, as defined below. Use primary
+appearance text for the outline (`textPrimary` in the native shell,
+`hl_text` in recovery), never a trust-domain token or the HOST grey identity.
+The native read-only group conservatively uses this state for all non-product rows. When registry
 membership is unknown, its neutral outline remains, but **membership unknown**
 replaces the external label: less trust does not justify a false lifecycle.
 For the same reason a registry Machine whose identity does not resolve is
@@ -75,9 +90,11 @@ A recovery domain receives a domain colour only when the registry lists it as
 a product Machine, one unique spec names it, its observed managed identity and
 trust profile agree with that spec's network profile, and every observed
 interface belongs to that network. An absent, duplicate or drifting spec does
-not fall back to dev. A domain outside the registry is always external in both
-surfaces, even with a matching spec: `compose list` also returns host-local
-`vm-specs/.generated/` files (withdrawn Machines, Workbench candidates), and
+not grant an identity; multiple interfaces on that same network are allowed,
+matching the CLI's `network_identity` rule. A mismatched or empty interface list
+does not establish an identity or fall back to dev. A domain outside the
+registry is always external in both surfaces, even with a matching spec:
+`compose list` also returns host-local `vm-specs/.generated/` files (withdrawn Machines, Workbench candidates), and
 nothing marks those as reviewed.
 GPU gates and network attachment alone cannot classify a machine.
 

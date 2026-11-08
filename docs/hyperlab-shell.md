@@ -119,6 +119,14 @@ If the raw observation fails, the total does not pretend to cover every
 domain: it reads **3 managed · other domains unavailable**. A stale registry
 read keeps **last observed** with its age beside the count.
 
+Paused, in shutdown, pmsuspended and other known active states remain distinct
+from running. Summaries append a separate count, for example **0 managed
+running · 0 external running · 1 external active (not running)**. Only shut off
+and crashed count as inactive. Without readable membership the activity count
+remains visible without a managed/external split. GTK badges show the observed
+state instead of calling an active non-running guest STOPPED. Action eligibility
+is unchanged.
+
 The sway session's Waybar VM pill shows running/total over every libvirt
 domain, from the same raw observation, with each domain and state in its
 tooltip. It has no registry membership and therefore no managed/external split.
@@ -127,6 +135,12 @@ and explains **Running state unknown** in the tooltip, retaining every domain
 row and the known total. An unavailable inventory shows **?**. The recovery
 reader receives a refusal from `vm list` when the domains provider fails, so
 that failure says **Running inventory unavailable**, never zero running.
+Recovery Overview also shows **? Detected VMs** on failure, reserving zero for
+a readable empty inventory. Other active states add a separate numerator to
+the bar, for example **0+1/7**, explained as **1 active (not running)** in the
+tooltip. Unknown runtime state takes precedence over these numeric counts.
+The automatic Swaybar fallback reads the same CLI payload and displays the
+same count. Command failure, timeout and malformed JSON show **VM ?**.
 
 Product cards are 300–420 units wide and carry, in
 order: name and operating system, provenance, state, the allocation the

@@ -169,12 +169,17 @@ def waybar_field(document, field):
             or "no PCI device matched the profile"
     elif field == "vms":
         text = "%d/%d" % (len(running), len(domains))
+        active = [domain for domain in domains
+                  if domain["state"] not in {"running", "shut off", "crashed", "unknown"}]
         blocked = [domain for domain in domains if domain.get("blocked")]
         state = "warn" if blocked else "ok"
         tooltip = "\n".join("%s  %s" % (domain["name"], domain["state"])
                             for domain in domains) or "no domains defined"
         if blocked:
             tooltip += "\nblocked: " + ", ".join(domain["name"] for domain in blocked)
+        if active:
+            text = "%d+%d/%d" % (len(running), len(active), len(domains))
+            tooltip += "\n%d active (not running)" % len(active)
         if any(domain["state"] == "unknown" for domain in domains):
             text, state = "?/%d" % len(domains), "error"
             tooltip += "\nRunning state unknown"

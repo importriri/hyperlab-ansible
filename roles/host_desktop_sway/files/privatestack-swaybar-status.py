@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -106,9 +107,16 @@ class TimedValue:
 
 
 def read_vms() -> str:
-    output = run_text(["virsh", "-c", "qemu:///system", "list", "--state-running", "--name"])
-    count = len([line for line in output.splitlines() if line.strip()])
-    return f"VM {count}"
+    output = run_text(["/usr/local/bin/hyperlabctl", "waybar", "--field", "vms"])
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return "VM ?"
+    if (not isinstance(payload, dict) or payload.get("machines_available") is not True
+            or not isinstance(payload.get("text"), str)
+            or re.fullmatch(r"(?:\d+(?:\+\d+)?|\?)/\d+", payload["text"]) is None):
+        return "VM ?"
+    return "VM " + payload["text"]
 
 
 def read_gpu() -> str:

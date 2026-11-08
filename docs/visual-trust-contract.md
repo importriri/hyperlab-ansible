@@ -109,8 +109,10 @@ The canonical visual identities remain:
 - `dirty`: orange;
 - `lab`: violet;
 - host-native: neutral HOST identity;
-- unclassified machines: neutral outline, transparent fill, explicit `external`
-  label; never a trust-domain colour or the HOST grey identity
+- unclassified machines: neutral outline and transparent fill; `external` for
+  a domain outside a readable registry, `unclassified` for a registry Machine
+  without a resolved identity, `membership unknown` when the registry is
+  unreadable; never a trust-domain colour or the HOST grey identity
   ([ADR 0059](adr/0059-external-machine-visibility.md), Proposed visual rule).
 
 Unreadable product membership cannot imply an external lifecycle. Observed
