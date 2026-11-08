@@ -47,3 +47,22 @@ Hashes, every negative-space pixel, fully covered neutral core pixels and
 quieter lock parameters are checked. The existing generated pool contract
 still compares all twelve images exactly. Source, tint, geometry, native
 size and lock mutations are catalogued in `tests/MUTATIONS.md`.
+
+## Native PNGs exceeded the file budget
+
+The first native material regeneration produced 4K product and lock files
+of 6,930,410 and 6,929,379 bytes, exceeding the 5 MiB repository asset limit.
+Qt saved opaque RGBA with adaptive scanline filters; that encoding compressed
+this fine grain poorly. Raising the compression level alone still exceeded
+the limit. Reducing the grain or output dimensions would change the artwork.
+
+The product entry point now captures the shared Qt scene into a temporary
+eight-bit RGB PPM, refuses an unexpected header or payload length, and writes
+an RGB PNG with unfiltered scanlines and zlib level 9. This requires only the
+existing Qt renderer and Python standard library. There is no quantisation
+or resampling. The pool keeps its existing PNG capture and unchanged bytes.
+
+The identity contract checks the 5 MiB ceiling for both committed files and
+every fresh native render. Exact decoded-pixel comparison remains mandatory,
+independent of the new file hashes. The old 4K files fail the new size stage;
+a valid oversized PNG mutation is rejected even with its pixels unchanged.

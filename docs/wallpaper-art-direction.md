@@ -45,9 +45,14 @@ Both are rendered natively at 3840×2160, 1920×1080, 2560×1600 and
 master is deployed as `/usr/share/backgrounds/hyperlab/product.png` (the
 `product` wallpaper mode) and `/usr/share/backgrounds/hyperlab/lock.png`.
 
-Rendering goes through Qt's software rasteriser, so output is byte-stable for
-a given Qt release. `tests/host_identity_asset_contract.py` pins every output
-by SHA256 and regenerates all eight, comparing every decoded RGB pixel,
+Rendering goes through Qt's software rasteriser, so product output is
+byte-stable for given Qt and zlib releases.
+`tests/host_identity_asset_contract.py` pins every output by SHA256 and
+enforces a 5 MiB limit on committed and regenerated PNGs.
+The product entry point captures native RGB through the shared Qt scene,
+then writes unfiltered PNG scanlines with zlib level 9. This lossless encoding
+keeps the 4K grain within the file budget without scaling or quantisation.
+The contract regenerates all eight, comparing every decoded RGB pixel,
 negative space and fully covered neutral core pixels. Regenerating the
 family is a reviewed change. `tests/product_symbol_geometry_contract.py`
 executes shell paths and the shared wallpaper shader to check numerical

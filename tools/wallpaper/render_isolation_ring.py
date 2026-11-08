@@ -18,7 +18,7 @@ Two variants are produced from one geometry:
               the session behind it
 
 Rendering uses Qt's software rasteriser through qmlscene, so the output is
-byte-stable for a given Qt release.
+byte-stable for given Qt and zlib releases.
 
     python3 tools/wallpaper/render_isolation_ring.py --out <dir>
 """
@@ -28,6 +28,9 @@ import argparse
 import hashlib
 import shutil
 from pathlib import Path
+import struct
+import tempfile
+import zlib
 
 import pool_material
 
@@ -58,7 +61,29 @@ def scene(size: tuple[int, int], variant: str, out: Path) -> str:
 
 
 def render(runner: str, size: tuple[int, int], variant: str, out: Path) -> None:
-    pool_material.render(runner, scene(size, variant, out), out)
+    # Capture the same opaque pixels without Qt's adaptive PNG filters. For
+    # this fine grain, unfiltered RGB compresses better and keeps 4K below
+    # the 5 MiB asset budget without quantisation or resampling.
+    with tempfile.TemporaryDirectory(prefix="hyperlab-product-rgb-") as temporary:
+        capture = Path(temporary) / "capture.ppm"
+        pool_material.render(runner, scene(size, variant, capture), capture)
+        data = capture.read_bytes()
+    width, height = size
+    header = f"P6\n{width} {height}\n255\n".encode("ascii")
+    if not data.startswith(header) or len(data) != len(header) + width * height * 3:
+        raise ValueError("unexpected native RGB capture")
+    pixels = data[len(header):]
+    stride = width * 3
+    rows = b"".join(b"\0" + pixels[start:start + stride]
+                    for start in range(0, len(pixels), stride))
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        body = kind + payload
+        return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body))
+
+    out.write_bytes(b"\x89PNG\r\n\x1a\n"
+                    + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                    + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
 
 
 def main() -> int:

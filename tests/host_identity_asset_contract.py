@@ -36,24 +36,25 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "roles/host_desktop_common/files/wallpapers"
 GENERATOR = ROOT / "tools/wallpaper/render_isolation_ring.py"
 ROLLBACK = ROOT / "tools/wallpaper/render_contained_planes.py"
+MAX_PNG_BYTES = 5 * 1024 * 1024
 
 EXPECTED = {
     "isolation-ring-1920x1080.png":
-        "d333713ed82b67dc4e908584337fd260f71d906730dfacd4a085f0201ba7b5a6",
+        "0717b9d6b97dffa9346d4cf9be0d9474bdd8efd036a437e5e0df1139c965ceff",
     "isolation-ring-2560x1600.png":
-        "7b489b4628e722836563d3de657fe56660114b7960f9d91511d096de22f99853",
+        "47b11250c28a9a7131ebb021966f49a622bc80a6bf1764259f924a86ce338f3e",
     "isolation-ring-3440x1440.png":
-        "cf87587820cfbf4b6d42ed726c5fcdb14ebcfa8faeb47c6bae836157504d61e1",
+        "627e633da60044ee2592f93e433af8ed1419901e787991e84bcd266a9ce7486b",
     "isolation-ring-3840x2160.png":
-        "984cd193f15e621a0b2180a8e36f6b06bdcac2cc14c1c99fe7742a870fe51238",
+        "0c3bffde2f3b9c6f00ab4f1e04a71927f311cc1a7f060e9b2c67967401a0b3ef",
     "isolation-ring-lock-1920x1080.png":
-        "85e48554daf4e4a6c4cc0034bfa53fc3280b46e796ad9a9824a8e19d0ad883c6",
+        "60fb2d24f642d0f12170d4252d11de69fbb7bd366897f727d89a74a79f08f24b",
     "isolation-ring-lock-2560x1600.png":
-        "191427b5e37fa703aa8d861db2dbdc91ac633cbaa8128bee2502e7fdfa3a3cbc",
+        "0066e6fee2501115b6cdaa106cc44049daf15f1c557f98ff9e18db9c80f3bf09",
     "isolation-ring-lock-3440x1440.png":
-        "b4c02ba1f380c0ce93ba07ebe7506695ee29cec87ba484af6b8c3a00a845f11c",
+        "55e976e2402192eb8cabbf0873c1ec539f2629a3f653359011b396f44a02b053",
     "isolation-ring-lock-3840x2160.png":
-        "42b5014d6364693120cb4dc879cdeff19df1f5ab6e91100eb912820940794bc1",
+        "9df66f58668908cf671fe6ab21ed95fbe1ebc1b86f10c2e8a8cbc62a73fe2295",
 }
 
 
@@ -64,6 +65,11 @@ def require(condition: bool, message: str) -> None:
 
 def text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def file_budget_contract(path: Path) -> None:
+    require(path.stat().st_size <= MAX_PNG_BYTES,
+            f"identity PNG exceeds 5 MiB: {path.name}")
 
 
 def configuration_contract(directory: Path) -> dict[str, tuple[int, int]]:
@@ -81,14 +87,34 @@ def configuration_contract(directory: Path) -> dict[str, tuple[int, int]]:
     # Both generation and capture must be delegated to the shared material.
     recorded = []
     original = module.pool_material.render
-    module.pool_material.render = lambda runner, source, out: recorded.append((runner, source, out))
+    size = (32, 16)
+    pixels = bytes(index % 256 for index in range(math.prod(size) * 3))
+
+    def capture(runner: str, source: str, out: Path) -> None:
+        recorded.append((runner, source, out))
+        out.write_bytes(b"P6\n32 16\n255\n" + pixels)
+
+    module.pool_material.render = capture
     try:
         for variant, (diameter, quiet) in module.VARIANTS.items():
             target = directory / f"{variant}.png"
-            module.render("capture-probe", (1920, 1080), variant, target)
-            shared = module.pool_material.scene((1920, 1080), (0.52, 0.48), diameter / 2,
-                                                quiet, (147, 147, 147), target)
-            require(recorded[-1] == ("capture-probe", shared, target), "product bypasses shared v3 drawing")
+            module.render("capture-probe", size, variant, target)
+            captured = recorded[-1][2]
+            shared = module.pool_material.scene(size, (0.52, 0.48), diameter / 2,
+                                                quiet, (147, 147, 147), captured)
+            require(recorded[-1] == ("capture-probe", shared, captured), "product bypasses shared v3 drawing")
+            require(png_pixels(target, size) == pixels, "product encoding changed captured RGB pixels")
+            target.unlink()
+        for invalid in (b"P6\n16 32\n255\n" + pixels,
+                        b"P6\n32 16\n255\n" + pixels[:-1],
+                        b"P6\n32 16\n255\n" + pixels + b"\0"):
+            module.pool_material.render = lambda runner, source, out, payload=invalid: out.write_bytes(payload)
+            try:
+                module.render("capture-probe", size, "isolation-ring", directory / "invalid.png")
+            except ValueError:
+                pass
+            else:
+                require(False, "product accepted invalid native RGB capture")
     finally:
         module.pool_material.render = original
     return expected_sizes
@@ -106,6 +132,7 @@ def native_contract(directory: Path) -> None:
     for name in EXPECTED:
         size = expected_sizes[name.removesuffix(".png").split("-")[-1]]
         generated = directory / name
+        file_budget_contract(generated)
         digest = hashlib.sha256(generated.read_bytes()).hexdigest()
         require(f"{digest}  {name}" in result.stdout, "--print-hashes drift")
         diameter = 0.40 if "-lock-" in name else 0.46
@@ -170,6 +197,7 @@ def main() -> int:
         path = ASSETS / name
 
         require(path.is_file(), f"identity asset missing: {name}")
+        file_budget_contract(path)
 
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
 

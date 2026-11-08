@@ -3428,3 +3428,31 @@ placement `(0.52, 0.48, 0.23)` to `ground_offsets`; P-18 passes diameter
 untouched. SHA pinning remains a separate earlier gate in the full identity
 contract; the native pixel stages do not depend on a stale hash to detect
 artwork changes.
+
+### Lossless native PNG file budget
+
+The two original 4K material captures were 6,930,410 and 6,929,379 bytes.
+The new identity size stage failed on the product 4K capture before the
+encoding repair. It checks the 5 MiB ceiling independently for committed
+assets and every freshly generated PNG. Hash pinning, native dimensions
+and exact decoded RGB comparisons remain unchanged.
+
+Qt's shared capture now supplies temporary eight-bit RGB PPM to the product
+entry point. That entry point writes unfiltered RGB PNG with zlib level 9;
+the pool still uses its original PNG path. The configuration stage intercepts
+the shared capture, supplies known RGB pixels and checks the actual encoded
+PNG. It also supplies wrong dimensions, a missing byte and an extra byte:
+all must be refused before encoding. Before implementation, that stage
+failed with `invalid PNG capture` because the old wrapper did not encode RGB.
+
+| Mutation | Check | Observed result |
+| --- | --- | --- |
+| P-20: insert a valid `tEXt` chunk with 5 MiB of padding before `IEND` in a copied native PNG; retain every pixel and a valid CRC | identity `file_budget_contract()`; independently decode and compare the unchanged RGB | red: `identity PNG exceeds 5 MiB`; restored green |
+| P-21: remove the native PPM header and payload-length refusal from the product renderer | identity `configuration_contract()` with invalid RGB captures | red: `product accepted invalid native RGB capture`; restored green |
+
+Both mutated files were copied before modification and restored from their
+saved copies. P-20 uses a copy of the 1920×1080 product PNG; build the padding
+as PNG `tEXt` type plus `padding\0`, 5 MiB of `x` bytes and its CRC, preceded
+by the four-byte payload length. P-21 removes only the condition and its
+`unexpected native RGB capture` exception, leaving capture and encoding in
+place. No check, size ceiling or pixel requirement is weakened.

@@ -165,7 +165,10 @@ The earlier HOST images were visual references only. Their pixels, words,
 reticles and construction lines are not part of the generated assets.
 
 The byte reference for this regeneration is Qt 6.11.2 with its software
-backend. The asset contract pins all eight hashes and regenerates native outputs,
+backend and zlib 1.3.2. Native RGB is captured through Qt and encoded
+losslessly as unfiltered RGB PNG using Python's standard-library zlib at
+level 9. Each PNG is at most 5 MiB; the encoding changes no decoded pixels.
+The asset contract pins all eight hashes and regenerates native outputs,
 comparing every decoded RGB pixel, negative space and neutral core pixels.
 The pool's twelve committed images and manifest remain unchanged after
 extraction. Source, helper, contract and product asset inventory rows are
