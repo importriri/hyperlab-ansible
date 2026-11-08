@@ -568,9 +568,10 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 
 ### 8b. Reliability
 
-- [x] every apply refreshes a resident shell or recovery UI older than the
-      installed code, as the desktop user; a failed apply is retried by the
-      next one, a busy shell is refused without killing, inactive surfaces
+- [x] every apply reconciles resident shell and recovery code generations as
+      the desktop user, including the final unit deployment; clock steps
+      cannot hide updates, failed applies retry and paused inspection
+      refuses busy children without killing them; inactive surfaces
       stay inactive and an unchanged second apply sends nothing
       ([ADR 0059](adr/0059-resident-desktop-updates.md), proposed;
       `tests/shell_reload_after_apply_contract.py`, software-verified)
@@ -849,7 +850,8 @@ Measured with the complete security plane active.
       notification and CLI help; then the frozen Predator replay
 
 - [x] software gate for installed-versus-resident desktop code: state-based
-      refresh with retry, check-mode silence and unchanged-apply idempotence
+      refresh with clock-step and launch-race checks, retry, check-mode silence
+      and immediate unchanged-apply idempotence
       (`tests/shell_reload_after_apply_contract.py`, software-verified)
 - [ ] installed desktop refresh observed after host apply on Nitro and
       replayed on Predator; see [the shell update contract](hyperlab-shell.md#installed-updates-and-resident-code)

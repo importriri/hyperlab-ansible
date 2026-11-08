@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
+import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import stat
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Iterator
+import uuid
 
 UNIT = "hyperlab-quickshell.service"
 APP_ID = "io.github.importriri.HyperlabControlCenter"
@@ -41,6 +46,7 @@ RESIDENT_OBSERVERS = frozenset({
 INTERPRETERS = frozenset({(), ("bash",), ("python3",), ("/usr/bin/env", "bash"),
                           ("/usr/bin/env", "python3")})
 IDLE_WAIT_SECONDS = 10
+CHECKOUT_POINTER = Path("/etc/hyperlabctl/checkout")
 
 
 def runtime_path() -> Path:
@@ -72,61 +78,148 @@ def session_environment() -> dict[str, str] | None:
                 DBUS_SESSION_BUS_ADDRESS="unix:path=" + str(bus))
 
 
-def regular_file_ns(path: Path) -> int:
+def require_regular_file(path: Path) -> None:
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode):
         raise RuntimeError(f"Installed source is not an unredirected regular file: {path}")
-    # ctime also detects atomic replacements that preserve an older mtime.
-    return max(info.st_mtime_ns, info.st_ctime_ns)
 
 
-def installed_shell_ns() -> int:
-    def newest(directory: Path) -> int:
+def source_generation(surface: str) -> str:
+    entries = []
+
+    def include(path: Path, name: str) -> None:
+        require_regular_file(path)
+        entries.append((name, hashlib.sha256(path.read_bytes()).hexdigest()))
+
+    def collect(directory: Path) -> None:
         if not stat.S_ISDIR(directory.lstat().st_mode):
             raise RuntimeError(f"Redirected shell directory: {directory}")
-        latest = 0
-        for path in directory.iterdir():
-            info = path.lstat()
-            if stat.S_ISDIR(info.st_mode):
-                latest = max(latest, newest(path))
+        for path in sorted(directory.iterdir()):
+            if stat.S_ISDIR(path.lstat().st_mode):
+                collect(path)
             else:
-                stamp = regular_file_ns(path)
+                require_regular_file(path)
                 # This runtime-data file has its own live FileView observer.
                 if path != SHELL_ROOT / "features.json":
-                    latest = max(latest, stamp)
-        return latest
+                    include(path, str(path.relative_to(SHELL_ROOT)))
 
-    regular_file_ns(SHELL_ROOT / "shell.qml")
-    return max(newest(SHELL_ROOT), regular_file_ns(UNIT_PATH))
+    if surface == "quickshell":
+        require_regular_file(SHELL_ROOT / "shell.qml")
+        collect(SHELL_ROOT)
+        include(UNIT_PATH, str(UNIT_PATH))
+    else:
+        include(CONTROL_CENTER_PATH, str(CONTROL_CENTER_PATH))
+    return hashlib.sha256(json.dumps(entries, separators=(",", ":")).encode()).hexdigest()
 
 
-def process_started_ns(pid: int) -> int:
+def process_fields(pid: int) -> list[str]:
     if pid <= 0:
         raise RuntimeError("Missing resident process PID")
     directory = PROC_ROOT / str(pid)
     info = directory.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
         raise RuntimeError("Resident process is redirected or belongs to another user")
-    # /proc/PID/stat field 22 is boot-relative ticks, including suspend.
-    # comm (field 2) can itself contain spaces and closing parentheses.
     path = directory / "stat"
-    regular_file_ns(path)
+    require_regular_file(path)
     fields = path.read_text().rpartition(") ")[2].split()
+    if len(fields) < 20:
+        raise RuntimeError("Cannot read resident process identity")
+    return fields
+
+
+def boot_ticks() -> int:
+    return time.clock_gettime_ns(time.CLOCK_BOOTTIME) * os.sysconf("SC_CLK_TCK") // 1_000_000_000
+
+
+def process_ticks(pid: int) -> int:
     try:
-        ticks = int(fields[19])
-    except (IndexError, ValueError) as exc:
-        raise RuntimeError("Cannot read resident process start time") from exc
-    rate = os.sysconf("SC_CLK_TCK")
-    realtime = time.time_ns()
-    boot = time.clock_gettime_ns(time.CLOCK_BOOTTIME)
-    started = ticks * 1_000_000_000 // rate
-    if ticks <= 0 or started > boot:
-        raise RuntimeError("Invalid resident process start time")
-    return realtime - boot + started
+        ticks = int(process_fields(pid)[19])
+    except ValueError as exc:
+        raise RuntimeError("Cannot read resident process start ticks") from exc
+    if ticks <= 0 or ticks > boot_ticks():
+        raise RuntimeError("Invalid resident process start ticks")
+    return ticks
+
+
+def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise RuntimeError("Duplicated resident checkpoint field")
+        result[key] = value
+    return result
+
+
+class Checkpoint:
+    def __init__(self, descriptor: int) -> None:
+        self.descriptor = descriptor
+        boot = PROC_ROOT / "sys/kernel/random/boot_id"
+        require_regular_file(boot)
+        self.boot_id = str(uuid.UUID(boot.read_text().strip()))
+        raw = os.read(descriptor, 8193)
+        self.state = json.loads(raw, object_pairs_hook=unique_keys) if raw else None
+        if raw and self.state is None:
+            raise RuntimeError("Invalid resident checkpoint")
+        if self.state is not None:
+            state = self.state
+            if (not isinstance(state, dict)
+                    or set(state) != {"boot_id", "generation", "boundary", "resident"}
+                    or not isinstance(state["boot_id"], str)
+                    or str(uuid.UUID(state["boot_id"])) != state["boot_id"]
+                    or not isinstance(state["generation"], str)
+                    or len(state["generation"]) != 64
+                    or any(char not in "0123456789abcdef" for char in state["generation"])
+                    or type(state["boundary"]) is not int or state["boundary"] < 0):
+                raise RuntimeError("Invalid resident checkpoint")
+            resident = state["resident"]
+            if resident is not None and (not isinstance(resident, list) or len(resident) != 2
+                                        or any(type(value) is not int or value <= 0 for value in resident)):
+                raise RuntimeError("Invalid checkpoint process identity")
+            if state["boot_id"] == self.boot_id and state["boundary"] > boot_ticks():
+                raise RuntimeError("Checkpoint boundary is in the future")
+
+    def current(self, generation: str, pid: int) -> bool:
+        identity = [pid, process_ticks(pid)]
+        state = self.state
+        return bool(state and state["boot_id"] == self.boot_id
+                    and state["generation"] == generation
+                    and (state["resident"] == identity or identity[1] > state["boundary"]))
+
+    def record(self, generation: str, boundary: int, pid: int | None = None) -> None:
+        state = {"boot_id": self.boot_id, "generation": generation, "boundary": boundary,
+                 "resident": [pid, process_ticks(pid)] if pid is not None else None}
+        raw = json.dumps(state).encode()
+        os.lseek(self.descriptor, 0, os.SEEK_SET)
+        if os.write(self.descriptor, raw) != len(raw):
+            raise RuntimeError("Incomplete resident checkpoint write")
+        os.ftruncate(self.descriptor, len(raw))
+        os.fsync(self.descriptor)
+        self.state = state
+
+
+@contextmanager
+def checkpoint(env: dict[str, str], surface: str) -> Iterator[Checkpoint]:
+    path = Path(env["XDG_RUNTIME_DIR"]) / ("hyperlab-resident-" + surface + ".json")
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1
+                or info.st_size > 8192):
+            raise RuntimeError("Unsafe resident checkpoint")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            saved = Checkpoint(descriptor)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Invalid resident checkpoint") from exc
+        yield saved
+    finally:
+        os.close(descriptor)
 
 
 def shell_properties(env: dict[str, str]) -> dict[str, str]:
-    names = ("LoadState", "ActiveState", "MainPID", "ControlGroup", "NeedDaemonReload")
+    names = ("LoadState", "ActiveState", "MainPID", "ControlGroup", "NeedDaemonReload", "Restart",
+             "RestartPreventExitStatus", "SuccessExitStatus")
     result = subprocess.run(
         ["/usr/bin/systemctl", "--user", "show", "--property=" + ",".join(names), UNIT],
         check=True, timeout=10, env=env, capture_output=True, text=True,
@@ -156,7 +249,7 @@ def control_group_members(properties: dict[str, str]) -> set[int]:
     def collect(path: Path) -> None:
         # systemd's control-group kill includes descendant cgroups as well.
         membership = path / "cgroup.procs"
-        regular_file_ns(membership)
+        require_regular_file(membership)
         for value in membership.read_text().split():
             if not value.isdecimal() or int(value) <= 0:
                 raise RuntimeError("Invalid shell control-group member")
@@ -186,7 +279,28 @@ def process_identity(pid: int) -> tuple[int, tuple[str, ...]]:
     return parent, tuple(os.fsdecode(argument) for argument in arguments)
 
 
+def provenance_resolver(argv: tuple[str, ...]) -> bool:
+    if argv[:3] != ("/usr/bin/python3", "-I", "-B"):
+        return False
+    require_regular_file(CHECKOUT_POINTER)
+    lines = CHECKOUT_POINTER.read_text().splitlines()
+    if len(lines) != 1:
+        raise RuntimeError("Invalid checkout pointer")
+    checkout = Path(lines[0])
+    if not checkout.is_absolute() or checkout.resolve(strict=True) != checkout:
+        raise RuntimeError("Redirected checkout pointer")
+    resolver = checkout / "tools/surface_provenance.py"
+    require_regular_file(resolver)
+    if resolver.resolve(strict=True) != resolver:
+        raise RuntimeError("Redirected provenance resolver")
+    return argv == ("/usr/bin/python3", "-I", "-B", str(resolver), "--repo", str(checkout),
+                    "--proc-root", "/proc", "stream", "--registry",
+                    f"/run/user/{os.getuid()}/hyperlab/surface-provenance.json")
+
+
 def resident_observer(argv: tuple[str, ...]) -> bool:
+    if provenance_resolver(argv):
+        return True
     for command in RESIDENT_OBSERVERS:
         split = len(argv) - len(command)
         if split >= 0 and argv[split:] == command and argv[:split] in INTERPRETERS:
@@ -232,26 +346,116 @@ def require_idle_cgroup(properties: dict[str, str]) -> None:
         time.sleep(0.25)
 
 
-def refresh_quickshell(env: dict[str, str]) -> dict[str, bool | str]:
-    properties = shell_properties(env)
+def thread_states(pid: int) -> list[str]:
+    task = PROC_ROOT / str(pid) / "task"
+    if not stat.S_ISDIR(task.lstat().st_mode):
+        raise RuntimeError("Redirected shell threads")
+    states = []
+    for thread in task.iterdir():
+        if not stat.S_ISDIR(thread.lstat().st_mode):
+            raise RuntimeError("Redirected shell thread")
+        path = thread / "stat"
+        require_regular_file(path)
+        fields = path.read_text().rpartition(") ")[2].split()
+        if not fields:
+            raise RuntimeError("Missing shell thread state")
+        states.append(fields[0])
+    if not states:
+        raise RuntimeError("Missing shell threads")
+    return states
+
+
+class PausedShell:
+    def __init__(self, descriptor: int) -> None:
+        self.descriptor = descriptor
+        self.killed = False
+
+    def terminate(self) -> None:
+        # No SIGCONT and no systemd restart job: either would let the shell
+        # launch a child after the final inspection. SIGKILL cannot run QML.
+        signal.pidfd_send_signal(self.descriptor, signal.SIGKILL)
+        self.killed = True
+
+
+@contextmanager
+def paused_shell(pid: int, started: int) -> Iterator[PausedShell]:
+    descriptor = os.pidfd_open(pid)
+    paused = PausedShell(descriptor)
+    stopped = False
+    try:
+        if process_ticks(pid) != started or any(state in ("T", "t") for state in thread_states(pid)):
+            raise RuntimeError("Shell identity changed or was already stopped")
+        stopped = True
+        signal.pidfd_send_signal(descriptor, signal.SIGSTOP)
+        deadline = time.monotonic() + 2
+        while any(state != "T" for state in thread_states(pid)):
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Shell did not stop every thread")
+            time.sleep(0.02)
+        yield paused
+    finally:
+        try:
+            if stopped and not paused.killed:
+                try:
+                    signal.pidfd_send_signal(descriptor, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass  # The pinned process has already exited.
+        finally:
+            os.close(descriptor)
+
+
+def active_shell(properties: dict[str, str]) -> bool:
     if properties["LoadState"] == "not-found" or properties["ActiveState"] in ("inactive", "failed"):
-        return {"changed": False, "status": "shell-inactive"}
+        return False
     if properties["LoadState"] != "loaded" or properties["ActiveState"] != "active":
         raise RuntimeError("Cannot refresh a shell in an unexpected or transitional state")
-    started = process_started_ns(int(properties["MainPID"]))
-    if installed_shell_ns() < started and properties["NeedDaemonReload"] == "no":
-        return {"changed": False, "status": "shell-current"}
-    require_idle_cgroup(properties)
-    # Reload only for an actual stale resident. The unit is copied by a later
-    # play; its time is compared here, so the next apply picks it up.
+    return True
+
+
+def replace_shell(env: dict[str, str], properties: dict[str, str]) -> int:
+    # Any launches during daemon-reload are included in the final inspection.
     subprocess.run(["/usr/bin/systemctl", "--user", "daemon-reload"],
                    check=True, timeout=30, env=env)
-    # try-restart also guards against the service stopping after the probe.
-    subprocess.run(["/usr/bin/systemctl", "--user", "try-restart", UNIT],
-                   check=True, timeout=30, env=env)
-    subprocess.run(["/usr/bin/systemctl", "--user", "is-active", "--quiet", UNIT],
-                   check=True, timeout=10, env=env)
-    return {"changed": True, "status": "shell-refreshed"}
+    current = shell_properties(env)
+    if (not active_shell(current) or current["MainPID"] != properties["MainPID"]
+            or current["ControlGroup"] != properties["ControlGroup"]
+            or current["Restart"] != "on-failure" or current["RestartPreventExitStatus"]
+            or current["SuccessExitStatus"]
+            or current["NeedDaemonReload"] != "no"):
+        raise RuntimeError("Shell identity or restart policy changed before refresh")
+    pid = int(current["MainPID"])
+    started = process_ticks(pid)
+    with paused_shell(pid, started) as paused:
+        require_idle_cgroup(current)
+        paused.terminate()
+    # Existing on-failure policy performs the restart and observer cleanup.
+    # We never start an inactive service or send a compositor/session job.
+    deadline = time.monotonic() + 30
+    while True:
+        current = shell_properties(env)
+        if current["ActiveState"] == "active" and current["LoadState"] == "loaded":
+            new_pid = int(current["MainPID"])
+            if (new_pid, process_ticks(new_pid)) != (pid, started):
+                return new_pid
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Shell did not restart with a new resident identity")
+        time.sleep(0.1)
+
+
+def refresh_quickshell(env: dict[str, str]) -> dict[str, bool | str]:
+    with checkpoint(env, "quickshell") as saved:
+        properties = shell_properties(env)
+        if not active_shell(properties):
+            return {"changed": False, "status": "shell-inactive"}
+        generation = source_generation("quickshell")
+        if saved.current(generation, int(properties["MainPID"])) and properties["NeedDaemonReload"] == "no":
+            return {"changed": False, "status": "shell-current"}
+        boundary = boot_ticks()
+        new_pid = replace_shell(env, properties)
+        if source_generation("quickshell") != generation:
+            raise RuntimeError("Installed shell changed during refresh; reapply")
+        saved.record(generation, boundary, new_pid)
+        return {"changed": True, "status": "shell-refreshed"}
 
 
 def control_center_connection(env: dict[str, str]) -> Any:
@@ -301,22 +505,27 @@ def control_center_pid(connection: Any) -> int:
 
 
 def refresh_control_center(env: dict[str, str]) -> dict[str, bool | str]:
-    connection = control_center_connection(env)
-    if not control_center_running(connection):
-        return {"changed": False, "status": "control-center-absent"}
-    started = process_started_ns(control_center_pid(connection))
-    if regular_file_ns(CONTROL_CENTER_PATH) < started:
-        return {"changed": False, "status": "control-center-current"}
-    # Existing versions already export quit. A theme refresh would retain the
-    # old Python code, and launching --warm would need the compositor's env.
-    subprocess.run(["/usr/bin/gapplication", "action", APP_ID, "quit"],
-                   check=True, timeout=15, env=env)
-    deadline = time.monotonic() + 10
-    while control_center_running(connection):
-        if time.monotonic() >= deadline:
-            raise RuntimeError("HyperLab Control Center retained its old code after quit")
-        time.sleep(0.1)
-    return {"changed": True, "status": "control-center-retired"}
+    with checkpoint(env, "control-center") as saved:
+        connection = control_center_connection(env)
+        generation = source_generation("control-center")
+        boundary = boot_ticks()
+        if not control_center_running(connection):
+            # An owner started after this observation loads the installed code.
+            saved.record(generation, boundary)
+            return {"changed": False, "status": "control-center-absent"}
+        if saved.current(generation, control_center_pid(connection)):
+            return {"changed": False, "status": "control-center-current"}
+        subprocess.run(["/usr/bin/gapplication", "action", APP_ID, "quit"],
+                       check=True, timeout=15, env=env)
+        deadline = time.monotonic() + 10
+        while control_center_running(connection):
+            if time.monotonic() >= deadline:
+                raise RuntimeError("HyperLab Control Center retained its old code after quit")
+            time.sleep(0.1)
+        if source_generation("control-center") != generation:
+            raise RuntimeError("Installed Control Center changed during retirement; reapply")
+        saved.record(generation, boundary)
+        return {"changed": True, "status": "control-center-retired"}
 
 
 def main() -> int:

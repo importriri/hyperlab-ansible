@@ -5,105 +5,129 @@ Status: Proposed.
 ## Context
 
 On 2026-11-03 the Nitro had new QML and recovery Python files on disk but
-showed the older versions held by long-running processes. The Quickshell
-unit deliberately disables watching to avoid loading a partially copied
-tree. The GTK GApplication forwards new invocations to its existing owner;
-its theme reload refreshes appearance without loading new Python code.
+showed older versions held by long-running processes. Quickshell's unit
+intentionally disables watching during multi-file deployment. The GTK
+GApplication forwards new invocations to its resident owner; theme reload
+changes appearance without loading new Python code.
 
 ## Decision
 
-Proposed: reconcile running presentation with installed code from state on
-every apply, not from a one-shot change notification. After its copies,
-each role runs an ordinary task as the configured desktop user:
+Proposed: reconcile presentation from state on every apply as the configured
+desktop user. `host_desktop_common` checks after its QML copies,
+`host_desktop_sway` checks after its recovery helper copies, and `v1-host.yml`
+checks the shell again after the Hyprland component's final service-unit
+copy. The Hyprland role continues to stage files and runs nothing. The
+final check covers a unit-only change during its installing apply; an
+unchanged second apply dispatches no refresh. The QML checks carry the
+copy's `hyperlab_provenance` tag. Check mode dispatches nothing.
 
-- `host_desktop_common`, after the shared QML copies, compares the newest
-  installed time of every regular file under `/etc/xdg/quickshell/hyperlab`
-  and of `/etc/systemd/user/hyperlab-quickshell.service` with the start time
-  of the active shell's main PID. If the shell is older, or the user
-  manager reports that the unit needs a daemon reload, it reloads the user
-  manager and `try-restart`s only that already active unit.
-- `host_desktop_sway`, after the helper copies, compares the recovery
-  manager executable with the start time of the process that owns the
-  GApplication bus name. If it is older, it invokes the existing `quit`
-  action and waits for the owner to leave. The next ordinary open loads the
-  installed code.
+Freshness uses SHA-256 over sorted source paths and contents, including the
+installed shell unit and every regular file under the shell root except
+live-watched `features.json`. The GTK generation covers its executable.
+It does not compare file dates with reconstructed process dates: the
+current realtime-minus-boottime offset is not the offset when an old
+process started. A forward clock step can hide stale code indefinitely;
+a backward step can cause repeated refreshes. Content generations and
+boot-relative process identities avoid both errors, including unchanged
+retries after a failed apply.
 
-The installed time is the later of modification and status-change time, so
-an atomic replacement that keeps an older modification time still counts.
-`features.json` is excluded: `ShellState.qml` already watches it live.
-A task reports `changed` only after an actual refresh, so an unchanged
-second pass is `changed=0`. Because the decision comes from state, a play
-that failed after the copies, a refresh that failed, a tagged run or a
-resident that was already stale before this change is corrected by the
-next apply. The QML reconciliation carries the same tag as the tagged QML
-copy.
+Each surface has a private, mode-0600, user-owned checkpoint in the validated
+user runtime directory. It records the generation, kernel boot ID, a
+boot-relative tick boundary and, for the shell, the successfully refreshed
+PID and its start ticks. A resident is current only for that generation
+and boot, with either that exact identity or start ticks strictly after
+the boundary. A missing initial checkpoint means one conservative refresh
+of an active resident. An absent GTK owner establishes a boundary without
+starting it; an ordinary later open loads the installed code. Checkpoints
+are locked against concurrent refreshes and reject redirected, hard-linked,
+public, oversized, duplicated or malformed input. They are updated only
+after success or an observed absent GTK owner. Failed refreshes leave the
+previous generation pending; concurrent source changes cause refusal.
 
-Restarting the unit ends every process in its control group. The shell
-always runs read-only observers there (workspace and focus watches, the
-trust stream, the provenance resolver and status polls), which the new
-shell starts again. Before restarting, the script reads the unit's control
-group and its descendants and identifies each other process by parent and
-argv. Only the exact commands `ShellState.qml` starts, and processes they
-started, may be ended. For any other child (a Machine operation bridge,
-a launched application still in the unit, a process it cannot read) it
-waits up to ten seconds for the child to finish, then refuses: the task
-fails with the PIDs, nothing is killed, and the next apply retries.
+A shell refresh uses the existing `Restart=on-failure` policy without a
+whole-unit restart job:
 
-Use a shared deployment-only script transferred by Ansible, without a new
-installed helper, IPC receiver or persistent watcher. Derive the user bus
-from the non-root executing UID and validate its runtime directory and
-socket before contacting it. An absent session is explicitly reported;
-invalid transports and failed refreshes fail the apply. Never activate an
-inactive shell or absent recovery application. Check mode sends nothing.
+1. Reload the user's service definitions and recheck the same active main
+   PID, cgroup and effective restart policy.
+2. Open a PID file descriptor, validate the process start ticks, send
+   `SIGSTOP`, and wait until every shell thread is stopped. A previously
+   stopped shell is refused.
+3. Inspect the cgroup and its descendants while the shell cannot launch
+   anything. Only its exact read-only observer commands and their own
+   descendants may remain. Unknown, unreadable or foreign children get up
+   to ten seconds to finish, then cause refusal with their PIDs.
+4. Send `SIGKILL` through that same descriptor without resuming the shell.
+   The existing service policy restarts it and cleans up its observers.
+   Wait for an active, different process identity before saving success.
+   On a refusal or exception before termination, resume the pinned shell.
+
+This closes the launch race between inspection and termination. A normal
+restart job sends `SIGCONT` during shutdown, which would reopen that race.
+`SIGKILL` cannot execute QML or a shutdown handler. These signal semantics
+are described by [Linux signal(7)](https://man7.org/linux/man-pages/man7/signal.7.html)
+and [systemd.kill](https://github.com/systemd/systemd/blob/main/man/systemd.kill.xml).
+A PID descriptor avoids signalling a reused PID.
+
+The observer list equals the commands in `ShellState.qml`. The provenance
+bridge replaces itself with `/usr/bin/python3 -I -B` and the checkout's
+`tools/surface_provenance.py`. Accept that post-exec form only with the
+exact resolver path, repository, proc-root, stream and per-user registry
+arguments from an unredirected, single-line checkout pointer. It must still
+be a child of the shell or of an accepted observer. Arbitrary Python
+commands remain busy. Workspace and focus watches are exercised too.
+
+For GTK, query the existing GApplication owner without activation. An
+unknown or stale owner receives the existing `quit` action, with a bounded
+wait until the bus name is unowned. The next normal open loads new code.
+The user bus is derived from the executing non-root UID, with ownership,
+mode and socket validation; absence is an explicit no-session result.
+Invalid transports, failed commands and deadlines fail the apply.
 
 ## Ruled out
 
-- Notification-only handlers. A handler is dropped when a later task in the
-  play fails, and the next apply finds the copy unchanged and never
-  notifies again. That repeats the 2026-11-03 failure silently.
-- Quickshell's own file watcher. It would reload part-way through a
-  multi-file copy and load mixed versions.
-- A new QML IPC receiver for reload. The process that needs its first
-  update does not yet contain it.
-- `--reload-theme` for the recovery UI. It refreshes the palette of the
-  existing interpreter, not its code.
-- A visible "installed differs from running" notice in the shell and in
-  Diagnostics, without a refresh. It needs new QML state and a new
-  installed stamp, and it still leaves the operator to restart by hand.
-  It cannot appear in an old resident shell either, which is exactly the
-  case to cover. The refusal above already makes a pending refresh visible
-  in the apply output, and the restart itself is bounded to the managed
-  unit.
+- Notification-only handlers: a later failed task drops them, and unchanged
+  copies on retry never notify again.
+- Quickshell's watcher: it can reload an incomplete multi-file copy.
+- A new QML reload receiver or notice-only state in Diagnostics: the old
+  resident needing its first update cannot contain either receiver or
+  notice. A notice also leaves manual intervention necessary.
+- GTK `--reload-theme`: it keeps the old interpreter code.
+- Age comparisons using the current wall-clock offset: clock corrections
+  can hide updates or destroy idempotence.
+- Another cgroup sample before `try-restart`: a shell can launch a child
+  after any unsynchronized sample. Freezing only until a graceful restart
+  is insufficient because shutdown resumes the main process.
+- `KillMode=process`: it would change normal session cleanup and leave
+  unowned observer processes. Session lifecycle remains unchanged.
 
 ## Consequences and evidence
 
-Shell UI state and unsaved forms are lost; the recovery UI closes. A busy
-shell makes the apply fail until the operator finishes or closes the busy
-child; that failure is deliberate and names the PIDs. An operation that
-`privatestack-operation` has already dispatched runs in its own
-`systemd-run --user` unit (`hyperlab-operation-<id>`), outside the shell's
-control group; its bridge process still in the shell's group counts as
-busy until it exits. This refresh has no test of operation rediscovery by
-the restarted shell. The GTK `quit` action ends the recovery UI's
-process; work it started itself is not inspected by this refresh.
+Open surfaces, selection and unsaved forms are lost; GTK closes. The shell
+can be paused for up to ten seconds before a busy refusal resumes it. The
+successful replacement is deliberately abrupt, and its journal records a
+signal failure followed by the existing automatic restart. If the refresh
+script itself is forcibly killed while the shell is stopped, its cleanup
+cannot run; the operator must resume that shell before retrying. External
+session/service manipulation during this short critical section is not
+coordinated by this mechanism. These remain physical acceptance concerns.
 
-Residual cases: the unit file is copied by `host_desktop_hyprland`, whose
-play follows the common role and which by its own contract runs nothing.
-A change to the unit alone therefore reaches the running shell at the next
-apply, which finds the unit newer than the shell. Covering it in the same
-apply would need a playbook change or a refresh task in the inactive
-Hyprland component; neither is part of this decision. A wall-clock step between the shell's start and the check
-can misjudge age by the size of the step; a large forward step causes at
-most one extra refresh. Only `admin_user`'s managed shell and recovery bus
-owner are covered; manually launched Quickshell instances are outside this
-path. No compositor, session target or Machine lifecycle command is sent.
+An operation already dispatched by `privatestack-operation` runs in its own
+`hyperlab-operation-<id>` user unit. An operation bridge still in the
+shell's cgroup counts as busy. Operation rediscovery is not verified here.
+The GTK quit action ends its process; its children are not inspected. Only
+`admin_user`'s managed shell and recovery owner are covered. No compositor,
+session target or Machine lifecycle command is sent.
 
-The contract parses the real tasks, resolves the observer commands from
-`ShellState.qml`, exercises timestamps, control-group refusals, transport
-refusals and failure paths, and runs isolated Ansible copies with the real
-freshness decision: a later failure followed by a retry, a failed refresh
-followed by a retry, a unit-only change picked up by the next apply,
-already stale residents, check mode and `changed=0` passes. Installed-host behavior and the physical
-Nitro/Predator campaign remain open. The deployment-to-user-session bridge
-requires acceptance of this proposal; software verification alone is not
-hardware acceptance.
+The topology contract previously required every v1 entry to be an import;
+that approximation prevented a final deployment boundary. It now permits
+exactly the reviewed reconciliation play in exactly its final-desktop
+position. Arbitrary inline tasks, changed commands, extra roles and
+component launches remain refused. Role and import uniqueness checks stay.
+
+The contract exercises real observer argv, all-thread pausing, a real inert
+launcher with a queued post-inspection launch, busy-child survival,
+checkpoint refusals, both clock-step directions and failed unchanged
+retries. Isolated Ansible copies cover unit-only deployment followed
+immediately by `changed=0`, later failures, refresh failures, stale
+residents, unrelated helpers and check mode. Software verification does not
+establish installed Nitro or Predator behavior. Acceptance remains open.

@@ -9,83 +9,87 @@ negotiable by any of the design decisions above them.
 
 ## Installed updates and resident code
 
-Every apply compares running presentation with installed code, whether or
-not a copy changed in that apply. After the shared QML copies,
-`host_desktop_common` runs a task as `admin_user` that reads
-`hyperlab-quickshell.service` in that user's manager. If the service is
-active and its main process started before the newest installed file under
-`/etc/xdg/quickshell/hyperlab` or before the installed unit file, or the
-manager reports a pending daemon reload, the task reloads the user manager
-and uses `try-restart`. An inactive or absent service stays inactive.
-The unit itself is copied by `host_desktop_hyprland`, whose play runs
-after the common role and starts nothing, so a change to the unit alone
-reaches the running shell at the next apply. The installed time of a file
-is the later of its modification and status-change times. The QML check
-carries the `hyperlab_provenance` tag of the QML copy, so a tagged run also
-refreshes. This works with older running versions, which have no
-deployment IPC receiver. Manually launched shell processes are outside this
-managed-service path.
+Every apply compares the installed code generation with a private runtime
+checkpoint for the running presentation. `host_desktop_common` checks the
+shell after its QML copies, and `host_desktop_sway` checks the recovery UI
+after its helper copies. `v1-host.yml` checks the shell again after the
+Hyprland component's final unit deployment. A unit-only change therefore
+refreshes during that apply; the unchanged second pass sends nothing.
+Hyprland continues to stage files without running anything.
 
-Because the decision comes from state, a play that fails after the copies,
-a refresh that fails or a shell that was already stale is refreshed by the
-next apply, even though its copies are unchanged by then. A task reports
-`changed` only after an actual refresh: a current shell or no desktop
-session is `ok`, so an unchanged second apply is `changed=0`.
+The generation hashes paths and contents of all shell sources plus the
+installed service unit; `features.json` already has a live observer and is
+excluded. The recovery generation hashes its Python executable. Checkpoints
+bind a successful generation to the kernel boot ID and boot-relative
+process identity, without file-date or wall-clock comparisons. Clock steps
+cannot hide a new generation. A resident without a checkpoint gets one
+conservative refresh. Failed applies and failed refreshes leave pending
+code discoverable on unchanged retries. Only an actual refresh reports
+`changed`; current or absent surfaces report `ok`. A newly opened GTK owner
+after an absent-owner checkpoint loads the installed generation.
 
-The unit keeps `QS_DISABLE_FILE_WATCHER=1`: a tree of files is not deployed
-as one transaction, even though Ansible replaces each file atomically.
-Reloading between copies can combine incompatible versions. The cause of
-the stale installed shell was the missing post-copy refresh, not a failed
-watcher. [ADR 0059](adr/0059-resident-desktop-updates.md) records the
-deployment boundary.
+Quickshell retains `QS_DISABLE_FILE_WATCHER=1`: atomic file replacement does
+not make a multi-file directory copy atomic. A reload during copying could
+combine incompatible versions. The refresh needs no new IPC receiver in
+the old resident. Manually launched shell instances are outside this
+managed-service path. [ADR 0059](adr/0059-resident-desktop-updates.md)
+records the mechanism and alternatives.
 
-A restart ends every process in the unit's control group. Before it, the
-task lists the group and its descendant groups. The shell's own read-only
-observers may be ended, because the new shell starts them again: exactly
-the commands `ShellState.qml` runs (status polls, the workspace and focus
-watches, the trust stream, the provenance resolver and telemetry), and
-processes those observers started. Any other child, such as a Machine
-action bridge or an application still in the unit, makes the task wait up
-to ten seconds and then fail with its PIDs. Nothing is killed in that case;
-finish or close the child and apply again. An operation already dispatched
-by `privatestack-operation` runs in its own `hyperlab-operation-<id>` user
-unit and is not in the shell's group.
+The shell refresh first reloads the user's service definitions. It then
+pins the main process with a PID descriptor, sends `SIGSTOP`, confirms all
+its threads stopped, and inspects its cgroup and descendants. The shell
+cannot launch an application or action after this inspection. Only the
+exact read-only status observers in `ShellState.qml` and their own children
+may remain. The provenance observer is recognized in both its bridge form
+and its exact post-exec resolver form, validated against the checkout
+pointer. Workspace and focus watches are included.
 
-The recovery Control Center keeps the existing helper-copy loop in
-`host_desktop_sway`. After it, a task compares the installed recovery
-manager with the start time of the process that owns the GApplication bus
-name. Only when that process is older does it use the existing `quit`
-action and wait until the bus owner leaves. An absent application is not
-launched. The next ordinary `hyperlabctl open manager` starts the installed
-version; `--reload-theme` alone only refreshes the palette of the existing
-process. Changes to unrelated cockpit helpers do not retire it.
+Any other child, such as an operation bridge or application still in the
+unit, causes a wait of up to ten seconds followed by refusal with its PIDs.
+The task resumes the shell without killing those children. Finish or close
+them and reapply. Otherwise it sends `SIGKILL` to the pinned main process
+without resuming it, then waits for the existing `Restart=on-failure`
+policy to produce a different active process before recording success.
+A normal whole-unit restart could resume the old shell during shutdown and
+let it launch a child after inspection. No restart job is sent here. The
+journal will show the deliberate signal failure and automatic restart.
 
-These tasks refresh presentation processes only. Open shell surfaces,
-selection and unsaved forms are lost; a visible recovery UI closes. None of
-them sends a compositor reload, logs out the session or requests a Machine
-lifecycle operation.
+An operation already dispatched by `privatestack-operation` runs in its own
+`hyperlab-operation-<id>` user unit, outside the shell cgroup. Its bridge
+still inside that cgroup is busy. Operation rediscovery is not tested by
+this change. If the refresh script is forcibly killed while the shell is
+paused, cleanup cannot run: resume the shell before retrying. Normal
+refusals and exceptions before termination resume it automatically.
 
-The refresh script is transferred by Ansible, not installed as a runtime
-helper. It derives the bus address from the executing user's
-`/run/user/UID`, requires a user-owned mode-0700 directory and user-owned
-socket without symlink redirection, and ignores inherited session
-addresses. An absent runtime or bus explicitly reports no session. Unsafe
-transports, redirected sources, command failures, timeouts, a busy shell or
-a retained GTK bus owner fail the task. GTK bus authentication has a
-five-second cancellation deadline, separate from the five-second owner
-queries and ten-second owner-exit wait. Check mode runs neither task. Live
-`features.json` changes still use the existing file observer and are not
-counted as installed code.
+The recovery task queries its GApplication owner without activation. An
+unknown or stale owner receives the existing `quit` action and a bounded
+wait for the bus name to leave. An absent application is not launched. The
+next `hyperlabctl open manager` loads the installed code; `--reload-theme`
+only changes the existing interpreter's appearance. Unrelated helper
+changes do not retire it. The GTK task does not inspect its children.
 
-`tests/shell_reload_after_apply_contract.py` verifies the parsed deployment
-wiring and tags, the observer list against `ShellState.qml`, timestamps,
-control-group refusals, session refusals, fixed commands and failure paths.
-An isolated Ansible fixture runs the real freshness decision through a
-later failure and retry, a failed refresh and retry, a unit-only change
-picked up by the next apply,
-already stale residents, unrelated helpers, check mode and `changed=0`
-passes. This is software verification; the installed Nitro and Predator
-checks remain open.
+These tasks refresh presentation only. Open surfaces, selection and
+unsaved forms are lost; a visible recovery UI closes. They send no
+compositor reload, session logout or Machine lifecycle operation.
+
+The deployment-only script derives the bus from the executing non-root
+user's `/run/user/UID`, requiring a user-owned mode-0700 directory and
+user-owned unredirected socket. An absent runtime or bus reports no
+session. Its locked mode-0600 generation files reject redirection,
+hard links, duplicate fields and malformed input. Failed commands,
+timeouts, unsafe inputs, busy children and retained GTK owners fail the
+apply. GTK authentication and owner queries each have five-second
+limits, with a ten-second owner-exit wait. Check mode runs no refresh.
+QML reconciliation carries the copy's `hyperlab_provenance` tag.
+
+`tests/shell_reload_after_apply_contract.py` checks the parsed deployment
+order, tags and exact final task; every observer and the post-exec
+resolver; generation and transport refusals; both directions of clock
+correction; and queued launches against a real inert paused subprocess.
+Its isolated Ansible fixture covers a later failure and retry, a failed
+refresh and retry, a unit-only change followed immediately by `changed=0`,
+already stale residents, unrelated helpers and check mode. This is
+software verification; installed Nitro and Predator checks remain open.
 
 ## What the product is
 

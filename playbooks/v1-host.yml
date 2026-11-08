@@ -16,5 +16,23 @@
   vars:
     host_desktop_hyprland_session_lifecycle_enabled: true
 
+# The component above only stages files. Reconcile after its final unit copy,
+# including when an earlier apply failed after installing the same bytes.
+- name: Reconcile the resident shell after all desktop deployment
+  hosts: hypervisor
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Refresh the running HyperLab shell
+      tags: [hyperlab_provenance]
+      become: true
+      become_user: "{{ admin_user }}"
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/../roles/host_desktop_common/handlers/refresh.py quickshell"
+        executable: /usr/bin/python
+      register: host_desktop_common_final_resident_refresh
+      changed_when: (host_desktop_common_final_resident_refresh.stdout | from_json).changed
+      when: not ansible_check_mode
+
 - name: Keep the host awake while a VFIO Machine runs
   import_playbook: host-sleep-guard.yml

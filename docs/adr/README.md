@@ -618,14 +618,12 @@ remain.
 
 - [ADR 0059](0059-resident-desktop-updates.md)
   - Decision: proposed.
-  - Built: built — state-based refresh of residents older than the installed
-    code, user-session validation, busy control-group refusal and resident
-    recovery retirement, with isolated Ansible retry, idempotence and
-    transport failure checks.
+  - Built: built — content-generation checkpoints, pinned shell pause and busy
+    cgroup refusal, exact post-exec observer validation and resident recovery
+    retirement, with clock-step, launch-race, retry and idempotence checks.
   - Activation: default — after the copies in `host_desktop_common` and
-    `host_desktop_sway` through `playbooks/v1-host.yml`; the Hyprland unit
-    copy is compared by the next apply. Only existing presentation
-    processes are refreshed.
+    `host_desktop_sway` and after the Hyprland unit copy in
+    `playbooks/v1-host.yml`. Only existing presentation processes are refreshed.
   - Source: [`refresh.py`](../../roles/host_desktop_common/handlers/refresh.py),
     [`common tasks`](../../roles/host_desktop_common/tasks/main.yml),
     [`recovery tasks`](../../roles/host_desktop_sway/tasks/main.yml),

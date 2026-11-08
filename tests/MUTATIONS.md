@@ -4393,66 +4393,111 @@ for number, new, predicted in cases:
 
 ## Resident desktop updates after apply
 
-`tests/shell_reload_after_apply_contract.py` parses the real copy and
-reconciliation tasks, resolves the observer commands from `ShellState.qml`,
-exercises the deployment-only refresh script with fake transports, fake
-`/proc` and fake cgroup trees, and runs unprivileged Ansible copies and the
-real freshness decision in a temporary fixture. No production role, live
-user manager, cgroup or desktop bus is contacted. The fixture covers a
-first apply with stale residents, a later failing task followed by a retry,
-a failed refresh followed by a retry, a unit-only change picked up by the
-next apply, an unrelated
-helper, check mode and unchanged passes with `changed=0`. The GTK action
-check executes the actual application's startup method with inert GTK
-objects and verifies that its existing quit action still calls `quit()`.
+`tests/shell_reload_after_apply_contract.py` parses the deployment wiring,
+including the final post-unit reconciliation in `v1-host.yml`. It runs real
+unprivileged Ansible copies and generation decisions in temporary fixtures,
+without contacting a production host, user manager or desktop bus. It also
+uses inert subprocesses to verify pausing, post-inspection launch prevention
+and busy-child survival. GTK startup is executed with inert GTK objects to
+check that the existing quit action remains connected.
 
-For focused mutation replay, load the contract with `runpy.run_path()`.
-Call `deployment_contract()` for the deployment stage;
-`refresh_contract(load_refresh())` for the refresh stage;
-`state_contract(load_refresh(), Path(temporary_directory))` for timestamps
-and control groups; `gtk_transport_contract(load_refresh())` for the GTK
-transport stage; or `runtime_contract(load_refresh(), Path(temporary_directory))`
-for the runtime stage, each inside a fresh `TemporaryDirectory`. These are
-the same checks the complete contract invokes. Save each source before
-mutation and restore its exact saved bytes before the green run.
+Coverage includes every original observer command and interpreter form,
+the provenance resolver's exact post-exec argv and parent, both directions
+of clock correction, failed unchanged retries, a unit-only change followed
+immediately by `changed=0`, unrelated helpers, check mode and already stale
+residents. Invalid session transports and private checkpoints are refused.
 
-All cases below were run against the complete contract: each was red, the
-restored bytes matched the saved copy, and the complete contract was green
-afterwards. No mutation survived. The notification-only cases of the first
-version (removing a copy's `notify`, or a handler condition on the helper
-loop) no longer apply: R1, R2 and R15 are replaced by N1, N2 and N8.
+For focused mutation replay load the contract with `runpy.run_path()` and
+use a fresh `TemporaryDirectory` for every case. `deployment_contract()`
+checks tasks and order; `review_regressions(module, directory)` checks the
+resolver; `state_contract(module, directory)` checks generations, processes
+and cgroups (prepare the resolver fixture with `review_regressions` first);
+`checkpoint_contract`, `clock_step_contract` and `replacement_contract`
+accept the same module/directory arguments. `refresh_contract(module)`
+checks dispatch/failure paths, `runtime_contract(module, directory)` checks
+session discovery and `gtk_transport_contract(module)` checks D-Bus.
+Here `module` is `load_refresh()`. Save the source before each mutation,
+restore exactly, then run the same focused stage green. Run the complete
+contract after all sources are restored.
 
-| ID | Break | Stage | Observed red result |
+All 43 cases below were red at their focused stage, followed by a green
+run with the saved bytes restored. The first V34 attempt survived: the
+unsafe-policy test accidentally refused on a missing fake process before
+reaching the policy assertion. The fixture was strengthened to provide
+that process identity and raise immediately if unsafe policy reaches the
+pause. V34 then failed at the intended guard; all cases were rerun. No
+survivor is omitted. Checkpoint oversize and JSON-null regressions also
+went red before their input refusals were added.
+
+These replace age-based and whole-unit-restart mutations from the earlier
+implementation, as explained in ADR 0059: N13's timestamp comparison and
+R3/R10's `try-restart` checks describe mechanisms no longer used. Content
+comparison, pinned signals, restart-policy checks and failure-before-save
+replace them. Existing session, GTK transport and inactive-surface checks
+remain in the complete contract.
+
+| ID | Break | Focused stage | Observed red result |
 | --- | --- | --- | --- |
-| N1 | Condition the QML reconciliation on the copy having changed (notify-only behaviour) | deployment | `reconciliation must retry unchanged copies and skip check mode` |
-| N2 | Compare a different unit path than the one the Hyprland role installs | deployment | `installed freshness does not compare the deployed unit` |
-| N3 | Omit the unit file from the installed time | state | `service unit omitted from installed freshness` |
-| N4 | Skip the control-group sample (`while busy := []`) | state | `shell cgroup child would be killed` |
-| N5 | Stop descending into child cgroups | state | `shell cgroup child would be killed` |
-| N6 | Accept any direct shell child as an observer | state | `shell cgroup child would be killed` |
-| N7 | Add a non-`ShellState.qml` command to the observer list | state | `refresh may end exactly the read-only observers ShellState.qml starts` |
-| N8 | Ignore the GTK owner's start time (`if False:`) | refresh | `StopIteration`: the current owner was quit and the owner-query sequence ran out |
-| N9 | Refuse a busy shell without waiting | state | `busy shell refused without waiting for short work to finish` |
-| N10 | Add an un-reconciled copy into the shell config root after the check | deployment | `shell config write has no subsequent resident-state reconciliation` |
-| N11 | Drop `hyperlab_provenance` from the QML reconciliation | deployment | `a tagged apply can install shell code without reconciliation` |
-| N12 | Count the live-watched `features.json` as installed code | state | `live-watched features trigger shell restart` |
-| N13 | Use modification time only | state | `preserved modification time hides a replacement` |
-| R3 | Replace `try-restart` with `restart` | refresh | `unsafe restart argv` |
-| R4 | Bypass the absent-GTK-owner guard | refresh | `GTK age did not determine retirement` |
-| R5 | Remove the QML reconciliation's `become_user` | deployment | `refresh must run as the configured desktop user` |
-| R6 | Replace runtime directory `lstat()` with `stat()` | runtime | `redirected runtime accepted` |
-| R7 | Replace bus socket `lstat()` with `stat()` | runtime | `redirected bus accepted` |
-| R8 | Replace the GTK owner-exit loop with `while False` | refresh | `resident owner retained after quit` |
-| R9 | Remove the service-state probe's `timeout=10` | state | `KeyError: 'timeout'` in the real subprocess call arguments |
-| R10 | Set restart `check=False` | refresh | `refresh failure/deadline lost` |
-| R11 | Replace `NO_AUTO_START` with zero in the owner query | GTK transport | actual D-Bus flags differ from the required no-activation query |
-| R12 | Remove the entrypoint's `refresh_quickshell(env)` call | refresh | expected refresh once, called zero times |
-| R13 | Set unit `QS_DISABLE_FILE_WATCHER=0` | deployment | `partial deployment can trigger a file-watcher reload` |
-| R14 | Omit starting the connection-authentication deadline | GTK transport | expected timer `start()` once, called zero times |
+| V1 | Reject the post-exec provenance resolver | review | `actual post-exec provenance resolver rejected` |
+| V2 | Reject workspace-watch | state | `Shell refresh refused: shell child PIDs [45] are not read-only observers. Finish or close them, then reapply.` |
+| V3 | Reject focused-window-watch | state | `Shell refresh refused: shell child PIDs [45] are not read-only observers. Finish or close them, then reapply.` |
+| V4 | Accept arbitrary resolver arguments | review | `arbitrary resolver argv accepted` |
+| V5 | Accept a resolver parent outside the shell | state | `foreign resolver parent accepted` |
+| V6 | Accept duplicated checkout pointer lines | review | `duplicated checkout pointer accepted` |
+| V7 | Omit the pinned SIGSTOP | replacement | `signal sequence resumes before termination or fails to resume refusal` |
+| V8 | Inspect when only one thread has stopped | replacement | `not all shell threads were stopped before inspection` |
+| V9 | Resume the shell before final termination | replacement | `signal sequence resumes before termination or fails to resume refusal` |
+| V10 | Omit the final frozen cgroup inspection | replacement | `unsafe refresh sequence` |
+| V11 | Omit daemon-reload | replacement | `final inspection did not prevent launches` |
+| V12 | Ignore the installed generation | checkpoint | `clock step hides changed source` |
+| V13 | Reuse a checkpoint from another boot | checkpoint | `different boot reused checkpoint` |
+| V14 | Accept an older process across the checkpoint boundary | checkpoint | `reused PID accepted as recorded resident` |
+| V15 | Match a reused PID without its start ticks | checkpoint | `reused PID accepted as recorded resident` |
+| V16 | Follow a redirected checkpoint | checkpoint | `redirected checkpoint accepted` |
+| V17 | Ignore duplicated checkpoint fields | checkpoint | `invalid checkpoint accepted` |
+| V18 | Drop checkpoint locking | checkpoint | `concurrent reconciliation accepted` |
+| V19 | Save a generation before refreshing successfully | refresh | `checkpoint was saved before the failed replacement` |
+| V20 | Omit the installed unit from the generation | state | `service unit omitted from installed generation` |
+| V21 | Ignore installed file contents | state | `service unit omitted from installed generation` |
+| V22 | Hash live-watched features as source code | state | `live-watched features trigger shell restart` |
+| V23 | Remove final post-unit reconciliation | deployment | `final reconciliation play must contain only the reviewed task` |
+| V24 | Reconcile before the final unit deployment | deployment | `unit deployment is not followed by reconciliation` |
+| V25 | Replace the final reviewed command | deployment | `final shell reconciliation differs from the reviewed deployment task` |
+| V26 | Ignore descendant cgroups | state | `shell cgroup child would be killed` |
+| V27 | Accept any direct shell child as an observer | state | `shell cgroup child would be killed` |
+| V28 | Refuse a busy shell without bounded waiting | state | `busy shell refused without waiting for short work to finish` |
+| V29 | Ignore pending unit daemon reload | refresh | `stale unit cache ignored` |
+| V30 | Refresh an inactive service | refresh | `shell generation did not determine refresh` |
+| V31 | Activate retirement for an absent GTK owner | refresh | `GTK generation did not determine retirement` |
+| V32 | Skip the GTK owner exit wait | refresh | `resident owner retained after quit` |
+| V33 | Report success without a new shell identity | replacement | `unchanged resident identity accepted` |
+| V34 | Ignore the effective shell restart policy | replacement | `unsafe policy reached pause` |
+| V35 | Accept oversized checkpoints | checkpoint | `oversized checkpoint accepted` |
+| V36 | Skip the pinned process start identity check | replacement | `changed identity or already stopped shell accepted` |
+| V37 | Accept an unreadable or public checkpoint | checkpoint | `public checkpoint accepted` |
+| V38 | Accept JSON null as an initial checkpoint | checkpoint | `invalid checkpoint accepted` |
+| V39 | Write shell code after its reconciliation | deployment | `shell config write has no subsequent resident-state reconciliation` |
+| V40 | Condition reconciliation on changed copies | deployment | `reconciliation must retry unchanged copies and skip check mode` |
+| V41 | Drop tagged QML reconciliation | deployment | `a tagged apply can install shell code without reconciliation` |
+| V42 | Drop the configured desktop user | deployment | `refresh must run as the configured desktop user` |
+| V43 | Treat SIGKILL as a successful service exit | replacement | `unsafe policy reached pause` |
 
-The runtime fixtures also refuse root, foreign ownership, public directory
-permissions and a regular file in place of the bus. Missing runtime and bus
-have explicit no-session results. Refresh fixtures retain distinct inactive,
-missing-unit, transitional, bus-error, command-failure, command-timeout,
-busy-cgroup and retained-owner outcomes. These software cases do not
-establish an installed Nitro refresh.
+The following earlier catalogue cases still apply. Their recorded outcomes
+are from the preceding implementation round; they were not remutated in
+this round. Their unmodified checks remain in the complete contract. Other
+old cases map to V1-V43 or the retired age/notification/restart mechanisms.
+
+| Earlier ID | Break | Stage | Earlier recorded result |
+| --- | --- | --- | --- |
+| N2 | Compare a unit path different from the deployed destination | deployment | red: installed freshness does not compare the deployed unit; restored green |
+| N7 | Add a command absent from `ShellState.qml` to the observer list | state | red: observer-list equality; restored green |
+| R6 | Follow a redirected runtime directory with `stat()` | runtime | red: redirected runtime accepted; restored green |
+| R7 | Follow a redirected bus socket with `stat()` | runtime | red: redirected bus accepted; restored green |
+| R9 | Remove the service probe's ten-second timeout | state | red: missing timeout in actual argv-call check; restored green |
+| R11 | Remove `NO_AUTO_START` from the GTK owner query | GTK transport | red: actual D-Bus flags differ; restored green |
+| R12 | Remove the entrypoint's shell dispatch | refresh | red: expected refresh once, called zero times; restored green |
+| R13 | Enable the unit's file watcher | deployment | red: partial deployment can trigger a reload; restored green |
+| R14 | Omit starting the authentication cancellation timer | GTK transport | red: expected timer start once, called zero times; restored green |
+
+The complete restored contract and the repository battery must also pass.
+These software checks do not establish a physical Nitro or Predator refresh.

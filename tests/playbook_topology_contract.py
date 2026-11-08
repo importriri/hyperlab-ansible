@@ -7,7 +7,7 @@ VFIO sleep guard, each once. Its Hyprland import arms the existing
 managed-session lifecycle opt-in, and the installed Ansible engine
 evaluates the role tasks with the play's effective variables to prove the
 managed session catalog, both session targets and the Quickshell coupling
-are staged. No task runs and no host is contacted.
+are staged. A single exact reconciliation play follows final deployment. No task runs and no host is contacted.
 """
 from __future__ import annotations
 
@@ -27,6 +27,21 @@ LIFECYCLE = "host_desktop_hyprland_session_lifecycle_enabled"
 # pre_tasks, post_tasks or handlers could hide a role from this closure.
 PLAY_KEYS = {"name", "hosts", "become", "gather_facts", "roles", "vars"}
 IMPORT_KEYS = {"name", "import_playbook", "vars"}
+
+# One explicit post-deployment boundary; all other inline tasks remain refused.
+RESIDENT_REFRESH_PLAY = {
+    "name": "Reconcile the resident shell after all desktop deployment",
+    "hosts": "hypervisor", "become": True, "gather_facts": False,
+    "tasks": [{
+        "name": "Refresh the running HyperLab shell", "tags": ["hyperlab_provenance"],
+        "become": True, "become_user": "{{ admin_user }}",
+        "ansible.builtin.script": {
+            "cmd": "{{ playbook_dir }}/../roles/host_desktop_common/handlers/refresh.py quickshell",
+            "executable": "/usr/bin/python"},
+        "register": "host_desktop_common_final_resident_refresh",
+        "changed_when": "(host_desktop_common_final_resident_refresh.stdout | from_json).changed",
+        "when": "not ansible_check_mode"}],
+}
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -115,6 +130,8 @@ def playbook_closure(root: Path, entry: str) -> Closure:
                     raise ImportRefused(f"{label}: import carries {sorted(set(play) - IMPORT_KEYS)}")
                 child = resolve(path.parent, play["import_playbook"], label)
                 visit(child, scope, (*stack, path))
+                continue
+            if label == "v1-host.yml" and play == RESIDENT_REFRESH_PLAY:
                 continue
             if set(play) - PLAY_KEYS:
                 raise ImportRefused(f"{label}: play carries {sorted(set(play) - PLAY_KEYS)}")
@@ -451,12 +468,15 @@ def test_v1_host_composes_existing_targets_once() -> None:
     # The entrypoint reuses the component playbooks and copies nothing.
     assert {source for *_, source in v1.roles} == set(v1.files[1:])
     plays = yaml.load((ROOT / V1_HOST).read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
-    assert all("import_playbook" in play and set(play) <= IMPORT_KEYS for play in plays)
+    assert plays[2] == RESIDENT_REFRESH_PLAY
+    imports = [play for index, play in enumerate(plays) if index != 2]
+    assert len(plays) == 4
+    assert all("import_playbook" in play and set(play) <= IMPORT_KEYS for play in imports)
 
 
 def test_v1_host_lifecycle_opt_in_is_scoped() -> None:
     plays = yaml.load((ROOT / V1_HOST).read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
-    scoped = {play["import_playbook"]: play.get("vars") for play in plays}
+    scoped = {play["import_playbook"]: play.get("vars") for play in plays if "import_playbook" in play}
     assert scoped == {
         "lab.yml": None,
         "host-desktop-hyprland.yml": {LIFECYCLE: True},

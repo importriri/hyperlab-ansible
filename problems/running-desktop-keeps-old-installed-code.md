@@ -38,31 +38,43 @@ A first fix notified deferred handlers from the changed copies. Review
 showed that it could repeat the failure: Ansible runs notified handlers at
 the end of the play, so a later failing task drops them, and the next apply
 finds the copies unchanged and never notifies again. The fix now decides
-from state on every apply. After the copies, a task run as the desktop user
-compares the newest installed shell file and the unit file with the start
-time of the active shell's main process, and restarts only an active,
-older shell. A second task compares the recovery manager executable with
-the start time of the GApplication bus owner and uses its existing quit
-action only when that owner is older. Either task reports `changed` only
-after an actual refresh, so an unchanged pass stays `changed=0`, and a
-failed earlier apply or an already stale resident is corrected next time.
+from state on every apply, with content-generation checkpoints bound to
+boot-relative process identities. It never reconstructs an old start date
+from today's realtime offset: a forward clock correction could hide an
+update indefinitely, while a backward step could repeatedly restart it.
+A failed refresh does not advance the checkpoint, so unchanged retries
+still find the installed generation pending.
 
-The same review found that the restart ends every process in the unit's
-control group, and the shell always runs watcher children there. The
-refresh therefore ends only the read-only observers that `ShellState.qml`
-starts (and their own helpers). Any other child makes it wait briefly and
-then refuse with the PIDs, killing nothing. No compositor reload or
-Machine operation is requested. Both tasks work with the older resident
-versions because they use existing control routes.
+The shell's provenance bridge uses `exec` to become the checkout's Python
+resolver. Matching only the bridge argv falsely marked this permanent
+observer busy. The check now validates the resolver's exact path, flags,
+repository, proc-root, registry and parent. Every original observer command,
+including workspace and focus watches, is exercised too.
 
-The proposed deployment boundary and UI-state consequences are in
-[ADR 0059](../docs/adr/0059-resident-desktop-updates.md). The structural and
-behavioral contract is `tests/shell_reload_after_apply_contract.py`;
-mutations are recorded in `tests/MUTATIONS.md`. Software checks cover a
-later failure and retry, a failed refresh and retry, a unit-only change
-picked up by the next apply,
-already stale residents, check mode, inactive surfaces, busy control
-groups, redirected transports and an unchanged second apply. Physical
-acceptance still requires a changed symbol appearing after a host apply
-without an operator restart, then an unchanged pass with no refresh, and a
-recovery manager open that displays the newly installed code.
+A cgroup sample followed by a restart also had a launch race: an action or
+application could appear after inspection and be killed by shutdown. The
+refresh now reloads the manager first, pauses the pinned shell process and
+confirms every thread stopped before inspecting the cgroup and descendants.
+Unknown children cause a bounded refusal and the shell resumes, killing
+nothing. Otherwise the still-paused main process receives a pinned
+`SIGKILL`; its existing on-failure service policy starts a new shell and
+cleans up the read-only observers. No normal restart job can resume the
+old shell between inspection and termination.
+
+Finally, the Hyprland component copies the service unit after the common
+role. Reconciling only in the common role left unit-only changes pending
+until an unchanged second apply. A final play in `v1-host.yml` now checks
+after that unit copy, while Hyprland remains staging-only. The topology
+contract permits exactly that final task and continues to refuse arbitrary
+inline tasks and component launches. The immediate second pass is inert.
+
+The proposed boundary and UI-state consequences are in
+[ADR 0059](../docs/adr/0059-resident-desktop-updates.md). The contract is
+`tests/shell_reload_after_apply_contract.py`; mutations are recorded in
+`tests/MUTATIONS.md`. Software checks include both clock-step directions,
+failed unchanged retries, a real inert launcher queued after inspection,
+busy-child survival, exact observer identities, unit-only deployment and
+an immediate `changed=0` pass. They send no compositor reload or Machine
+operation. Physical acceptance still requires a changed symbol appearing
+after a host apply without an operator restart, a recovery manager open
+showing the installed code, and an unchanged apply with no refresh.
