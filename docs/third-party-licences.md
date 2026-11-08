@@ -114,7 +114,7 @@ its copyright line filled in: after whitespace normalisation the text from
 
 | Files | Generator and inputs | Re-run on 2026-10-27 |
 | --- | --- | --- |
-| `roles/host_desktop_common/files/wallpapers/isolation-ring-*.png` (8) | `tools/wallpaper/render_isolation_ring.py` | byte-identical with Qt 6.11.2 `qmlscene` (software rasteriser) |
+| `roles/host_desktop_common/files/wallpapers/isolation-ring-*.png` (8) | `tools/wallpaper/render_isolation_ring.py` and shared `pool_material.py` | superseded by the native v3 material regeneration below |
 | `roles/host_desktop_common/files/wallpapers/contained-planes-*.png` (4) | `tools/wallpaper/render_contained_planes.py` | byte-identical with Qt 6.11.2 `qmlscene` |
 | `roles/host_desktop_sway/files/palette/{green,violet,blue,red}/*` (32) | `tools/palette/render_palette.py <variant>` from `tools/palette/palette.yml` | byte-identical |
 | `themes/trust-model/rendered/*` (10) and `themes/trust-model/preview.html` | `tools/theme_render.py trust-model --preview` | byte-identical |
@@ -152,6 +152,30 @@ V3 is now the host trust-model and managed guest wallpaper source.
 `hyperlab-trust-v2` remains reviewed rollback material without being deployed
 by default. Keeping its bytes does not resolve S1 or grant redistribution
 rights for that older pool.
+
+### Native product and lock materials (2026-11-08)
+
+The eight `isolation-ring-*.png` files are rendered directly at 3840×2160,
+1920×1080, 2560×1600 and 3440×1440 by
+`tools/wallpaper/render_isolation_ring.py`. It shares the v3 scene and capture
+in `tools/wallpaper/pool_material.py` with `render_trust_pool.py`. The static
+family supplies neutral RGB without reading the trust palette. Grain comes
+from fixed coordinate seeds; no third-party image, font or texture is read.
+The earlier HOST images were visual references only. Their pixels, words,
+reticles and construction lines are not part of the generated assets.
+
+The byte reference for this regeneration is Qt 6.11.2 with its software
+backend and zlib 1.3.2. Native RGB is captured through Qt and encoded
+losslessly as unfiltered RGB PNG using Python's standard-library zlib at
+level 9. Each PNG is at most 5 MiB; the encoding changes no decoded pixels.
+The asset contract pins all eight hashes and regenerates native outputs,
+comparing every decoded RGB pixel, negative space and neutral core pixels.
+The pool's twelve committed images and manifest remain unchanged after
+extraction. Source, helper, contract and product asset inventory rows are
+updated for this regeneration; unrelated rows retain their audit dates.
+Terms continue to rest on the root MIT declaration for the generators and
+inputs. [ADR 0058](adr/0058-product-wallpaper-pool-materials.md) records the
+proposed art-direction change. Physical acceptance remains open.
 
 ### Patches of upstream source
 

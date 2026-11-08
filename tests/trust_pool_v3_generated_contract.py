@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterable, Iterator
 import hashlib
 from itertools import accumulate
 import importlib.util
@@ -14,6 +15,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import zlib
@@ -22,6 +24,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 RENDERER = ROOT / "tools/wallpaper/render_trust_pool.py"
+SHARED = ROOT / "tools/wallpaper/pool_material.py"
+PRODUCT = ROOT / "tools/wallpaper/render_isolation_ring.py"
 POOL = ROOT / "themes/assets/trust-pool-v3"
 PALETTE = ROOT / "tools/palette/palette.yml"
 IDENTITIES = ("host", "clean", "dev", "services", "dirty", "lab")
@@ -36,8 +40,14 @@ def require(condition: bool, message: str) -> None:
 
 
 def source_contract() -> None:
-    require(RENDERER.is_file(), "renderer missing")
-    source = RENDERER.read_text(encoding="utf-8")
+    require(SHARED.is_file(), "shared v3 material missing")
+    for path in (SHARED, RENDERER, PRODUCT):
+        source_file_contract(path)
+
+
+def source_file_contract(path: Path) -> None:
+    require(path.is_file(), f"renderer missing: {path}")
+    source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     strings = [node.value for node in ast.walk(tree)
                if isinstance(node, ast.Constant) and isinstance(node.value, str)]
@@ -61,16 +71,26 @@ def source_contract() -> None:
                 for item in node.elts):
             numeric_triples.append(list(ast.literal_eval(node)))
     content = "\n".join(strings + names)
+    require(not set(names).intersection({"random", "datetime", "urllib", "requests"})
+            and not re.search(r"\b(?:Math\.random|Date|time\.time)\b", source + "\n" + content),
+            "non-deterministic material input")
     require(not re.search(r"\b(?:fillText|strokeText|reticle|crosshair)\b|\bText\s*\{|font(?:[._ ]?family)?",
                           content, re.IGNORECASE), "text or reticle primitive in renderer")
     scenes = [node.value for node in tree.body if isinstance(node, ast.Assign)
               and any(isinstance(target, ast.Name) and target.id == "SCENE" for target in node.targets)]
-    require(len(scenes) == 1, "missing or duplicate literal scene")
-    scene = ast.literal_eval(scenes[0])
+    if path == SHARED:
+        require(len(scenes) == 1, "missing or duplicate literal scene")
+        scene = ast.literal_eval(scenes[0])
+    else:
+        require(not scenes, f"wrapper duplicates shared scene: {path}")
+        imports = [node for node in tree.body if isinstance(node, ast.Import)
+                   for alias in node.names if alias.name == "pool_material"]
+        require(len(imports) == 1, f"wrapper must import shared materials: {path}")
+        scene = "\n".join(strings)
     # Pixel materials are the sole paint operation; line/path/label primitives
     # would allow screen furniture to escape the geometry's surface masks.
     operations = set(re.findall(r"\bctx\s*\.\s*(\w+)\s*\(", scene))
-    require(operations == {"createImageData", "putImageData"},
+    require(operations == ({"createImageData", "putImageData"} if path == SHARED else set()),
             f"unexpected Canvas drawing operations: {operations}")
     palette = yaml.safe_load(PALETTE.read_text(encoding="utf-8"))["domains"]
     for identity in IDENTITIES:
@@ -125,33 +145,29 @@ def input_contract(module: object, directory: Path) -> None:
 
 
 def geometry_contract() -> dict[str, float]:
-    """Link the pool to the product source pinned by the geometry B contract."""
-    ratios = []
-    for path in (ROOT / "tools/wallpaper/render_isolation_ring.py", RENDERER):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        scenes = [node.value for node in tree.body if isinstance(node, ast.Assign)
-                  and any(isinstance(target, ast.Name) and target.id == "SCENE"
-                          for target in node.targets)]
-        require(len(scenes) == 1, f"missing or duplicate scene: {path}")
-        scene = ast.literal_eval(scenes[0])
-        values = {}
-        for key in GEOMETRY_KEYS:
-            matches = re.findall(r"(?m)^\s*readonly property real " + key
-                                 + r":\s*([0-9]+(?:\.[0-9]+)?)\s*$", scene)
-            require(len(matches) == 1, f"missing or duplicate geometry ratio: {path}/{key}")
-            values[key] = float(matches[0])
-        ratios.append(values)
-    require(ratios[0] == ratios[1], "pool geometry differs from product symbol")
-    return ratios[0]
+    """Read the shared ratios pinned by the executable product geometry contract."""
+    tree = ast.parse(SHARED.read_text(encoding="utf-8"))
+    scenes = [node.value for node in tree.body if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "SCENE"
+                      for target in node.targets)]
+    require(len(scenes) == 1, "missing or duplicate shared scene")
+    scene = ast.literal_eval(scenes[0])
+    values = {}
+    for key in GEOMETRY_KEYS:
+        matches = re.findall(r"(?m)^\s*readonly property real " + key
+                             + r":\s*([0-9]+(?:\.[0-9]+)?)\s*$", scene)
+        require(len(matches) == 1, f"missing or duplicate geometry ratio: {key}")
+        values[key] = float(matches[0])
+    return values
 
 
-def png_pixels(path: Path) -> bytes:
+def png_pixels(path: Path, size: tuple[int, int] = (1672, 941)) -> bytes:
     """Decode the entire opaque capture to RGB, independent of PNG compression."""
     source = path.read_bytes()
     require(source[:8] == b"\x89PNG\r\n\x1a\n" and len(source) >= 33, "invalid PNG capture")
     width, height, depth, kind, compression, filtering, interlace = struct.unpack(
         ">IIBBBBB", source[16:29])
-    require((width, height, depth, compression, filtering, interlace) == (1672, 941, 8, 0, 0, 0)
+    require((width, height, depth, compression, filtering, interlace) == (*size, 8, 0, 0, 0)
             and kind in (2, 6), "unexpected capture geometry or pixel format")
     compressed = bytearray()
     offset = 8
@@ -210,41 +226,45 @@ def png_pixels(path: Path) -> bytes:
     return bytes(pixels)
 
 
-def png_samples(path: Path, coordinates: list[tuple[int, int]]) -> list[list[int]]:
-    pixels = png_pixels(path)
-    return [list(pixels[(y * 1672 + x) * 3:(y * 1672 + x) * 3 + 3]) for x, y in coordinates]
+def png_samples(path: Path, coordinates: list[tuple[int, int]],
+                size: tuple[int, int] = (1672, 941)) -> list[list[int]]:
+    pixels = png_pixels(path, size)
+    return [list(pixels[(y * size[0] + x) * 3:(y * size[0] + x) * 3 + 3]) for x, y in coordinates]
 
 
-def ground_offsets(variant: str, ratios: dict[str, float]) -> list[int]:
+def ground_offsets(variant: str, ratios: dict[str, float],
+                   size: tuple[int, int] = (1672, 941),
+                   placement: tuple[float, float, float] | None = None) -> Iterator[int]:
     """Every negative-space pixel, leaving one pixel for surface antialiasing."""
-    cx, radius = ((1672 * 0.5, 941 * 0.33) if variant == "01"
-                  else (1672 * 0.75, 941 * 0.26))
+    width, height = size
+    centre, cy, fraction = placement or ((0.5, 0.5, 0.33) if variant == "01"
+                                        else (0.75, 0.5, 0.26))
+    cx, cy, radius = width * centre, height * cy, height * fraction
     core = (radius * ratios["coreRadiusRatio"] + 1) ** 2
     ring_inner = (radius * (ratios["ringRadiusRatio"] - ratios["ringStrokeRatio"] / 2) - 1) ** 2
     ring_outer = (radius * (ratios["ringRadiusRatio"] + ratios["ringStrokeRatio"] / 2) + 1) ** 2
     arc_inner = (radius * ratios["arcInnerRatio"] - 1) ** 2
     arc_outer = (radius + 1) ** 2
     cut = radius * ratios["cutRatio"] - 1
-    offsets = []
-    for y in range(941):
-        dy2 = (y + 0.5 - 941 * 0.5) ** 2
-        for x in range(1672):
+    for y in range(height):
+        dy2 = (y + 0.5 - cy) ** 2
+        for x in range(width):
             dx = x + 0.5 - cx
             d2 = dx * dx + dy2
             if (d2 <= core or ring_inner <= d2 <= ring_outer
                     or (arc_inner <= d2 <= arc_outer and abs(dx) >= cut)):
                 continue
-            offsets.append((y * 1672 + x) * 3)
-    return offsets
+            yield (y * width + x) * 3
 
 
-def ground_contract(pixels: bytes, offsets: list[int], where: Path) -> None:
+def ground_contract(pixels: bytes, offsets: Iterable[int], where: Path,
+                    size: tuple[int, int] = (1672, 941)) -> None:
     # Documented #07090d–#151b23 ground, plus 1.1 grain and byte rounding:
     # two integer levels of margin per channel, including silhouettes.
     for offset in offsets:
         if not (5 <= pixels[offset] <= 23 and 7 <= pixels[offset + 1] <= 29
                 and 11 <= pixels[offset + 2] <= 37):
-            y, x = divmod(offset // 3, 1672)
+            y, x = divmod(offset // 3, size[0])
             require(False, f"non-ground pixel in geometry gap: {where} at ({x}, {y})")
 
 
@@ -367,12 +387,13 @@ def main() -> int:
     expected = {Path("manifest.yml")} | {Path(f"images/{identity}/{variant}.png")
                for identity in IDENTITIES for variant in ("01", "02")}
     committed_manifest = pool_manifest(POOL, expected)
-    offsets = {variant: ground_offsets(variant, ratios) for variant in ("01", "02")}
+    offsets = {variant: list(ground_offsets(variant, ratios)) for variant in ("01", "02")}
     committed_pixels = {}
     for relative in sorted(expected - {Path("manifest.yml")}):
         pixels = png_pixels(POOL / relative)
         ground_contract(pixels, offsets[relative.stem], relative)
         committed_pixels[relative] = pixels
+    sys.path.insert(0, str(RENDERER.parent))
     spec = importlib.util.spec_from_file_location("trust_pool_renderer", RENDERER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

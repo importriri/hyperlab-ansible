@@ -25,7 +25,7 @@ coverage check against repository sources, so the guest surfaces escaped it.
 
 ## Fix
 
-Extend ADR 0058 and the open release item with the known missing files.
+Extend ADR 0059 and the open release item with the known missing files.
 Describe the inventory as known at `db7c99b`, without claiming exhaustiveness.
 Keep host and guest lock/login surfaces deferred with their deployment
 readers, rather than changing their runtime input during documentation work.

@@ -4,6 +4,9 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`product-wallpaper-material-and-resolution.md`](product-wallpaper-material-and-resolution.md):
+  product relief lacked the preferred stone and sphere materials; native
+  product rendering now shares v3, while the engine pins pool resolution.
 - [`product-reader-edge-divergence.md`](product-reader-edge-divergence.md):
   newline translation, locale ranges and symlink following made product
   identity readers disagree on the same input.

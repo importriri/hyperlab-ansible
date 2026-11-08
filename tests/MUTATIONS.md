@@ -3361,6 +3361,102 @@ V3-30 compares the copied and original pools through `pool_manifest`, with
 restores the saved manifest and requires equality. These temporary-copy
 fixtures leave the versioned pool untouched.
 
+## Native product and lock wallpapers with shared v3 materials
+
+ADR 0058 supersedes the wallpaper relief treatment in ADR 0056. The glyph
+path checks above remain intact. Wallpaper-only relief command mutations
+are replaced by executed native shader masks and saved-pixel checks; the
+shared helper now owns the five full-form geometry ratios. Pool source
+mutations target that helper where the literal scene formerly lived in
+`render_trust_pool.py`. No pool geometry, policy, hash or pixel tolerance
+was broadened.
+
+Before extraction, the extended source and identity contracts both failed
+with `shared v3 material missing`. After extraction, all twelve pool
+renders remained pixel-exact against the unchanged committed images.
+The product contract checks all eight native renders, independent pinned
+hashes, negative space and every fully covered neutral core pixel. Product
+material probes cover all four sizes and both variants, vertical cuts,
+circular gaps and captured pixels. Source checks cover the shared helper
+and both entry points.
+
+Each mutation below was applied after copying the changed file, rejected
+by the named check, restored byte-for-byte and observed green on that same
+check. Stage checks are the same functions called by the complete contracts;
+they avoid regenerating all native outputs for a source or configuration
+failure. The full contracts run again after restoration through verification.
+There were 18 red mutations and no surviving broken invariant. P-19 is an
+explicit green compression control.
+
+| Mutation | Check | Observed result |
+| --- | --- | --- |
+| P-01: add `ctx.fillText("bad", 0, 0)` to shared `draw` | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-02: add a `ctx.fillText` expression string in the product entry point | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-03: add a `ctx.fillText` expression string in the pool entry point | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-04: add `ctx.stroke()` to shared `draw` | pool `source_contract()` | red: `unexpected Canvas drawing operations`; restored green |
+| P-05: add a `reticle` declaration in shared `draw` | pool `source_contract()` | red: `text or reticle primitive in renderer`; restored green |
+| P-06: change product neutral RGB from `(147, 147, 147)` to `(147, 159, 147)` | product executed material probe, `check_renderer` at 1920×1080 | red: `renderer: neutral sphere is tinted`; restored green |
+| P-07: disable the pool HOST desaturation branch | pool `material_contract()` | red: `capture differs from material: host/01`; restored green |
+| P-08: change shared `cutRatio` from `0.41` to `0.42` | product material probe | red: `renderer: cutRatio must be 0.41`; restored green |
+| P-09: change shared `ringRadiusRatio` from `0.555` to `0.556` | product material probe | red: `renderer: ringRadiusRatio must be 0.555`; restored green |
+| P-10: change shared `coreRadiusRatio` from `0.413` to `0.414` | product material probe | red: `renderer: coreRadiusRatio must be 0.413`; restored green |
+| P-11: map the product 1920×1080 filename to `(1672, 941)` | identity `configuration_contract()` | red: `native output sizes changed`; restored green |
+| P-12: replace shared native canvas width with `1672` | product material probe | red: `renderer: mark scale or centre changed`; restored green |
+| P-13: remove lock attenuation by changing `0.55` to `1.0` | lock material probe | red: `renderer: lock material attenuation`; restored green |
+| P-14: keep output dimensions but pass `(1672, 941)` to the product's shared scene builder | identity `configuration_contract()` | red: `product bypasses shared v3 drawing`; restored green |
+| P-15: replace the shared ground's coordinate grain with `Math.random()` | pool `source_contract()` | red: `non-deterministic material input`; restored green |
+| P-16: change the last pixel of a copied native product PNG to `(12, 15, 20)`, with valid chunks and CRCs | identity `capture_contract()` against the unchanged original | red: `native generated pixel drift`; restored green |
+| P-17: add a grey `(90, 90, 90)` corner pixel at `(2, 2)` in a copied native product PNG | `ground_contract()` with native dimensions and product placement | red: `non-ground pixel in geometry gap`; restored green |
+| P-18: tint the copied native product's interior core pixel at `(998, 518)` to `(80, 82, 80)` | identity `neutral_core_contract()` | red: `neutral sphere is tinted`; restored green |
+| P-19: encode the original native pixels as opaque RGB with unfiltered scanlines and new compression | identity `capture_contract()` | green: identical decoded pixels, ground and neutral core |
+
+To replay the source stages, import the listed contract with `tests/` and
+`tools/wallpaper/` on `sys.path`. For product/lock material stages, load the
+production `scene((1920, 1080), variant, output)`, remove its `onPaint`
+capture handler, append `RENDERER_CHECK` and execute it with the contract's
+`run`; pass its record to `check_renderer`. This is the identical inspection
+used for each native size in `main`. Save and restore the source around
+one mutation at a time.
+
+P-16 through P-19 use a copied original PNG. Decode its RGB with
+`png_pixels(path, (1920, 1080))`, change only the specified pixel, then encode
+a complete non-interlaced eight-bit RGB PNG with filter-zero scanlines and
+valid CRCs. Restore from the saved copy before checking green. P-16 passes
+the original and copied paths to `capture_contract`; P-17 supplies product
+placement `(0.52, 0.48, 0.23)` to `ground_offsets`; P-18 passes diameter
+`0.46` to `neutral_core_contract`. These fixtures leave committed images
+untouched. SHA pinning remains a separate earlier gate in the full identity
+contract; the native pixel stages do not depend on a stale hash to detect
+artwork changes.
+
+### Lossless native PNG file budget
+
+The two original 4K material captures were 6,930,410 and 6,929,379 bytes.
+The new identity size stage failed on the product 4K capture before the
+encoding repair. It checks the 5 MiB ceiling independently for committed
+assets and every freshly generated PNG. Hash pinning, native dimensions
+and exact decoded RGB comparisons remain unchanged.
+
+Qt's shared capture now supplies temporary eight-bit RGB PPM to the product
+entry point. That entry point writes unfiltered RGB PNG with zlib level 9;
+the pool still uses its original PNG path. The configuration stage intercepts
+the shared capture, supplies known RGB pixels and checks the actual encoded
+PNG. It also supplies wrong dimensions, a missing byte and an extra byte:
+all must be refused before encoding. Before implementation, that stage
+failed with `invalid PNG capture` because the old wrapper did not encode RGB.
+
+| Mutation | Check | Observed result |
+| --- | --- | --- |
+| P-20: insert a valid `tEXt` chunk with 5 MiB of padding before `IEND` in a copied native PNG; retain every pixel and a valid CRC | identity `file_budget_contract()`; independently decode and compare the unchanged RGB | red: `identity PNG exceeds 5 MiB`; restored green |
+| P-21: remove the native PPM header and payload-length refusal from the product renderer | identity `configuration_contract()` with invalid RGB captures | red: `product accepted invalid native RGB capture`; restored green |
+
+Both mutated files were copied before modification and restored from their
+saved copies. P-20 uses a copy of the 1920×1080 product PNG; build the padding
+as PNG `tEXt` type plus `padding\0`, 5 MiB of `x` bytes and its CRC, preceded
+by the four-byte payload length. P-21 removes only the condition and its
+`unexpected native RGB capture` exception, leaving capture and encoding in
+place. No check, size ceiling or pixel requirement is weakened.
+
 ## Product display name
 
 `tests/product_display_name_contract.py` tokenizes QML string literals,
@@ -3437,7 +3533,7 @@ The deployed file now carries both `name` and `byline`. Focus and notification
 helpers validate it directly; CLI banners use only their own checkout. The
 old PD-21 banner-guard mutation is superseded by PD-40's input-guard mutation.
 The byline change that was rejected by PD-15 is now a valid shared-input
-control (PD-41); consumer drift is rejected by PD-32. ADR 0058 explains the
+control (PD-41); consumer drift is rejected by PD-32. ADR 0059 explains the
 narrow installed-session documentation exception and the deferred visible
 surfaces, which remain open in the release roadmap.
 
@@ -3487,7 +3583,7 @@ For each input, root help, nested panic help and version must still refuse
 with exit 2, the usual diagnostic and no traceback. No emergency stop is
 engaged and no live runtime state is read by these fixtures.
 
-The deferred-surface check requires every inventoried file in ADR 0058 and
+The deferred-surface check requires every inventoried file in ADR 0059 and
 specifically in the open roadmap item. An AST scan inventories old-name
 `Refused(...)` literals from the machine-action bridge. The Bash-reader
 stage compares all four extracted `product_name()` bodies and exercises
@@ -3501,7 +3597,7 @@ checked independently through both structure and notification behavior.
 | ID | Mutation | Stage | Observed result |
 | --- | --- | --- | --- |
 | PD-45 | Remove `privatestack-operation.py` from the open roadmap item | deferred inventory | red: operation surface omitted from open roadmap item; restored green |
-| PD-46 | Remove one old-name bridge refusal from ADR 0058 | AST refusal inventory | red: bridge refusal omitted from ADR inventory; restored green |
+| PD-46 | Remove one old-name bridge refusal from ADR 0059 | AST refusal inventory | red: bridge refusal omitted from ADR inventory; restored green |
 | PD-47 | Read identity in `build_parser()` again | CLI entry point | red: missing display input blocks emergency-stop status dispatch; restored green |
 | PD-48 | Change one character in the Waybar reader's document pattern | Bash reader equality | red: product readers differ; restored green |
 | PD-49 | Replace the theme reader's parent loop with leaf-only symlink refusal | Bash equality and notification argv | both red: reader drift and notification accepts redirected parent; both restored green |
@@ -3509,7 +3605,7 @@ checked independently through both structure and notification behavior.
 | PD-51 | Add an unlisted old-name `Refused(...)` literal to the machine bridge | AST refusal inventory | red: new old-name bridge refusal outside inventory; restored green |
 
 The display-only behavior supersedes the previous whole-parser refusal;
-ADR 0058 explains why emergency stop cannot depend on cosmetic identity.
+ADR 0059 explains why emergency stop cannot depend on cosmetic identity.
 
 ### Shared reader edges and known deferred surfaces
 
@@ -3571,7 +3667,7 @@ locale whose unguarded Bash ranges actually accept the accented control.
 PD-59 was repeated: identical readers without their local C setting still
 pass the equality check, but reject parity under `en_US.utf8` by accepting
 the accented input. No root execution is claimed: PD-62 remains the recorded
-normal-user survivor, and ADR 0058 labels the stronger behavior intended and
+normal-user survivor, and ADR 0059 labels the stronger behavior intended and
 unverified.
 
 Each file was copied before mutation and restored byte-for-byte; the extra

@@ -316,10 +316,10 @@ def deferred_surface_contract() -> None:
     roadmap = (ROOT / "docs/roadmap.md").read_text()
     open_items = re.findall(r"(?m)^- \[ \] Finish the visible name migration[^\n]*(?:\n +[^\n]*)*", roadmap)
     require(len(open_items) == 1, "deferred visible migration is not open exactly once")
-    adr = (ROOT / "docs/adr/0058-visible-name-migration-boundary.md").read_text()
+    adr = (ROOT / "docs/adr/0059-visible-name-migration-boundary.md").read_text()
     for filename in inventory:
         require((ROOT / filename).is_file(), f"missing deferred surface: {filename}")
-        for label, source in (("open roadmap item", open_items[0]), ("ADR 0058", adr)):
+        for label, source in (("open roadmap item", open_items[0]), ("ADR 0059", adr)):
             label_path = filename if filename.endswith(("tasks/main.yml", "defaults/main.yml")) else Path(filename).name
             require(f"`{label_path}`" in source,
                     f"visible legacy surface omitted from {label}: {filename}")

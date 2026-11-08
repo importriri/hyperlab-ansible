@@ -23,8 +23,11 @@ radius. Below 33 units the glyph omits the ring and uses a 0.435 R core.
 
 `IsolationGlyph.qml` draws that geometry at 18 units in the rail and 24 on
 the idle desktop. `tools/wallpaper/render_isolation_ring.py` renders the same
-geometry as architectural relief cut into a graphite ground, under a broad
-upper-left light.
+geometry with the v3 pool materials: seeded near-black ground, light
+stone-grained grey arcs lit from the upper left, a thin grey ring and a
+neutral textured sphere. The operator rejected the flat wallpaper relief on
+2026-11-03; [ADR 0058](adr/0058-product-wallpaper-pool-materials.md) records
+the proposed implementation of that direction. The shell glyph stays as it is.
 
 ```sh
 python3 tools/wallpaper/render_isolation_ring.py --print-hashes
@@ -35,18 +38,31 @@ Two variants come from one geometry:
 | Variant | Mark diameter | Use |
 | --- | --- | --- |
 | `isolation-ring` | 46% of the shorter side | the everyday product ground |
-| `isolation-ring-lock` | 40%, darker, quieter | the lock surface |
+| `isolation-ring-lock` | 40%, 55% material strength | the lock surface |
 
-Both are rendered at 3840×2160, 1920×1080, 2560×1600 and 3440×1440. The
+Both are rendered natively at 3840×2160, 1920×1080, 2560×1600 and
+3440×1440. No smaller bitmap is scaled into these outputs. The
 master is deployed as `/usr/share/backgrounds/hyperlab/product.png` (the
 `product` wallpaper mode) and `/usr/share/backgrounds/hyperlab/lock.png`.
 
-Rendering goes through Qt's software rasteriser, so output is byte-stable for
-a given Qt release. `tests/host_identity_asset_contract.py` pins every output
-by SHA256: regenerating the family is a reviewed change, never a silent one.
-`tests/product_symbol_geometry_contract.py` executes both implementations to
-check their numerical constants, vertical cuts and actual drawing paths.
-Geometry B is software-verified; its physical acceptance remains open.
+Rendering goes through Qt's software rasteriser, so product output is
+byte-stable for given Qt and zlib releases.
+`tests/host_identity_asset_contract.py` pins every output by SHA256 and
+enforces a 5 MiB limit on committed and regenerated PNGs.
+The product entry point captures native RGB through the shared Qt scene,
+then writes unfiltered PNG scanlines with zlib level 9. This lossless encoding
+keeps the 4K grain within the file budget without scaling or quantisation.
+The contract regenerates all eight, comparing every decoded RGB pixel,
+negative space and fully covered neutral core pixels. Regenerating the
+family is a reviewed change. `tests/product_symbol_geometry_contract.py`
+executes shell paths and the shared wallpaper shader to check numerical
+constants, vertical cuts, material boundaries, native dimensions and actual
+capture samples. Source restrictions cover both entry points and their shared
+`tools/wallpaper/pool_material.py`; only native pixel-buffer painting is
+allowed. The static product has no trust identity or palette input: its core
+uses neutral RGB (147, 147, 147), matching the current v3 HOST material.
+Geometry B and these materials are software-verified; physical acceptance
+remains open.
 
 "Contained Planes" (`render_contained_planes.py`) stays installed as reviewed
 rollback material until the identity family passes physical acceptance on
@@ -59,6 +75,8 @@ both compositors.
 - **Dark, low-saturation ground** in the `#07090d`–`#151b23` range, so
   foreground text at `#f0f6fc` and the six provenance colours read at full
   contrast anywhere on it.
+- No construction lines, however faint: detached guide lines count as HUD
+  marks. Stone grain and sphere texture stay inside the symbol's surfaces.
 - **Depth, not glow.** Soft directional light; no neon, no glowing lines, no
   lens flares, no RGB gaming look.
 - **Quiet where the product sits.** The top 37 units belong to the rail, and
@@ -90,8 +108,11 @@ python3 tools/wallpaper/render_trust_pool.py --print-hashes
 python3 tests/trust_pool_v3_generated_contract.py
 ```
 
-The renderer writes twelve 1672×941 PNGs and their SHA-256 manifest. The schema,
-six identities, two variants each, 30-minute rotation within the current
+The renderer writes twelve 1672×941 PNGs and their SHA-256 manifest. That
+size is retained because the trust engine requires the exact geometry mapping;
+3840×2160 needs a separate engine-contract change (see the
+[resolution constraint](../problems/product-wallpaper-material-and-resolution.md)).
+The schema, six identities, two variants each, 30-minute rotation within the current
 identity and authority fields are unchanged from v2. Every `trust_color` is
 read from `tools/palette/palette.yml` (`domains`), never inferred from artwork.
 The palette must be a regular, readable file with unique keys and all six
@@ -118,9 +139,10 @@ the parsed manifest policy. Compression and metadata bytes may differ between
 Qt releases; image pixels may not. Every pixel outside the symbol or in its
 core/ring/arc gaps and vertical cuts must remain within the documented ground
 range plus two byte levels for grain and rounding, with a one-pixel margin
-around material edges. The contract also links the geometry ratios directly
-to the product renderer, probes material boundaries, refuses typography and
-extra drawing primitives, and checks host and guest deployment sources. Its source check rejects identity colours
+around material edges. The contract reads the shared geometry ratios pinned
+by the product geometry contract, probes material boundaries, refuses typography and extra drawing
+primitives in the helper and both entry points, and checks host and guest
+deployment sources. Its source check rejects identity colours
 as strings, RGB triples or packed numeric literals in Python and QML, so a
 constant matching today's palette cannot silently replace palette input.
 

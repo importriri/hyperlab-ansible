@@ -36,7 +36,7 @@ site without changing a completed operation's success. The CLI loads identity
 only when formatting help or invoking its custom version action, inside the
 normal error boundary. Invalid data refuses these displays with exit 2 and no
 fallback name. Operational dispatch, including emergency stop, never reads
-this cosmetic input. ADR 0058 records the distinction from policy inputs.
+this cosmetic input. ADR 0059 records the distinction from policy inputs.
 
 ## Regression proof
 

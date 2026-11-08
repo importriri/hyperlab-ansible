@@ -1,4 +1,4 @@
-# ADR 0058 - Record the remaining visible name migration
+# ADR 0059 - Record the remaining visible name migration
 
 Status: Proposed.
 

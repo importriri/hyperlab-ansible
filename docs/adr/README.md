@@ -162,7 +162,11 @@ entered the pipeline.
     — proposed: compare every trust pool pixel across Qt releases, retain
     compressed-file hashes and check all negative space and shared geometry.
 
-58. [`0058-visible-name-migration-boundary.md`](0058-visible-name-migration-boundary.md)
+58. [`0058-product-wallpaper-pool-materials.md`](0058-product-wallpaper-pool-materials.md)
+    — proposed: share v3 stone and sphere materials with the native product
+    and quieter lock family, retaining geometry B and pool dimensions.
+
+59. [`0059-visible-name-migration-boundary.md`](0059-visible-name-migration-boundary.md)
     — proposed: document the remaining visible surfaces and pin accurate session
     names while their shared-identity migration remains open; load cosmetic
     CLI identity only for help/version so emergency stop stays independent;
@@ -630,7 +634,21 @@ remain.
   - Prerequisites: the operator's decision; a hosted workflow run remains
     separate from local Arch and Ubuntu runtime evidence.
 
-- [ADR 0058](0058-visible-name-migration-boundary.md)
+- [ADR 0058](0058-product-wallpaper-pool-materials.md)
+  - Decision: proposed.
+  - Built: built — shared v3 shader and capture, native product and lock
+    outputs, pixel/hash, neutral-core and material geometry contracts.
+  - Activation: default — `host_desktop_common` installs the product and
+    dedicated lock assets; the discovered contracts run in repository checks.
+  - Source: [`pool_material.py`](../../tools/wallpaper/pool_material.py),
+    [`render_isolation_ring.py`](../../tools/wallpaper/render_isolation_ring.py),
+    [`render_trust_pool.py`](../../tools/wallpaper/render_trust_pool.py),
+    [`host_identity_asset_contract.py`](../../tests/host_identity_asset_contract.py),
+    [`product_symbol_geometry_contract.py`](../../tests/product_symbol_geometry_contract.py)
+  - Prerequisites: the operator's decision; Nitro product and lock inspection
+    at 1920×1080 under both compositors, then Predator replay.
+
+- [ADR 0059](0059-visible-name-migration-boundary.md)
   - Decision: proposed.
   - Built: built — explicit remaining visible-surface inventory, accurate
     session documentation and narrowly pinned documentation exceptions;
