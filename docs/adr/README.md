@@ -166,7 +166,8 @@ entered the pipeline.
     — proposed: document the remaining visible surfaces and pin accurate session
     names while their shared-identity migration remains open; load cosmetic
     CLI identity only for help/version so emergency stop stays independent;
-    align byte/path refusals across shell, CLI and Bash readers.
+    align byte/path refusals across shell, CLI and Bash readers; pin host
+    login and guest presentation exceptions and require a widening locale.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
@@ -634,10 +635,12 @@ remain.
   - Built: built — explicit remaining visible-surface inventory, accurate
     session documentation and narrowly pinned documentation exceptions;
     lazy help/version identity leaves operational dispatch independent;
-    shared byte/path fixtures cover every reader and installed UTF-8 locale.
+    shared byte/path fixtures cover every reader and installed UTF-8 locale,
+    requiring a language locale that exercises Bash range widening.
   - Activation: default — product contract checks documentation and existing
-    desktop/Waybar/lock labels, shell stderr, reader parity and operational
-    independence from cosmetic input; no session or authority change.
+    host/guest QML, desktop/Waybar/lock/login labels, helper stderr, reader
+    parity and operational independence from cosmetic input; no session or
+    authority change.
   - Source: [`product_display_name_contract.py`](../../tests/product_display_name_contract.py).
   - Prerequisites: the operator's decision; the remaining visible migration
     and physical Nitro/Predator gates remain open.

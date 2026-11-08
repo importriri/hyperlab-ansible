@@ -44,15 +44,21 @@ needs no active compositor, and reuses the focus reader's leaf/parent,
 regular-file and readable-mode checks. Its internal `--document` mode returns
 the exact validated bytes, including their original line ending. Every Bash
 reader retains the same function body; notification/focus callers keep the
-name-only result. Explicit mode bits also refuse zero-mode files when running
-as root. QML retains its grammar and publishes identity only after a successful
-normal bridge exit. Failed startup or reading leaves identity empty. This adds
-one short-lived bridge process at shell startup and no deployment path. QML
+name-only result. Explicit mode bits are intended to refuse zero-mode files
+even when the execution identity could otherwise read them; that behavior is
+not verified here. Normal-user fixtures cannot distinguish this guard from
+the kernel's permission refusal. QML retains its grammar and publishes identity
+only after a successful normal bridge exit. Failed startup or reading leaves
+identity empty. This adds one short-lived bridge process at shell startup and
+no deployment path. QML
 still cannot start an interpreter or bypass the existing provenance bridge.
 No reader supplies a default name. The shared fixture table checks LF, CRLF,
 no newline, lone CR, accented words, malformed/duplicate fields, extra lines,
 NUL bytes, long fields and missing, unreadable, nonregular or redirected paths.
-Bash runs the table under C and every installed UTF-8 locale.
+Bash runs the table under C and every installed UTF-8 locale. The contract
+requires at least one non-C UTF-8 locale whose unguarded Bash ranges accept
+an accented word; C/C.utf8 alone refuses verification rather than hiding
+an unexercised widening case.
 
 Correct the documentation check with one exact README sentence naming the
 installed Ly sessions. Parse the desktop entries to pin those names, and
@@ -63,9 +69,10 @@ old-name strings or change command names, paths or session identifiers.
 
 ## Deferred surface inventory
 
-These are known remaining surfaces at `233b046`, including the additional
-lock, stderr and guest labels identified below. This is a baseline inventory,
-not an exhaustive claim about every visible string in the tree. The contract
+These are known remaining surfaces at `db7c99b`, including the additional
+host login, guest desktop/session and helper labels identified below. This is
+a baseline inventory, not an exhaustive claim about every visible string in
+the tree. The contract
 requires each known file in the open roadmap item; later discoveries must be
 added to both records before the physical presentation gate can close.
 
@@ -118,6 +125,22 @@ added to both records before the physical presentation gate can close.
   and the desk-qualified lock label under `roles/guest_desktop_hyprland/files/`.
 - `roles/guest_desktop_hyprland/tasks/main.yml`: the guest Ly
   `initial_info_text` value `HyperLab guest workstation`.
+- `roles/host_desktop_sway/defaults/main.yml`: host Ly `box_title`
+  `HyperLab Gate` and `initial_info_text` `HyperLab host gateway`, deployed
+  by `roles/host_desktop_sway/tasks/main.yml` into the host login screen.
+- `DesktopLayer.qml` under
+  `roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace/`: guest
+  idle-desktop fallback `HYPERLAB WORKSTATION` when no desk is named.
+- `hyperlab-hyprland.desktop.j2` under
+  `roles/guest_desktop_hyprland/templates/`: guest Ly session name
+  `HyperLab Hyprland` and comment
+  `Deterministic Hyprland session for the HyperLab VFIO guest`.
+- `privatestack-keyboard.sh` under `roles/host_desktop_sway/files/`: stderr
+  format `HyperLab: compositor rejected keyboard layout %s (index %s, order %s).`.
+- `hyperlab-gaming-mode-root.py` under `roles/host_gaming_mode/files/`:
+  argparse description `Root guard for HyperLab Gaming Mode`.
+- `ly-guest-login.sh.j2` under `roles/guest_desktop_hyprland/templates/`:
+  stderr format `HyperLab: NVIDIA DRM device did not become ready: %s`.
 
 ## Evidence and consequences
 
@@ -125,8 +148,14 @@ The product contract requires the exact session-label sentence, every file
 in this inventory in the open roadmap item, and these bridge refusal literals
 through an AST scan. The same scan checks shell-action stderr prefixes;
 parsed host hyprlock label blocks, the guest lock-label function and guest
-Ly task data pin the known lock/login strings. Removing an entry fails. New
-help literals naming the old product also fail through an AST check; the two
+Ly task data pin the known lock/login strings. Parsed host Ly defaults pin
+both host gate labels. Every repository desktop source, including the guest
+template, must be inventoried with its parsed Name and Comment. The QML scan
+covers the host shell and guest workspace recursively, allowing exactly one
+instance of the pinned guest desktop fallback in its existing file. Shell
+printf tokens and the root Gaming Mode parser AST pin the additional helper
+messages above. Removing an entry or adding another old-name QML string fails.
+New help literals naming the old product also fail through an AST check; the two
 existing literals rewritten by the CLI formatter are enumerated explicitly.
 QML presentation fixtures reject old
 names in evaluated text and accessibility attributes; their inert bridge data

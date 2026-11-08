@@ -3555,3 +3555,43 @@ The native bridge cases execute the real adapter while the existing
 provenance restrictions remain unchanged. PD-62 kept both reader
 equality and every unprivileged refusal case green, because kernel permission
 checks still deny the zero-mode document to this user.
+
+### Host login, guest presentation and locale coverage
+
+The deferred inventory baseline is now `db7c99b`. The contract scans both
+host and guest QML recursively, with exactly one existing guest idle fallback
+pinned to its original file. It parses host Ly defaults and all repository
+desktop sources (including the guest template), requiring complete inventory
+coverage and exact Name/Comment values. Shell printf formats and the root
+Gaming Mode parser description are pinned, as are their documentation entries.
+
+The previous reader fixture passed with locale discovery limited to
+C/C.utf8/POSIX. It now refuses that environment and requires a non-C UTF-8
+locale whose unguarded Bash ranges actually accept the accented control.
+PD-59 was repeated: identical readers without their local C setting still
+pass the equality check, but reject parity under `en_US.utf8` by accepting
+the accented input. No root execution is claimed: PD-62 remains the recorded
+normal-user survivor, and ADR 0058 labels the stronger behavior intended and
+unverified.
+
+Each file was copied before mutation and restored byte-for-byte; the extra
+desktop source was copied from a saved fixture and removed after the check.
+Locale discovery and control mutations use inert executables in a temporary
+PATH. All restored stages were green.
+
+| ID | Mutation | Stage | Observed result |
+| --- | --- | --- | --- |
+| PD-66 | Remove `roles/host_desktop_sway/defaults/main.yml` from the open roadmap item | deferred inventory | red: host login surface omitted; restored green |
+| PD-67 | Add `text: "HyperLab"` to guest `UiText.qml` | recursive QML strings | red: old product display string; restored green |
+| PD-68 | Copy the allowed `HYPERLAB WORKSTATION` label into guest `UiText.qml` | scoped QML exception | red: old product display string outside its pinned file; restored green |
+| PD-69 | Change host Ly `box_title` | parsed defaults YAML | red: deferred host Ly gate text changed; restored green |
+| PD-70 | Change the guest desktop template's Name | parsed desktop entries | red: undocumented greeter/application name or comment; restored green |
+| PD-71 | Change the guest desktop template's Comment | parsed desktop entries | red: undocumented greeter/application name or comment; restored green |
+| PD-72 | Add an unlisted desktop source | desktop inventory coverage | red: inventory differs from repository sources; restored green |
+| PD-73 | Change the keyboard compositor-rejection printf format | parsed shell tokens | red: deferred helper printf changed; restored green |
+| PD-74 | Change the root Gaming Mode argparse description | parser AST | red: deferred root Gaming Mode help changed; restored green |
+| PD-75 | Change the guest NVIDIA readiness printf format | parsed shell tokens | red: deferred helper printf changed; restored green |
+| PD-76 | Limit locale discovery to C/C.utf8/POSIX | shared reader table prerequisites | red: non-C UTF-8 locale required; restored green |
+| PD-77 | Replace the pinned guest idle fallback | recursive QML strings | red: deferred QML label changed; restored green |
+| PD-78 | Remove the guest desktop QML input | QML input coverage | red: host/guest presentation input missing; restored green |
+| PD-79 | Discover a language locale but make its unguarded Bash control refuse the accented word | widening control | red: installed language locales do not exercise Bash range widening; restored green |

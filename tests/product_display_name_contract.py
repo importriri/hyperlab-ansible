@@ -27,6 +27,7 @@ import host_compositor_adapter_behaviour_contract as adapter
 
 ROOT = Path(__file__).resolve().parents[1]
 QML = runtime.QML
+GUEST_QML = ROOT / "roles/guest_desktop_hyprland/files/quickshell/hyperlab-workspace"
 PRODUCT = ROOT / "tools/product.yml"
 HISTORY = "The product was called HyperLab before 2026-11."
 SESSIONS = "the HyperLab Hyprland and HyperLab Sway sessions in Ly's private catalog"
@@ -96,7 +97,12 @@ def reader_contract() -> None:
     # Exercise C and every installed UTF-8 locale: language collation can
     # widen Bash's ASCII-looking ranges.
     utf8 = [value for value in locales if "utf" in value.lower()]
-    require(bool(utf8), "UTF-8 locale required for product reader parity")
+    language_locales = [value for value in utf8 if value.lower().split(".")[0] not in {"c", "posix"}]
+    require(bool(language_locales), "non-C UTF-8 locale required to exercise Bash range widening")
+    widening = [locale for locale in language_locales if subprocess.run(
+        ["bash", "-c", "[[ Sfère =~ ^[A-Za-z]+$ ]]"],
+        env={**os.environ, "LC_ALL": locale}, check=False).returncode == 0]
+    require(bool(widening), "installed language locales do not exercise Bash range widening")
     with reader_inputs() as cases:
         for label, path, expected in cases:
             try:
@@ -139,7 +145,11 @@ def require(condition: bool, message: str) -> None:
 
 
 def qml_strings() -> None:
-    for path in sorted(QML.glob("*.qml")):
+    deferred = {GUEST_QML / "DesktopLayer.qml": ["HYPERLAB WORKSTATION"]}
+    require(QML.is_dir() and GUEST_QML.is_dir() and all(path.is_file() for path in deferred),
+            "host/guest QML presentation input missing")
+    for path in sorted([*QML.rglob("*.qml"), *GUEST_QML.rglob("*.qml")]):
+        pending = list(deferred.get(path, []))
         source = path.read_text(encoding="utf-8")
         for token in TOKENS.finditer(source):
             value = token.group()
@@ -147,8 +157,11 @@ def qml_strings() -> None:
                 continue
             if not value.startswith("`"):
                 value = ast.literal_eval(value)
-            require(not OLD.search(value), f"{path.name}: old product display string {value}")
+            if OLD.search(value):
+                require(value in pending, f"{path.relative_to(ROOT)}: old product display string {value}")
+                pending.remove(value)
             require("Sfere" not in value, f"{path.name}: product name duplicated outside shared input")
+        require(not pending, f"{path.name}: deferred QML label changed without updating inventory")
 
 
 def cli_contract() -> str:
@@ -259,9 +272,26 @@ def docs_contract(name: str) -> None:
 def deferred_surface_contract() -> None:
     """Pin the documented visible exceptions while their migration is pending."""
     entries = {
-        "roles/host_desktop_hyprland/files/hyperlab-hyprland.desktop": "HyperLab Hyprland",
-        "roles/host_desktop_hyprland/files/hyperlab-sway.desktop": "HyperLab Sway",
-        "roles/host_desktop_sway/files/hyperlab-control-center.desktop": "HyperLab Control Center",
+        "roles/host_desktop_hyprland/files/hyperlab-hyprland.desktop": (
+            "HyperLab Hyprland", "HyperLab primary managed host session"),
+        "roles/host_desktop_hyprland/files/hyperlab-sway.desktop": (
+            "HyperLab Sway", "HyperLab recovery managed host session"),
+        "roles/host_desktop_sway/files/hyperlab-control-center.desktop": (
+            "HyperLab Control Center", "Manage the complete isolated virtualization laboratory"),
+        "roles/guest_desktop_hyprland/templates/hyperlab-hyprland.desktop.j2": (
+            "HyperLab Hyprland", "Deterministic Hyprland session for the HyperLab VFIO guest"),
+    }
+    desktops = {str(path.relative_to(ROOT)) for pattern in ("*.desktop", "*.desktop.j2")
+                for path in (ROOT / "roles").rglob(pattern)}
+    require(desktops == set(entries), "desktop entry inventory differs from repository desktop sources")
+    deferred_labels = {
+        "roles/host_desktop_sway/defaults/main.yml": ("HyperLab Gate", "HyperLab host gateway"),
+        str((GUEST_QML / "DesktopLayer.qml").relative_to(ROOT)): ("HYPERLAB WORKSTATION",),
+        "roles/host_desktop_sway/files/privatestack-keyboard.sh": (
+            "HyperLab: compositor rejected keyboard layout %s (index %s, order %s).",),
+        "roles/host_gaming_mode/files/hyperlab-gaming-mode-root.py": ("Root guard for HyperLab Gaming Mode",),
+        "roles/guest_desktop_hyprland/templates/ly-guest-login.sh.j2": (
+            "HyperLab: NVIDIA DRM device did not become ready: %s",),
     }
     inventory = [*entries,
         "roles/host_desktop_sway/files/waybar.jsonc",
@@ -281,6 +311,7 @@ def deferred_surface_contract() -> None:
         "roles/host_desktop_sway/files/privatestack-hyperlab-session.sh",
         "roles/guest_desktop_hyprland/files/hyperlab-desk.py",
         "roles/guest_desktop_hyprland/tasks/main.yml",
+        *deferred_labels,
     ]
     roadmap = (ROOT / "docs/roadmap.md").read_text()
     open_items = re.findall(r"(?m)^- \[ \] Finish the visible name migration[^\n]*(?:\n +[^\n]*)*", roadmap)
@@ -289,9 +320,14 @@ def deferred_surface_contract() -> None:
     for filename in inventory:
         require((ROOT / filename).is_file(), f"missing deferred surface: {filename}")
         for label, source in (("open roadmap item", open_items[0]), ("ADR 0058", adr)):
-            label_path = filename if filename.endswith("tasks/main.yml") else Path(filename).name
+            label_path = filename if filename.endswith(("tasks/main.yml", "defaults/main.yml")) else Path(filename).name
             require(f"`{label_path}`" in source,
                     f"visible legacy surface omitted from {label}: {filename}")
+            for text in deferred_labels.get(filename, ()):
+                require(f"`{text}`" in source, f"deferred label omitted from {label}: {text}")
+            if filename.endswith("hyperlab-hyprland.desktop.j2"):
+                for text in entries[filename]:
+                    require(f"`{text}`" in source, f"guest session label omitted from {label}: {text}")
     bridge = ROOT / "roles/host_desktop_common/files/privatestack-machine-actions.py"
     reasons = {
         "invalid HyperLab spec inventory",
@@ -353,10 +389,28 @@ def deferred_surface_contract() -> None:
     require(len(ly) == 1 and [item["value"] for item in ly[0]["loop"]
                              if item["key"] == "initial_info_text"] == ["HyperLab guest workstation"],
             "deferred guest Ly text changed without updating inventory")
+    defaults = yaml.safe_load((ROOT / "roles/host_desktop_sway/defaults/main.yml").read_text())
+    gate = defaults["host_desktop_sway_ly_gate_theme"]
+    require((gate["box_title"], gate["initial_info_text"]) == deferred_labels["roles/host_desktop_sway/defaults/main.yml"],
+            "deferred host Ly gate text changed without updating inventory")
+    for filename in ("roles/host_desktop_sway/files/privatestack-keyboard.sh",
+                     "roles/guest_desktop_hyprland/templates/ly-guest-login.sh.j2"):
+        tokens = shlex.split((ROOT / filename).read_text().replace("\\\n", ""), comments=True)
+        formats = tuple(tokens[index + 1].removesuffix(r"\n") for index, token in enumerate(tokens[:-1])
+                        if token == "printf" and OLD.search(tokens[index + 1]))
+        require(formats == deferred_labels[filename], f"deferred helper printf changed without updating inventory: {filename}")
+    filename = "roles/host_gaming_mode/files/hyperlab-gaming-mode-root.py"
+    descriptions = tuple(keyword.value.value for node in ast.walk(ast.parse((ROOT / filename).read_text()))
+                         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                         and isinstance(node.func.value, ast.Name) and node.func.value.id == "argparse"
+                         and node.func.attr == "ArgumentParser" for keyword in node.keywords
+                         if keyword.arg == "description" and isinstance(keyword.value, ast.Constant))
+    require(descriptions == deferred_labels[filename], "deferred root Gaming Mode help changed without updating inventory")
     for filename, expected in entries.items():
         parser = configparser.ConfigParser(interpolation=None, strict=True)
         parser.read_string((ROOT / filename).read_text())
-        require(parser["Desktop Entry"]["Name"] == expected, f"undocumented greeter/application name: {filename}")
+        require((parser["Desktop Entry"]["Name"], parser["Desktop Entry"]["Comment"]) == expected,
+                f"undocumented greeter/application name or comment: {filename}")
     source = (SWAY_FILES / "waybar.jsonc").read_text()
     bar = json.loads(re.sub(r"(?m)^\s*//[^\n]*", "", source))["custom/brand"]
     require(bar["format"] == "  HyperLab" and bar["tooltip-format"] == "Open the compact HyperLab drawer",

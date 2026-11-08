@@ -756,7 +756,17 @@ Measured with the complete security plane active.
       `hyperlab-gaming-mode.py`; session shutdown refusal in
       `privatestack-hyperlab-session.sh`; guest lock labels in `hyperlab-desk.py`
       and guest Ly info text in `roles/guest_desktop_hyprland/tasks/main.yml`.
-      These are known at `233b046`, not an exhaustive tree-wide inventory;
+      Host Ly gate labels in `roles/host_desktop_sway/defaults/main.yml`:
+      `HyperLab Gate`, `HyperLab host gateway`; guest idle fallback in
+      `DesktopLayer.qml`: `HYPERLAB WORKSTATION`; guest Ly session in
+      `hyperlab-hyprland.desktop.j2`: `HyperLab Hyprland`,
+      `Deterministic Hyprland session for the HyperLab VFIO guest`;
+      keyboard stderr in `privatestack-keyboard.sh`:
+      `HyperLab: compositor rejected keyboard layout %s (index %s, order %s).`;
+      root Gaming Mode help in `hyperlab-gaming-mode-root.py`:
+      `Root guard for HyperLab Gaming Mode`; guest login stderr in
+      `ly-guest-login.sh.j2`: `HyperLab: NVIDIA DRM device did not become ready: %s`.
+      These are known at `db7c99b`, not an exhaustive tree-wide inventory;
       they still display the previous name
       ([ADR 0058](adr/0058-visible-name-migration-boundary.md), proposed).
 - [ ] Sfere presentation on Nitro: bar, idle desktop, workspace,

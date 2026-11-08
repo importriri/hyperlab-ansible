@@ -29,9 +29,9 @@ successful normal process exit. Failed transport, including failed startup,
 leaves the identity empty. No operational command depends on this display
 input; emergency-stop dispatch retains its independent contract.
 
-The explicit readable-mode checks also refuse zero-mode files when an
-execution identity could otherwise read them. The unprivileged fixtures
-cannot establish root's runtime behavior; the privileged verification remains
+The explicit readable-mode checks are intended to refuse zero-mode files when
+an execution identity could otherwise read them. This is not verified here:
+the unprivileged fixtures cannot establish root's runtime behavior. That remains
 separate from the source checks and normal-user refusal cases.
 
 ## Regression proof
@@ -39,6 +39,9 @@ separate from the source checks and normal-user refusal cases.
 `tests/product_display_name_contract.py` uses the same byte/path cases for
 all readers. It executes Bash under C and each installed UTF-8 locale,
 including `en_US.utf8` where the accented-name failure was reproduced.
+It requires a non-C UTF-8 locale and proves that an unguarded Bash range
+actually accepts an accented word there. Discovery limited to C/C.utf8 fails
+explicitly; otherwise the fixture could pass without exercising the defect.
 Native Quickshell fixtures also inject a bridge that prints a valid document
 and exits unsuccessfully, plus a missing bridge. Neither may publish
 an identity. Restoring newline translation, locale dependence, symlink
