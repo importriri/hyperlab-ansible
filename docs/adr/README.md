@@ -41,9 +41,10 @@ entered the pipeline.
     durable operation; the password and the become prompt stay in its
     terminal (operator's decision, 2026-11-05).
 18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
-    — proposed: a disposable Machine's disk is a libvirt transient disk, so
-    every stop discards its writes; access closing and the host-key pin at
-    every later boot are not built.
+    — accepted: a disposable Machine's disk is a libvirt transient disk, so
+    every stop discards its writes (operator's decision, 2026-11-05).
+    Protected access and the host-key pin at every later boot are not built;
+    Nitro evidence remains open (see the record's Limits).
 19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — proposed: a GPU-capable
     Machine chooses at each start whether this run owns the GPU.
 20. [`0020-host-to-guest-clipboard.md`](0020-host-to-guest-clipboard.md) —
@@ -211,25 +212,6 @@ Every entry has five fields. **Decision** repeats the record's status.
 **Source** links the code and the checks that exercise it, or says `none`.
 **Prerequisites** lists the decision, software, lab and hardware steps that
 remain.
-
-- [ADR 0018](0018-disposable-discards-on-stop.md)
-  - Decision: proposed; no record accepts it.
-  - Built: partial — only `lifecycle: disposable` gets `<transient/>` in the
-    domain template, and the managed XML contract refuses a disposable
-    domain without it. Closing guest access and re-pinning the host key at
-    every later boot are not built.
-  - Activation: default — every disposable Machine defined through the
-    `guest` role (`playbooks/vm-create.yml`, which the provisioner runs)
-    gets the transient disk, and the server Templates allow the disposable
-    lifecycle.
-    `playbooks/vm-start.yml` runs neither `vm-guest-inventory.yml` nor
-    `guest-close-access.yml` at a later boot.
-  - Source: [`domain.xml.j2`](../../roles/guest/templates/domain.xml.j2),
-    [`guest_xml_contract.py`](../../tools/guest_xml_contract.py),
-    [`guest_contract.py`](../../tests/guest_contract.py)
-  - Prerequisites: the operator's decision; the software that closes access
-    and re-pins the host key at every boot (ADR 0025 shapes the pin); a
-    disposable Machine started, stopped and started again on Nitro.
 
 - [ADR 0019](0019-gpu-lease.md)
   - Decision: proposed; implementation waits for the record's

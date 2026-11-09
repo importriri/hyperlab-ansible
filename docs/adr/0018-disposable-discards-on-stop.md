@@ -1,8 +1,16 @@
 # ADR 0018 - A disposable Machine discards its writes every time it stops
 
-Status: proposed. No record accepts it. The transient disk is built and
-software-verified; closing access and re-pinning the host key at every later
-boot are not built (see Limits).
+Status: accepted (2026-11-05, operator's decision).
+
+The decision is recorded in the operator's private notes
+(operator-observed, unpublished), in the 2026-11-05 task entry and Nitro
+session step 11 at 19:28. The operator accepted the design read at `main`
+commit `1e42308a863180590fc9b2a209b41227978b8a4f`: only disposable Machines
+discard their disk writes on every stop; permanent Machines keep their data.
+Readiness still requires protected access on every boot and the Nitro
+tests. The transient disk is built and software-verified; closing access
+and re-pinning the host key at every later boot are not built (see Limits).
+This records design acceptance without adding hardware evidence.
 
 ## Context
 
@@ -58,9 +66,16 @@ start begins from the sealed base exactly as the first boot did.
 ## Limits
 
 - Built and software-verified: only `lifecycle: disposable` gets
-  `<transient/>` in `roles/guest/templates/domain.xml.j2`, and the managed
-  XML contract refuses a disposable domain without it
-  (`tests/guest_contract.py`).
+  `<transient/>` in
+  [`domain.xml.j2`](../../roles/guest/templates/domain.xml.j2), and the
+  managed XML contract in
+  [`guest_xml_contract.py`](../../tools/guest_xml_contract.py) refuses a
+  disposable domain without it
+  ([`guest_contract.py`](../../tests/guest_contract.py)).
+- Activation: default — every disposable Machine defined through the
+  `guest` role (`playbooks/vm-create.yml`, which the provisioner runs)
+  gets the transient disk, and the server Templates allow the disposable
+  lifecycle.
 - Not built: what every later boot needs. The managed start,
   `playbooks/vm-start.yml`, runs only the `guest` role. It runs neither
   `vm-guest-inventory.yml` nor `guest-close-access.yml`. The agent
@@ -71,4 +86,10 @@ start begins from the sealed base exactly as the first boot did.
   allowlist, and its strict SSH pin no longer matches its host key, until
   the two playbooks are run again by hand.
 - Not proven on hardware: no disposable Machine has been started, stopped
-  and started again on Nitro.
+  and started again on Nitro. Normal and forced stops still need evidence
+  of discarded writes and temporary-overlay cleanup; host-crash recovery
+  remains a separate physical test (see Consequences).
+- Readiness prerequisites: the software that closes access and re-pins the
+  host key at every boot ([ADR 0025](0025-host-key-without-agent-file-reads.md)
+  shapes the pin), then the Nitro tests. Accepting the design completes
+  neither prerequisite.

@@ -80,10 +80,12 @@ or work that is not on `main` does not raise it.
   from the shell are not observed.
 - **Disposable Machines (5):** the libvirt transient disk that discards the
   writes at every stop is software-verified
-  ([ADR 0018](adr/0018-disposable-discards-on-stop.md), proposed). Access at
-  every later boot is not closed: the managed start does not restrict the
-  agent again or re-pin the host key. No disposable Machine has been proven
-  on hardware.
+  ([ADR 0018](adr/0018-disposable-discards-on-stop.md), accepted by the
+  operator on 2026-11-05; the record names the unpublished decision source).
+  Access at every later boot is not closed: the managed start does not
+  restrict the agent again or re-pin the host key. Readiness still requires
+  that separate software work and the Nitro tests. No disposable Machine
+  has been proven on hardware.
 - **GPU lease (5b):** proposed in [ADR 0019](adr/0019-gpu-lease.md), not
   decided and not built. What it builds on, the shared definition, the
   ladder and GPU-capable services, is software-verified.
@@ -375,7 +377,7 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [x] disposable Machines discard their writable layer on every stop: a
       libvirt transient disk over the lifecycle overlay; server Templates
       offer them ([ADR 0018](adr/0018-disposable-discards-on-stop.md),
-      proposed; software-verified)
+      accepted by the operator on 2026-11-05; software-verified)
 - [ ] a disposable Machine closed again at every later boot: the agent
       allowlist restored and the host key re-pinned after each start (not
       built: the managed start runs neither step, ADR 0018 Limits)
