@@ -148,9 +148,11 @@ entered the pipeline.
     — proposed: a host profile without GPU passthrough, chosen only by name,
     never by `auto`.
 53. [`0053-withdraw-machine-intent.md`](0053-withdraw-machine-intent.md) —
-    proposed: the shell creates a Machine in one staged step that publishes
+    accepted: option A creates a Machine in one staged step that publishes
     the record last; a record is withdrawn only by its digest, under the
     registry lock, and never while a projection or a domain follows from it.
+    Operator's decision, 2026-11-05; unpublished source in the record.
+    Transaction remediation and Nitro refusal evidence remain open.
 
 54. [`0054-private-machine-diagnostics.md`](0054-private-machine-diagnostics.md) —
     proposed, software built: supervise one private diagnostics collection
@@ -522,22 +524,6 @@ remain.
   - Prerequisites: the operator's decision; the record's run in the lab
     host with the profile named, and `auto` on Nitro; nothing is tested on
     a real one-GPU host.
-
-- [ADR 0053](0053-withdraw-machine-intent.md)
-  - Decision: proposed.
-  - Built: built — `machine create --project`, which publishes the record
-    last under the registry lock, and `machine withdraw ID --record-sha256`
-    with its projection and domain refusals.
-  - Activation: on request — the shell's creation runs the staged step
-    through the bridge, and withdraw runs only when the operator calls it.
-    Nothing removes the record and spec an interrupted provisioning leaves.
-  - Source: [`machine_registry.py`](../../tools/hyperlabctl/hyperlabctl/machine_registry.py),
-    [`machine.py`](../../tools/hyperlabctl/hyperlabctl/commands/machine.py),
-    [`c10_machine_registry_contract.py`](../../tests/c10_machine_registry_contract.py),
-    [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py)
-  - Prerequisites: the operator's decision; the record's Nitro test with the
-    bridge installed; a cleanup for what an interrupted provisioning leaves,
-    if one is wanted.
 
 - [ADR 0054](0054-private-machine-diagnostics.md)
   - Decision: proposed.

@@ -1,6 +1,15 @@
 # ADR 0053 - A Machine is created in one staged step, and withdrawn only by its digest
 
-Status: proposed.
+Status: accepted (2026-11-05, operator's decision).
+
+The decision is recorded in the operator's private notes
+(operator-observed, unpublished), in the 2026-11-05 task entry for ADR 0053
+and Nitro session step 11 at 20:01. The operator accepted the design read
+at `main` commit `1e42308a863180590fc9b2a209b41227978b8a4f`: option A and
+the guarded manual withdrawal path below. This records design acceptance
+without adding evidence for handled failures, incomplete compensation or
+physical refusal tests. The separate Plan/Intent transaction remediation
+remains open.
 
 ## Context
 
@@ -18,7 +27,7 @@ domain out of the product if it is not held to the Machine's state.
 
 ## Options
 
-**A. Stage the creation, publish the record last (recommended for the
+**A. Stage the creation, publish the record last (accepted for the
 shell).** `machine create --project`, under the registry lock, checks that
 the name is free, writes the generated spec, and only then publishes the
 record. When the record cannot be published, it removes the spec it wrote,
@@ -72,9 +81,13 @@ projection and domain checks, which do not depend on who calls.
 A lock that stays held for five seconds is a refusal, not a wait without
 end.
 
-## Recommendation
+## Decision
 
-A for the shell, and `withdraw` as above for the manual path.
+Option A for the shell, with compensation limited to this attempt's own
+record and spec under the registry lock, and `withdraw` as above for the
+manual path. Acceptance authorizes no removal of an existing Machine,
+disk, domain, registry entry or generated spec as part of recording this
+decision.
 
 ## What this does not cover
 
@@ -88,7 +101,30 @@ A for the shell, and `withdraw` as above for the manual path.
   --confirm NAME` removes the spec and then `machine withdraw` the record;
   both refuse while a domain with that name exists.
 
-## Hardware test
+## Implementation and evidence
+
+- Existing software: `machine create --project` and the guarded
+  `machine withdraw ID --record-sha256 DIGEST` path are implemented in
+  [`machine_registry.py`](../../tools/hyperlabctl/hyperlabctl/machine_registry.py)
+  and [`machine.py`](../../tools/hyperlabctl/hyperlabctl/commands/machine.py),
+  exercised by
+  [`c10_machine_registry_contract.py`](../../tests/c10_machine_registry_contract.py)
+  and
+  [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py).
+- Activation: on request — the shell's creation runs the staged step
+  through the bridge, and withdrawal runs only when the operator calls it.
+  Nothing removes the record and spec an interrupted provisioning leaves.
+- Still open: the separate Plan/Intent transaction remediation and its
+  reviewed regression evidence for failure after publication, incomplete
+  compensation and invalid-spec refusal. Acceptance of this design does
+  not establish that work is complete or that cleanup always succeeds.
+  Stale owned files can keep a name taken and require manual recovery;
+  the process-death and power-loss limits above remain.
+
+## Hardware tests (open)
+
+The following Nitro refusal tests remain unobserved. The design decision
+adds no hardware evidence and authorizes no test on existing Machine state.
 
 On Nitro, as the user, with the bridge installed:
 `privatestack-machine-actions create server-arch NAME permanent dev balanced`

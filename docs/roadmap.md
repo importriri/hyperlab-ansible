@@ -69,7 +69,13 @@ or work that is not on `main` does not raise it.
   factory allows, and one staged `machine create --project` publishes the
   Machine record only after its projection is written
   ([ADR 0017](adr/0017-shell-machine-creation.md), accepted by the operator
-  on 2026-11-05; [ADR 0053](adr/0053-withdraw-machine-intent.md), proposed).
+  on 2026-11-05; [ADR 0053](adr/0053-withdraw-machine-intent.md), option A
+  and guarded manual withdrawal accepted on 2026-11-05; the record names
+  the unpublished decision source). This acceptance adds no evidence for
+  handled failures or incomplete compensation; the separate Plan/Intent
+  transaction remediation and Nitro refusal tests remain open. Cleanup can
+  be incomplete, and process death or power loss can leave owned files
+  that keep the name taken and require manual recovery.
 - **Create view (5):** implemented in the shell and software-verified
   offscreen. No creation from the shell has been accepted on hardware.
 - **Provisioning (5):** the runner, the check of the whole plan before the
@@ -398,12 +404,21 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
       password and become prompt only in the operation window
       ([ADR 0017](adr/0017-shell-machine-creation.md), accepted 2026-11-05;
       software-verified)
-  - [x] a refused creation leaves no record: one staged `machine create
-        --project` under the registry lock, a failure after the record's
-        publication undone record first, and the manual `machine withdraw`
-        held by digest, projection, a readable spec and the libvirt domain
-        list ([ADR 0053](adr/0053-withdraw-machine-intent.md), proposed,
-        software-verified)
+  - [x] staged intent and guarded manual withdrawal: `machine create
+        --project` under the registry lock compensates only its own record
+        and spec after a handled failure, record first, when cleanup
+        succeeds; incomplete cleanup reports what stays. Manual
+        `machine withdraw` is held by digest, projection, a readable spec
+        and the libvirt domain list
+        ([ADR 0053](adr/0053-withdraw-machine-intent.md), option A and the
+        manual path accepted by the operator on 2026-11-05; unpublished
+        decision source in the record; existing software checks)
+  - [ ] separate Plan/Intent transaction remediation accepted with reviewed
+        regression evidence for failure after publication, incomplete
+        compensation and invalid-spec refusal; ADR 0053's design acceptance
+        does not close this work or its manual-recovery limits
+  - [ ] ADR 0053 refusal tests observed on Nitro: an obstructed generated
+        spec leaves no record, and a defined domain prevents withdrawal
   - [x] provisioning prepared for Nitro: the runner accepts exactly
         `privatestack-machine-provision NAME` on NAME's own projection,
         `provision-steps` refuses a spec that is not the record's

@@ -40,8 +40,8 @@ Creation is split along the existing boundary.
   NETWORK PROFILE [MEMORY VCPUS DISK]` takes positional, validated values
   only. It
   runs one staged `hyperlabctl machine create --project`
-  ([ADR 0053](0053-withdraw-machine-intent.md), proposed), which refuses
-  anything the Template forbids, writes the projected spec first and
+  ([ADR 0053](0053-withdraw-machine-intent.md), accepted 2026-11-05), which
+  refuses anything the Template forbids, writes the projected spec first and
   publishes the Machine record last under the registry lock. It answers
   with structured JSON, and the bridge launches nothing unless that answer
   names the Machine, its `vm-specs/.generated/NAME.yml` spec and the
