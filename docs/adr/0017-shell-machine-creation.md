@@ -160,4 +160,5 @@ Creation is split along the existing boundary.
 - Of the flows that reuse this one, a disposable Machine is offered by the
   server Templates, but what it needs after its first stop is open
   ([ADR 0018](0018-disposable-discards-on-stop.md)); the GPU lease is a
-  proposal and is not built ([ADR 0019](0019-gpu-lease.md)).
+  design accepted on 2026-11-05 and is not built
+  ([ADR 0019](0019-gpu-lease.md)).

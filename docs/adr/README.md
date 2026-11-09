@@ -45,8 +45,12 @@ entered the pipeline.
     every stop discards its writes (operator's decision, 2026-11-05).
     Protected access and the host-key pin at every later boot are not built;
     Nitro evidence remains open (see the record's Limits).
-19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — proposed: a GPU-capable
-    Machine chooses at each start whether this run owns the GPU.
+19. [`0019-gpu-lease.md`](0019-gpu-lease.md) — accepted: a GPU-capable
+    Machine chooses at each start whether this run owns the GPU; initially
+    `workstation-dev-standard` only, default without the dedicated NVIDIA
+    GPU (operator's decision, 2026-11-05; unpublished source in the record).
+    Not built; image readiness, Create acceptance and the physical
+    GPU → no-GPU → GPU test remain open (see the record's preconditions).
 20. [`0020-host-to-guest-clipboard.md`](0020-host-to-guest-clipboard.md) —
     host-to-guest clipboard is one host action aimed at one Machine, over
     the pinned SSH channel to a fixed receiver.
@@ -212,19 +216,6 @@ Every entry has five fields. **Decision** repeats the record's status.
 **Source** links the code and the checks that exercise it, or says `none`.
 **Prerequisites** lists the decision, software, lab and hardware steps that
 remain.
-
-- [ADR 0019](0019-gpu-lease.md)
-  - Decision: proposed; implementation waits for the record's
-    preconditions.
-  - Built: none — no Template offers `gpu_lease`, no planner renders a
-    second shape, the hook does not distinguish a run without the GPU, and
-    every VFIO Machine starts with the GPU.
-  - Activation: none — there is no code to activate.
-  - Source: none
-  - Prerequisites: an image with a working session on both shapes
-    (`workstation-dev-standard`); the Nitro define-then-start test; the
-    operator's choice of Templates and default; then the planner, hook,
-    validation and Start changes the record describes.
 
 - [ADR 0022](0022-network-trust-and-gpu-policy.md)
   - Decision: proposed; no record accepts it, although the policy runs.

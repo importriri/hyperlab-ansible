@@ -78,7 +78,6 @@ there.
 
 | ADR | Question |
 | --- | --- |
-| [0019](adr/0019-gpu-lease.md) | a GPU-capable Machine choosing per run whether it owns the GPU |
 | [0025](adr/0025-host-key-without-agent-file-reads.md) | pinning host keys without agent file reads |
 | [0027](adr/0027-guest-notification-owner.md) | whether mako or the guest shell owns notifications |
 | [0030](adr/0030-disposable-browser-image.md) | how the disposable browser image gets its session |

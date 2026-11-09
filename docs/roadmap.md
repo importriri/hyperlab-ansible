@@ -86,12 +86,16 @@ or work that is not on `main` does not raise it.
   restrict the agent again or re-pin the host key. Readiness still requires
   that separate software work and the Nitro tests. No disposable Machine
   has been proven on hardware.
-- **GPU lease (5b):** proposed in [ADR 0019](adr/0019-gpu-lease.md), not
-  decided and not built. What it builds on, the shared definition, the
-  ladder and GPU-capable services, is software-verified.
+- **GPU lease (5b):** [ADR 0019](adr/0019-gpu-lease.md) accepted by the
+  operator on 2026-11-05: initially `workstation-dev-standard` only, default
+  without the dedicated NVIDIA GPU. The record names the unpublished
+  decision source. The lease is not built; image readiness, Create hardware
+  acceptance and the physical GPU → no-GPU → GPU test remain open. What it
+  builds on, the shared definition, the ladder and GPU-capable services, is
+  software-verified.
 - **Showcase:** the storyboard is written and the read-only demo script is
-  software-verified; the lease shot waits for ADR 0019, and the recording and
-  its privacy review are open.
+  software-verified; the lease shot waits for ADR 0019's prerequisites and
+  implementation, and the recording and its privacy review are open.
 - **Qualification gap:** the checked-in release order of milestone 14
   (`release/acceptance.v2.yml`) was written before this scope. It has no
   gate for a Machine created from the shell, the disposable discard, the two
@@ -170,9 +174,9 @@ then accepted on Nitro; Predator replays the frozen result.
       GPU-capable SERVICES ([ADR 0022](adr/0022-network-trust-and-gpu-policy.md),
       proposed; the policy it records is built and software-verified, see 5b
       and C10)
-- [x] the boot-scoped GPU lease recorded as a proposal
-      ([ADR 0019](adr/0019-gpu-lease.md), proposed; not decided and not
-      built, see 5b)
+- [x] the boot-scoped GPU lease design accepted by the operator on
+      2026-11-05 ([ADR 0019](adr/0019-gpu-lease.md); initial Template and
+      default decided, implementation and prerequisites still open, see 5b)
 - [x] ADR: no separate PLAY identity; `gaming-clean`, `gaming-dirty` and
       `gaming-offline` on clean, dirty and lab
       ([ADR 0023](adr/0023-gaming-identities.md), accepted)
@@ -344,6 +348,12 @@ Within one boot the GPU goes clean → dev → dirty → lab, never back up.
 - [x] its draft Template and the placeholder manifest that reserves
       `arch-dev-standard`; the Workbench replaces only such a placeholder
       (software-verified)
+
+The initial lease choice in [ADR 0019](adr/0019-gpu-lease.md) keeps
+`workstation-dev-standard` draft, with `standard: true` and `vfio: false`.
+Its capture, sealing and readiness remain open; acceptance of a future
+optional lease does not make the Template runnable with the GPU.
+
 - [x] Linux `gaming-clean` and `gaming-dirty` draft Templates, with the
       placeholder manifests that reserve their Workbench captures and their
       reviewed profile playbooks (software-verified)
@@ -417,11 +427,21 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [ ] a Machine declares `gpu_capable`; owning the GPU is a host-owned lease
       for one run, so a dev Machine can start without the GPU and restart
       with it for Blender or CUDA
-- [ ] the lease decided: [ADR 0019](adr/0019-gpu-lease.md) is proposed and
-      nothing of it is built (it waits for an image with a session on both
-      shapes, a hardware test of define-then-start and the choice of
-      Templates; it comes after `workstation-dev-standard` and the Create
-      view accepted on hardware, both open)
+- [x] the lease decided: [ADR 0019](adr/0019-gpu-lease.md), accepted by the
+      operator on 2026-11-05; the record names the unpublished decision
+      source. Initially `workstation-dev-standard` only, default without
+      the dedicated NVIDIA GPU; other Templates require separate decisions.
+      A mode change requires a stopped Machine; one Machine uses the GPU
+      at a time, with the existing ladder and refusals.
+- [ ] lease implementation after its prerequisites: first
+      `workstation-dev-standard` ready, then the Create view accepted on
+      Nitro, then the lease, preserving the order agreed on 2026-10-04.
+      The image must have a working session on both shapes, and the
+      physical GPU → no-GPU → GPU define-then-start test must show Looking
+      Glass, SPICE and the ladder level after each run. All remain open;
+      dual-shape planning, validation, the hook and Start require separate
+      reviewed work. Future workstation and services Templates remain
+      outside the initial rollout.
 - [x] SERVICES Machines may be GPU-capable through a reviewed handoff
       profile; the static rule that excludes them is replaced: a service spec
       names `gpu_handoff_profile` (null by default) and its VM spec must match
@@ -440,7 +460,8 @@ platform, recorded on the host:
 - [x] storyboard of 60 to 90 seconds: create a Machine from
       `workstation-dev` in the shell, first boot with the rice, the GPU lease,
       Looking Glass, the Desks, the host frame showing trust and network
-      ([`showcase.md`](showcase.md); the lease shot waits for ADR 0019)
+      ([`showcase.md`](showcase.md); the lease shot waits for ADR 0019's
+      prerequisites and implementation)
 - [x] a demo script that runs the steps in order, so the take is clean
       (`tools/showcase/demo.sh`, read-only; it prints a generic privacy
       checklist, never this host's names, paths or addresses, and a failing

@@ -1,9 +1,22 @@
 # ADR 0019 - A GPU-capable Machine leases the GPU for one run
 
-Status: proposed. The decision is recorded; implementation waits for the
-preconditions below. Order agreed on 2026-10-04: first
+Status: accepted (2026-11-05, operator's decision).
+
+The decision is recorded in the operator's private notes
+(operator-observed, unpublished), in the 2026-11-05 task entry for ADR 0019
+and its initial GPU choices, and Nitro session step 11 at 19:31. The
+operator accepted the design read at `main` commit
+`1e42308a863180590fc9b2a209b41227978b8a4f`: the initial optional lease is
+for `workstation-dev-standard` only, with a default start without the
+dedicated NVIDIA GPU. Other Templates require separate future decisions.
+This records design acceptance without adding implementation or hardware
+evidence.
+
+The prerequisite order agreed on 2026-10-04 remains: first
 `workstation-dev-standard`, then the Create view proven on Nitro, then the
-lease.
+lease. That historical agreement set the order; the 2026-11-05 decision
+settles the initial Template and default. Implementation still waits for
+the open preconditions below.
 
 ## Context
 
@@ -23,6 +36,13 @@ run, fixed when that run starts.
 
 ## Decision
 
+- **Initial scope and default.** Only `workstation-dev-standard` is selected
+  for the initial optional lease, and its default start will be without
+  the dedicated NVIDIA GPU. A different mode is selected only while the
+  Machine is stopped; only one Machine uses the GPU at a time. Other
+  workstation and services Templates remain future design space, outside
+  this initial rollout and subject to separate decisions and Template
+  review.
 - **Capability.** A Template may offer `gpu_lease: optional` beside the
   existing `vfio` device capability. A Machine created with it is
   GPU-capable: it may run with the GPU or without it. A Machine without it
@@ -48,7 +68,8 @@ run, fixed when that run starts.
   the same boot.
 - **Services.** A services Machine may be GPU-capable only through a
   handoff profile its Template allows; the static rule that excludes
-  services from the GPU is replaced by that Template review.
+  services from the GPU is replaced by that Template review. This generic
+  support does not select any services Template for the initial lease.
 - **The shell** shows the lease: Start offers *with GPU* and *without GPU*
   for a GPU-capable Machine, and the card states which one the current run
   has, from the domain observed by the host, never from the guest.
@@ -63,8 +84,26 @@ run, fixed when that run starts.
    functions: GPU run, GPU-less run, GPU run again in one boot, Looking
    Glass on the GPU run, SPICE on the GPU-less run, and the ladder level
    after each.
-3. The operator's choice of which Templates offer the lease, and whether
-   the default start is with or without the GPU.
+3. The Create view accepted on Nitro, after `workstation-dev-standard`
+   readiness and before the lease, as the agreed order requires.
+
+The initial Template and default are decided on 2026-11-05, not an open
+precondition. None of the image, Create acceptance or physical transition
+preconditions above is completed by that decision.
+
+## Implementation status
+
+- Not built: no Template offers `gpu_lease`, no planner renders the two
+  reviewed shapes, no managed start selects between them, and the hook
+  does not distinguish a GPU-capable Machine's run without the GPU.
+  Existing VFIO Machines still start with the GPU every time.
+- Activation: none — there is no lease implementation to activate. The
+  selected [`workstation-dev-standard` Template](../../templates/workstation-dev-standard.yml)
+  remains `draft`, with `standard: true` and `vfio: false`. This decision
+  neither promotes it nor makes it runnable in both shapes.
+- After the prerequisites, the planner, managed XML validation, hook and
+  Start changes above need separate reviewed implementation work. The
+  existing trust ladder, ownership checks and fail-closed refusals remain.
 
 ## Consequences
 
@@ -73,4 +112,5 @@ run, fixed when that run starts.
   metadata.
 - A crash between define and start leaves a valid reviewed shape defined,
   which validation accepts and the next start replaces.
-- `local-ai` and other GPU services become possible on the same rules.
+- `local-ai` and other GPU services remain future possibilities on the same
+  rules, requiring separate decisions beyond the initial rollout.
