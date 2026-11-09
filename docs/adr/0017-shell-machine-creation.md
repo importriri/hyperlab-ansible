@@ -1,7 +1,14 @@
 # ADR 0017 - The shell creates a Machine through the reviewed bridge and one durable operation
 
-Status: proposed. No record accepts it; what is built of it is listed
-under "Implementation status" below.
+Status: accepted (2026-11-05, operator's decision).
+
+The decision is recorded in the private operator task log
+(`OPERATOR-TASKS.md`, ADR 0017 entry dated 2026-11-05) and the Nitro session
+record (`seduta-2026-11-05.md`, step 11 at 19:24). The operator accepted
+the design read at `main` commit
+`1e42308a863180590fc9b2a209b41227978b8a4f`. This records design acceptance
+without adding hardware evidence; the implementation and its unobserved
+hardware checks remain listed under "Implementation status" below.
 
 ## Context
 

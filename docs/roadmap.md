@@ -68,8 +68,8 @@ or work that is not on `main` does not raise it.
 - **Plan and Intent (5):** software-verified. `create-plan` reports what the
   factory allows, and one staged `machine create --project` publishes the
   Machine record only after its projection is written
-  ([ADR 0017](adr/0017-shell-machine-creation.md) and
-  [ADR 0053](adr/0053-withdraw-machine-intent.md), both proposed).
+  ([ADR 0017](adr/0017-shell-machine-creation.md), accepted by the operator
+  on 2026-11-05; [ADR 0053](adr/0053-withdraw-machine-intent.md), proposed).
 - **Create view (5):** implemented in the shell and software-verified
   offscreen. No creation from the shell has been accepted on hardware.
 - **Provisioning (5):** the runner, the check of the whole plan before the
@@ -384,7 +384,7 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
 - [x] Create view in the shell: Template, name, network and resources
       within the Template's limits, provisioned as one durable operation;
       password and become prompt only in the operation window
-      ([ADR 0017](adr/0017-shell-machine-creation.md), proposed;
+      ([ADR 0017](adr/0017-shell-machine-creation.md), accepted 2026-11-05;
       software-verified)
   - [x] a refused creation leaves no record: one staged `machine create
         --project` under the registry lock, a failure after the record's
@@ -401,7 +401,7 @@ Details: [C10 — Machine Factory](#c10--machine-factory).
         failure, SIGINT, SIGTERM and SIGHUP, also when the runner is
         stopped while a playbook is slow to end, ignores SIGTERM or is
         still being started, only after that playbook is stopped and reaped
-        ([ADR 0017](adr/0017-shell-machine-creation.md), proposed;
+        ([ADR 0017](adr/0017-shell-machine-creation.md), accepted 2026-11-05;
         software-verified within the limits that ADR lists)
 - [ ] Create view accepted on Nitro: a server and a workstation created
       from the shell

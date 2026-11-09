@@ -37,9 +37,9 @@ entered the pipeline.
 16. [`0016-gpu-shared-definition-running-lease.md`](0016-gpu-shared-definition-running-lease.md) — several
     managed VFIO domains may name the GPU; only the running one owns it.
 17. [`0017-shell-machine-creation.md`](0017-shell-machine-creation.md) —
-    proposed: the shell creates a Machine through the reviewed bridge and one
+    accepted: the shell creates a Machine through the reviewed bridge and one
     durable operation; the password and the become prompt stay in its
-    terminal.
+    terminal (operator's decision, 2026-11-05).
 18. [`0018-disposable-discards-on-stop.md`](0018-disposable-discards-on-stop.md)
     — proposed: a disposable Machine's disk is a libvirt transient disk, so
     every stop discards its writes; access closing and the host-key pin at
@@ -211,35 +211,6 @@ Every entry has five fields. **Decision** repeats the record's status.
 **Source** links the code and the checks that exercise it, or says `none`.
 **Prerequisites** lists the decision, software, lab and hardware steps that
 remain.
-
-- [ADR 0017](0017-shell-machine-creation.md)
-  - Decision: proposed; no record accepts it.
-  - Built: built — the plan (`machine create-plan`), the staged intent
-    (`machine create --project`, ADR 0053), the shell's Create view and the
-    provisioning runner with its whole-plan check and hash-file cleanup.
-  - Activation: on request — `host_desktop_common`, part of
-    `playbooks/lab.yml`, installs the machine bridge, the operation runner
-    and the provisioner in `/usr/local/bin` and stages the shell source;
-    the Create view exists only in the Quickshell shell of the Hyprland
-    session. `playbooks/v1-host.yml` imports `lab.yml` and then
-    `host-desktop-hyprland.yml` with the managed session lifecycle enabled,
-    staging Quickshell beside Sway without starting a session or selecting
-    a Ly default. The Hyprland component run alone leaves that lifecycle
-    off. Nothing is created until the operator submits a creation.
-  - Source: [`privatestack-machine-actions.py`](../../roles/host_desktop_common/files/privatestack-machine-actions.py),
-    [`privatestack-operation.py`](../../roles/host_desktop_common/files/privatestack-operation.py),
-    [`privatestack-machine-provision.py`](../../roles/host_desktop_common/files/privatestack-machine-provision.py),
-    [`machine_provision.py`](../../tools/hyperlabctl/hyperlabctl/machine_provision.py),
-    [`CreateMachineView.qml`](../../roles/host_desktop_common/files/quickshell/hyperlab/CreateMachineView.qml),
-    [`v1-host.yml`](../../playbooks/v1-host.yml),
-    [`playbook_topology_contract.py`](../../tests/playbook_topology_contract.py),
-    [`c10_machine_create_plan_contract.py`](../../tests/c10_machine_create_plan_contract.py),
-    [`host_quickshell_create_view_contract.py`](../../tests/host_quickshell_create_view_contract.py),
-    [`host_machine_provision_contract.py`](../../tests/host_machine_provision_contract.py)
-  - Prerequisites: the operator's decision; a Machine created from the
-    installed shell on Nitro, with a real unit stop and a real
-    `ansible-playbook` under the runner; the disposable follow-up of
-    ADR 0018 and the lease of ADR 0019, both open.
 
 - [ADR 0018](0018-disposable-discards-on-stop.md)
   - Decision: proposed; no record accepts it.
