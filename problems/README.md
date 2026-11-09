@@ -27,6 +27,9 @@ proof.
 - [`running-desktop-keeps-old-installed-code.md`](running-desktop-keeps-old-installed-code.md):
   installed QML and recovery Python updates left older presentation processes
   resident; every apply now refreshes residents older than the installed code.
+- [`resident-refresh-rejected-symlinked-checkout.md`](resident-refresh-rejected-symlinked-checkout.md):
+  resident refresh rejected the configured checkout symlink; resolver hashing
+  now resolves the checkout while observer matching retains its literal argv.
 
 - [`trust-pool-render-contract-portability.md`](trust-pool-render-contract-portability.md):
   compressed PNG equality was runtime-dependent; arithmetic marks and product

@@ -212,6 +212,59 @@ def observer_generation_contract(module: Any, directory: Path) -> None:
         refused(lambda: module.source_generation("quickshell"), "redirected generation checkout pointer accepted")
 
 
+def symlinked_checkout_contract(module: Any, directory: Path) -> None:
+    """Hash the resolved checkout but recognize the observer's literal argv."""
+    directory.mkdir()
+    shell = directory / "shell"
+    shell.mkdir()
+    (shell / "shell.qml").write_text("shell")
+    unit = directory / "unit"
+    unit.write_text("unit")
+    with observer_sources(module, directory / "observers"), \
+            patch.object(module, "SHELL_ROOT", shell), patch.object(module, "UNIT_PATH", unit):
+        pointer = module.CHECKOUT_POINTER
+        checkout = Path(pointer.read_text().strip())
+        resolver = checkout / "tools/surface_provenance.py"
+        leaf = directory / "checkout-link"
+        leaf.symlink_to(checkout, target_is_directory=True)
+        ancestor = directory / "ancestor-link"
+        ancestor.symlink_to(checkout.parent, target_is_directory=True)
+        for literal in (leaf, ancestor / checkout.name):
+            pointer.write_text(str(literal) + "\n")
+            generation = module.source_generation("quickshell")
+            resolver.write_text("resolver changed")
+            require(module.source_generation("quickshell") != generation,
+                    "symlinked checkout resolver omitted from installed generation")
+            argv = ("/usr/bin/python3", "-I", "-B", str(literal / "tools/surface_provenance.py"),
+                    "--repo", str(literal), "--proc-root", "/proc", "stream", "--registry",
+                    f"/run/user/{os.getuid()}/hyperlab/surface-provenance.json")
+            require(module.resident_observer(argv), "literal symlinked checkout observer rejected")
+            for index in range(len(argv)):
+                changed = tuple("unreviewed" if offset == index else value for offset, value in enumerate(argv))
+                require(not module.resident_observer(changed), "arbitrary symlinked checkout observer accepted")
+            canonical = list(argv)
+            canonical[3], canonical[5] = str(resolver), str(checkout)
+            require(not module.resident_observer(tuple(canonical)), "canonical checkout observer accepted as literal")
+            missing = checkout.rename(directory / "unavailable-checkout")
+            refused(lambda: module.source_generation("quickshell"), "missing symlinked checkout accepted")
+            refused(lambda argv=argv: module.resident_observer(argv), "missing observer checkout accepted")
+            missing.rename(checkout)
+            resolver.unlink()
+            refused(lambda: module.source_generation("quickshell"), "missing symlinked checkout resolver accepted")
+            resolver.symlink_to(unit)
+            refused(lambda: module.source_generation("quickshell"), "redirected symlinked checkout resolver accepted")
+            refused(lambda argv=argv: module.resident_observer(argv), "redirected symlinked checkout observer accepted")
+            resolver.unlink()
+            resolver.write_text("resolver one")
+            tools = checkout / "tools"
+            real_tools = tools.rename(checkout / "real-tools")
+            tools.symlink_to(real_tools, target_is_directory=True)
+            refused(lambda: module.source_generation("quickshell"), "redirected checkout tools directory accepted")
+            refused(lambda argv=argv: module.resident_observer(argv), "redirected observer tools directory accepted")
+            tools.unlink()
+            real_tools.rename(tools)
+
+
 def runtime_contract(module: Any, directory: Path) -> None:
     runtime = directory / "runtime"
     uid = os.getuid()
@@ -1057,6 +1110,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="shell-refresh-") as temporary:
         directory = Path(temporary)
         review_regressions(module, directory)
+        symlinked_checkout_contract(module, directory / "symlinked-checkouts")
         runtime_contract(module, directory)
         refresh_contract(module)
         state_contract(module, directory)

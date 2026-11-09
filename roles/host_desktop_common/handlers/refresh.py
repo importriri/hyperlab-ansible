@@ -291,9 +291,9 @@ def provenance_source() -> tuple[Path, Path]:
     if len(lines) != 1:
         raise RuntimeError("Invalid checkout pointer")
     checkout = Path(lines[0])
-    if not checkout.is_absolute() or checkout.resolve(strict=True) != checkout:
+    if not checkout.is_absolute():
         raise RuntimeError("Redirected checkout pointer")
-    resolver = checkout / "tools/surface_provenance.py"
+    resolver = checkout.resolve(strict=True) / "tools/surface_provenance.py"
     require_regular_file(resolver)
     if resolver.resolve(strict=True) != resolver:
         raise RuntimeError("Redirected provenance resolver")
@@ -303,7 +303,9 @@ def provenance_source() -> tuple[Path, Path]:
 def provenance_resolver(argv: tuple[str, ...]) -> bool:
     if argv[:3] != ("/usr/bin/python3", "-I", "-B"):
         return False
-    checkout, resolver = provenance_source()
+    checkout, _ = provenance_source()
+    # The bridge execs with the pointer's spelling, including checkout symlinks.
+    resolver = checkout / "tools/surface_provenance.py"
     return argv == ("/usr/bin/python3", "-I", "-B", str(resolver), "--repo", str(checkout),
                     "--proc-root", "/proc", "stream", "--registry",
                     f"/run/user/{os.getuid()}/hyperlab/surface-provenance.json")

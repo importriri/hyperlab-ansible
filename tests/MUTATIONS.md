@@ -4534,3 +4534,29 @@ survived.
 | V47 | Move `require_idle_cgroup(current)` inside `with paused_shell(...)` | replacement | `idle waiting must precede the shell pause` |
 | V48 | Insert `time.sleep(0.02)` immediately after the pinned `SIGSTOP` | replacement | `sleep or monotonic wait while the shell is paused` |
 | V49 | Keep the paused `busy_members` sample but disable its refusal condition | replacement | `late child or running thread was killed` |
+
+### Symlinked checkout paths
+
+`symlinked_checkout_contract(module, directory)` exercises a checkout symlink
+both at the final component and in an ancestor. Generation hashing follows
+the resolved checkout; exact observer matching retains the pointer's literal
+checkout and resolver arguments. Resolver edits change the generation, while
+missing checkouts, missing resolvers, symlinked resolvers and redirected tools
+directories remain refused. Existing pointer-file, line-count and argv
+refusals are unchanged.
+
+For a focused replay, load the contract with `runpy.run_path()`, create a
+fresh `TemporaryDirectory`, and call `symlinked_checkout_contract(load_refresh(),
+Path(temporary) / "case")` using the functions from that contract namespace.
+The `case` directory must not exist yet. Copy `refresh.py` before each
+mutation, restore its saved bytes, then rerun the same focused stage. Each
+case below was observed red with the indicated result and green after exact
+restoration; none survived. The new stage also failed with the original
+strict checkout refusal before the fix.
+
+| ID | Break | Focused stage | Observed red result |
+| --- | --- | --- | --- |
+| V50 | Restore `or checkout.resolve(strict=True) != checkout` in the absolute-checkout guard | symlinked checkout | `Redirected checkout pointer` |
+| V51 | In `provenance_resolver`, use the resolved resolver returned by `provenance_source()` and set `checkout = resolver.parent.parent` for argv matching | symlinked checkout | `literal symlinked checkout observer rejected` |
+| V52 | Remove `include(resolver, str(resolver))` from `source_generation` | symlinked checkout | `symlinked checkout resolver omitted from installed generation` |
+| V53 | Remove the `resolver.resolve(strict=True) != resolver` refusal | symlinked checkout | `redirected checkout tools directory accepted` |

@@ -851,7 +851,8 @@ Measured with the complete security plane active.
 
 - [x] software gate for installed-versus-resident desktop code: state-based
       refresh with clock-step and launch-race checks, retry, check-mode silence
-      and immediate unchanged-apply idempotence
+      and immediate unchanged-apply idempotence; symlinked checkout paths retain
+      literal observer matching while hashing the resolved resolver
       (`tests/shell_reload_after_apply_contract.py`, software-verified)
 - [ ] installed desktop refresh observed after host apply on Nitro and
       replayed on Predator; see [the shell update contract](hyperlab-shell.md#installed-updates-and-resident-code)
