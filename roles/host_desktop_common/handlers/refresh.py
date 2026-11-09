@@ -39,6 +39,7 @@ RESIDENT_OBSERVERS = frozenset({
     (STATUS_BRIDGE, "diagnostics-domains"),
     (COMPOSITOR_ADAPTER, "workspace-watch"),
     (COMPOSITOR_ADAPTER, "focused-window-watch"),
+    (COMPOSITOR_ADAPTER, "product-identity"),
     ("/usr/local/bin/privatestack-surface-provenance", "stream"),
     ("/usr/local/bin/privatestack-telemetry", "snapshot"),
 })
@@ -107,6 +108,11 @@ def source_generation(surface: str) -> str:
         require_regular_file(SHELL_ROOT / "shell.qml")
         collect(SHELL_ROOT)
         include(UNIT_PATH, str(UNIT_PATH))
+        for executable in sorted({command[0] for command in RESIDENT_OBSERVERS}):
+            include(Path(executable), executable)
+        _, resolver = provenance_source()
+        include(CHECKOUT_POINTER, str(CHECKOUT_POINTER))
+        include(resolver, str(resolver))
     else:
         include(CONTROL_CENTER_PATH, str(CONTROL_CENTER_PATH))
     return hashlib.sha256(json.dumps(entries, separators=(",", ":")).encode()).hexdigest()
@@ -279,9 +285,7 @@ def process_identity(pid: int) -> tuple[int, tuple[str, ...]]:
     return parent, tuple(os.fsdecode(argument) for argument in arguments)
 
 
-def provenance_resolver(argv: tuple[str, ...]) -> bool:
-    if argv[:3] != ("/usr/bin/python3", "-I", "-B"):
-        return False
+def provenance_source() -> tuple[Path, Path]:
     require_regular_file(CHECKOUT_POINTER)
     lines = CHECKOUT_POINTER.read_text().splitlines()
     if len(lines) != 1:
@@ -293,6 +297,13 @@ def provenance_resolver(argv: tuple[str, ...]) -> bool:
     require_regular_file(resolver)
     if resolver.resolve(strict=True) != resolver:
         raise RuntimeError("Redirected provenance resolver")
+    return checkout, resolver
+
+
+def provenance_resolver(argv: tuple[str, ...]) -> bool:
+    if argv[:3] != ("/usr/bin/python3", "-I", "-B"):
+        return False
+    checkout, resolver = provenance_source()
     return argv == ("/usr/bin/python3", "-I", "-B", str(resolver), "--repo", str(checkout),
                     "--proc-root", "/proc", "stream", "--registry",
                     f"/run/user/{os.getuid()}/hyperlab/surface-provenance.json")
@@ -387,11 +398,8 @@ def paused_shell(pid: int, started: int) -> Iterator[PausedShell]:
             raise RuntimeError("Shell identity changed or was already stopped")
         stopped = True
         signal.pidfd_send_signal(descriptor, signal.SIGSTOP)
-        deadline = time.monotonic() + 2
-        while any(state != "T" for state in thread_states(pid)):
-            if time.monotonic() >= deadline:
-                raise RuntimeError("Shell did not stop every thread")
-            time.sleep(0.02)
+        if any(state != "T" for state in thread_states(pid)):
+            raise RuntimeError("Shell did not stop every thread; reapply")
         yield paused
     finally:
         try:
@@ -425,8 +433,14 @@ def replace_shell(env: dict[str, str], properties: dict[str, str]) -> int:
         raise RuntimeError("Shell identity or restart policy changed before refresh")
     pid = int(current["MainPID"])
     started = process_ticks(pid)
+    require_idle_cgroup(current)
     with paused_shell(pid, started) as paused:
-        require_idle_cgroup(current)
+        # Never wait while host trust/provenance presentation is frozen.
+        if busy := busy_members(current):
+            raise RuntimeError(
+                f"Shell refresh refused: shell child PIDs {busy} appeared before "
+                "the pause. Finish or close them, then reapply."
+            )
         paused.terminate()
     # Existing on-failure policy performs the restart and observer cleanup.
     # We never start an inactive service or send a compositor/session job.

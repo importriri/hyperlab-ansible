@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import Any, Iterator
 from unittest.mock import Mock, patch
 
 import yaml
@@ -115,13 +115,101 @@ def deployment_contract() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "executable": "/usr/bin/python"}
     require(task == expected, "final shell reconciliation differs from the reviewed deployment task")
     require(unit["Service"]["Restart"] == "on-failure", "pinned replacement needs the existing restart policy")
-    return [copies[0], helpers, unit_copies[0]], [*reconcilers, task]
+    module = load_refresh()
+    observer_paths = {command[0] for command in module.RESIDENT_OBSERVERS}
+    deployed = set()
+    observer_copies = []
+    pipeline = [*common, *sway, *hyprland, task]
+    for role_tasks in (common, sway, hyprland):
+        for copy in role_tasks:
+            action = copy.get("ansible.builtin.copy", {})
+            for item in copy.get("loop", [{}]):
+                if not isinstance(item, dict):
+                    continue
+                dest = action.get("dest", "").replace("{{ item.dest }}", item.get("dest", ""))
+                if dest not in observer_paths and dest != str(module.CHECKOUT_POINTER):
+                    continue
+                boundary = reconcilers[0] if role_tasks is common else task
+                require(pipeline.index(copy) < pipeline.index(boundary),
+                        "observer copy has no subsequent resident-state reconciliation: " + dest)
+                require(set(copy.get("tags", [])) <= set(boundary.get("tags", [])),
+                        "tagged observer copy has no reconciliation: " + dest)
+                if dest in observer_paths:
+                    deployed.add(dest)
+                    if copy is not helpers:
+                        observer_copies.append(copy)
+    require(deployed == observer_paths, "observer executable lacks a deployment copy")
+    with tempfile.TemporaryDirectory(prefix="observer-generation-") as temporary:
+        observer_generation_contract(module, Path(temporary))
+    return [copies[0], helpers, unit_copies[0], *observer_copies], [*reconcilers, task]
 
 
 def load_refresh() -> Any:
     module = ModuleType("desktop_refresh")
     exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)
     return module
+
+
+@contextmanager
+def observer_sources(module: Any, directory: Path) -> Iterator[dict[str, Path]]:
+    """Provide real installed observer files without using host paths."""
+    directory.mkdir()
+    paths = {argv[0]: directory / Path(argv[0]).name for argv in module.RESIDENT_OBSERVERS}
+    for path in paths.values():
+        path.write_text("observer one")
+    checkout = directory / "checkout"
+    (checkout / "tools").mkdir(parents=True)
+    (checkout / "tools/surface_provenance.py").write_text("resolver one")
+    pointer = directory / "checkout-pointer"
+    pointer.write_text(str(checkout) + "\n")
+    observers = frozenset((str(paths[argv[0]]), *argv[1:]) for argv in module.RESIDENT_OBSERVERS)
+    with patch.object(module, "RESIDENT_OBSERVERS", observers), \
+            patch.object(module, "COMPOSITOR_ADAPTER", str(paths[module.COMPOSITOR_ADAPTER])), \
+            patch.object(module, "STATUS_BRIDGE", str(paths[module.STATUS_BRIDGE])), \
+            patch.object(module, "CHECKOUT_POINTER", pointer):
+        yield paths
+
+
+def observer_generation_contract(module: Any, directory: Path) -> None:
+    shell = directory / "shell"
+    shell.mkdir()
+    (shell / "shell.qml").write_text("shell")
+    unit = directory / "unit"
+    unit.write_text("unit")
+    with observer_sources(module, directory / "observers") as paths, \
+            patch.object(module, "SHELL_ROOT", shell), patch.object(module, "UNIT_PATH", unit):
+        for original, path in sorted(paths.items()):
+            generation = module.source_generation("quickshell")
+            path.write_text("observer two")
+            require(module.source_generation("quickshell") != generation,
+                    "observer executable omitted from installed generation: " + original)
+            path.unlink()
+            refused(lambda: module.source_generation("quickshell"), "missing observer accepted: " + original)
+            path.symlink_to(unit)
+            refused(lambda: module.source_generation("quickshell"), "redirected observer accepted: " + original)
+            path.unlink()
+            path.write_text("observer one")
+        pointer = module.CHECKOUT_POINTER
+        checkout = Path(pointer.read_text().strip())
+        resolver = checkout / "tools/surface_provenance.py"
+        generation = module.source_generation("quickshell")
+        resolver.write_text("resolver two")
+        require(module.source_generation("quickshell") != generation,
+                "checkout resolver omitted from installed generation")
+        for invalid in (str(checkout) + "\n" + str(checkout) + "\n", "relative\n", ""):
+            pointer.write_text(invalid)
+            refused(lambda: module.source_generation("quickshell"), "invalid generation checkout pointer accepted")
+        pointer.write_text(str(checkout) + "\n")
+        resolver.unlink()
+        refused(lambda: module.source_generation("quickshell"), "missing generation resolver accepted")
+        resolver.symlink_to(unit)
+        refused(lambda: module.source_generation("quickshell"), "redirected generation resolver accepted")
+        resolver.unlink()
+        resolver.write_text("resolver one")
+        pointer.unlink()
+        refused(lambda: module.source_generation("quickshell"), "missing generation checkout pointer accepted")
+        pointer.symlink_to(unit)
+        refused(lambda: module.source_generation("quickshell"), "redirected generation checkout pointer accepted")
 
 
 def runtime_contract(module: Any, directory: Path) -> None:
@@ -290,7 +378,8 @@ def state_contract(module: Any, directory: Path) -> None:
     unit.write_text("one")
     features = source / "features.json"
     features.write_text("{}")
-    with patch.object(module, "SHELL_ROOT", source), patch.object(module, "UNIT_PATH", unit):
+    with observer_sources(module, directory / "state-observers"), \
+            patch.object(module, "SHELL_ROOT", source), patch.object(module, "UNIT_PATH", unit):
         original = module.source_generation("quickshell")
         features.write_text('{"changed": true}')
         require(module.source_generation("quickshell") == original, "live-watched features trigger shell restart")
@@ -524,11 +613,19 @@ def ansible_contract(tasks: list[dict[str, Any]], reconcilers: list[dict[str, An
     (shell / "IsolationGlyph.qml").write_text("symbol one")
     manager = next(item for item in tasks[1]["loop"] if item["src"] == "privatestack-hyperlab-domains.py")
     helper = next(item for item in tasks[1]["loop"] if item["src"] != manager["src"])
-    for item in (manager, helper):
+    status = next(item for item in tasks[1]["loop"]
+                  if item["dest"] == Path(load_refresh().STATUS_BRIDGE).name)
+    for item in (manager, helper, status):
         (source / item["src"]).write_text(item["src"] + " one")
     (source / UNIT).write_text("unit one")
+    for task in tasks[3:]:
+        (source / task["ansible.builtin.copy"]["src"]).write_text("observer one")
     installed = directory / "installed"
     installed.mkdir()
+    checkout = installed / "checkout"
+    (checkout / "tools").mkdir(parents=True)
+    (checkout / "tools/surface_provenance.py").write_text("resolver one")
+    (installed / "checkout-pointer").write_text(str(checkout) + "\n")
     log, running = directory / "refreshes", directory / "running.json"
     fail_refresh = directory / "fail-refresh"
     running.write_text(json.dumps({"quickshell": 1, "control-center": 1}))
@@ -553,6 +650,11 @@ def ansible_contract(tasks: list[dict[str, Any]], reconcilers: list[dict[str, An
                      "    return 42\n"
                      "m.update(SHELL_ROOT=root / 'shell', UNIT_PATH=root / 'unit', "
                      f"CONTROL_CENTER_PATH=root / {manager['dest']!r})\n"
+                     "m.update(RESIDENT_OBSERVERS=frozenset((str(root / pathlib.Path(argv[0]).name), *argv[1:])\n"
+                     "         for argv in m['RESIDENT_OBSERVERS']),\n"
+                     "         COMPOSITOR_ADAPTER=str(root / pathlib.Path(m['COMPOSITOR_ADAPTER']).name),\n"
+                     "         STATUS_BRIDGE=str(root / pathlib.Path(m['STATUS_BRIDGE']).name),\n"
+                     "         CHECKOUT_POINTER=root / 'checkout-pointer')\n"
                      "m.update(process_ticks=lambda pid: state[surface],\n"
                      "         replace_shell=lambda env, properties: refreshed(),\n"
                      "         control_center_connection=lambda env: object(),\n"
@@ -569,11 +671,17 @@ def ansible_contract(tasks: list[dict[str, Any]], reconcilers: list[dict[str, An
     copies = [
         {"name": tasks[0]["name"],
          "ansible.builtin.copy": {"src": str(shell) + "/", "dest": str(installed / "shell") + "/", "mode": "0644"}},
-        {"name": tasks[1]["name"], "loop": [manager, helper],
+        {"name": tasks[1]["name"], "loop": [manager, helper, status],
          "ansible.builtin.copy": {"src": str(source) + "/{{ item.src }}",
                                   "dest": str(installed) + "/{{ item.dest }}", "mode": "0755"}},
         {"name": tasks[2]["name"],
          "ansible.builtin.copy": {"src": str(source / UNIT), "dest": str(installed / "unit"), "mode": "0644"}},
+    ]
+    observers = [
+        {"name": task["name"], "ansible.builtin.copy": {
+            "src": str(source / task["ansible.builtin.copy"]["src"]),
+            "dest": str(installed / Path(task["ansible.builtin.copy"]["dest"]).name), "mode": "0755"}}
+        for task in tasks[3:]
     ]
     fixture_reconcilers = [
         {"name": task["name"], "when": task["when"], "register": task["register"],
@@ -591,7 +699,7 @@ def ansible_contract(tasks: list[dict[str, Any]], reconcilers: list[dict[str, An
         failure = [{"name": "Injected later failure", "ansible.builtin.fail": {"msg": "injected"}}] if fail_later else []
         playbook.write_text(yaml.safe_dump([{"name": "Isolated desktop refresh", "hosts": "localhost",
                                            "gather_facts": False, "become": False,
-                                           "tasks": copies[:2] + failure + fixture_reconcilers[:2]
+                                           "tasks": copies[:2] + observers + failure + fixture_reconcilers[:2]
                                            + copies[2:] + fixture_reconcilers[2:]}]))
         result = subprocess.run(["ansible-playbook", "-i", "localhost,", "-c", "local", str(playbook),
                                  *(["--check"] if check else [])], env=env, capture_output=True,
@@ -606,6 +714,11 @@ def ansible_contract(tasks: list[dict[str, Any]], reconcilers: list[dict[str, An
     # Fresh install has no unit until the later play: stage the old unit first.
     (installed / "unit").write_text("unit one")
     apply(["quickshell", "control-center"])
+    apply([], changed=False)
+    adapter = next(task["ansible.builtin.copy"]["src"] for task in tasks[3:]
+                   if task["ansible.builtin.copy"]["dest"] == load_refresh().COMPOSITOR_ADAPTER)
+    (source / adapter).write_text("adapter two")
+    apply(["quickshell"])
     apply([], changed=False)
     (source / helper["src"]).write_text("helper two")
     apply([])
@@ -656,7 +769,8 @@ def clock_step_contract(module: Any, directory: Path) -> None:
                 pid[0] = 42
                 return 42
 
-            with patch.object(module, "SHELL_ROOT", shell), patch.object(module, "UNIT_PATH", unit), \
+            with observer_sources(module, root / "observers"), \
+                    patch.object(module, "SHELL_ROOT", shell), patch.object(module, "UNIT_PATH", unit), \
                     patch.object(module, "CONTROL_CENTER_PATH", code), \
                     patch.object(module, "boot_ticks", side_effect=lambda boot=boot: boot[0]), \
                     patch.object(module, "process_ticks", side_effect=lambda value, ticks=ticks: ticks[value]), \
@@ -765,26 +879,33 @@ def replacement_contract(module: Any, directory: Path) -> None:
         require(kwargs == {"check": True, "timeout": 30, "env": env}, "refresh failure/deadline lost")
         events.append("reload")
 
-    def inspect(state: Any) -> None:
-        require(events == ["reload", "stop"], "final inspection did not prevent launches")
+    def wait_idle(state: Any) -> None:
+        require(events == ["reload"], "idle waiting must precede the shell pause")
+        events.append("idle")
+
+    def inspect(state: Any) -> list[int]:
+        require(events == ["reload", "idle", "stop"], "final inspection did not prevent launches")
         events.append("inspect")
+        return []
 
     with patch.object(module, "shell_properties", side_effect=[properties(), properties(MainPID="42")]), \
             patch.object(module, "process_ticks", return_value=50), \
             patch.object(module, "paused_shell", side_effect=pause), \
-            patch.object(module, "require_idle_cgroup", side_effect=inspect), \
+            patch.object(module, "require_idle_cgroup", side_effect=wait_idle), \
+            patch.object(module, "busy_members", side_effect=inspect), \
             patch.object(module.subprocess, "run", side_effect=reload):
         require(module.replace_shell(env, properties()) == 42, "new shell identity not verified")
-        require(events == ["reload", "stop", "inspect", "kill", "leave"], "unsafe refresh sequence")
+        require(events == ["reload", "idle", "stop", "inspect", "kill", "leave"], "unsafe refresh sequence")
     # The review's reproduction: daemon-reload introduces a busy child.
     with patch.object(module, "shell_properties", return_value=properties()), \
             patch.object(module, "process_ticks", return_value=50), \
-            patch.object(module, "paused_shell", side_effect=pause), \
+            patch.object(module, "paused_shell", side_effect=AssertionError("busy shell reached pause")) as pause_mock, \
             patch.object(module, "require_idle_cgroup", side_effect=RuntimeError("late busy child")), \
             patch.object(module.subprocess, "run"):
         paused.reset_mock()
         refused(lambda: module.replace_shell(env, properties()), "child created during reload was killed")
         paused.terminate.assert_not_called()
+        pause_mock.assert_not_called()
     for state in (properties(MainPID="99"), properties(Restart="no"),
                   properties(RestartPreventExitStatus="9"), properties(SuccessExitStatus="9"),
                   properties(NeedDaemonReload="yes"),
@@ -797,7 +918,8 @@ def replacement_contract(module: Any, directory: Path) -> None:
     with patch.object(module, "shell_properties", return_value=properties()), \
             patch.object(module, "process_ticks", return_value=50), \
             patch.object(module, "paused_shell", side_effect=pause), \
-            patch.object(module, "require_idle_cgroup"), patch.object(module.subprocess, "run"), \
+            patch.object(module, "require_idle_cgroup"), \
+            patch.object(module, "busy_members", return_value=[]), patch.object(module.subprocess, "run"), \
             patch.object(module.time, "monotonic", side_effect=[0, 31]):
         refused(lambda: module.replace_shell(env, properties()), "unchanged resident identity accepted")
     for started, states in ((51, [["S"], ["T"]]), (50, [["T"]])):
@@ -811,27 +933,51 @@ def replacement_contract(module: Any, directory: Path) -> None:
                     pass
             refused(enter_pause, "changed identity or already stopped shell accepted")
             send.assert_not_called()
-    # Deterministic proof that every thread has stopped, and failure resumes it.
-    for fail in (False, True):
+    # No sleep or monotonic deadline is permitted while the pinned shell is stopped.
+    # A busy child first seen after SIGSTOP causes an immediate, single-sample refusal.
+    for outcome in ("idle", "late-busy", "not-all-stopped"):
+        signals = []
+        stopped = [False]
+
+        def send_signal(descriptor: int, sent: int, signals: list[tuple[int, int]] = signals,
+                        stopped: list[bool] = stopped) -> None:
+            signals.append((descriptor, sent))
+            stopped[0] = sent == signal.SIGSTOP
+
+        def no_paused_wait(*args: Any, stopped: list[bool] = stopped) -> float:
+            require(not stopped[0], "sleep or monotonic wait while the shell is paused")
+            return 0.0
+
+        samples = []
+
+        def members(state: Any, samples: list[bool] = samples, stopped: list[bool] = stopped,
+                    outcome: str = outcome) -> list[int]:
+            samples.append(stopped[0])
+            return [99] if stopped[0] and outcome == "late-busy" else []
+
+        states = [["S", "S"], ["T", "S"] if outcome == "not-all-stopped" else ["T", "T"]]
         with patch.object(module.os, "pidfd_open", return_value=123) as pin, \
                 patch.object(module.os, "close") as close, \
                 patch.object(module, "process_ticks", return_value=50), \
-                patch.object(module, "thread_states", side_effect=[["S", "S"], ["T", "S"], ["T", "T"]]) as states, \
-                patch.object(module.time, "sleep") as sleep, \
-                patch.object(module.signal, "pidfd_send_signal") as send:
-            try:
-                with module.paused_shell(41, 50) as process:
-                    require(states.call_count == 3 and sleep.call_count == 1,
-                            "not all shell threads were stopped before inspection")
-                    if fail:
-                        raise RuntimeError("busy child")
-                    process.terminate()
-            except RuntimeError:
-                require(fail, "unexpected pause failure")
+                patch.object(module, "thread_states", side_effect=states) as threads, \
+                patch.object(module, "shell_properties", side_effect=[properties(), properties(MainPID="42")]), \
+                patch.object(module, "busy_members", side_effect=members), \
+                patch.object(module.subprocess, "run", side_effect=reload), \
+                patch.object(module.time, "monotonic", side_effect=no_paused_wait), \
+                patch.object(module.time, "sleep", side_effect=no_paused_wait) as sleep, \
+                patch.object(module.signal, "pidfd_send_signal", side_effect=send_signal):
+            if outcome == "idle":
+                require(module.replace_shell(env, properties()) == 42, "idle shell did not refresh")
+            else:
+                refused(lambda: module.replace_shell(env, properties()), "late child or running thread was killed")
+            require(threads.call_count == 2, "stopped threads must be checked once without polling")
+            require(samples == ([False] if outcome == "not-all-stopped" else [False, True]),
+                    "refresh needs one live and one paused cgroup inspection")
+            sleep.assert_not_called()
             pin.assert_called_once_with(41)
             close.assert_called_once_with(123)
-            require([call.args for call in send.call_args_list] ==
-                    [(123, signal.SIGSTOP), (123, signal.SIGCONT if fail else signal.SIGKILL)],
+            require(signals == [(123, signal.SIGSTOP),
+                                (123, signal.SIGKILL if outcome == "idle" else signal.SIGCONT)],
                     "paused shell resumed before termination or not resumed on refusal")
     # A real inert launcher is asked to fork AFTER the final inspection.
     # SIGSTOP prevents that request executing before the pinned SIGKILL.
@@ -859,12 +1005,14 @@ def replacement_contract(module: Any, directory: Path) -> None:
     with subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"]) as child, \
             subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"]) as shell:
         try:
-            with patch.object(module, "busy_members", return_value=[child.pid]), \
-                    patch.object(module, "IDLE_WAIT_SECONDS", 0):
-                def busy() -> None:
-                    with module.paused_shell(shell.pid, module.process_ticks(shell.pid)):
-                        module.require_idle_cgroup(properties(MainPID=str(shell.pid)))
-                refused(busy, "existing non-observer was killed")
+            def members(state: Any) -> list[int]:
+                return [child.pid] if "T" in module.thread_states(shell.pid) else []
+
+            with patch.object(module, "busy_members", side_effect=members), \
+                    patch.object(module, "shell_properties", return_value=properties(MainPID=str(shell.pid))), \
+                    patch.object(module.subprocess, "run"):
+                refused(lambda: module.replace_shell(env, properties(MainPID=str(shell.pid))),
+                        "existing non-observer was killed")
             require(child.poll() is None and "T" not in module.thread_states(shell.pid),
                     "busy refusal killed a child or left shell stopped")
         finally:

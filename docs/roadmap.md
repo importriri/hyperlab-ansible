@@ -573,7 +573,7 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       cannot hide updates, failed applies retry and paused inspection
       refuses busy children without killing them; inactive surfaces
       stay inactive and an unchanged second apply sends nothing
-      ([ADR 0059](adr/0059-resident-desktop-updates.md), proposed;
+      ([ADR 0061](adr/0061-resident-desktop-updates.md), proposed;
       `tests/shell_reload_after_apply_contract.py`, software-verified)
 - [ ] the same installed on Nitro: changed symbol visible after apply
       without a manual shell restart, recovery manager running the new code,

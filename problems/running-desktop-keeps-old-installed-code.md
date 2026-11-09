@@ -69,7 +69,7 @@ contract permits exactly that final task and continues to refuse arbitrary
 inline tasks and component launches. The immediate second pass is inert.
 
 The proposed boundary and UI-state consequences are in
-[ADR 0059](../docs/adr/0059-resident-desktop-updates.md). The contract is
+[ADR 0061](../docs/adr/0061-resident-desktop-updates.md). The contract is
 `tests/shell_reload_after_apply_contract.py`; mutations are recorded in
 `tests/MUTATIONS.md`. Software checks include both clock-step directions,
 failed unchanged retries, a real inert launcher queued after inspection,

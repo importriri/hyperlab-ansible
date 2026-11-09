@@ -240,18 +240,6 @@
     group: root
     mode: "0644"
 
-# Reconcile running state even when a prior apply installed these files and failed.
-- name: Refresh the running HyperLab shell
-  tags: [hyperlab_provenance]
-  become: true
-  become_user: "{{ admin_user }}"
-  ansible.builtin.script:
-    cmd: "{{ role_path }}/handlers/refresh.py quickshell"
-    executable: /usr/bin/python
-  register: host_desktop_common_resident_refresh
-  changed_when: (host_desktop_common_resident_refresh.stdout | from_json).changed
-  when: not ansible_check_mode
-
 - name: Inspect installed shared HyperLab Quickshell files
   ansible.builtin.stat:
     path: "{{ host_desktop_common_shell_stage.config_root }}/{{ item }}"
@@ -457,6 +445,18 @@
     owner: root
     group: root
     mode: "0755"
+
+# Reconcile running state even when a prior apply installed these files and failed.
+- name: Refresh the running HyperLab shell
+  tags: [hyperlab_provenance]
+  become: true
+  become_user: "{{ admin_user }}"
+  ansible.builtin.script:
+    cmd: "{{ role_path }}/handlers/refresh.py quickshell"
+    executable: /usr/bin/python
+  register: host_desktop_common_resident_refresh
+  changed_when: (host_desktop_common_resident_refresh.stdout | from_json).changed
+  when: not ansible_check_mode
 
 - name: Record that the host_desktop_common brick landed
   ansible.builtin.include_role:

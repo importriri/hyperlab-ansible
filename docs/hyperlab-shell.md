@@ -11,19 +11,29 @@ negotiable by any of the design decisions above them.
 
 Every apply compares the installed code generation with a private runtime
 checkpoint for the running presentation. `host_desktop_common` checks the
-shell after its QML copies, and `host_desktop_sway` checks the recovery UI
-after its helper copies. `v1-host.yml` checks the shell again after the
+shell after its QML and observer copies, and `host_desktop_sway` checks the
+recovery UI after its helper copies. `v1-host.yml` checks the shell again after the
 Hyprland component's final unit deployment. A unit-only change therefore
 refreshes during that apply; the unchanged second pass sends nothing.
 Hyprland continues to stage files without running anything.
 
 The generation hashes paths and contents of all shell sources plus the
-installed service unit; `features.json` already has a live observer and is
-excluded. The recovery generation hashes its Python executable. Checkpoints
-bind a successful generation to the kernel boot ID and boot-relative
+installed service unit, every executable in `RESIDENT_OBSERVERS`, and the
+validated checkout pointer and its `tools/surface_provenance.py` resolver.
+`features.json` already has a live observer and is excluded. The common
+check follows its last observer copy; the final v1 check also follows the
+Sway status bridge and checkout pointer copies. An observer-only update
+refreshes its resident readers with the shell. The recovery generation
+hashes its Python executable. Checkpoints bind a successful generation to
+the kernel boot ID and boot-relative
 process identity, without file-date or wall-clock comparisons. Clock steps
 cannot hide a new generation. A resident without a checkpoint gets one
-conservative refresh. Failed applies and failed refreshes leave pending
+conservative refresh even if it already runs the installed code. These
+checkpoints live in `/run/user/UID`: the first apply can repeat that refresh
+after every login that recreates the runtime directory (normally after the
+last logout), and after every reboot. It reports `changed=1` and loses open
+surfaces, selection and unsaved forms, or closes the recovery UI, even if no
+source changed. Failed applies and failed refreshes leave pending
 code discoverable on unchanged retries. Only an actual refresh reports
 `changed`; current or absent surfaces report `ok`. A newly opened GTK owner
 after an absent-owner checkpoint loads the installed generation.
@@ -32,12 +42,16 @@ Quickshell retains `QS_DISABLE_FILE_WATCHER=1`: atomic file replacement does
 not make a multi-file directory copy atomic. A reload during copying could
 combine incompatible versions. The refresh needs no new IPC receiver in
 the old resident. Manually launched shell instances are outside this
-managed-service path. [ADR 0059](adr/0059-resident-desktop-updates.md)
+managed-service path. [ADR 0061](adr/0061-resident-desktop-updates.md)
 records the mechanism and alternatives.
 
-The shell refresh first reloads the user's service definitions. It then
-pins the main process with a PID descriptor, sends `SIGSTOP`, confirms all
-its threads stopped, and inspects its cgroup and descendants. The shell
+The shell refresh first reloads the user's service definitions and waits
+up to ten seconds for busy cgroup children while the shell keeps running
+and showing current host trust and provenance. It then pins the main
+process with a PID descriptor, sends `SIGSTOP`, checks all its threads
+stopped once, and inspects its cgroup and descendants once. An incomplete
+stop causes immediate refusal and resume. There is no sleep or deadline
+polling during the pause, which normally lasts milliseconds. The shell
 cannot launch an application or action after this inspection. Only the
 exact read-only status observers in `ShellState.qml` and their own children
 may remain. The provenance observer is recognized in both its bridge form
@@ -45,10 +59,11 @@ and its exact post-exec resolver form, validated against the checkout
 pointer. Workspace and focus watches are included.
 
 Any other child, such as an operation bridge or application still in the
-unit, causes a wait of up to ten seconds followed by refusal with its PIDs.
-The task resumes the shell without killing those children. Finish or close
-them and reapply. Otherwise it sends `SIGKILL` to the pinned main process
-without resuming it, then waits for the existing `Restart=on-failure`
+unit, is busy. If it remains after the live wait, the task refuses with its
+PIDs without pausing. If a busy child appears only after the pause, the task
+refuses and resumes immediately without waiting or killing those children.
+Finish or close them and reapply. Otherwise it sends `SIGKILL` to the pinned
+main process without resuming it, then waits for the existing `Restart=on-failure`
 policy to produce a different active process before recording success.
 A normal whole-unit restart could resume the old shell during shutdown and
 let it launch a child after inspection. No restart job is sent here. The
@@ -85,10 +100,12 @@ QML reconciliation carries the copy's `hyperlab_provenance` tag.
 `tests/shell_reload_after_apply_contract.py` checks the parsed deployment
 order, tags and exact final task; every observer and the post-exec
 resolver; generation and transport refusals; both directions of clock
-correction; and queued launches against a real inert paused subprocess.
+correction; zero sleeps or monotonic waits during the pause; immediate
+late-child refusal; and queued launches against a real inert paused
+subprocess.
 Its isolated Ansible fixture covers a later failure and retry, a failed
-refresh and retry, a unit-only change followed immediately by `changed=0`,
-already stale residents, unrelated helpers and check mode. This is
+refresh and retry, adapter-only and unit-only changes followed immediately
+by `changed=0`, already stale residents, unrelated helpers and check mode. This is
 software verification; installed Nitro and Predator checks remain open.
 
 ## What the product is

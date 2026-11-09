@@ -184,7 +184,7 @@ entered the pipeline.
     — accepted operator population decision: every domain visible, external
     rows read-only in the native shell; proposed external outline and label.
 
-59. [`0059-resident-desktop-updates.md`](0059-resident-desktop-updates.md)
+61. [`0061-resident-desktop-updates.md`](0061-resident-desktop-updates.md)
     — proposed: every apply refreshes resident presentation older than the
     installed code, in the configured user's existing session.
 
@@ -616,7 +616,7 @@ remain.
   - Prerequisites: acceptance of the external visual rule; installed Nitro
     visibility, colour and counts, then Predator replay.
 
-- [ADR 0059](0059-resident-desktop-updates.md)
+- [ADR 0061](0061-resident-desktop-updates.md)
   - Decision: proposed.
   - Built: built — content-generation checkpoints, pinned shell pause and busy
     cgroup refusal, exact post-exec observer validation and resident recovery

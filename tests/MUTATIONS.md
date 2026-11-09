@@ -4430,7 +4430,7 @@ survivor is omitted. Checkpoint oversize and JSON-null regressions also
 went red before their input refusals were added.
 
 These replace age-based and whole-unit-restart mutations from the earlier
-implementation, as explained in ADR 0059: N13's timestamp comparison and
+implementation, as explained in ADR 0061: N13's timestamp comparison and
 R3/R10's `try-restart` checks describe mechanisms no longer used. Content
 comparison, pinned signals, restart-policy checks and failure-before-save
 replace them. Existing session, GTK transport and inactive-surface checks
@@ -4501,3 +4501,36 @@ old cases map to V1-V43 or the retired age/notification/restart mechanisms.
 
 The complete restored contract and the repository battery must also pass.
 These software checks do not establish a physical Nitro or Predator refresh.
+
+### Observer generations and a pause without waits
+
+The deployment stage now follows every observer copy through the common,
+Sway and final v1 boundaries, and executes generation comparisons against
+real temporary observer files and the validated checkout resolver. The
+isolated Ansible fixture also changes only the compositor adapter: exactly
+one shell refresh, then an immediate `changed=0` apply.
+
+The replacement stage requires the bounded idle wait before pausing, then
+one cgroup sample while paused. Instrumented signals forbid both sleep and
+monotonic deadline calls between `SIGSTOP` and `SIGKILL`/`SIGCONT`. A child
+that appears only after the pause is refused with zero sleeps; incomplete
+thread stopping is also refused immediately. The former V8 polling-count
+expectation is replaced by a single all-thread inspection and refusal:
+ADR 0061 removes all waiting from the paused section. Existing pinned
+identity, launch prevention, restart policy and busy-child survival checks
+remain.
+
+For these cases, load the contract with `runpy.run_path()` and use the
+focused stages described above. Copy the production file before each
+mutation, restore its saved bytes, then rerun the same stage. All six
+mutations were observed red and then green after exact restoration; none
+survived.
+
+| ID | Break | Focused stage | Observed red result |
+| --- | --- | --- | --- |
+| V44 | Skip `include(Path(executable), executable)` when `executable == COMPOSITOR_ADAPTER` | deployment | `observer executable omitted from installed generation: /usr/local/bin/privatestack-compositor-adapter` |
+| V45 | Remove `include(resolver, str(resolver))` from `source_generation` | deployment | `checkout resolver omitted from installed generation` |
+| V46 | Move the common-role reconciliation before the compositor adapter copy | deployment | `observer copy has no subsequent resident-state reconciliation: /usr/local/bin/privatestack-compositor-adapter` |
+| V47 | Move `require_idle_cgroup(current)` inside `with paused_shell(...)` | replacement | `idle waiting must precede the shell pause` |
+| V48 | Insert `time.sleep(0.02)` immediately after the pinned `SIGSTOP` | replacement | `sleep or monotonic wait while the shell is paused` |
+| V49 | Keep the paused `busy_members` sample but disable its refusal condition | replacement | `late child or running thread was killed` |
