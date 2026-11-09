@@ -2,10 +2,9 @@
 
 Status: accepted (2026-11-05, operator's decision).
 
-The decision is recorded in the private operator task log
-(`OPERATOR-TASKS.md`, ADR 0017 entry dated 2026-11-05) and the Nitro session
-record (`seduta-2026-11-05.md`, step 11 at 19:24). The operator accepted
-the design read at `main` commit
+The decision is recorded in the operator's private notes
+(operator-observed, unpublished), in the 2026-11-05 task entry and Nitro
+session step 11 at 19:24. The operator accepted the design read at `main` commit
 `1e42308a863180590fc9b2a209b41227978b8a4f`. This records design acceptance
 without adding hardware evidence; the implementation and its unobserved
 hardware checks remain listed under "Implementation status" below.
@@ -150,6 +149,11 @@ Creation is split along the existing boundary.
   `tests/host_quickshell_create_view_contract.py`,
   `tests/host_machine_provision_contract.py`). These contracts run on
   fixtures, with the limits listed above.
+- Activation: on request — `host_desktop_common` in `playbooks/lab.yml`
+  installs the bridge, runner, provisioner and shell files.
+  `playbooks/v1-host.yml` stages the managed Hyprland and Quickshell sessions
+  beside Sway without selecting a Ly default. Nothing is created until the
+  operator submits a creation.
 - Not proven on hardware: no Machine has been created from the shell on
   Nitro, and a real unit stop and a real `ansible-playbook` under the
   runner have not been observed.

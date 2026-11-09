@@ -1651,7 +1651,7 @@ right shape, not that the observation happened or that a receipt is enough.
 | D6 | The same target becomes `/etc/passwd`. | `evidence target '/etc/passwd' is not a relative path inside the repository` |
 | D7 | The same target becomes `hyperlab-shell.md`, a guide that describes a physical acceptance. | `evidence target 'hyperlab-shell.md' is not an acceptance receipt in docs/` |
 | D8 | The same target becomes `../tests/docs_contract.py`, a software contract. | The same `is not an acceptance receipt in docs/` message |
-| D9 | The ADR index entry of 0017 loses its leading `proposed:`. | `ADR index entry of 0017-shell-machine-creation.md does not open with its status 'proposed'` |
+| D9 | The ADR index entry of 0017 loses its leading `accepted:`. | `ADR index entry of 0017-shell-machine-creation.md does not open with its status 'accepted'` |
 | D10 | ADR 0022: `Status: proposed.` becomes `Status: decided.` | `0022-network-trust-and-gpu-policy.md: unrecognized status line 'Status: decided. ...'` |
 | D11 | ADR 0017: add `Status: accepted.` below `## Context`. | `0017-shell-machine-creation.md has 2 Status lines, not one` |
 | D12 | `- [x] physical Quickshell per-screen panel creation` becomes `- [X] ...`. | `roadmap line N: unknown checkbox mark [X]` |
@@ -2794,7 +2794,7 @@ description is true: that is source review.
 | # | Break | Observed red diagnostic |
 | --- | --- | --- |
 | I1 | Delete the 0052 inventory entry; its numbered navigation link stays. | `proposal inventory omits 0052-host-without-gpu-passthrough.md` |
-| I2 | Repeat the 0017 entry after itself. | `proposal inventory lists 0017-shell-machine-creation.md twice` |
+| I2 | Repeat the 0018 entry after itself. | `proposal inventory lists 0018-disposable-discards-on-stop.md twice` |
 | I3 | The 0052 entry heading links the accepted `0037-qemu-process-confinement.md` instead. | `proposal inventory lists 0037-qemu-process-confinement.md, whose Status is not proposed` |
 | I4 | Delete the Activation field of 0044. | `proposal inventory entry 0044-measured-boot.md (ADR index line 394) lacks Activation` |
 | I5 | Delete the Prerequisites field of 0051. | `proposal inventory entry 0051-disposable-viewer-and-safe-documents.md (ADR index line 514) lacks Prerequisites` |
