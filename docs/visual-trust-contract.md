@@ -113,12 +113,12 @@ The canonical visual identities remain:
   a domain outside a readable registry, `unclassified` for a registry Machine
   without a resolved identity, `membership unknown` when the registry is
   unreadable; never a trust-domain colour or the HOST grey identity
-  ([ADR 0059](adr/0059-external-machine-visibility.md), Proposed visual rule).
+  ([ADR 0060](adr/0060-external-machine-visibility.md), Proposed visual rule).
 
 Unreadable product membership cannot imply an external lifecycle. Observed
 rows then say `membership unknown` (recovery detail lifecycle `unknown`);
 unclassified identities retain the neutral outline and transparent fill
-specified by ADR 0059.
+specified by ADR 0060.
 
 The selected appearance theme is independent from those meanings.
 
@@ -152,7 +152,7 @@ with `domains.trust_conflict`. A GPU gate may name an unmanaged domain for
 handoff policy; the CLI still reports that gate as the domain's `trust_profile`
 (and `provenance` in `waybar --field vms`), but the shell surfaces ignore it for
 every domain outside the Machine registry
-([ADR 0059](adr/0059-external-machine-visibility.md)). A domain outside the
+([ADR 0060](adr/0060-external-machine-visibility.md)). A domain outside the
 registry stays external even with a matching spec, a GPU gate entry or an
 attachment to a trust network.
 

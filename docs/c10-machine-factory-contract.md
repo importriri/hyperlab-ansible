@@ -154,7 +154,7 @@ projection is recomputed for each comparison
 
 Machines presents product-managed user-created Machines and every other
 observed libvirt domain in separate groups
-([ADR 0059](adr/0059-external-machine-visibility.md), accepted operator
+([ADR 0060](adr/0060-external-machine-visibility.md), accepted operator
 population decision, 2026-11-02).
 
 Checked-in campaign domains such as `arch-dev-vfio` remain fixtures during C10

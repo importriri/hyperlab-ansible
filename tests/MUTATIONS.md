@@ -3692,7 +3692,7 @@ PATH. All restored stages were green.
 | PD-78 | Remove the guest desktop QML input | QML input coverage | red: host/guest presentation input missing; restored green |
 | PD-79 | Discover a language locale but make its unguarded Bash control refuse the accented word | widening control | red: installed language locales do not exercise Bash range widening; restored green |
 
-## External Machine visibility and identity (ADR 0059)
+## External Machine visibility and identity (ADR 0060)
 
 For each mutation, first copy the named target to a private backup and set
 `backup` to that copy. Run `python tests/external_machine_visibility_contract.py`

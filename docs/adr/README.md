@@ -180,7 +180,7 @@ entered the pipeline.
     align byte/path refusals across shell, CLI and Bash readers; pin host
     login and guest presentation exceptions and require a widening locale.
 
-59. [`0059-external-machine-visibility.md`](0059-external-machine-visibility.md)
+60. [`0060-external-machine-visibility.md`](0060-external-machine-visibility.md)
     — accepted operator population decision: every domain visible, external
     rows read-only in the native shell; proposed external outline and label.
 
@@ -597,7 +597,7 @@ remain.
   - Prerequisites: the operator's decision; the remaining visible migration
     and physical Nitro/Predator gates remain open.
 
-- [ADR 0059](0059-external-machine-visibility.md)
+- [ADR 0060](0060-external-machine-visibility.md)
   - Decision: proposed external visual state; population change accepted by
     the operator on 2026-11-02.
   - Built: built — native Not managed group, raw runtime counts with separate

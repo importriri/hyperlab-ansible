@@ -20,7 +20,7 @@ unknown or absent network to dev, without consulting a reviewed spec.
 
 ## Correction
 
-[ADR 0059](../docs/adr/0059-external-machine-visibility.md) records the accepted
+[ADR 0060](../docs/adr/0060-external-machine-visibility.md) records the accepted
 operator decision to show every domain in Machines, without adoption. Native
 Not managed rows remain read-only and explicitly external. Raw libvirt state
 supplies the total and split running counts on Machines, Session, confirmation

@@ -100,7 +100,7 @@ appears below in **Not managed**, with lifecycle **external**, name and state.
 Those rows have a neutral outline and transparent fill, never a domain colour
 or HOST grey, and carry no selection, power or console actions. The same raw
 inventory stays in Diagnostics. This is visibility without adoption
-([ADR 0059](adr/0059-external-machine-visibility.md): accepted population
+([ADR 0060](adr/0060-external-machine-visibility.md): accepted population
 change; proposed external visual state).
 
 The Machines header, Session and Diagnostics use raw libvirt running state,

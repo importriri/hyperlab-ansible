@@ -547,7 +547,7 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       non-running active states are counted separately; recovery refuses
       unavailable observations and totals; fallback inventory reads have a
       30-second command budget and match Waybar's 30-second refresh)
-      ([ADR 0059](adr/0059-external-machine-visibility.md), software-verified)
+      ([ADR 0060](adr/0060-external-machine-visibility.md), software-verified)
 - [ ] external visibility and running counts accepted on Nitro and Predator
 
 ### 8a. Test infrastructure
@@ -696,7 +696,7 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       checked across palettes, hover and selection; native primary-text
       outlines and GTK neutral tokens are checked against every provenance
       colour, including HOST
-      ([ADR 0059](adr/0059-external-machine-visibility.md), proposed visual
+      ([ADR 0060](adr/0060-external-machine-visibility.md), proposed visual
       rule; software-verified)
 - [ ] external visual state accepted on Nitro and Predator
 

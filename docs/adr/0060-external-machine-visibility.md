@@ -1,4 +1,4 @@
-# ADR 0059 - Show every domain without granting it trust
+# ADR 0060 - Show every domain without granting it trust
 
 Status: Proposed (external visual state only; population decision accepted below).
 
