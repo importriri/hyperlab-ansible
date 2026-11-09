@@ -4338,3 +4338,55 @@ for number, path, old, new, predicted in cases:
             [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
         )
 ```
+
+### External 74–75: Failed and readable-empty recovery Machines inventories
+
+The provider-failure regression builds the real shared showcase used by the
+drawer and overlay. A failed domains read must show an unavailable notice
+instead of first-Machine guidance; a readable empty inventory keeps that
+guidance. Both mutations were observed red for the predicted assertion and
+green after exact restoration.
+
+| ID | Break | Predicted red |
+| --- | --- | --- |
+| External 74 | Drop the domains-error guard and always show first-Machine guidance | `GTK Machines invited first-Machine creation after a failed inventory read` |
+| External 75 | Always show the unavailable notice, even for a readable empty inventory | `GTK Machines lost the readable empty inventory guidance` |
+
+```python
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+path = Path('roles/host_desktop_sway/files/privatestack-hyperlab-domains.py')
+old = '''            message = ("Machine inventory unavailable · see Diagnostics"
+                       if any(error.startswith("domains:") for error in self.model.load_errors)
+                       else "No machines yet. Open Create to build the first one.")'''
+cases = [
+    (74, '            message = "No machines yet. Open Create to build the first one."',
+     'GTK Machines invited first-Machine creation after a failed inventory read'),
+    (75, '            message = "Machine inventory unavailable · see Diagnostics"',
+     'GTK Machines lost the readable empty inventory guidance'),
+]
+for number, new, predicted in cases:
+    with tempfile.TemporaryDirectory(prefix='external-machine-mutation-') as directory:
+        backup = Path(directory) / path.name
+        shutil.copyfile(path, backup)
+        try:
+            source = path.read_text()
+            assert source.count(old) == 1, old
+            path.write_text(source.replace(old, new, 1))
+            red = subprocess.run(
+                [sys.executable, 'tests/external_machine_visibility_contract.py'],
+                text=True, capture_output=True, check=False,
+            )
+            assert red.returncode != 0 and predicted in red.stdout + red.stderr, (
+                number, red.stdout, red.stderr,
+            )
+        finally:
+            shutil.copyfile(backup, path)
+        subprocess.run(
+            [sys.executable, 'tests/external_machine_visibility_contract.py'], check=True,
+        )
+```

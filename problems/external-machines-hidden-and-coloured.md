@@ -74,6 +74,14 @@ unavailable section; a readable empty list remains valid. The regression
 drives the real provider failure through the CLI, recovery JSON reader and
 model loader, which reports **Running inventory unavailable**.
 
+The recovery Machines body still interpreted that failed read's empty domain
+list as a fresh inventory and invited creating the first Machine, contradicting
+its unavailable header. The shared showcase builder used by the drawer and
+overlay now shows **Machine inventory unavailable · see Diagnostics** when a
+domains load error leaves no rows. **No machines yet** is reserved for a
+readable empty inventory. The provider-failure regression builds the real
+showcase and checks both the failed-read notice and the readable-empty control.
+
 Waybar also counted only known running states: an unreadable external state
 looked like **0/7**, with an OK class. It now shows **?/7** with an error class
 and **Running state unknown**, retaining all domain rows and the known total.
@@ -135,16 +143,20 @@ Recovery also unnecessarily required exactly one interface for a reviewed
 identity. It now accepts any nonempty set of interfaces all on the reviewed
 network, as the CLI does; mixed or missing interfaces remain unclassified.
 
-## Is the recovery Shut down action intended?
+## Are the recovery Shut down and drawer Open actions intended?
 
 Undecided. What exists: the recovery manager sends an external running
 domain's **Shut down** to `_vm_action("vm.stop", domain)`, and the registry
 resolves `vm.stop` to graceful libvirt shutdown; managed lifecycle uses its
 separate `vm.managed-shutdown` route. The code shows that the button exists,
 not that offering it on a domain such as the `hl-lab-host` test bed was
-decided. It is existing behaviour, kept unchanged; its intent awaits the
-operator's decision. The native Not managed group offers no such action. No
-lifecycle operation was performed to verify this change.
+decided. The drawer's **Open** also exists on external rows: it calls
+`_primary_vm_action`, which starts a non-running domain through
+`_toolbar_vm_action("start")` or opens a console (or Looking Glass where
+supported) for a running domain. Both are existing behaviour, kept unchanged;
+their intended availability on external domains awaits the operator's
+decision. The native Not managed group offers neither action. No lifecycle
+operation was performed to verify this change.
 
 ## Regression proof
 

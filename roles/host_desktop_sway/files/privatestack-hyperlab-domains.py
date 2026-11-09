@@ -3301,7 +3301,10 @@ class HyperlabWindow(Gtk.Window):
                 grid.attach(self._mock_vm_tile(vm, compact=compact), index % columns, index // columns, 1, 1)
             content.append(grid)
         if not shown:
-            content.append(text_label("No machines yet. Open Create to build the first one.", "mock-why"))
+            message = ("Machine inventory unavailable · see Diagnostics"
+                       if any(error.startswith("domains:") for error in self.model.load_errors)
+                       else "No machines yet. Open Create to build the first one.")
+            content.append(text_label(message, "mock-why"))
         new_grid = Gtk.Grid(column_spacing=11, row_spacing=11)
         new_grid.set_column_homogeneous(True)
         new_vm = Gtk.Button(label="＋  New machine")

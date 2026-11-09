@@ -152,6 +152,13 @@ def provider_failure(namespace: dict) -> None:
     assert snapshots[0].running_summary == "Running inventory unavailable", \
         "GTK turned a domains-provider failure into zero running"
     reader.model = snapshots[0]
+    page = reader._build_vm_showcase(columns=4)
+    labels = [item.get_text() for item in descendants(page)
+              if isinstance(item, namespace["Gtk"].Label)]
+    assert not any("No machines yet" in label for label in labels), \
+        "GTK Machines invited first-Machine creation after a failed inventory read"
+    assert any("unavailable" in label.lower() for label in labels), \
+        "GTK Machines omitted the unavailable inventory notice"
     reader._grid_columns = {}
     metric_values = []
     metric = reader._metric
@@ -163,6 +170,11 @@ def provider_failure(namespace: dict) -> None:
     reader._build_overview()
     assert metric_values == ["?"], "GTK Overview turned a failed inventory into zero Detected VMs"
     reader.model.load_errors = []
+    page = reader._build_vm_showcase(columns=4)
+    labels = [item.get_text() for item in descendants(page)
+              if isinstance(item, namespace["Gtk"].Label)]
+    assert any("No machines yet" in label for label in labels), \
+        "GTK Machines lost the readable empty inventory guidance"
     reader._build_overview()
     assert metric_values == ["?", "0"], "GTK Overview lost a genuinely empty total"
     # A readable, genuinely empty inventory remains a successful observation.
