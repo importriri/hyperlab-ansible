@@ -5401,6 +5401,22 @@ assertion at that boundary, not an unrelated crash.
 | V18 | Runbook: select v2 only in the fixture's `if python ... seal` pending-refusal command. | same as V12 | The conditional command is parsed and rejected for selecting v2. |
 | V19 | `tools/release_acceptance.py`: delete `validate_evidence(plan, evidence)` only in `seal`. | same as V8 | `seal accepted an edited pass ... clean_worktrees=false`; status refusal remains a control. |
 | V20 | Same tool, in `seal`, after validation and before hashing: insert `plan = {**plan, "schema_version": 2}`. | `test_complete_sanitized_evidence_seals_to_stable_hashes(3)` | Receipt version differs from the selected campaign version. |
+| V21 | `release/acceptance.v3.yml`: delete only `clean_after_dev_refused` from `vfio-trust-lifecycle.required_evidence`. | same as V3 | `vfio-trust-lifecycle: reviewed classes ... differ from the manifest`. |
+| V22 | Same gate: delete only `dev_after_dirty_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V23 | Same gate: delete only `upward_after_lab_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V24 | Same gate: delete only `unmapped_pci_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V25 | Same manifest: delete only `lease_runs_same_host_boot` from `gpu-lease.required_evidence`. | same as V3 | `gpu-lease: reviewed classes ... differ from the manifest`. |
+| V26 | `tools/release_acceptance.py`: delete only the `require(stat.S_ISREG(os.fstat(handle.fileno()).st_mode), ...)` line in `read_input`. | same as V13 | The FIFO plan receives `release plan root must be a mapping` instead of the required `must be regular` diagnostic; the FIFO assertion turns red. |
+
+V21–V26 were also observed red (exit 1) and restored green (exit 0), each
+after saving the input and comparing restored bytes. For V21–V25, delete
+the single YAML sequence line named in the table, keeping the other fields
+and their order. Each field is independently listed in the oracle and the
+production boolean set; the existing exhaustive CLI matrix also exercises
+its false-pass refusal at record/status/seal, false failed records, and
+string/integer refusal. V26 uses `os.mkfifo` without a writer and requires
+exit 2 with `must be regular`, no scaffold output and unchanged plan/evidence
+bytes. `O_NONBLOCK` keeps that refusal independent of a FIFO writer.
 
 For the parsed-YAML breaks V1–V6 and V11, this is the mutation command used
 inside the disposable copy; select one case by its id, then run its focused

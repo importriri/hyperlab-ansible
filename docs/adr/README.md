@@ -648,5 +648,6 @@ remain.
     [`release_acceptance_contract.py`](../../tests/release_acceptance_contract.py)
   - Prerequisites: the operator's decision, frozen public automation commits,
     Debian image, disposable access acceptance, dual-shape workstation image,
+    reviewed clean/dirty/lab and unmapped PCI fixtures,
     real lease controls, complete recording/privacy review and portable
     Predator checks; every physical campaign observation remains pending.

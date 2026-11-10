@@ -285,6 +285,7 @@ REVIEWED_V3_EVIDENCE: dict[str, dict[str, tuple[str, ...]]] = {
             "first_gpu_run",
             "gpu_less_run",
             "second_gpu_run",
+            "lease_runs_same_host_boot",
             "gpu_less_ladder_unchanged",
             "gpu_runs_looking_glass",
             "gpu_less_spice",
@@ -309,6 +310,10 @@ REVIEWED_V3_EVIDENCE: dict[str, dict[str, tuple[str, ...]]] = {
     "vfio-trust-lifecycle": {
         "booleans": (
             "exclusive_owner",
+            "clean_after_dev_refused",
+            "dev_after_dirty_refused",
+            "upward_after_lab_refused",
+            "unmapped_pci_refused",
             "reboot_resets_trust",
         ),
         "hashes": (),
@@ -1286,6 +1291,13 @@ def test_campaign_inputs_refuse_duplicates_and_redirection(version: int = 2) -> 
                           "scaffold", "--plan", str(input_path), "--output", str(output))
             assert refused.returncode == 2 and "redirected" in refused.stderr
             assert not output.exists()
+        fifo = root / "plan.fifo"
+        os.mkfifo(fifo)
+        output = root / "fifo.json"
+        refused = run(sys.executable, str(TOOL), "--manifest", str(MANIFESTS[version]),
+                      "scaffold", "--plan", str(fifo), "--output", str(output))
+        assert refused.returncode == 2 and "must be regular" in refused.stderr, refused.stderr
+        assert not output.exists()
         assert plan_path.read_bytes() == original and evidence_path.read_bytes() == before
 
 

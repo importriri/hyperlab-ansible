@@ -88,10 +88,10 @@ or work that is not on `main` does not raise it.
   writes at every stop is software-verified
   ([ADR 0018](adr/0018-disposable-discards-on-stop.md), accepted by the
   operator on 2026-11-05; the record names the unpublished decision source).
-  Access at every later boot is not closed: the managed start does not
-  restrict the agent again or re-pin the host key. Readiness still requires
-  that separate software work and the Nitro tests. No disposable Machine
-  has been proven on hardware.
+  The restricted agent and host-key pin refresh on managed start are
+  software-verified. Readiness still requires a fresh seed and the Nitro
+  discard/access observations on frozen commits; existing seeds are not
+  upgraded by a host apply. No disposable Machine has been proven on hardware.
 - **GPU lease (5b):** [ADR 0019](adr/0019-gpu-lease.md) accepted by the
   operator on 2026-11-05: initially `workstation-dev-standard` only, default
   without the dedicated NVIDIA GPU. The record names the unpublished

@@ -228,10 +228,15 @@ Prerequisites remain explicit:
 - **Lease:** `workstation-dev-standard` captured/sealed and ready for both
   shapes, Create accepted, then real lease controls implemented and reviewed.
   Default boot is without GPU. Observe GPU → without GPU → GPU in one boot,
-  with unchanged ladder during the GPU-less run. No lease CLI exists yet;
-  obtain its actual controls from that implementation before proceeding.
+  record `lease_runs_same_host_boot` and retain the host boot identity for each
+  run in the hashed lease log, with unchanged ladder during the GPU-less run.
+  No lease CLI exists yet; obtain its actual controls from that implementation
+  before proceeding.
 - **Ladder:** reviewed runnable clean/dirty/lab and unmapped PCI test fixtures;
-  a missing image/domain is not a security refusal.
+  this proposal requires them before qualification. Record the separate
+  `clean_after_dev_refused`, `dev_after_dirty_refused`, `upward_after_lab_refused`
+  and `unmapped_pci_refused` observations. After lab, observe refusal of starts
+  at every higher trust level. A missing image/domain is not a security refusal.
 - **Showcase:** a complete recording, including the real lease, honest editing
   and captions, and manual review of every frame with text. The current
   storyboard's lease placeholder cannot qualify as a complete take. Follow

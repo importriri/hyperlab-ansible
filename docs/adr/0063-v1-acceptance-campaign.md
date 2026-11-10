@@ -24,6 +24,8 @@ commits; they cannot be imported as campaign passes.
 
 Both profiles use exactly this gate order. Nitro runs first; Predator uses
 its own pending scaffold at the same two frozen automation commits.
+V1 requires reviewed runnable clean GPU and dirty/lab fixtures; qualification
+without those fixtures is ruled out by this proposal.
 
 | Order | Gate | Selected requirement and evidence boundary |
 | --- | --- | --- |
@@ -43,7 +45,7 @@ its own pending scaffold at the same two frozen automation commits.
 | 140 | `physical-audio` | Audible guest output without clipping, host volume cap and no guest microphone (milestone 1). |
 | 150 | `gpu-lease` | `workstation-dev-standard`, default boot without GPU; real GPU → without GPU → GPU runs in one host boot, LG on GPU runs, SPICE without GPU, host-owned lease and unchanged ladder on the GPU-less run (milestone 5b). |
 | 160 | `showcase` | Complete storyboard including shell creation, real lease, LG/Desks, host provenance, honest captions and manual frame privacy review, bound to the recording hash. |
-| 170 | `vfio-trust-lifecycle` | Exclusive owner, downward dirty/lab transitions and upward refusals; reboot resets trust. |
+| 170 | `vfio-trust-lifecycle` | Exclusive owner and downward dirty/lab transitions; separate clean-after-dev, dev-after-dirty, upward-after-lab and unmapped-PCI refusals; reboot resets trust. |
 | 180 | `session-recovery` | Guest reboot and agent reconnect, host reboot, cold start, encrypted storage, separate PRIMARY/input/audio recovery, Sway/console recovery, guest profile changed=0 and disposable crash recovery. |
 | 190 | `sanitized-publication` | Reviewed bundle digest, exact commit matrix, known limits and no sensitive patterns. |
 
@@ -54,6 +56,12 @@ be exactly true for a pass. A failed gate may retain false and prevents
 sealing. Hashes remain lowercase SHA-256; descriptive fields retain the
 existing scalar validation. `lease_template` must be exactly
 `workstation-dev-standard`. No single success field replaces these facts.
+`lease_runs_same_host_boot` observes that all three lease runs share one host
+boot; retain the boot identity with each run in the hashed lease transcript.
+`clean_after_dev_refused`, `dev_after_dirty_refused`, `upward_after_lab_refused`
+and `unmapped_pci_refused` record the corresponding policy refusals separately
+from the descriptive downward-transition log. An absent fixture cannot make
+any refusal boolean true.
 
 Accepted decisions map as follows:
 

@@ -12,6 +12,11 @@ The release input readers also silently replaced duplicate YAML/JSON keys
 and followed redirected campaign files. A duplicated observation could hide
 a false value; a redirected plan was not an independent regular input.
 
+The initial v3 field list also omitted the upward and unmapped-PCI refusal
+observations and the requirement that all three lease runs share one host
+boot. A descriptive transition log could not enforce those independent
+outcomes, and runs across reboots could hide a trust-ladder reset.
+
 ## Fix
 
 A separate `release/acceptance.v3.yml`, described by Proposed ADR 0063,
@@ -20,6 +25,10 @@ Create, access, audio, lease and Showcase precede dirty/lab tests; reboot
 and recovery follow. Each distribution and each stop/recovery outcome has
 its own observation. The initial lease is `workstation-dev-standard`,
 default without GPU, with the ladder unchanged on the GPU-less run.
+Separate booleans require clean-after-dev, dev-after-dirty, upward-after-lab
+and unmapped-PCI refusals, and the lease runs sharing one host boot. The
+proposal requires reviewed clean/dirty/lab fixtures before qualification;
+their construction remains a prerequisite, outside the campaign tooling.
 Jellyfin and service recovery remain in unchanged historical v2 only.
 
 The runner propagates the selected integer version through plan, scaffold,
@@ -39,6 +48,8 @@ refusal. Every boolean is exercised through record with strings and integers
 in both passed and failed records, including the former record-only
 coercion coverage gap. The probe rejects boolean --value coercion and keeps
 --true/--false typed. Storage and idempotence collectors use both manifests.
+The input regression also presents a FIFO as a plan and requires the explicit
+regular-file refusal, with no output or evidence changes.
 
 The documentation contract parses manifest flags and gate order and executes
 the complete synthetic command sequence for both profiles. The unchanged
