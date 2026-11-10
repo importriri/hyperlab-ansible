@@ -54,9 +54,9 @@ start begins from the sealed base exactly as the first boot did.
 - Every start is a first boot. cloud-init runs again from the same seed:
   the account and the key come back, and the guest generates a new
   machine-id and new SSH host keys. The pinned host key is stale after a
-  restart; this decision needs `vm-guest-inventory.yml` to read the new one
-  through QEMU Guest Agent and replace the pin, as it does for a new
-  Machine. Nothing runs it at a start yet (see Limits).
+  restart; the amendment below runs `vm-guest-inventory.yml` after each
+  new managed Start or Power Cycle to read the new one through QEMU Guest
+  Agent and replace the pin, as it does for a new Machine (see Limits).
 - Snapshots and live migration of a transient disk are not supported by
   libvirt; HyperLab offers neither for disposable Machines.
 - libvirt creates the temporary overlay beside the lifecycle overlay in
