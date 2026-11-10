@@ -14,6 +14,8 @@ observations are separate evidence levels.
 
 Use `release/acceptance.v3.yml` for the selected v1. Manifest, canonical plan,
 scaffold, evidence and receipt all carry integer `schema_version: 3`.
+The runner binds that version to the exact ordered gate identifiers below;
+a v2 gate list relabeled as v3 is refused before plan creation.
 Explicit v2 selection retains the historical campaign and its strict boolean,
 ordering, privacy and immutability rules. Unsupported and mixed versions
 refuse without rewriting inputs or producing a receipt. No campaign upgrade,
@@ -34,7 +36,7 @@ without those fixtures is ruled out by this proposal.
 | 30 | `bootstrap-clean-install` | Fresh encrypted installation, two hardened boots, Secure Boot state and networking. |
 | 40 | `storage-handoff` | Independent mapper, filesystem root, Btrfs NOCOW and HyperLab-device comparison. |
 | 50 | `host-idempotence` | Check/diff, first apply and unchanged second apply of `playbooks/v1-host.yml`. |
-| 60 | `network-isolation` | Persistent network identities, active networks, cross-domain and isolated-lab refusals. |
+| 60 | `network-isolation` | Persistent network identities and active networks; separate cross-domain and isolated-lab refusal booleans, reached gateway DNS control, refused dev resolver and refused host LLMNR. |
 | 70 | `standard-vm-lifecycle` | Reviewed create, validate, start, shutdown and confirmed destroy. |
 | 80 | `vfio-clean-baseline` | PCI/IOMMU identity, real clean GPU use and shutdown before any dev GPU use. |
 | 90 | `server-ssh` | Independent Debian and Fedora strict SSH and restricted-agent observations, with separate log hashes (milestone 4). |
@@ -53,8 +55,9 @@ The scalar field list in the manifest makes each outcome independently
 representable. `server-ssh` cannot substitute Fedora for Debian; normal stop
 cannot substitute for forced stop or crash. Every observation boolean must
 be exactly true for a pass. A failed gate may retain false and prevents
-sealing. Hashes remain lowercase SHA-256; descriptive fields retain the
-existing scalar validation. `lease_template` must be exactly
+sealing. Hashes remain lowercase SHA-256. V3 descriptive fields require
+strings of 1–240 characters at probe, record, status and seal; v2 retains
+its historical scalar validation. `lease_template` must be exactly
 `workstation-dev-standard`. No single success field replaces these facts.
 `lease_runs_same_host_boot` observes that all three lease runs share one host
 boot; retain the boot identity with each run in the hashed lease transcript.
@@ -62,6 +65,12 @@ boot; retain the boot identity with each run in the hashed lease transcript.
 and `unmapped_pci_refused` record the corresponding policy refusals separately
 from the descriptive downward-transition log. An absent fixture cannot make
 any refusal boolean true.
+`cross_domain_refused` and `isolated_lab_refused` observe separate network
+boundaries. `dns_control_reached`, `dev_resolver_refused` and
+`host_llmnr_refused` record the existing isolation collector's reached TCP
+DNS control and two refusals independently. An unreachable control cannot
+make a refusal pass; the descriptive network summaries cannot replace any
+of these five booleans.
 
 Accepted decisions map as follows:
 

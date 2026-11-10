@@ -11,7 +11,9 @@ explicit historical campaign, including Jellyfin and service recovery.
 `--manifest release/acceptance.v2.yml` retains that behavior and strictness;
 a v2 receipt cannot qualify the selected v1. Every command below selects v3.
 Unsupported or mixed manifest/plan/evidence versions refuse without rewriting
-inputs or creating a receipt. There is no upgrade or pass-import command.
+inputs or creating a receipt. Schema version 3 requires the reviewed ordered
+v1 gate list; relabeling the v2 manifest as v3 is refused before plan creation.
+There is no upgrade or pass-import command.
 Observations from 3–8 November 2026 at `1e42308` are operator-observed,
 unpublished; repeat them on the frozen commits rather than importing them.
 
@@ -99,8 +101,10 @@ sanitized-publication
 The [ADR's gate table](adr/0063-v1-acceptance-campaign.md) maps the phase-1
 requirements to these observations. The manifest lists each required scalar.
 For both versions, booleans use JSON `true`/`false` only, SHA-256 fields use
-64 lowercase hex characters, and descriptive values are scalars, never nested
-logs. Use short reviewed text for descriptions. `lease_template` is exactly
+64 lowercase hex characters. V3 descriptive values must be strings of 1–240
+characters; booleans, numbers, empty strings and nested logs are refused at
+probe, record, status and seal. Historical v2 keeps its scalar validation.
+Use short reviewed text for descriptions. `lease_template` is exactly
 `workstation-dev-standard`. Hashes identify reviewed local files; they do not
 prove their contents. No field is a catch-all pass for an omitted observation.
 
@@ -111,6 +115,16 @@ record a pass. A false observation belongs in a failed gate, which stays the
 next gate and prevents sealing. Passed gates are immutable. `status` and
 `seal` also refuse an edited false pass. Duplicate keys, missing/unreadable
 files and redirected campaign inputs are refused.
+
+For `network-isolation`, record `cross_domain_refused` and
+`isolated_lab_refused` independently of the descriptive transcript summaries.
+The existing `tools/acceptance/07-network-isolation.sh` also judges three
+separate facts from `srv-tz-01`: `dns_control_reached` for its own gateway's
+TCP DNS at `10.10.5.1:53`, `dev_resolver_refused` for `10.10.3.1:53`, and
+`host_llmnr_refused` for `10.10.5.1:5355`. All five booleans must be true for
+a pass. A failed control leaves the refusals unjudged; missing fixtures or a
+failed connection alone cannot prove isolation. Keep the reviewed private
+transcripts behind the four descriptive summaries.
 
 For example, only after independently observing both distributions, make the
 complete server payload (the two files must contain the actual reviewed
@@ -298,6 +312,8 @@ as an ordinary user. The independent test oracle supplies the fixture values,
 so this is a software regression exercise, not a collector.
 
 ```bash
+(
+set -euo pipefail
 FIXTURE_DIR="${FIXTURE_DIR:-$(mktemp -d)}"
 for PROFILE in nitro-3060 predator-3070; do
   mkdir "$FIXTURE_DIR/$PROFILE"
@@ -313,7 +329,7 @@ for PROFILE in nitro-3060 predator-3070; do
   if python tools/release_acceptance.py --manifest release/acceptance.v3.yml seal \
     --plan "$FIXTURE_DIR/$PROFILE/plan.json" --evidence "$FIXTURE_DIR/$PROFILE/evidence.json" \
     --output "$FIXTURE_DIR/$PROFILE/pending-receipt.json"; then
-    exit 1
+    false
   else
     test "$?" -eq 2
   fi
@@ -359,9 +375,12 @@ PY
     --output "$FIXTURE_DIR/$PROFILE/receipt-again.json"
   cmp "$FIXTURE_DIR/$PROFILE/receipt.json" "$FIXTURE_DIR/$PROFILE/receipt-again.json"
 done
+)
 ```
 
 Expected: pending status 0/19 and refused pending seal, then synthetic 19/19,
 ready true and byte-identical local fixture receipts with schema version 3.
 Any nonzero command other than the deliberately refused pending seal, missing
-gate, coerced boolean or differing receipt is a software failure.
+gate, coerced boolean or differing receipt is a software failure. The subshell
+stops at the first unexpected failure and leaves the calling shell open with
+its original options.

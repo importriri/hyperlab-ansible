@@ -851,7 +851,7 @@ def check_v3_release_runbook(root: Path) -> None:
     rehearsal = bash_blocks(markdown_section(path, "## Synthetic fixture rehearsal"))
     require(len(rehearsal) == 1, "release runbook needs one complete fixture block")
     with TemporaryDirectory() as td:
-        result = subprocess.run(["bash", "-euo", "pipefail", "-c", rehearsal[0]],
+        result = subprocess.run(["bash", "-c", rehearsal[0]],
                                 cwd=root, text=True, capture_output=True, check=False,
                                 env={**os.environ, "FIXTURE_DIR": td, "PYTHONDONTWRITEBYTECODE": "1"})
         require(result.returncode == 0, f"release runbook fixture failed: {result.stderr}")
@@ -875,6 +875,20 @@ def check_v3_release_runbook(root: Path) -> None:
                         f"runbook fixture field omission: {gate['id']}")
                 for field in classes["booleans"]:
                     require(gate["evidence"][field] is True, f"runbook fixture untyped boolean: {field}")
+    with TemporaryDirectory() as td:
+        # Exercise a real record refusal, then detect any continued shell work.
+        broken = rehearsal[0].replace('"--status", "pass"', '"--status", "pending"', 1)
+        require(broken != rehearsal[0], "rehearsal record failure was not injected")
+        require(broken.count('\nPY\n') == 1, "rehearsal needs one payload heredoc")
+        broken = broken.replace('\nPY\n', '\nPY\n  touch "$FIXTURE_DIR/continued-after-failure"\n', 1)
+        result = subprocess.run(["bash", "-c", broken], cwd=root, text=True, capture_output=True,
+                                check=False, env={**os.environ, "FIXTURE_DIR": td,
+                                                  "PYTHONDONTWRITEBYTECODE": "1"})
+        require(result.returncode != 0 and "record" in result.stderr,
+                "invalid rehearsal record did not fail")
+        require(not (Path(td) / "continued-after-failure").exists(),
+                "rehearsal continued after a refused record")
+        require(not list(Path(td).glob("*/receipt*.json")), "failed rehearsal wrote receipts")
 
 
 def main() -> int:

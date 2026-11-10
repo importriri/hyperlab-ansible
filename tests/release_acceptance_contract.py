@@ -161,7 +161,13 @@ REVIEWED_V3_EVIDENCE: dict[str, dict[str, tuple[str, ...]]] = {
         "descriptive": (),
     },
     "network-isolation": {
-        "booleans": (),
+        "booleans": (
+            "cross_domain_refused",
+            "isolated_lab_refused",
+            "dns_control_reached",
+            "dev_resolver_refused",
+            "host_llmnr_refused",
+        ),
         "hashes": (),
         "descriptive": (
             "persistent_network_hashes",
@@ -1256,6 +1262,75 @@ def test_unsupported_versions_refuse_before_creating_a_plan(version: int = 2) ->
                           "--output", str(output))
             assert refused.returncode == 2 and "schema_version" in refused.stderr
             assert not output.exists() and path.read_bytes() == before
+
+        historical = yaml.safe_load(MANIFESTS[2].read_text())
+        historical["schema_version"] = 3
+        path.write_text(yaml.safe_dump(historical))
+        before = path.read_bytes()
+        refused = run(sys.executable, str(TOOL), "--manifest", str(path), "plan",
+                      "--profile", "nitro-3060", "--campaign-id", "synthetic-version",
+                      "--ansible-sha", ANSIBLE_SHA, "--bootstrap-sha", BOOTSTRAP_SHA,
+                      "--output", str(output))
+        assert refused.returncode == 2, "relabeled v2 gates were accepted as schema_version 3"
+        assert "schema_version 3 requires the reviewed v1 gate order" in refused.stderr
+        assert not output.exists() and path.read_bytes() == before
+
+
+def test_descriptive_fields_keep_the_versioned_text_contract(version: int = 2) -> None:
+    release_plan = plan(version=version)
+    for index, gate in enumerate(release_plan["gates"]):
+        for field in REVIEWED_BY_VERSION[version][gate["id"]]["descriptive"]:
+            if field == "lease_template":
+                continue  # Its exact Template identity has a separate contract.
+            for value in (False, True, "", 0, 1, 1.5, "x" * 241, "x" * 240):
+                evidence = failed_at(release_plan, index)
+                evidence["gates"][index]["evidence"][field] = value
+                for status_value in ("pass", "fail"):
+                    evidence["gates"][index]["status"] = status_value
+                    try:
+                        release_acceptance.validate_partial_evidence(release_plan, evidence)
+                    except release_acceptance.AcceptanceError as exc:
+                        assert version == 3 and value != "x" * 240, str(exc)
+                        assert f"field {field} must contain 1-240 characters of text" in str(exc)
+                    else:
+                        assert version == 2 or value == "x" * 240, (
+                            f"v3 {status_value} accepted description {gate['id']}.{field}={value!r}"
+                        )
+
+
+def test_record_status_and_seal_refuse_invalid_v3_descriptions(version: int = 2) -> None:
+    if version == 2:
+        return  # The preceding matrix preserves historical scalar behavior.
+    release_plan = plan(version=version)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        plan_path, evidence_path = scaffold_files(root, release_plan)
+        for index, gate in enumerate(release_plan["gates"]):
+            field = {"vfio-trust-lifecycle": "downward_trust_transitions",
+                     "sanitized-publication": "known_limits"}.get(gate["id"])
+            if field is None:
+                continue
+            for value in (False, "", 0, "x" * 241):
+                payload = valid_payload(gate)
+                payload[field] = value
+                evidence = failed_at(release_plan, index)
+                evidence_path.write_text(json.dumps(evidence))
+                before = evidence_path.read_bytes()
+                for status_value in ("pass", "fail"):
+                    refused = record(plan_path, evidence_path, gate, status=status_value, payload=payload)
+                    assert refused.returncode == 2, f"record accepted {field}={value!r}"
+                    assert f"field {field} must contain 1-240 characters of text" in refused.stderr
+                    assert evidence_path.read_bytes() == before
+
+                edited = evidence_for(release_plan)
+                edited["gates"][index]["evidence"][field] = value
+                evidence_path.write_text(json.dumps(edited))
+                before = evidence_path.read_bytes()
+                receipt = root / "must-not-exist.json"
+                for refused in (status_of(plan_path, evidence_path), seal_file(plan_path, evidence_path, receipt)):
+                    assert refused.returncode == 2, f"read path accepted {field}={value!r}"
+                    assert f"field {field} must contain 1-240 characters of text" in refused.stderr
+                    assert not receipt.exists() and evidence_path.read_bytes() == before
 
 
 def test_campaign_inputs_refuse_duplicates_and_redirection(version: int = 2) -> None:

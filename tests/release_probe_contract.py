@@ -413,7 +413,7 @@ def test_storage_collector_main_uses_both_manifests_with_fixture_observations() 
                 assert payload["topology"] == topology and payload["mapper"] == mapper
                 assert payload["fsroot"] == fsroot and payload["nocow"] is True
                 gate = release_probe.gate_contract(load_yaml(manifest_path), "storage-handoff")
-                validate_gate_payload(gate, payload, complete=True)
+                validate_gate_payload(gate, payload, complete=True, schema_version=version)
 
 
 def test_probe_refuses_another_initial_lease_template() -> None:
@@ -426,6 +426,26 @@ def test_probe_refuses_another_initial_lease_template() -> None:
         assert "lease_template must be workstation-dev-standard" in str(exc)
     else:
         raise AssertionError("probe accepted another initial lease Template")
+
+
+def test_v3_probe_bounds_descriptive_text() -> None:
+    from release_acceptance_contract import MANIFESTS, REVIEWED_V3_EVIDENCE, scalar_for
+    classes = REVIEWED_V3_EVIDENCE["vfio-trust-lifecycle"]
+    for version in (2, 3):
+        manifest = load_yaml(MANIFESTS[version])
+        for length in (240, 241):
+            values = [f"{field}={scalar_for(field)}" for field in classes["descriptive"]
+                      if field != "downward_trust_transitions"]
+            values.append(f"downward_trust_transitions={'x' * length}")
+            booleans = list(classes["booleans"]) if version == 3 else ["exclusive_owner", "reboot_resets_trust"]
+            try:
+                payload = build_payload(manifest, "vfio-trust-lifecycle", values, booleans, [], [])
+            except AcceptanceError as exc:
+                assert version == 3 and length == 241, str(exc)
+                assert "field downward_trust_transitions must contain 1-240 characters of text" in str(exc)
+            else:
+                assert version == 2 or length == 240, "v3 probe accepted an oversized description"
+                assert payload["downward_trust_transitions"] == "x" * length
 
 
 def main() -> int:

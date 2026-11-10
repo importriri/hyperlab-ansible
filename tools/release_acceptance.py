@@ -19,6 +19,27 @@ import yaml
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+V3_GATE_IDS = (
+    "repository-software",
+    "bootstrap-dry-run",
+    "bootstrap-clean-install",
+    "storage-handoff",
+    "host-idempotence",
+    "network-isolation",
+    "standard-vm-lifecycle",
+    "vfio-clean-baseline",
+    "server-ssh",
+    "shell-creation",
+    "disposable-lifecycle",
+    "looking-glass",
+    "workstation-access",
+    "physical-audio",
+    "gpu-lease",
+    "showcase",
+    "vfio-trust-lifecycle",
+    "session-recovery",
+    "sanitized-publication",
+)
 BOOL_FIELDS = {
     "clean_worktrees",
     "no_writes_observed",
@@ -46,6 +67,7 @@ BOOL_FIELDS = {
     "cold_start",
     "complete_storyboard",
     "console_recovery",
+    "cross_domain_refused",
     "debian_agent_restricted",
     "debian_strict_ssh",
     "default_boot_without_gpu",
@@ -54,6 +76,8 @@ BOOL_FIELDS = {
     "disposable_crash_overlay_not_reused",
     "disposable_crash_pin_refreshed",
     "disposable_crash_writes_discarded",
+    "dns_control_reached",
+    "dev_resolver_refused",
     "duplicate_creation_refused",
     "encrypted_storage_ready",
     "fedora_agent_restricted",
@@ -76,11 +100,13 @@ BOOL_FIELDS = {
     "guest_shortcuts_work",
     "host_frame_fullscreen",
     "host_frame_windowed",
+    "host_llmnr_refused",
     "host_owned_lease",
     "host_provenance_visible",
     "host_reboot",
     "host_volume_capped",
     "input_recovered",
+    "isolated_lab_refused",
     "keyboard_captured",
     "lease_runs_same_host_boot",
     "logout_returns_to_login",
@@ -287,6 +313,11 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
         "acceptance gate order must be unique and increasing",
     )
     require(len(ids) == len(set(ids)), "acceptance gate ids must be unique")
+    if manifest["schema_version"] == 3:
+        require(
+            tuple(ids) == V3_GATE_IDS,
+            "schema_version 3 requires the reviewed v1 gate order",
+        )
 
     expected_single = {
         "mapper": "/dev/mapper/cryptroot",
@@ -485,6 +516,7 @@ def validate_gate_payload(
     payload: dict[str, Any],
     *,
     complete: bool,
+    schema_version: int,
 ) -> None:
     require(
         isinstance(payload, dict),
@@ -523,6 +555,11 @@ def validate_gate_payload(
             require(
                 value is True or not complete,
                 f"passed evidence gate {planned['id']} field {field} must be true",
+            )
+        elif not field.endswith("sha256") and schema_version == 3:
+            require(
+                isinstance(value, str) and 1 <= len(value) <= 240,
+                f"evidence gate {planned['id']} field {field} must contain 1-240 characters of text",
             )
 
 
@@ -618,7 +655,9 @@ def validate_partial_evidence(plan: dict[str, Any], evidence: dict[str, Any]) ->
                 observed["summary"] == "",
                 f"pending evidence gate {planned['id']} summary must be empty",
             )
-            validate_gate_payload(planned, observed["evidence"], complete=False)
+            validate_gate_payload(
+                planned, observed["evidence"], complete=False, schema_version=plan["schema_version"],
+            )
             require(
                 all(value is None for value in observed["evidence"].values()),
                 f"pending evidence gate {planned['id']} must contain no values",
@@ -633,6 +672,7 @@ def validate_partial_evidence(plan: dict[str, Any], evidence: dict[str, Any]) ->
                 planned,
                 observed["evidence"],
                 complete=status_value == "pass",
+                schema_version=plan["schema_version"],
             )
             if status_value == "fail":
                 seen_incomplete = True
@@ -677,7 +717,9 @@ def record_gate(
         )
 
     planned = plan["gates"][gate_index]
-    validate_gate_payload(planned, payload, complete=status_value == "pass")
+    validate_gate_payload(
+        planned, payload, complete=status_value == "pass", schema_version=plan["schema_version"],
+    )
     existing = evidence["gates"][gate_index]
     if existing["status"] == "pass":
         require(

@@ -5353,7 +5353,7 @@ metadata or real campaign belongs in that copy. Before each break, copy the
 indicated input to a separate backup below the checkout. Restore by copying
 that backup, compare bytes and rerun the same check. Do not combine breaks.
 
-All V1–V20 cases below were observed red (exit 1) and restored green (exit 0).
+All V1–V40 cases below were observed red (exit 1) and restored green (exit 0).
 Scope and field expectations come from the handwritten version-specific
 oracles, never production typing. The exhaustive record matrix runs every
 boolean through strings `"true"`, `"false"`, 0 and 1 in both pass and fail
@@ -5381,12 +5381,12 @@ assertion at that boundary, not an unrelated crash.
 
 | ID | Input and exact break | Focused check | Red observed |
 | --- | --- | --- | --- |
-| V1 | Parse `release/acceptance.v3.yml`; remove only the gate with id `disposable-lifecycle`, preserving the remaining orders. | `test_scope_adr_plan_and_complete_storage_mapping(3)` | Ordered fixture-plan scope differs from the independent v1 list. |
-| V2 | Same file: remove only `gpu-lease`, preserving the remaining orders. | same as V1 | Ordered scope differs. |
+| V1 | Parse `release/acceptance.v3.yml`; remove only the gate with id `disposable-lifecycle`, preserving the remaining orders. | `test_scope_adr_plan_and_complete_storage_mapping(3)` | Plan creation refuses `schema_version 3 requires the reviewed v1 gate order`; the independent scope check turns red. |
+| V2 | Same file: remove only `gpu-lease`, preserving the remaining orders. | same as V1 | Same reviewed gate-order refusal. |
 | V3 | Same file: remove only `fedora_strict_ssh` from `server-ssh.required_evidence`. | `test_reviewed_evidence_classes_match_the_manifest_and_tool_typing(3)` | `server-ssh: reviewed classes ... differ from the manifest`. |
 | V4 | Same file: remove only `super_isolated` from `workstation-access.required_evidence`. | same as V3 | `workstation-access: reviewed classes ... differ`. |
 | V5 | Same file: remove only `no_guest_microphone` from `physical-audio.required_evidence`. | same as V3 | `physical-audio: reviewed classes ... differ`. |
-| V6 | Same file: insert historical `jellyfin-service` and `service-recovery` before publication, renumbering every gate in increments of 10. | same as V1 | Extra service scope differs from the independent list. |
+| V6 | Same file: insert historical `jellyfin-service` and `service-recovery` before publication, renumbering every gate in increments of 10. | same as V1 | Same reviewed gate-order refusal for extra service scope. |
 | V7 | `tools/release_acceptance.py`: remove `"gpu_less_ladder_unchanged",` only from `BOOL_FIELDS`. | same as V3 | `tool booleans differ ... missing=['gpu_less_ladder_unchanged']`. |
 | V8 | Same tool, in `validate_partial_evidence`: change `complete=status_value == "pass",` to `complete=False,`. Keep record's direct payload validation intact. | `test_status_and_seal_refuse_an_edited_false_pass(3)` | `status accepted an edited pass ... clean_worktrees=false`. Record still refuses false passes: a deliberate control. |
 | V9 | Same tool, immediately before `planned = plan["gates"][gate_index]` in `record_gate`: insert `payload = {key: True if value == "true" else value for key, value in payload.items()}`. | `test_record_cli_boolean_types_are_strict_and_refusals_preserve_bytes(2)` | `record pass coerced repository-software.clean_worktrees='true'`. |
@@ -5397,7 +5397,7 @@ assertion at that boundary, not an unrelated crash.
 | V14 | Same tool: replace `absolute = path.absolute()` in `read_input` with `absolute = path.resolve()`. | same as V13 | A redirected plan is accepted instead of refused. |
 | V15 | Same tool: replace the `lease_template` require with `require(True, "lease_template unrestricted")`. | `test_lease_template_is_the_selected_initial_template(3)` | A pass on `workstation-dev` seals instead of refusing the wrong initial Template. |
 | V16 | Same tool: delete only `require(key not in result, f"duplicate mapping key: {key}")`. | same as V13 | Duplicate plan schema key is accepted instead of refused. |
-| V17 | `tools/release_probe.py`: delete `validate_gate_payload(gate, payload, complete=False)`. | `test_probe_refuses_another_initial_lease_template()` | `probe accepted another initial lease Template`. |
+| V17 | `tools/release_probe.py`: delete `validate_gate_payload(gate, payload, complete=False, schema_version=manifest["schema_version"])`. | `test_probe_refuses_another_initial_lease_template()` | `probe accepted another initial lease Template`. |
 | V18 | Runbook: select v2 only in the fixture's `if python ... seal` pending-refusal command. | same as V12 | The conditional command is parsed and rejected for selecting v2. |
 | V19 | `tools/release_acceptance.py`: delete `validate_evidence(plan, evidence)` only in `seal`. | same as V8 | `seal accepted an edited pass ... clean_worktrees=false`; status refusal remains a control. |
 | V20 | Same tool, in `seal`, after validation and before hashing: insert `plan = {**plan, "schema_version": 2}`. | `test_complete_sanitized_evidence_seals_to_stable_hashes(3)` | Receipt version differs from the selected campaign version. |
@@ -5407,6 +5407,20 @@ assertion at that boundary, not an unrelated crash.
 | V24 | Same gate: delete only `unmapped_pci_refused`. | same as V3 | Same independent field-oracle refusal. |
 | V25 | Same manifest: delete only `lease_runs_same_host_boot` from `gpu-lease.required_evidence`. | same as V3 | `gpu-lease: reviewed classes ... differ from the manifest`. |
 | V26 | `tools/release_acceptance.py`: delete only the `require(stat.S_ISREG(os.fstat(handle.fileno()).st_mode), ...)` line in `read_input`. | same as V13 | The FIFO plan receives `release plan root must be a mapping` instead of the required `must be regular` diagnostic; the FIFO assertion turns red. |
+| V27 | `release/acceptance.v3.yml`: delete only `cross_domain_refused` from `network-isolation.required_evidence`. | same as V3 | `network-isolation: reviewed classes ... differ from the manifest`. |
+| V28 | Same gate: delete only `isolated_lab_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V29 | Same gate: delete only `dns_control_reached`. | same as V3 | Same independent field-oracle refusal. |
+| V30 | Same gate: delete only `dev_resolver_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V31 | Same gate: delete only `host_llmnr_refused`. | same as V3 | Same independent field-oracle refusal. |
+| V32 | `tools/release_acceptance.py`: replace `isinstance(value, str) and 1 <= len(value) <= 240` with `not isinstance(value, str) or 1 <= len(value) <= 240`, accepting non-text scalars while retaining string bounds. | `test_descriptive_fields_keep_the_versioned_text_contract(3)` | `v3 pass accepted description repository-software.exact_commits=False`. |
+| V33 | Same condition: change only the minimum length from 1 to 0. | same as V32 | The empty description is accepted and the matrix turns red. |
+| V34 | Same condition: change only the maximum length from 240 to 241. | same as V32 | The 241-character description is accepted and the matrix turns red. |
+| V35 | `tools/release_probe.py`: pass `schema_version=2` to `validate_gate_payload`. | `test_v3_probe_bounds_descriptive_text()` | `v3 probe accepted an oversized description`. |
+| V36 | `tools/release_acceptance.py`: pass `schema_version=2` only in the non-pending branch of `validate_partial_evidence`. | same as V32 | The v3 false descriptive value is accepted and the matrix turns red. |
+| V37 | Same tool: delete the `if manifest["schema_version"] == 3` block requiring `tuple(ids) == V3_GATE_IDS`. | `test_unsupported_versions_refuse_before_creating_a_plan(3)` | `relabeled v2 gates were accepted as schema_version 3`. |
+| V38 | `docs/release-evidence.md`: delete only `set -euo pipefail` from the rehearsal. | same as V12 | `rehearsal continued after a refused record`; the injected real record refusal reaches the subsequent marker. |
+| V39 | Same rehearsal: replace the record argv's `"--status", "pass"` with `"--status", "pending"`. | same as V12 | `release runbook fixture failed`; plain `bash -c` stops on the refused record. |
+| V40 | `tools/release_acceptance.py`: delete only `cross_domain_refused` from `BOOL_FIELDS`. | same as V3 | `tool booleans differ from the reviewed manifest booleans`. |
 
 V21–V26 were also observed red (exit 1) and restored green (exit 0), each
 after saving the input and comparing restored bytes. For V21–V25, delete
@@ -5417,6 +5431,28 @@ its false-pass refusal at record/status/seal, false failed records, and
 string/integer refusal. V26 uses `os.mkfifo` without a writer and requires
 exit 2 with `must be regular`, no scaffold output and unchanged plan/evidence
 bytes. `O_NONBLOCK` keeps that refusal independent of a FIFO writer.
+
+V27–V40 were observed red (exit 1) and restored green (exit 0) after saving
+each input, restoring it by copy and comparing bytes. V27–V31 delete one
+YAML sequence line at a time, preserving all other fields. The exhaustive
+record/status/seal and probe matrices exercise each new network boolean:
+false cannot pass, failed records can retain false, and text/integer
+coercions refuse without evidence writes. V32–V36 cover the v3 text type,
+both length boundaries and propagation of the selected version; the same
+matrix verifies unchanged historical v2 scalar behavior. V37 proves a
+well-formed historical gate list cannot acquire the v3 label. V38–V39 run
+the pasted block under plain `bash -c`, including an invalid real record
+and a marker that must never run afterward. All V1–V26 checks were also
+rerun red and restored green with these changes.
+
+The additional exact focused commands, run in the disposable copy, are:
+
+```bash
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_descriptive_fields_keep_the_versioned_text_contract(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_record_status_and_seal_refuse_invalid_v3_descriptions(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_unsupported_versions_refuse_before_creating_a_plan(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_probe_contract as t; t.test_v3_probe_bounds_descriptive_text()'
+```
 
 For the parsed-YAML breaks V1–V6 and V11, this is the mutation command used
 inside the disposable copy; select one case by its id, then run its focused

@@ -135,7 +135,7 @@ def build_payload(
         f"gate {gate_id} fields differ: missing={sorted(required - set(payload))} "
         f"extra={sorted(set(payload) - required)}",
     )
-    validate_gate_payload(gate, payload, complete=False)
+    validate_gate_payload(gate, payload, complete=False, schema_version=manifest["schema_version"])
     return payload
 
 

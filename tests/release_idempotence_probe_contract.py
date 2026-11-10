@@ -101,7 +101,10 @@ def test_real_idempotence_cli_supports_both_campaign_versions() -> None:
             result = subprocess.run(argv, text=True, capture_output=True, check=False)
             assert result.returncode == 0, result.stderr
             payload = json.loads(result.stdout)
-            validate_gate_payload(gate_contract(load_yaml(manifest), "host-idempotence"), payload, complete=True)
+            validate_gate_payload(
+                gate_contract(load_yaml(manifest), "host-idempotence"), payload,
+                complete=True, schema_version=version,
+            )
             assert payload["second_apply_changed_zero"] is True
             logs[2].write_text(recap(changed=1))
             refused = subprocess.run(argv, text=True, capture_output=True, check=False)

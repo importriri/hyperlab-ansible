@@ -17,6 +17,13 @@ observations and the requirement that all three lease runs share one host
 boot. A descriptive transition log could not enforce those independent
 outcomes, and runs across reboots could hide a trust-ladder reset.
 
+Network refusals remained descriptive scalars: false or text saying a
+destination was reached could satisfy a passed isolation gate. Descriptions
+also accepted booleans, empty strings and numbers. The manifest version
+alone did not bind the gate set, so relabeling historical gates as v3 could
+produce a misleading v3 receipt. Finally, the runbook rehearsal relied on
+shell options supplied by its test; a pasted block continued after failure.
+
 ## Fix
 
 A separate `release/acceptance.v3.yml`, described by Proposed ADR 0063,
@@ -38,6 +45,15 @@ guard. Failed gates may retain false and cannot seal. Campaign readers now
 refuse duplicate keys, non-regular files and symlink redirection. The probe
 also validates its generated payload against the same scalar contract.
 
+V3 network isolation now requires five independent booleans: cross-domain
+and isolated-lab refusals, a reached gateway DNS control, and refused dev
+resolver and host LLMNR. Its descriptive summaries remain separate. V3
+descriptions require 1–240 characters of text through the shared validator;
+historical v2 scalar behavior is preserved. Schema version 3 requires the
+reviewed ordered v1 gate identifiers before any plan is written. The
+rehearsal enables fail-fast shell options in its own subshell, preserving
+the reader's shell and stopping after a refused record.
+
 ## Regression evidence
 
 The independent field oracle enumerates both scopes and every field class.
@@ -52,7 +68,11 @@ The input regression also presents a FIFO as a plan and requires the explicit
 regular-file refusal, with no output or evidence changes.
 
 The documentation contract parses manifest flags and gate order and executes
-the complete synthetic command sequence for both profiles. The unchanged
+the complete synthetic command sequence for both profiles. The
+rehearsal runs under plain `bash -c`; an injected invalid record must stop
+before a subsequent marker or any receipt. Versioned descriptive matrices
+check type and length, and real record/status/seal refusals preserve evidence
+bytes. A relabeled historical manifest cannot create a plan. The unchanged
 bootstrap required-mode verifier compares its real fixture writer with the
 storage guard and historical v2 manifest; independent complete v2/v3 mapping
 equality extends only that storage agreement to v3.

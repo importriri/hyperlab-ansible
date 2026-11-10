@@ -877,7 +877,9 @@ Measured with the complete security plane active.
   - [x] v3 campaign preparation: independent ordered gate/field oracle,
         typed payloads, version-bound plan/evidence/receipt, both-profile CLI
         fixtures and executable synthetic runbook; clean/dev and Showcase
-        precede dirty/lab, then reboot/recovery. Every campaign observation
+        precede dirty/lab, then reboot/recovery. V3 binds its ordered gates,
+        requires typed network refusals and DNS controls, and limits
+        descriptive evidence to 1–240 characters of text. Every observation
         stays pending (`tests/release_acceptance_contract.py`,
         `tests/release_probe_contract.py`, `tests/docs_contract.py`,
         software-verified on synthetic campaigns)

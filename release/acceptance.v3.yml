@@ -67,6 +67,11 @@ gates:
       - active_networks
       - cross_domain_refusals
       - isolated_lab_refusals
+      - cross_domain_refused
+      - isolated_lab_refused
+      - dns_control_reached
+      - dev_resolver_refused
+      - host_llmnr_refused
   - id: standard-vm-lifecycle
     order: 70
     execution: hardware-runtime
