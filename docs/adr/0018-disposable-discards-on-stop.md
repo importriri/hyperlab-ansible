@@ -91,7 +91,7 @@ start begins from the sealed base exactly as the first boot did.
 
 ## Amendment: restore access policy and SSH identity on every boot
 
-Status: Proposed.
+The following amendment is proposed.
 
 A provisioning-time change on the transient disk disappears on stop too.
 The disposable Linux cloud-init seed therefore writes root-owned
