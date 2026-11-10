@@ -5509,3 +5509,44 @@ python tests/release_probe_contract.py
 python tests/release_idempotence_probe_contract.py
 python tests/docs_contract.py
 ```
+
+### Guest runtime fixtures keep user-installed Ansible reachable
+
+`problems/guest-contract-lost-user-installed-ansible.md`.
+
+Red check for every row:
+
+```bash
+python tests/guest_runtime_environment_contract.py
+```
+
+The contract starts a fresh Python interpreter with a temporary user bin
+and Python user site. It executes `guest_contract.playbook_invocation()`
+and the selected recording launcher, verifies its real argv and isolated
+environment, then removes the launcher and requires a deliberate refusal.
+The launcher imports a module that exists only in that temporary user site;
+a system Ansible installation cannot satisfy either positive assertion.
+
+Each break below changes `playbook_invocation()` in
+`tests/guest_contract.py`. Replay one break at a time from a saved copy and
+restore it before the next. The observed runs used a private copy of this
+helper, the environment contract and `ansible.cfg`; the restored helper was
+also compared byte for byte with the original.
+
+| Mutation | Break | Observed red diagnostic | After restoration |
+| --- | --- | --- | --- |
+| `bare-command` | Replace `str(Path(executable).absolute())` in argv with `"ansible-playbook"`. | `guest fixture did not execute the caller's Ansible launcher` | Exit 0, contract OK. |
+| `lost-user-base` | Remove `PYTHONUSERBASE` from the child environment. | `No module named 'guest_fixture_dependency'` | Exit 0, contract OK. |
+| `missing-executable-guard` | Remove the assertion immediately after `shutil.which`. | `missing launcher did not produce a deliberate refusal` | Exit 0, contract OK. |
+| `caller-home` | Set child HOME to `tmp.parent`. | `guest fixture lost its private HOME` | Exit 0, contract OK. |
+| `caller-path` | Replace the fixed child PATH with `str(Path(executable).parent)`. | `guest fixture inherited the caller's PATH` | Exit 0, contract OK. |
+| `wrong-configuration` | Set `ANSIBLE_CONFIG` to `tmp / 'ansible.cfg'`. | `guest fixture lost its repository Ansible configuration` | Exit 0, contract OK. |
+| `shared-temporary-directory` | Set `ANSIBLE_LOCAL_TEMP` to `tmp.parent / 'ansible-local'`. | `guest fixture lost its private Ansible directories` | Exit 0, contract OK. |
+| `inherited-caller-settings` | Prepend the caller's environment to the child mapping. | `guest fixture inherited caller configuration` | Exit 0, contract OK. |
+
+All eight deliberate breaks exited 1 with the diagnostic listed, and each
+saved-copy restoration exited 0. The first test-first run on the original
+helper also failed `bare-command`; resolving only the executable then failed
+the user-site import, before preserving `PYTHONUSERBASE` made both pass.
+The full guest and inventory contracts continue to execute real Ansible and
+the strict SSH proofs with their existing hardware stubs.

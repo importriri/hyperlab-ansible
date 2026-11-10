@@ -16,6 +16,10 @@ enough for the claim.
 
 ## Current state
 
+- **Repository verification:** guest runtime fixtures support user-installed
+  Ansible while keeping their private environment (software-verified;
+  [failure and regression](../problems/guest-contract-lost-user-installed-ansible.md)).
+  A hosted CI rerun remains pending.
 - **Encrypted Arch bootstrap:** validated on Nitro; the frozen release replay is
   still required.
 - **Host KVM, networks and VFIO:** live Nitro validation passed.

@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shutil
+import site
 import subprocess
 import sys
 import tempfile
@@ -364,6 +365,8 @@ def run_playbook(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str
 def playbook_invocation(tmp: Path, playbook: list[dict[str, Any]], extra_vars: dict[str, Any],
                         *options: str, inventory: Path | None = None) -> tuple[list[str], dict[str, str]]:
     """The argv and environment run_playbook uses, for a run kept in the background."""
+    executable = shutil.which("ansible-playbook")
+    assert executable is not None, "ansible-playbook is required for guest runtime fixtures"
     path = tmp / f"playbook-{len(list(tmp.glob('playbook-*.yml')))}.yml"
     write_yaml(path, playbook)  # type: ignore[arg-type]
     variables = tmp / f"{path.stem}-vars.json"
@@ -371,6 +374,9 @@ def playbook_invocation(tmp: Path, playbook: list[dict[str, Any]], extra_vars: d
     environment = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp),
+        # CI installs Ansible with pip --user. A private HOME must not move
+        # its Python packages to an empty user site in the fixture.
+        "PYTHONUSERBASE": site.getuserbase(),
         "LC_ALL": "C.UTF-8",
         "ANSIBLE_CONFIG": str(ROOT / "ansible.cfg"),
         "ANSIBLE_HOME": str(tmp / "ansible-home"),
@@ -379,7 +385,7 @@ def playbook_invocation(tmp: Path, playbook: list[dict[str, Any]], extra_vars: d
         "ANSIBLE_RETRY_FILES_ENABLED": "false",
         "ANSIBLE_NOCOLOR": "1",
     }
-    argv = ["ansible-playbook", "-i", str(inventory) if inventory else "localhost,",
+    argv = [str(Path(executable).absolute()), "-i", str(inventory) if inventory else "localhost,",
             "-e", f"@{variables}", *options, str(path)]
     return argv, environment
 

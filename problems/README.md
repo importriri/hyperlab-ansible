@@ -438,6 +438,9 @@ proof.
 - [`ci-skipped-shell-palette-and-choices.md`](ci-skipped-shell-palette-and-choices.md):
   CI omitted six shell, palette and choices checks that the local verifier ran;
   execution fixtures now compare both paths and require failure propagation.
+- [`guest-contract-lost-user-installed-ansible.md`](guest-contract-lost-user-installed-ansible.md):
+  the shared guest fixture hid CI's user-installed Ansible executable and Python
+  packages when it isolated PATH and HOME.
 
 - [`machine-capability-failures-lost-their-cause.md`](machine-capability-failures-lost-their-cause.md):
   failed capability reads hid known refusal causes or stayed unanswered.
