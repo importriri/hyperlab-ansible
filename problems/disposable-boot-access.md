@@ -18,8 +18,10 @@ host key. Managed Start waited only for the agent to answer; neither the
 seed nor Start restored those boot-specific properties. A successful first
 provisioning therefore said nothing about the next disposable boot.
 
-The pinning module replaces only one matching entry, so duplicate old pins
-could leave an earlier boot trusted after a successful refresh. The per-Machine
+The pinning module replaces only one unmarked entry of the same key type,
+so duplicate old pins or a sole RSA/ECDSA pin could leave an earlier boot
+trusted after a successful Ed25519 refresh. A marked entry also survives
+replacement by an ordinary host pin. The per-Machine
 publication lock also did not protect the owner's shared `known_hosts` file
 from another Machine's read and replacement: concurrent publishers could
 both succeed while one overwrote the other's new pin.
@@ -47,6 +49,10 @@ standalone inventory step after the holder ends, since the refused Machine
 may already be running. Forced handlers release acquired locks on failures.
 OpenSSH's address lookup matches clear and hashed entries; more than one
 match refuses without changing pins or publishing inventory.
+Even a sole match must be an unmarked Ed25519 entry: a different key type,
+`@cert-authority` or `@revoked` refuses before replacement. Inspect and resolve
+these entries before retrying; the publisher preserves policy it cannot
+safely replace.
 
 Existing seeds must be replaced through normal throwaway Machine creation.
 Passwordless server sudo remains an explicit limitation. See
@@ -77,3 +83,10 @@ shared serialization reproduces the lost update. Parsed lifecycle lock
 acquisition and release tasks must each explicitly declare `become: false`,
 even though the fixture lifecycle runs without privilege. Each independent
 deletion is detected without requesting privilege.
+
+Sole RSA and ECDSA pins and Ed25519 entries marked `@cert-authority` or
+`@revoked`, each in clear and hashed form, must refuse without changing the
+database or publishing inventory, and release both acquired locks. Ordinary
+Ed25519 entries in both forms still refresh; strict SSH accepts the current
+boot's key and rejects the previous one. Removing the compatibility assertion
+makes the cross-type regression fail.

@@ -267,7 +267,8 @@
       check_mode: false
 
     # OpenSSH matches clear and hashed host fields. known_hosts replaces
-    # only one matching line, so refuse ambiguous input before any update.
+    # only one unmarked line of the same key type, so refuse duplicates
+    # and incompatible entries before any update.
     - name: Find all existing SSH pins for the selected address
       ansible.builtin.command:
         argv:
@@ -295,6 +296,21 @@
           The strict known-hosts database has duplicate entries for
           {{ guest_inventory_address.stdout }}, including any hashed matches.
           Inspect and resolve them before retrying; no inventory was published.
+
+    - name: Refuse SSH pins that cannot be replaced safely
+      ansible.builtin.assert:
+        that:
+          - item.split() | length >= 3
+          - item.split()[1] == 'ssh-ed25519'
+        fail_msg: >-
+          The strict known-hosts entry for {{ guest_inventory_address.stdout }}
+          is not an unmarked Ed25519 pin. Inspect and resolve it before retrying;
+          no inventory was published.
+      loop: >-
+        {{ guest_inventory_previous_keys.stdout_lines
+           | reject('match', '^#') | list }}
+      loop_control:
+        label: "{{ guest_inventory_address.stdout }}"
 
     - name: Pin the guest SSH host key for strict checking
       ansible.builtin.known_hosts:

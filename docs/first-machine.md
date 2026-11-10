@@ -204,6 +204,11 @@ interrupted run's shared lock also needs inspection before `rmdir`. Duplicate
 entries for the selected address, including hashed entries, refuse before
 any pin update or inventory publication. Inspect and resolve the duplicates
 before retrying; the publisher never guesses which old entry to keep.
+A sole match must also be an unmarked Ed25519 pin. Other key types and entries
+marked `@cert-authority` or `@revoked`, including hashed entries, refuse with
+the database and inventory unchanged. Inspect and resolve the incompatible
+entry before retrying the same inventory step; the new pin comes from the
+agent channel.
 
 An already-running Start and check mode do not repin or run the boot action.
 Creation still uses the explicit inventory step above before further

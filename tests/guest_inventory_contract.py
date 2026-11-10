@@ -374,6 +374,59 @@ def check_duplicate_pins() -> None:
             assert lab.unlocked(), f"{label}: refusal left a lock behind"
 
 
+def check_replaceable_pins() -> None:
+    """Only an unmarked Ed25519 pin can be replaced by the current boot key."""
+    with tempfile.TemporaryDirectory() as td:
+        lab = Lab(Path(td))
+        address = "10.10.4.31"
+        previous_keys = {"ed25519": lab.public_key(1)}
+        for kind in ("rsa", "ecdsa"):
+            path = lab.tmp / f"previous-{kind}"
+            subprocess.run(["ssh-keygen", "-q", "-t", kind, "-N", "", "-f", str(path)], check=True)
+            previous_keys[kind] = " ".join(path.with_suffix(".pub").read_text(encoding="utf-8").split()[:2])
+
+        scenario = boot_scenario(address, lab.public_key(2))
+        for label, marker, key in (
+            ("rsa", "", previous_keys["rsa"]),
+            ("ecdsa", "", previous_keys["ecdsa"]),
+            ("certificate authority", "@cert-authority ", previous_keys["ed25519"]),
+            ("revoked", "@revoked ", previous_keys["ed25519"]),
+        ):
+            for hashed in (False, True):
+                previous = f"{address} {key}\n"
+                lab.known_hosts.write_text(previous, encoding="utf-8")
+                if hashed:
+                    # ssh-keygen -H leaves marked entries clear; hash first.
+                    subprocess.run(["ssh-keygen", "-H", "-f", str(lab.known_hosts)],
+                                   check=True, capture_output=True)
+                    previous = lab.known_hosts.read_text(encoding="utf-8")
+                    assert previous.startswith("|1|"), previous
+                previous = marker + previous
+                lab.known_hosts.write_text(previous, encoding="utf-8")
+                case = f"{'hashed' if hashed else 'plain'} {label}"
+                result, _ = lab.start(PUBLISHER.name, scenario)
+                assert result.returncode != 0, f"{case}: an incompatible previous-boot pin was accepted"
+                assert failed_task(result.stdout) == "Refuse SSH pins that cannot be replaced safely", result.stdout
+                assert lab.known_hosts.read_text(encoding="utf-8") == previous, f"{case}: refusal changed the database"
+                assert not lab.inventory.exists(), f"{case}: refusal published inventory"
+                assert lab.unlocked(), f"{case}: refusal left a lock behind"
+
+        # A hashed address alone must not block a supported replacement.
+        for hashed in (False, True):
+            lab.known_hosts.write_text(f"{address} {previous_keys['ed25519']}\n", encoding="utf-8")
+            if hashed:
+                subprocess.run(["ssh-keygen", "-H", "-f", str(lab.known_hosts)],
+                               check=True, capture_output=True)
+            result, _ = lab.start(PUBLISHER.name, scenario)
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert lab.pins() == {address: [lab.public_key(2)]}, lab.pins()
+            assert lab.unlocked(), "a supported pin replacement left a lock behind"
+            current = lab.ssh(2)
+            assert current.returncode == 0, current.stderr
+            stale = lab.ssh(1)
+            assert stale.returncode == 255 and "Host key verification failed" in stale.stderr, stale.stderr
+
+
 def pausing_publisher(tmp: Path, barrier: Path) -> Path:
     """Instrument only the installed pin module's final atomic replacement.
 
@@ -525,12 +578,12 @@ def check_disposable_repin() -> None:
 
 
 def failed_task(output: str) -> str | None:
-    """The name of the task whose result was the run's first fatal one."""
+    """The name of the task whose result was the run's first failed one."""
     task = None
     for line in output.splitlines():
         if line.startswith("TASK [") and "]" in line:
             task = line[len("TASK ["):line.rindex("]")]
-        elif line.startswith("fatal:"):
+        elif line.startswith(("fatal:", "failed:")):
             return task
     return None
 
@@ -789,6 +842,7 @@ def main() -> int:
     check_publisher_entries()
     check_lock_privilege()
     check_duplicate_pins()
+    check_replaceable_pins()
     check_shared_known_hosts_publication()
     check_disposable_repin()
     check_pin_failure()

@@ -5315,3 +5315,29 @@ the duplicate assertion, retain the database bytes, publish no inventory and
 release acquired locks. The privilege check parses the actual lifecycle
 acquisition and release tasks, requiring explicit boolean false independently
 of the fixture play's unprivileged execution.
+
+## Refuse incompatible SSH pins before replacement
+
+`tests/guest_inventory_contract.py` also runs `check_replaceable_pins` against
+sole RSA and ECDSA pins and Ed25519 entries marked `@cert-authority` or
+`@revoked`, each in clear and hashed form. Each must refuse at the
+compatibility assertion, leave the database bytes unchanged, publish no
+inventory and release both acquired locks. The fixtures hash the host field
+before adding a marker, because `ssh-keygen -H` leaves marked entries clear.
+Two positive cases refresh ordinary Ed25519 pins, in clear and hashed form;
+strict SSH over a pipe accepts the current boot and rejects the old one.
+
+Before the mutation, copy `playbooks/vm-guest-inventory.yml` to a `.saved`
+file below the checkout. Remove only the parsed YAML task named
+`Refuse SSH pins that cannot be replaced safely`, keeping the duplicate
+assertion and both publication locks. Run:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_inventory_contract as t; t.check_replaceable_pins()'
+```
+
+Restore the playbook from the saved copy and run the identical check again.
+
+Observed: removing the compatibility assertion exits 1 with
+`plain rsa: an incompatible previous-boot pin was accepted`; restoring it
+exits 0. The duplicate assertion remains in place during this mutation.
