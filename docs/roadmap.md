@@ -523,6 +523,8 @@ platform, recorded on the host:
 - [ ] the same seen in the lab host and on Nitro (ADR 0051 hardware test)
 - [x] host keybinding cheatsheet that includes the crossing keys:
       `SUPER + F1`, checked against the bindings (software-verified)
+      (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
+      Hyprland, `main` `1e42308`: sheet opened and closed, also after host unlock)
 
 ### 7. Snapshots, backups and recovery (M12, second half)
 
@@ -539,7 +541,9 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 - [ ] VM lifecycle and Control Center operational and recovery surfaces
       complete (M10 domain manager and M11 shell are implemented; their live
       gates remain)
-- [ ] the drawer placement visual recheck on Nitro
+- [x] the drawer placement visual recheck on Nitro
+      (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
+      Sway, `main` `1e42308`: VMs drawer at the top-left, immediately below Waybar)
 - [x] reviewed desktop-entry catalogue and app-launch bridge on the host:
       the launcher's Applications group starts only catalogue entries the
       shell action bridge resolves to root-owned desktop files
@@ -797,6 +801,9 @@ to decide).
 - [x] the proposed emergency key is unbound and absent from the host key
       sheet pending the operator's choice; ordinary lock and key-sheet
       access remain (`tests/host_key_sheet_contract.py`, software-verified)
+      (Nitro, 2026-11-07, operator session of 2026-11-07; operator-observed, unpublished;
+      Hyprland, `main` `1e42308`: former `SUPER+SHIFT+Escape` pressed with all domains
+      inactive; emergency status stayed disengaged, with no record)
 - [ ] the emergency stop pressed and restored on Nitro, with running, paused
       and VFIO Machines (ADR 0047 hardware test)
 
@@ -1058,17 +1065,28 @@ work explicitly requires it.
         on-demand loading/freshness (`tests/host_quickshell_runtime_contract.py`,
         `tests/host_quickshell_readonly_runtime_contract.py`,
         `tests/host_desktop_common_contract.py`; software-verified with fixtures;
-        installed convergence and Nitro/Predator acceptance remain open)
+        installed convergence and native-page acceptance
+        (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
+        Hyprland, `main` `1e42308`: enable/disable second applies `changed=0`,
+        readbacks, Tab, narrow window, section return and automatic page withdrawal);
+        Predator acceptance remains open)
   - [x] default-off, read-only native Nitro observation page: product, fan
         driver settings, battery limiter and four-zone readbacks through the
         fixed client status request, typed validation, guarded navigation and
         freshness (`tests/host_quickshell_runtime_contract.py`,
         `tests/host_quickshell_readonly_runtime_contract.py`,
         `tests/host_desktop_common_contract.py`; software-verified with fixtures;
-        installed convergence and Nitro/Predator acceptance remain open)
+        installed convergence and native-page acceptance in the observed scope
+        (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
+        Hyprland, `main` `1e42308`: enable/disable second applies `changed=0`,
+        readbacks, Tab, narrow window, section return and page absent after disable;
+        automatic page withdrawal was not separately attested);
+        Predator acceptance remains open)
 - [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
 - [ ] shell-owned notifications (mako remains the reviewed daemon)
 - [x] complete keybinding cheatsheet surface: `SUPER + F1`, every host binding
       on the sheet and nothing else (`tests/host_key_sheet_contract.py`;
       the same item as in milestone 6, software-verified)
+      (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
+      Hyprland, `main` `1e42308`: sheet opened and closed, also after host unlock)
 - [ ] Sway native parity acceptance (Sway remains the recovery session)
