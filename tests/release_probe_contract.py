@@ -341,6 +341,93 @@ def test_probe_command_types_the_private_spice_socket() -> None:
     )
 
 
+def test_v3_probe_types_every_reviewed_field_without_coercion() -> None:
+    from release_acceptance_contract import MANIFESTS, REVIEWED_V3_EVIDENCE, scalar_for
+    manifest = load_yaml(MANIFESTS[3])
+    for gate_id, classes in REVIEWED_V3_EVIDENCE.items():
+        values = [f"{field}={'a' * 64}" for field in classes["hashes"]]
+        values.extend(f"{field}={scalar_for(field)}" for field in classes["descriptive"])
+        booleans = list(classes["booleans"])
+        payload = build_payload(manifest, gate_id, values, booleans, [], [])
+        assert set(payload) == {field for fields in classes.values() for field in fields}
+        for field in booleans:
+            assert payload[field] is True
+            others = [item for item in booleans if item != field]
+            failed = build_payload(manifest, gate_id, values, others, [field], [])
+            assert failed[field] is False
+            for value in BOOLEAN_TEXT:
+                try:
+                    build_payload(manifest, gate_id, [*values, f"{field}={value}"], others, [], [])
+                except AcceptanceError as exc:
+                    assert f"boolean field {field} needs --true or --false" in str(exc)
+                else:
+                    raise AssertionError(f"--value coerced v3 {gate_id}.{field}={value}")
+            arguments = [argument for value in values for argument in ("--value", value)]
+            arguments.extend(argument for other in others for argument in ("--true", other))
+            for flag, expected in (("--true", True), ("--false", False), ("--value", None)):
+                typed = [flag, field if expected is not None else f"{field}=true"]
+                result = subprocess.run(
+                    [sys.executable, str(PROBE), "--manifest", str(MANIFESTS[3]), "payload",
+                     "--gate", gate_id, *arguments, *typed],
+                    text=True, capture_output=True, check=False,
+                )
+                if expected is None:
+                    assert result.returncode == 2 and "needs --true or --false" in result.stderr
+                else:
+                    assert result.returncode == 0, result.stderr
+                    assert json.loads(result.stdout)[field] is expected
+        for field in classes["descriptive"]:
+            try:
+                build_payload(manifest, gate_id, [], [field], [], [])
+            except AcceptanceError as exc:
+                assert "not a reviewed boolean" in str(exc)
+            else:
+                raise AssertionError(f"descriptive v3 field {field} became boolean")
+
+
+def test_storage_collector_main_uses_both_manifests_with_fixture_observations() -> None:
+    import contextlib
+    import io
+    from unittest.mock import patch
+    import release_probe
+    from release_acceptance import validate_gate_payload
+    from release_acceptance_contract import MANIFESTS
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "contract.yml"
+        for version, manifest_path in MANIFESTS.items():
+            for topology, mapper, fsroot in (
+                ("single-disk", "/dev/mapper/cryptroot", "/@vm"),
+                ("dedicated-disk", "/dev/mapper/cryptvm", "/"),
+            ):
+                write_contract(path, topology)
+                stdout = io.StringIO()
+                with (
+                    patch.object(sys, "argv", [str(PROBE), "--manifest", str(manifest_path),
+                                               "storage", "--contract", str(path)]),
+                    patch.object(release_probe, "findmnt_observation", return_value=observation(mapper, fsroot)),
+                    patch.object(release_probe, "lsattr_text", return_value="---------------C------ store\n"),
+                    contextlib.redirect_stdout(stdout),
+                ):
+                    assert release_probe.main() == 0, f"v{version} {topology}"
+                payload = json.loads(stdout.getvalue())
+                assert payload["topology"] == topology and payload["mapper"] == mapper
+                assert payload["fsroot"] == fsroot and payload["nocow"] is True
+                gate = release_probe.gate_contract(load_yaml(manifest_path), "storage-handoff")
+                validate_gate_payload(gate, payload, complete=True)
+
+
+def test_probe_refuses_another_initial_lease_template() -> None:
+    from release_acceptance_contract import MANIFESTS, REVIEWED_V3_EVIDENCE
+    classes = REVIEWED_V3_EVIDENCE["gpu-lease"]
+    values = [f"lease_log_sha256={'a' * 64}", "lease_template=workstation-dev"]
+    try:
+        build_payload(load_yaml(MANIFESTS[3]), "gpu-lease", values, list(classes["booleans"]), [], [])
+    except AcceptanceError as exc:
+        assert "lease_template must be workstation-dev-standard" in str(exc)
+    else:
+        raise AssertionError("probe accepted another initial lease Template")
+
+
 def main() -> int:
     tests = [
         value

@@ -20,6 +20,7 @@ from release_acceptance import (
     load_yaml,
     require,
     validate_manifest,
+    validate_gate_payload,
 )
 from bootstrap_storage_guard import (
     normalized_observation,
@@ -134,6 +135,7 @@ def build_payload(
         f"gate {gate_id} fields differ: missing={sorted(required - set(payload))} "
         f"extra={sorted(set(payload) - required)}",
     )
+    validate_gate_payload(gate, payload, complete=False)
     return payload
 
 

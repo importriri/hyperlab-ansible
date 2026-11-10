@@ -812,7 +812,73 @@ def check_inventory_fixtures() -> None:
         )
 
 
+def check_v3_release_runbook(root: Path) -> None:
+    """Parse the documented argv and execute the complete synthetic rehearsal."""
+    import hashlib
+    import json
+    import os
+    import subprocess
+    from release_acceptance_contract import REVIEWED_V3_EVIDENCE
+
+    path = root / "docs/release-evidence.md"
+    blocks = bash_blocks(path.read_text().splitlines())
+    operations: set[str] = set()
+    for block in blocks:
+        heredoc = False
+        for line in block.replace("\\\n", " ").splitlines():
+            if heredoc:
+                if line == "PY":
+                    heredoc = False
+                continue
+            argv = shlex.split(line, comments=True)
+            if argv[:1] == ["if"]:
+                argv = argv[1:]
+            if "<<'PY'" in line:
+                heredoc = True
+            if len(argv) < 2 or argv[1] not in ("tools/release_acceptance.py", "tools/release_probe.py"):
+                continue
+            require(argv[:4] == ["python", argv[1], "--manifest", "release/acceptance.v3.yml"],
+                    f"release runbook command does not select v3: {argv!r}")
+            operations.add(argv[4])
+    require(operations == {"plan", "scaffold", "repository-proof", "payload", "storage",
+                           "idempotence", "record", "status", "seal"},
+            f"release runbook omits an executable operation: {operations!r}")
+    section = markdown_section(path, "## 3. Run the gates in order")
+    text = "\n".join(section)
+    order = re.findall(r"^```text\n(.*?)\n```", text, re.MULTILINE | re.DOTALL)
+    require(len(order) == 1 and order[0].splitlines() == list(REVIEWED_V3_EVIDENCE),
+            "release runbook gate order differs from the reviewed v1 scope")
+    rehearsal = bash_blocks(markdown_section(path, "## Synthetic fixture rehearsal"))
+    require(len(rehearsal) == 1, "release runbook needs one complete fixture block")
+    with TemporaryDirectory() as td:
+        result = subprocess.run(["bash", "-euo", "pipefail", "-c", rehearsal[0]],
+                                cwd=root, text=True, capture_output=True, check=False,
+                                env={**os.environ, "FIXTURE_DIR": td, "PYTHONDONTWRITEBYTECODE": "1"})
+        require(result.returncode == 0, f"release runbook fixture failed: {result.stderr}")
+        for profile in ("nitro-3060", "predator-3070"):
+            fixture = Path(td) / profile
+            plan = json.loads((fixture / "plan.json").read_text())
+            evidence = json.loads((fixture / "evidence.json").read_text())
+            receipt = json.loads((fixture / "receipt.json").read_text())
+            require(plan["schema_version"] == evidence["schema_version"] == receipt["schema_version"] == 3,
+                    "runbook rehearsal mixed schema versions")
+            require(receipt["gate_ids"] == list(REVIEWED_V3_EVIDENCE), "runbook fixture omitted a gate")
+            require(receipt["gate_count"] == 19 and receipt["result"] == "pass", "fixture receipt differs")
+            for artifact, data in (("plan", plan), ("evidence", evidence)):
+                canonical = (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                require(receipt[f"{artifact}_sha256"] == hashlib.sha256(canonical).hexdigest(),
+                        f"runbook receipt {artifact} hash differs")
+            require(not (fixture / "pending-receipt.json").exists(), "pending fixture wrote a receipt")
+            for gate in evidence["gates"]:
+                classes = REVIEWED_V3_EVIDENCE[gate["id"]]
+                require(set(gate["evidence"]) == {field for fields in classes.values() for field in fields},
+                        f"runbook fixture field omission: {gate['id']}")
+                for field in classes["booleans"]:
+                    require(gate["evidence"][field] is True, f"runbook fixture untyped boolean: {field}")
+
+
 def main() -> int:
+    check_v3_release_runbook(ROOT)
     check_checkbox_paragraphs()
     check_v1_host_command_parsing()
     check_v1_host_commands(ROOT)

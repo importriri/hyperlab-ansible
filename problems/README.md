@@ -4,6 +4,10 @@ These notes keep the failures that changed a HyperLab contract. Start from the
 symptom; each page records what was actually wrong, the fix and the regression
 proof.
 
+- [`release-campaign-missed-v1-scope.md`](release-campaign-missed-v1-scope.md):
+  the historical service campaign could not describe the selected v1; a
+  separate version-bound campaign records each required observation.
+
 - [`product-wallpaper-material-and-resolution.md`](product-wallpaper-material-and-resolution.md):
   product relief lacked the preferred stone and sphere materials; native
   product rendering now shares v3, while the engine pins pool resolution.

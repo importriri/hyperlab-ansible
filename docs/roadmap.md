@@ -103,10 +103,10 @@ or work that is not on `main` does not raise it.
   software-verified; the lease shot waits for ADR 0019's prerequisites and
   implementation, and the recording and its privacy review are open.
 - **Qualification gap:** the checked-in release order of milestone 14
-  (`release/acceptance.v2.yml`) was written before this scope. It has no
-  gate for a Machine created from the shell, the disposable discard, the two
-  SSH servers, the GPU lease or the Showcase take, so a campaign sealed on it
-  does not qualify those parts. What replaces it is not decided yet.
+  (`release/acceptance.v2.yml`) remains historical and cannot qualify v1.
+  The separate `release/acceptance.v3.yml` describes the selected scope
+  ([ADR 0063](adr/0063-v1-acceptance-campaign.md), proposed). Its CLI and
+  fixtures prepare a pending campaign; no physical pass is added.
 
 The 2026-11-02 capture-session repairs are software-verified: bounded Machine
 capability failures retain known causes, GTK recovery ranks share the CLI's
@@ -869,9 +869,18 @@ Measured with the complete security plane active.
       hardware gates, in the checked-in order: repository-software,
       bootstrap-dry-run, bootstrap-clean-install, storage-handoff,
       host-idempotence, network-isolation, standard-vm-lifecycle,
-      vfio-trust-lifecycle, looking-glass, jellyfin-service, service-recovery,
-      sanitized-publication (this order does not cover the v1 additions:
-      see [v1 scope and evidence status](#v1-scope-and-evidence-status))
+      vfio-clean-baseline, server-ssh, shell-creation, disposable-lifecycle,
+      looking-glass, workstation-access, physical-audio, gpu-lease, showcase,
+      vfio-trust-lifecycle, session-recovery, sanitized-publication
+      (`release/acceptance.v3.yml`; [ADR 0063](adr/0063-v1-acceptance-campaign.md),
+      proposed; v2 remains historical and does not qualify v1)
+  - [x] v3 campaign preparation: independent ordered gate/field oracle,
+        typed payloads, version-bound plan/evidence/receipt, both-profile CLI
+        fixtures and executable synthetic runbook; clean/dev and Showcase
+        precede dirty/lab, then reboot/recovery. Every campaign observation
+        stays pending (`tests/release_acceptance_contract.py`,
+        `tests/release_probe_contract.py`, `tests/docs_contract.py`,
+        software-verified on synthetic campaigns)
   - [x] a passed gate needs every reviewed boolean exactly true on record,
         status and seal; `spice_socket_private` is a typed boolean
         ([`problems/release-pass-with-false-booleans.md`](../problems/release-pass-with-false-booleans.md),

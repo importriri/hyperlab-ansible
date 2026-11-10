@@ -189,6 +189,10 @@ entered the pipeline.
     — proposed: every apply refreshes resident presentation older than the
     installed code, in the configured user's existing session.
 
+63. [`0063-v1-acceptance-campaign.md`](0063-v1-acceptance-campaign.md)
+    — proposed: a separate version-3 campaign for the selected v1, retaining
+    the historical v2 contract and pending hardware observations.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.
@@ -631,3 +635,18 @@ remain.
     [`shell_reload_after_apply_contract.py`](../../tests/shell_reload_after_apply_contract.py)
   - Prerequisites: the operator's decision; installed Nitro apply/readback
     and unchanged second pass, then Predator replay.
+
+- [ADR 0063](0063-v1-acceptance-campaign.md)
+  - Decision: proposed.
+  - Built: built — version-3 manifest, version-bound runner, typed probes,
+    independent field oracle and executable synthetic runbook rehearsal.
+  - Activation: on request — explicit manifest selection creates a pending
+    local campaign; nothing installs, observes or publishes automatically.
+  - Source: [`acceptance.v3.yml`](../../release/acceptance.v3.yml),
+    [`release_acceptance.py`](../../tools/release_acceptance.py),
+    [`release_probe.py`](../../tools/release_probe.py),
+    [`release_acceptance_contract.py`](../../tests/release_acceptance_contract.py)
+  - Prerequisites: the operator's decision, frozen public automation commits,
+    Debian image, disposable access acceptance, dual-shape workstation image,
+    real lease controls, complete recording/privacy review and portable
+    Predator checks; every physical campaign observation remains pending.

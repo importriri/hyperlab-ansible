@@ -5341,3 +5341,119 @@ Restore the playbook from the saved copy and run the identical check again.
 Observed: removing the compatibility assertion exits 1 with
 `plain rsa: an incompatible previous-boot pin was accepted`; restoring it
 exits 0. The duplicate assertion remains in place during this mutation.
+
+## Qualify the selected v1 with a separate version-3 campaign
+
+These are software fixtures, never a hardware campaign. The v2 file must
+remain byte-for-byte unchanged. Run mutations in a disposable copy below the
+checkout containing `release/`, the two release tools,
+`tools/bootstrap_storage_guard.py`, the three release contracts,
+`tests/docs_contract.py`, `docs/release-evidence.md` and ADR 0063. No Git
+metadata or real campaign belongs in that copy. Before each break, copy the
+indicated input to a separate backup below the checkout. Restore by copying
+that backup, compare bytes and rerun the same check. Do not combine breaks.
+
+All V1–V20 cases below were observed red (exit 1) and restored green (exit 0).
+Scope and field expectations come from the handwritten version-specific
+oracles, never production typing. The exhaustive record matrix runs every
+boolean through strings `"true"`, `"false"`, 0 and 1 in both pass and fail
+records. The successful controls run both versions and both hardware profiles.
+Refused records preserve evidence bytes; refused seals create no receipt.
+
+Focused commands, from the disposable copy:
+
+```bash
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_scope_adr_plan_and_complete_storage_mapping(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_reviewed_evidence_classes_match_the_manifest_and_tool_typing(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_status_and_seal_refuse_an_edited_false_pass(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_record_cli_boolean_types_are_strict_and_refusals_preserve_bytes(2)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_mixed_versions_refuse_without_rewriting_or_receipts(2)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_campaign_inputs_refuse_duplicates_and_redirection(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_lease_template_is_the_selected_initial_template(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_acceptance_contract as t; t.test_complete_sanitized_evidence_seals_to_stable_hashes(3)'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import release_probe_contract as t; t.test_probe_refuses_another_initial_lease_template()'
+python -B -c 'import sys; sys.path.insert(0,"tests"); import docs_contract as t; t.check_v3_release_runbook(t.ROOT)'
+```
+
+In the table, the check names refer to those exact functions and arguments.
+Every mutation changes only the specified input; expected red means a failed
+assertion at that boundary, not an unrelated crash.
+
+| ID | Input and exact break | Focused check | Red observed |
+| --- | --- | --- | --- |
+| V1 | Parse `release/acceptance.v3.yml`; remove only the gate with id `disposable-lifecycle`, preserving the remaining orders. | `test_scope_adr_plan_and_complete_storage_mapping(3)` | Ordered fixture-plan scope differs from the independent v1 list. |
+| V2 | Same file: remove only `gpu-lease`, preserving the remaining orders. | same as V1 | Ordered scope differs. |
+| V3 | Same file: remove only `fedora_strict_ssh` from `server-ssh.required_evidence`. | `test_reviewed_evidence_classes_match_the_manifest_and_tool_typing(3)` | `server-ssh: reviewed classes ... differ from the manifest`. |
+| V4 | Same file: remove only `super_isolated` from `workstation-access.required_evidence`. | same as V3 | `workstation-access: reviewed classes ... differ`. |
+| V5 | Same file: remove only `no_guest_microphone` from `physical-audio.required_evidence`. | same as V3 | `physical-audio: reviewed classes ... differ`. |
+| V6 | Same file: insert historical `jellyfin-service` and `service-recovery` before publication, renumbering every gate in increments of 10. | same as V1 | Extra service scope differs from the independent list. |
+| V7 | `tools/release_acceptance.py`: remove `"gpu_less_ladder_unchanged",` only from `BOOL_FIELDS`. | same as V3 | `tool booleans differ ... missing=['gpu_less_ladder_unchanged']`. |
+| V8 | Same tool, in `validate_partial_evidence`: change `complete=status_value == "pass",` to `complete=False,`. Keep record's direct payload validation intact. | `test_status_and_seal_refuse_an_edited_false_pass(3)` | `status accepted an edited pass ... clean_worktrees=false`. Record still refuses false passes: a deliberate control. |
+| V9 | Same tool, immediately before `planned = plan["gates"][gate_index]` in `record_gate`: insert `payload = {key: True if value == "true" else value for key, value in payload.items()}`. | `test_record_cli_boolean_types_are_strict_and_refusals_preserve_bytes(2)` | `record pass coerced repository-software.clean_worktrees='true'`. |
+| V10 | Same tool, `validate_plan`: delete the explicit plan/manifest version require and replace `require(plan == expected, ...)` with `require(bool(expected), "canonical projection disabled")`. | `test_mixed_versions_refuse_without_rewriting_or_receipts(2)` | Scaffold accepts the v2 plan under v3; the refusal assertion turns red. |
+| V11 | `release/acceptance.v3.yml`: set only `allowed_storage_topologies.single-disk.fsroot` to `/wrong`. | same as V1 | Complete mapping differs from independent constants. |
+| V12 | `docs/release-evidence.md`: select `acceptance.v2.yml` only in the first real plan command. | `check_v3_release_runbook(t.ROOT)` | `release runbook command does not select v3`. |
+| V13 | `tools/release_acceptance.py`: delete only `require(key not in result, f"duplicate JSON key: {key}")`. | `test_campaign_inputs_refuse_duplicates_and_redirection(3)` | Repeated false/true observation is recorded instead of refused. |
+| V14 | Same tool: replace `absolute = path.absolute()` in `read_input` with `absolute = path.resolve()`. | same as V13 | A redirected plan is accepted instead of refused. |
+| V15 | Same tool: replace the `lease_template` require with `require(True, "lease_template unrestricted")`. | `test_lease_template_is_the_selected_initial_template(3)` | A pass on `workstation-dev` seals instead of refusing the wrong initial Template. |
+| V16 | Same tool: delete only `require(key not in result, f"duplicate mapping key: {key}")`. | same as V13 | Duplicate plan schema key is accepted instead of refused. |
+| V17 | `tools/release_probe.py`: delete `validate_gate_payload(gate, payload, complete=False)`. | `test_probe_refuses_another_initial_lease_template()` | `probe accepted another initial lease Template`. |
+| V18 | Runbook: select v2 only in the fixture's `if python ... seal` pending-refusal command. | same as V12 | The conditional command is parsed and rejected for selecting v2. |
+| V19 | `tools/release_acceptance.py`: delete `validate_evidence(plan, evidence)` only in `seal`. | same as V8 | `seal accepted an edited pass ... clean_worktrees=false`; status refusal remains a control. |
+| V20 | Same tool, in `seal`, after validation and before hashing: insert `plan = {**plan, "schema_version": 2}`. | `test_complete_sanitized_evidence_seals_to_stable_hashes(3)` | Receipt version differs from the selected campaign version. |
+
+For the parsed-YAML breaks V1–V6 and V11, this is the mutation command used
+inside the disposable copy; select one case by its id, then run its focused
+check above, restore from the saved file and rerun that check:
+
+```bash
+python - V1 <<'PY'
+import copy
+from pathlib import Path
+import sys
+import yaml
+
+path = Path("release/acceptance.v3.yml")
+manifest = yaml.safe_load(path.read_text())
+case = sys.argv[1]
+if case in ("V1", "V2"):
+    removed = {"V1": "disposable-lifecycle", "V2": "gpu-lease"}[case]
+    manifest["gates"] = [gate for gate in manifest["gates"] if gate["id"] != removed]
+elif case in ("V3", "V4", "V5"):
+    gate_id, field = {
+        "V3": ("server-ssh", "fedora_strict_ssh"),
+        "V4": ("workstation-access", "super_isolated"),
+        "V5": ("physical-audio", "no_guest_microphone"),
+    }[case]
+    next(gate for gate in manifest["gates"] if gate["id"] == gate_id)["required_evidence"].remove(field)
+elif case == "V6":
+    historical = yaml.safe_load(Path("release/acceptance.v2.yml").read_text())
+    services = [copy.deepcopy(gate) for gate in historical["gates"]
+                if gate["id"] in ("jellyfin-service", "service-recovery")]
+    manifest["gates"][-1:-1] = services
+    for index, gate in enumerate(manifest["gates"], start=1):
+        gate["order"] = index * 10
+elif case == "V11":
+    manifest["allowed_storage_topologies"]["single-disk"]["fsroot"] = "/wrong"
+else:
+    raise ValueError("select one parsed-YAML mutation")
+path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+PY
+```
+
+Two deliberate control checks also stayed green under their mutations:
+V8's `test_record_refuses_a_false_pass_and_keeps_a_false_failure(3)` retains
+the incoming record guard, and V9's
+`test_boolean_fields_refuse_text_and_integers_in_pass_and_fail(2)` reads
+through status rather than record. Their corresponding read-path and new
+record CLI detectors were red as listed above. Both controls were green
+again after restoration; a control is not mutation coverage.
+
+Full restored checks:
+
+```bash
+python tests/release_acceptance_contract.py
+python tests/release_probe_contract.py
+python tests/release_idempotence_probe_contract.py
+python tests/docs_contract.py
+```

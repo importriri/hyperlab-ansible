@@ -83,6 +83,32 @@ def test_changed_failed_unreachable_and_missing_recaps_are_refused() -> None:
                 raise AssertionError(f"invalid recap accepted: {message}")
 
 
+def test_real_idempotence_cli_supports_both_campaign_versions() -> None:
+    import json
+    import subprocess
+    from release_acceptance import load_yaml, validate_gate_payload
+    from release_probe import gate_contract
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        logs = [root / name for name in ("check.log", "first.log", "second.log")]
+        for path, changed in zip(logs, (4, 9, 0), strict=True):
+            path.write_text(recap(changed=changed))
+        for version in (2, 3):
+            manifest = ROOT / f"release/acceptance.v{version}.yml"
+            argv = [sys.executable, str(ROOT / "tools/release_probe.py"), "--manifest", str(manifest),
+                    "idempotence", "--check-log", str(logs[0]), "--first-apply-log", str(logs[1]),
+                    "--second-apply-log", str(logs[2])]
+            result = subprocess.run(argv, text=True, capture_output=True, check=False)
+            assert result.returncode == 0, result.stderr
+            payload = json.loads(result.stdout)
+            validate_gate_payload(gate_contract(load_yaml(manifest), "host-idempotence"), payload, complete=True)
+            assert payload["second_apply_changed_zero"] is True
+            logs[2].write_text(recap(changed=1))
+            refused = subprocess.run(argv, text=True, capture_output=True, check=False)
+            assert refused.returncode == 2 and "not idempotent" in refused.stderr
+            logs[2].write_text(recap())
+
+
 def main() -> int:
     tests = [
         value

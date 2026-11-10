@@ -37,6 +37,83 @@ BOOL_FIELDS = {
     "post_restore_health",
     "failed_restore_rollback",
     "no_sensitive_patterns",
+    "audio_recovered",
+    "captions_match_observations",
+    "clean_gpu_observed",
+    "clean_stopped_before_dev",
+    "client_reconnect_preserves_session",
+    "cold_start",
+    "complete_storyboard",
+    "console_recovery",
+    "debian_agent_restricted",
+    "debian_strict_ssh",
+    "default_boot_without_gpu",
+    "disposable_crash_agent_restricted",
+    "disposable_crash_overlay_not_reused",
+    "disposable_crash_pin_refreshed",
+    "disposable_crash_writes_discarded",
+    "duplicate_creation_refused",
+    "encrypted_storage_ready",
+    "fedora_agent_restricted",
+    "fedora_strict_ssh",
+    "first_gpu_run",
+    "forced_boot_agent_restricted",
+    "forced_boot_pin_refreshed",
+    "forced_boot_strict_ssh",
+    "forced_stop_overlay_removed",
+    "forced_stop_writes_discarded",
+    "gpu_less_ladder_unchanged",
+    "gpu_less_run",
+    "gpu_less_spice",
+    "gpu_runs_looking_glass",
+    "guest_agent_reconnected",
+    "guest_audio_audible",
+    "guest_lock_unlock",
+    "guest_profile_changed_zero",
+    "guest_reboot",
+    "guest_shortcuts_work",
+    "host_frame_fullscreen",
+    "host_frame_windowed",
+    "host_owned_lease",
+    "host_provenance_visible",
+    "host_reboot",
+    "host_volume_capped",
+    "input_recovered",
+    "keyboard_captured",
+    "logout_returns_to_login",
+    "looking_glass_desks_visible",
+    "manual_frame_privacy_review",
+    "no_clipping",
+    "no_guest_microphone",
+    "normal_boot_agent_restricted",
+    "normal_boot_pin_refreshed",
+    "normal_boot_strict_ssh",
+    "normal_stop_overlay_removed",
+    "normal_stop_writes_discarded",
+    "operation_survives_window_close",
+    "pointer_captured",
+    "power_cycle_agent_restricted",
+    "power_cycle_overlay_removed",
+    "power_cycle_pin_refreshed",
+    "power_cycle_strict_ssh",
+    "power_cycle_writes_discarded",
+    "primary_handoff_to_looking_glass",
+    "primary_prelogin_recovery",
+    "primary_recovered",
+    "real_lease_visible",
+    "refused_creation_leaves_no_record",
+    "rightctrl_releases_both",
+    "sealed_base_unchanged",
+    "second_gpu_run",
+    "secrets_confined_to_terminal",
+    "server_durable_operation",
+    "server_permanent_created_from_shell",
+    "shell_creation_visible",
+    "super_isolated",
+    "sway_recovery",
+    "withdraw_live_domain_refused",
+    "workstation_durable_operation",
+    "workstation_permanent_created_from_shell",
 }
 
 
@@ -49,18 +126,52 @@ def require(condition: bool, message: str) -> None:
         raise AcceptanceError(message)
 
 
+class UniqueLoader(yaml.SafeLoader):
+    """Policy and campaign mappings never silently replace duplicate keys."""
+
+
+def unique_mapping(loader: UniqueLoader, node: yaml.nodes.MappingNode) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in loader.construct_pairs(node, deep=True):
+        require(isinstance(key, str), "mapping keys must be text")
+        require(key not in result, f"duplicate mapping key: {key}")
+        result[key] = value
+    return result
+
+
+UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping)
+
+
+def read_input(path: Path) -> str:
+    absolute = path.absolute()
+    for component in (absolute, *absolute.parents):
+        require(not component.is_symlink(), f"redirected input: {component}")
+    fd = os.open(absolute, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "r", encoding="utf-8") as handle:
+        require(stat.S_ISREG(os.fstat(handle.fileno()).st_mode), f"input must be regular: {path}")
+        return handle.read()
+
+
 def load_yaml(path: Path, label: str = "acceptance manifest") -> dict[str, Any]:
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.load(read_input(path), Loader=UniqueLoader)
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise AcceptanceError(f"cannot read {label}: {exc}") from exc
     require(isinstance(data, dict), f"{label} root must be a mapping")
     return data
 
 
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        require(key not in result, f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def load_json_stdin(label: str) -> dict[str, Any]:
     try:
-        data = json.load(sys.stdin)
+        data = json.load(sys.stdin, object_pairs_hook=unique_json_object)
     except json.JSONDecodeError as exc:
         raise AcceptanceError(f"{label} is not valid JSON: {exc}") from exc
     require(isinstance(data, dict), f"{label} root must be a mapping")
@@ -100,7 +211,10 @@ def write_json(path: Path, data: dict[str, Any], *, replace: bool) -> None:
 
 
 def validate_manifest(manifest: dict[str, Any]) -> None:
-    require(manifest.get("schema_version") == 2, "acceptance schema_version must be 2")
+    require(
+        type(manifest.get("schema_version")) is int and manifest["schema_version"] in {2, 3},
+        "acceptance schema_version must be integer 2 (historical) or 3 (selected v1)",
+    )
     profiles = manifest.get("profiles")
     repositories = manifest.get("repositories")
     gates = manifest.get("gates")
@@ -241,7 +355,7 @@ def build_plan(
         for gate in manifest["gates"]
     ]
     return {
-        "schema_version": 2,
+        "schema_version": manifest["schema_version"],
         "campaign_id": campaign_id,
         "profile": profile,
         "profile_label": manifest["profiles"][profile]["label"],
@@ -282,6 +396,11 @@ def validate_plan(manifest: dict[str, Any], plan: dict[str, Any]) -> None:
             "publication_policy",
         },
         "release plan keys differ from the schema",
+    )
+    require(
+        type(plan.get("schema_version")) is int
+        and plan["schema_version"] == manifest["schema_version"],
+        "release plan schema_version differs from the manifest",
     )
     repositories = plan.get("repositories")
     require(
@@ -336,7 +455,7 @@ def reject_sensitive_strings(plan: dict[str, Any], value: Any) -> None:
 
 def scaffold(plan: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": 2,
+        "schema_version": plan["schema_version"],
         "campaign_id": plan["campaign_id"],
         "profile": plan["profile"],
         "repositories": {
@@ -387,6 +506,8 @@ def validate_gate_payload(
                 isinstance(value, str) and HEX64_RE.fullmatch(value) is not None,
                 f"evidence gate {planned['id']} field {field} must be SHA-256",
             )
+        if planned["id"] == "gpu-lease" and field == "lease_template":
+            require(value == "workstation-dev-standard", "lease_template must be workstation-dev-standard")
         if field in BOOL_FIELDS:
             require(
                 isinstance(value, bool),
@@ -452,7 +573,11 @@ def validate_partial_evidence(plan: dict[str, Any], evidence: dict[str, Any]) ->
         },
         "evidence keys differ from the schema",
     )
-    require(evidence.get("schema_version") == 2, "evidence schema_version must be 2")
+    require(
+        type(evidence.get("schema_version")) is int
+        and evidence["schema_version"] == plan["schema_version"],
+        "evidence schema_version differs from the plan",
+    )
     require(evidence.get("campaign_id") == plan["campaign_id"], "evidence campaign id differs")
     require(evidence.get("profile") == plan["profile"], "evidence hardware profile differs")
     require(
@@ -750,7 +875,7 @@ def seal(plan: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
     evidence_hash = hashlib.sha256(canonical_json(evidence)).hexdigest()
     plan_hash = hashlib.sha256(canonical_json(plan)).hexdigest()
     return {
-        "schema_version": 2,
+        "schema_version": plan["schema_version"],
         "campaign_id": plan["campaign_id"],
         "profile": plan["profile"],
         "repositories": {

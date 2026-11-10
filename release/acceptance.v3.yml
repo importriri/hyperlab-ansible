@@ -1,0 +1,248 @@
+---
+# Selected v1 campaign. Every observation starts pending; fixtures are not hardware evidence.
+# Clean/dev use and Showcase precede dirty/lab; recovery requires a new host boot.
+schema_version: 3
+profiles:
+  nitro-3060:
+    order: 1
+    label: Acer Nitro 5 / RTX 3060 Mobile
+  predator-3070:
+    order: 2
+    label: Acer Predator Helios 300 / RTX 3070 Mobile
+repositories:
+  hyperlab_ansible:
+    remote: importriri/hyperlab-ansible
+    required_branch: main
+  arch_bootstrap:
+    remote: importriri/arch-bootstrap
+    required_branch: main
+gates:
+  - id: repository-software
+    order: 10
+    execution: read-only
+    required_evidence:
+      - verify_sha256
+      - clean_worktrees
+      - exact_commits
+  - id: bootstrap-dry-run
+    order: 20
+    execution: read-only
+    required_evidence:
+      - dry_run_sha256
+      - selected_primary_disk
+      - selected_vm_disk
+      - no_writes_observed
+  - id: bootstrap-clean-install
+    order: 30
+    execution: destructive-hardware
+    required_evidence:
+      - install_log_sha256
+      - booted_linux_hardened_twice
+      - secure_boot_state
+      - network_ready
+  - id: storage-handoff
+    order: 40
+    execution: read-only
+    required_evidence:
+      - topology
+      - mapper
+      - fsroot
+      - fstype
+      - nocow
+      - contract_sha256
+      - hyperlab_device_match
+  - id: host-idempotence
+    order: 50
+    execution: operator-apply
+    required_evidence:
+      - check_mode_sha256
+      - first_apply_sha256
+      - second_apply_sha256
+      - second_apply_changed_zero
+  - id: network-isolation
+    order: 60
+    execution: hardware-runtime
+    required_evidence:
+      - persistent_network_hashes
+      - active_networks
+      - cross_domain_refusals
+      - isolated_lab_refusals
+  - id: standard-vm-lifecycle
+    order: 70
+    execution: hardware-runtime
+    required_evidence:
+      - create_sha256
+      - validate_sha256
+      - start_sha256
+      - shutdown_sha256
+      - destroy_confirmation
+  - id: vfio-clean-baseline
+    order: 80
+    execution: hardware-runtime
+    required_evidence:
+      - clean_gpu_observed
+      - clean_stopped_before_dev
+      - clean_start_sha256
+      - pci_binding
+      - iommu_group
+  - id: server-ssh
+    order: 90
+    execution: hardware-runtime
+    required_evidence:
+      - debian_strict_ssh
+      - fedora_strict_ssh
+      - debian_agent_restricted
+      - fedora_agent_restricted
+      - debian_ssh_sha256
+      - fedora_ssh_sha256
+  - id: shell-creation
+    order: 100
+    execution: hardware-runtime
+    required_evidence:
+      - server_permanent_created_from_shell
+      - workstation_permanent_created_from_shell
+      - server_durable_operation
+      - workstation_durable_operation
+      - operation_survives_window_close
+      - secrets_confined_to_terminal
+      - duplicate_creation_refused
+      - refused_creation_leaves_no_record
+      - withdraw_live_domain_refused
+      - creation_log_sha256
+  - id: disposable-lifecycle
+    order: 110
+    execution: hardware-runtime
+    required_evidence:
+      - normal_stop_writes_discarded
+      - normal_stop_overlay_removed
+      - normal_boot_agent_restricted
+      - normal_boot_pin_refreshed
+      - normal_boot_strict_ssh
+      - forced_stop_writes_discarded
+      - forced_stop_overlay_removed
+      - forced_boot_agent_restricted
+      - forced_boot_pin_refreshed
+      - forced_boot_strict_ssh
+      - power_cycle_writes_discarded
+      - power_cycle_overlay_removed
+      - power_cycle_agent_restricted
+      - power_cycle_pin_refreshed
+      - power_cycle_strict_ssh
+      - sealed_base_unchanged
+      - disposable_log_sha256
+  - id: looking-glass
+    order: 120
+    execution: hardware-runtime
+    required_evidence:
+      - host_build
+      - guest_build
+      - kvmfr_identity
+      - spice_socket_path
+      - spice_socket_private
+      - visual_proof_sha256
+  - id: workstation-access
+    order: 130
+    execution: hardware-runtime
+    required_evidence:
+      - primary_prelogin_recovery
+      - primary_handoff_to_looking_glass
+      - keyboard_captured
+      - pointer_captured
+      - rightctrl_releases_both
+      - super_isolated
+      - guest_shortcuts_work
+      - guest_lock_unlock
+      - client_reconnect_preserves_session
+      - logout_returns_to_login
+      - host_frame_windowed
+      - host_frame_fullscreen
+      - input_log_sha256
+  - id: physical-audio
+    order: 140
+    execution: hardware-runtime
+    required_evidence:
+      - guest_audio_audible
+      - no_clipping
+      - host_volume_capped
+      - no_guest_microphone
+      - audio_log_sha256
+  - id: gpu-lease
+    order: 150
+    execution: hardware-runtime
+    required_evidence:
+      - default_boot_without_gpu
+      - first_gpu_run
+      - gpu_less_run
+      - second_gpu_run
+      - gpu_less_ladder_unchanged
+      - gpu_runs_looking_glass
+      - gpu_less_spice
+      - host_owned_lease
+      - lease_log_sha256
+      - lease_template
+  - id: showcase
+    order: 160
+    execution: hardware-runtime
+    required_evidence:
+      - complete_storyboard
+      - shell_creation_visible
+      - real_lease_visible
+      - looking_glass_desks_visible
+      - host_provenance_visible
+      - manual_frame_privacy_review
+      - captions_match_observations
+      - recording_sha256
+  - id: vfio-trust-lifecycle
+    order: 170
+    execution: hardware-runtime
+    required_evidence:
+      - pci_binding
+      - iommu_group
+      - exclusive_owner
+      - downward_trust_transitions
+      - reboot_resets_trust
+  - id: session-recovery
+    order: 180
+    execution: destructive-hardware
+    required_evidence:
+      - guest_reboot
+      - guest_agent_reconnected
+      - host_reboot
+      - cold_start
+      - encrypted_storage_ready
+      - primary_recovered
+      - input_recovered
+      - audio_recovered
+      - sway_recovery
+      - console_recovery
+      - disposable_crash_writes_discarded
+      - disposable_crash_overlay_not_reused
+      - disposable_crash_agent_restricted
+      - disposable_crash_pin_refreshed
+      - guest_profile_changed_zero
+      - recovery_log_sha256
+  - id: sanitized-publication
+    order: 190
+    execution: read-only
+    required_evidence:
+      - publication_bundle_sha256
+      - no_sensitive_patterns
+      - exact_commit_matrix
+      - known_limits
+allowed_storage_topologies:
+  single-disk:
+    mapper: /dev/mapper/cryptroot
+    fsroot: /@vm
+    subvolume: '@vm'
+  dedicated-disk:
+    mapper: /dev/mapper/cryptvm
+    fsroot: /
+    subvolume: null
+forbidden_evidence_patterns:
+  - '-----BEGIN .*PRIVATE KEY-----'
+  - (?i)password\s*[:=]
+  - (?i)passphrase\s*[:=]
+  - (?i)(api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[:=]
+  - /home/[^/\s]+
+  - /root/
+  - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'

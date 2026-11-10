@@ -31,8 +31,12 @@ Adoption writes the contract after exact confirmation and changes no storage.
 Fresh Predator installations must receive the contract from the complete
 bootstrap entrypoint.
 
-The final campaign is generated from `release/acceptance.v2.yml` with exact
-40-character SHA values for both repositories. Nitro runs first. Predator may
+The historical campaign is generated from `release/acceptance.v2.yml`.
+The selected v1 uses the separate `release/acceptance.v3.yml` campaign
+([ADR 0063](0063-v1-acceptance-campaign.md), proposed), with the same complete
+storage topology mapping and exact 40-character SHA values for both
+repositories. A historical v2 receipt cannot qualify v1 and no pass is
+imported into the new campaign. Nitro runs first. Predator may
 run only with the same frozen pair. Evidence sealing accepts only the complete
 ordered gate matrix, scalar reviewed facts, hashes and short summaries. Raw logs
 stay local and known sensitive patterns are refused.
