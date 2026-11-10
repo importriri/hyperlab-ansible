@@ -18,6 +18,12 @@ host key. Managed Start waited only for the agent to answer; neither the
 seed nor Start restored those boot-specific properties. A successful first
 provisioning therefore said nothing about the next disposable boot.
 
+The pinning module replaces only one matching entry, so duplicate old pins
+could leave an earlier boot trusted after a successful refresh. The per-Machine
+publication lock also did not protect the owner's shared `known_hosts` file
+from another Machine's read and replacement: concurrent publishers could
+both succeed while one overwrote the other's new pin.
+
 ## Fix
 
 The disposable cloud-init seed restores the access-closing role's canonical
@@ -32,6 +38,15 @@ SSH pin from the agent channel and publish the current address. An
 owner-held publication lock, taken before the boot under the per-VM lock and
 released by the publisher, keeps a second Start or Power Cycle from booting
 again while the first boot's key is still being pinned.
+
+An additional owner-wide `known-hosts.lock` in the runtime directory covers
+the shared database's inspection, duplicate validation and replacement,
+including standalone inventory publication. A contender refuses and releases
+its own Machine lock; it never removes the holder's shared lock. Retry the
+standalone inventory step after the holder ends, since the refused Machine
+may already be running. Forced handlers release acquired locks on failures.
+OpenSSH's address lookup matches clear and hashed entries; more than one
+match refuses without changing pins or publishing inventory.
 
 Existing seeds must be replaced through normal throwaway Machine creation.
 Passwordless server sudo remains an explicit limitation. See
@@ -51,3 +66,14 @@ left running, a redirected or overridden policy, missing repin, a
 publication outside the lock, a suppressed pin failure and running/check-mode
 regressions. No physical cleanup claim follows from
 these fixtures.
+
+The inventory contract also preloads plain, hashed and mixed duplicate pins
+and requires refusal without database changes or inventory publication. Two
+Machine publishers share one owner database; a fixture copy of the installed
+pinning module pauses after reading it and before atomic replacement. Both
+managed and standalone entry paths contend, then retry; both current keys
+must pass strict SSH over a pipe and both stale keys must fail. Removing
+shared serialization reproduces the lost update. Parsed lifecycle lock
+acquisition and release tasks must each explicitly declare `become: false`,
+even though the fixture lifecycle runs without privilege. Each independent
+deletion is detected without requesting privilege.

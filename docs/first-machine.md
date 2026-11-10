@@ -186,12 +186,30 @@ key is pinned, the Machine's publication lock
 `/run/user/$UID/srv-01.inventory.lock` exists. Another Start or Power Cycle
 of it, or a separate inventory step, then refuses before it does anything.
 Retry when the first one ends. If a killed run left the lock behind, check
-that no run is active, then remove it with `rmdir`. An already-running
-Start and check mode do not repin or run the boot action. Creation still
-uses the explicit inventory step above before further provisioning, and so
-does a reset that starts the Machine again: it proves the agent closed but
-does not repin. A
-passwordless disposable server keeps passwordless sudo after every boot,
+that no run is active, then remove it with `rmdir`.
+
+All Machines of the same owner also share
+`/run/user/$UID/known-hosts.lock` while the publisher checks and updates
+`~/.ssh/known_hosts`. A concurrent publisher refuses without changing pins
+or publishing inventory, and releases only its own Machine lock. After the
+other publication ends, retry the inventory step for the refused Machine:
+
+```bash
+ansible-playbook -i inventory.ini playbooks/vm-guest-inventory.yml \
+  -e guest_spec=vm-specs/.generated/srv-01.yml
+```
+
+The boot may already be running, so this retry needs no new boot. An
+interrupted run's shared lock also needs inspection before `rmdir`. Duplicate
+entries for the selected address, including hashed entries, refuse before
+any pin update or inventory publication. Inspect and resolve the duplicates
+before retrying; the publisher never guesses which old entry to keep.
+
+An already-running Start and check mode do not repin or run the boot action.
+Creation still uses the explicit inventory step above before further
+provisioning, and so does a reset that starts the Machine again: it proves the
+agent closed but does not repin. A passwordless disposable server keeps
+passwordless sudo after every boot,
 just as a passwordless permanent server does.
 
 **Migration:** an existing seed does not gain new contents from a host code

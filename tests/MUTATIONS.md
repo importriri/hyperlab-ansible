@@ -5277,3 +5277,41 @@ Restore:
 ```bash
 cp "$MUTATION_BACKUP/playbooks/vm-guest-inventory.yml.saved" playbooks/vm-guest-inventory.yml
 ```
+
+## Shared disposable SSH pins and lock privilege
+
+`tests/guest_inventory_contract.py` now checks the three remaining pin and
+publication-lock failures. These are software fixtures: two Machine plans
+share one temporary owner home and runtime directory; libvirt replies are
+stubbed. Strict SSH uses the existing pipe to `sshd -i`, without a listening
+socket. A fixture copy of the installed `known_hosts` module pauses after
+building its replacement file and immediately before `atomic_move`. Its
+production task arguments, conditions, ordering and handlers are retained.
+The race runs managed Start against standalone publication, then reverses
+those entry paths. A refused contender retries only its inventory publisher.
+Both current keys must work and both stale keys must be rejected afterwards.
+
+Before each mutation, copy its input to a `.saved` file below the checkout.
+Change only the named parsed YAML tasks, run the focused check below, restore
+from that copy, and run the identical check again. Do not combine mutations.
+All four cases were observed red (exit 1) and restored green (exit 0).
+
+| Mutation | Input and break | Focused check | Observed red |
+| --- | --- | --- | --- |
+| Duplicate pins | In `playbooks/vm-guest-inventory.yml`, remove only `Refuse duplicate SSH pins for the selected address` | `check_duplicate_pins` | `plain: duplicate previous-boot pins were accepted` |
+| Shared database serialization | In the same playbook, remove `Acquire the owner's shared SSH pin database lock` and `Refuse a concurrent update of the owner's SSH pins`; its handler is then unnotified | `check_shared_known_hosts_publication` | `a shared database update was lost` |
+| Acquisition privilege | In `roles/guest/tasks/main.yml`, delete `become: false` only from `Acquire the owner's publication lock before the new boot` | `check_lock_privilege` | acquisition task `must explicitly declare become: false` |
+| Release privilege | In the same role, delete `become: false` only from `Release the publication lock unless the publisher now holds it` | `check_lock_privilege` | release task `must explicitly declare become: false` |
+
+For each table row, substitute its focused function name in this command:
+
+```bash
+python -c 'import sys; sys.path.insert(0,"tests"); import guest_inventory_contract as t; t.check_duplicate_pins()'
+```
+
+The duplicate-pin check preloads two plain old entries, two hashed old entries
+and one of each, through managed and standalone publication. Each must fail at
+the duplicate assertion, retain the database bytes, publish no inventory and
+release acquired locks. The privilege check parses the actual lifecycle
+acquisition and release tasks, requiring explicit boolean false independently
+of the fixture play's unprivileged execution.
