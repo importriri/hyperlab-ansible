@@ -523,8 +523,6 @@ platform, recorded on the host:
 - [ ] the same seen in the lab host and on Nitro (ADR 0051 hardware test)
 - [x] host keybinding cheatsheet that includes the crossing keys:
       `SUPER + F1`, checked against the bindings (software-verified)
-      (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
-      Hyprland, `main` `1e42308`: sheet opened and closed, also after host unlock)
 
 ### 7. Snapshots, backups and recovery (M12, second half)
 
@@ -541,9 +539,12 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
 - [ ] VM lifecycle and Control Center operational and recovery surfaces
       complete (M10 domain manager and M11 shell are implemented; their live
       gates remain)
-- [x] the drawer placement visual recheck on Nitro
+- [ ] the drawer placement visual recheck on Nitro
       (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
-      Sway, `main` `1e42308`: VMs drawer at the top-left, immediately below Waybar)
+      Sway, `main` `1e42308`: the VMs drawer opened at the top-left, immediately
+      below Waybar; the session records neither a flush left edge nor two
+      converging `host-desktop-sway.yml` applies before it, so the recheck
+      stays open)
 - [x] reviewed desktop-entry catalogue and app-launch bridge on the host:
       the launcher's Applications group starts only catalogue entries the
       shell action bridge resolves to root-owned desktop files
@@ -1076,12 +1077,12 @@ work explicitly requires it.
         freshness (`tests/host_quickshell_runtime_contract.py`,
         `tests/host_quickshell_readonly_runtime_contract.py`,
         `tests/host_desktop_common_contract.py`; software-verified with fixtures;
-        installed convergence and native-page acceptance in the observed scope
+        installed convergence and the native page observed
         (Nitro, 2026-11-05, operator session of 2026-11-05; operator-observed, unpublished;
         Hyprland, `main` `1e42308`: enable/disable second applies `changed=0`,
-        readbacks, Tab, narrow window, section return and page absent after disable;
-        automatic page withdrawal was not separately attested);
-        Predator acceptance remains open)
+        readbacks, Tab, narrow window, section return, page absent after disable);
+        Nitro acceptance of automatic withdrawal while the page is open and
+        Predator acceptance remain open)
 - [ ] visual theme and wallpaper browsers (needs reviewed per-theme palette export)
 - [ ] shell-owned notifications (mako remains the reviewed daemon)
 - [x] complete keybinding cheatsheet surface: `SUPER + F1`, every host binding
