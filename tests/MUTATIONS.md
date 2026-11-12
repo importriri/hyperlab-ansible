@@ -5586,13 +5586,16 @@ every other break edits `MachineSphere.qml`.
 | `off-near-ground` | `darkBody` 4.5 becomes 9, the darkening of the first version, which left a shut-off body almost on the ground. | `a dark sphere keeps a body above the ground: host/shut off/12` | Exit 0, contract OK. |
 | `theme-text-near-clean` | The green appearance's `text` `#dcf3e4` becomes `#72f2a5`, the clean colour. | `external drawn with the HOST grey or a domain colour: green/host/external: (114, 242, 165)` | Exit 0, contract OK. |
 | `dashes-solid` | Each dash `ctx.arc(cx, cy, orbit, angle, angle + Math.PI / 12)` becomes a full circle. | `the disposable ring is not dashed: host/64` | Exit 0, contract OK. |
-| `gpu-token-centred` | The token's `x = cx + orbit - side` becomes `cx - side / 2`. | `the GPU token is not docked on the ring at the right: host/64` | Exit 0, contract OK. |
+| `gpu-token-centred` | The token's `x = cx + orbit - side` becomes `cx - side / 2`. | `the GPU mark has all but vanished at 16 px: host` (the 16-pixel floor runs first; with that floor removed the 64-pixel placement check reports `the GPU token is not docked on the ring at the right: host/64`) | Exit 0, contract OK. |
 | `no-highlight` | The highlight's `if (sphere.lit \|\| sphere.paused)` becomes `if (sphere.paused)`. | `missing specular highlight: host/64` | Exit 0, contract OK. |
 | `host-grey-unflagged` | Drop `&& sphere.isHost === (sphere.domain === "host")` from `knownDomain`. | `unresolved identity became a filled sphere: host (isHost False)` | Exit 0, contract OK. |
 | `alias-dropped` | Delete the `"in shutdown"` → `"stopping"` line of `drawnState`. | `libvirt state 'in shutdown' does not draw 'stopping': host: dev-01, host, in shutdown` | Exit 0, contract OK. |
+| `case-fold-exact` | Drop `sphere.domain === sphere.domain.toLowerCase()` from `knownDomain`, the exact-match comparison of the first version. | `unresolved identity became a filled sphere: Host (isHost False)` | Exit 0, contract OK. |
+| `paused-undimmed` | `sphere.paused ? 2.6` becomes `sphere.paused ? 1`. | `paused must be a dimmed sphere: host/12` | Exit 0, contract OK. |
+| `gpu-token-vanishing` | The token's `side` becomes 0.8 px below 32 px. | `the GPU mark has all but vanished at 16 px: host` | Exit 0, contract OK. |
 | `adr-state-without-drawing` | Add the row `\| crashed \| dark sphere with a cross \|` to the ADR's state table. | `ADR states and drawn cases differ: ['crashed']` | Exit 0, contract OK. |
 
-All twenty-three breaks exited 1 with the diagnostic listed; each restored copy
+All twenty-six breaks exited 1 with the diagnostic listed; each restored copy
 was byte-identical to the original and exited 0. `theme-tinted` is caught by
 the exact 128-pixel rim colour before the per-appearance comparison runs;
 that comparison independently refuses any accent-dependent sphere. The first

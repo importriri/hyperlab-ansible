@@ -40,8 +40,12 @@ Item {
         : sphere.state === "in shutdown" ? "stopping"
         : sphere.state === "pmsuspended" ? "suspended"
         : sphere.state
+    // The domain must arrive in its canonical lower-case form: Theme resolves
+    // colours case-insensitively, so a "Host" that skipped the reserved-grey
+    // comparison would still be drawn in the HOST grey.
     readonly property bool knownDomain:
-        sphere.theme.provenanceAvailable && sphere.theme.knownProvenance(sphere.domain)
+        sphere.theme.provenanceAvailable && sphere.domain === sphere.domain.toLowerCase()
+        && sphere.theme.knownProvenance(sphere.domain)
         && sphere.isHost === (sphere.domain === "host")
     readonly property bool knownState: sphere.drawnStates.indexOf(sphere.drawnState) >= 0
     readonly property bool classified: sphere.knownDomain && sphere.knownState
@@ -58,7 +62,7 @@ Item {
     // The word a surface writes beside the sphere.
     readonly property string domainWord:
         sphere.state === "external" ? "external"
-        : sphere.knownDomain && sphere.state !== "unclassified" ? String(sphere.domain).toLowerCase()
+        : sphere.knownDomain && sphere.state !== "unclassified" ? sphere.domain
         : "unclassified"
 
     // Proportions of `size`. Everything, rings and token included, stays

@@ -83,6 +83,11 @@ DARK_BODY_LIFT = 8.0
 NEUTRAL_DISTANCE = 48
 # Least whiteness the specular highlight adds over its own surroundings.
 HIGHLIGHT_LIFT = 72
+# At 16 px a mark (disposable dashes, GPU token) must change at least this
+# many pixels by MARK_CONTRAST luminance levels; below 32 px it is a hint, not
+# a promise, so this floor only refuses a mark that has all but vanished.
+MARK_PIXELS_16 = 6
+MARK_CONTRAST = 48
 
 SCENE = r'''
 import QtQuick
@@ -294,11 +299,28 @@ def luminance(colour: tuple[int, int, int]) -> float:
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 
 
-def inner_luminance(picture: bytes, size: int) -> list[float]:
-    """Luminance of every pixel wholly inside 0.7 of the body radius."""
+def inner_luminance(picture: bytes, size: int, *, lower: bool = False) -> list[float]:
+    """Luminance of every pixel wholly inside 0.7 of the body radius.
+
+    `lower` keeps only the pixels wholly below the centre, away from the
+    pause cuts and the highlight.
+    """
     centre, reach = size / 2, size * 0.37 * 0.7
     return [luminance(pixel(picture, size, x, y)) for y in range(size) for x in range(size)
-            if math.hypot(x + 0.5 - centre, y + 0.5 - centre) + math.sqrt(0.5) <= reach]
+            if math.hypot(x + 0.5 - centre, y + 0.5 - centre) + math.sqrt(0.5) <= reach
+            and (not lower or y >= centre)]
+
+
+def mean(values: list[float]) -> float:
+    require(bool(values), "no pixels to measure")
+    return sum(values) / len(values)
+
+
+def strong_changes(first: bytes, second: bytes, size: int) -> int:
+    """Pixels whose luminance differs by at least MARK_CONTRAST."""
+    return sum(1 for y in range(size) for x in range(size)
+               if abs(luminance(pixel(first, size, x, y)) - luminance(pixel(second, size, x, y)))
+               >= MARK_CONTRAST)
 
 
 def orbit_runs(picture: bytes, size: int, ground: bytes) -> int:
@@ -398,6 +420,11 @@ def check_grid(rows: list[dict], records: list[dict], frames: list[bytes], width
                      ("running", "shut off", "starting", "stopping", "paused", "external")}) == 6,
                 f"two states share one drawing: {domain}/{size}")
         require(pictures["paused"] == pictures["suspended"], f"paused and suspended differ: {domain}/{size}")
+        # Paused is dimmed: its lower body lies strictly between shut off and running.
+        lower = {label: mean(inner_luminance(pictures[label], size, lower=True))
+                 for label in ("shut off", "paused", "running")}
+        require(lower["shut off"] < lower["paused"] < lower["running"],
+                f"paused must be a dimmed sphere: {domain}/{size}: {lower}")
         # The pause is two cuts in the silhouette, independent of colour.
         require(cuts(pictures["paused"], size, ground) == 2 and cuts(running, size, ground) == 0,
                 f"missing pause notch: {domain}/{size}")
@@ -406,6 +433,10 @@ def check_grid(rows: list[dict], records: list[dict], frames: list[bytes], width
         require(len({running, pictures["disposable"], pictures["GPU"]}) == 3
                 and pictures["off + GPU"] != off and pictures["all marks"] != pictures["paused"],
                 f"missing disposable ring or GPU token: {domain}/{size}")
+        if size == 16:
+            for mark, plain in (("disposable", "running"), ("GPU", "running"), ("off + GPU", "shut off")):
+                require(strong_changes(pictures[mark], pictures[plain], size) >= MARK_PIXELS_16,
+                        f"the {mark} mark has all but vanished at 16 px: {domain}")
         if size == 64:
             check_marks(domain, size, pictures, ground)
     for label in ("running", "shut off", "paused"):
@@ -570,7 +601,9 @@ def main() -> int:
         # The HOST grey is the host's own: "host" without the caller's
         # isHost, or isHost with any other domain, is the neutral outline.
         cases = ((incomplete, "dev", False), (incomplete, "host", True), (palette, "invented", False),
-                 (palette, "host", False), (palette, "dev", True), (palette, "invented", True))
+                 (palette, "host", False), (palette, "dev", True), (palette, "invented", True),
+                 (palette, "Host", False), (palette, "HOST", False), (palette, "Dev", False),
+                 (palette, "HOST", True))
         for table_input, domain, host in cases:
             single = [{"domain": domain, "state": "running", "size": 32, "x": 4, "y": 4, "isHost": host}]
             records, frames, width = render(directory, single, table_input)
