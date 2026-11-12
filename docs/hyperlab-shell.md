@@ -929,7 +929,7 @@ Three systems meet in `Theme.qml` and stay separate.
 | System | Where it may appear |
 | --- | --- |
 | Appearance | every surface, boundary, fill and text tone |
-| Provenance | labelled provenance markers, provenance group headers, the explicit trust diagram |
+| Provenance | labelled provenance markers, Machine spheres, provenance group headers, the explicit trust diagram |
 | Status | operational warning and error, as text and shape |
 
 Provenance colours are fixed identity, immutable across every appearance, and
@@ -969,6 +969,36 @@ constants, checked by `tests/product_symbol_geometry_contract.py`.
 "Sfere" is the wordmark and "by Doppiari" the byline; neither is a trust
 claim. There is no second logo. Software verification does not close physical
 Nitro acceptance under both compositors or Predator replay.
+
+### Machines
+
+Every Machine is a sphere and the host is the grey symbol at the centre
+([ADR 0064](adr/0064-spheres-are-machines.md), accepted operator decision).
+`MachineSphere.qml` is the one drawing of a Machine; no surface uses it yet,
+and each adopts it in its own change. Its inputs are `domain`, `state`,
+`disposable`, `gpuOwner`, `size` and `machineName`, with the shell's
+`theme` and `tokens`:
+
+| State | Drawing |
+| --- | --- |
+| running | lit sphere in the domain colour |
+| shut off | dark sphere, only its rim in the domain colour |
+| starting, stopping | dark sphere with an arc on its ring, clockwise for starting, counter-clockwise for stopping, moving only while the transition is reported and still under reduced motion |
+| paused, suspended | dimmed sphere with two cuts through its top |
+| disposable | dashed ring around the sphere, with any state |
+| owns the GPU | a chip docked on the ring at the right, with any state |
+| external, unclassified, any other word | solid neutral outline in the appearance text tone, no fill |
+
+The sphere is lit from the upper left with a small highlight and draws
+nothing beyond its own edge, from 12 to 256 pixels. Its accessible name reads
+`dev-01, dev, running`, extended with `disposable` and `owns the GPU`;
+`domainWord` is the word a surface writes beside it: the domain, `external`
+for an external domain, `unclassified` when no identity resolved. The
+component reads nothing from the host and has no pointer handler: it changes
+only when its caller reports a state the bridge, GPU ownership or inventory
+confirmed. The host bar's
+core, which follows the focused Machine, is decided by the same ADR and built
+separately; the arcs and ring of the product symbol still carry no claim.
 
 ## Security boundaries
 

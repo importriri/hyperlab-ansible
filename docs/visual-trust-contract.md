@@ -122,6 +122,30 @@ specified by ADR 0060.
 
 The selected appearance theme is independent from those meanings.
 
+### Spheres are Machines
+
+[ADR 0064](adr/0064-spheres-are-machines.md) (accepted, operator decision
+2026-11-02) gives these identities one shape. Every Machine is a sphere
+tinted with its domain colour; the host is the grey product symbol, drawn on
+the host only (product glyph, idle desktop, host wallpaper, lock surface)
+and never tinted there. A Machine's state is shape and light, never colour
+alone: lit when running, a dark body with a coloured rim when shut off, a
+moving arc only while a transition is reported, a dimmed body with a pause
+notch when paused or suspended, a dashed ring when disposable, the GPU token
+on its ring when it owns the GPU, and the neutral outline above for an
+external or unclassified domain. The domain is also written as a word beside
+the sphere where space allows. `MachineSphere.qml` is the one drawing every
+surface uses.
+
+The product symbol's arcs and ring carry no trust claim. Its core in the host
+bar does: it takes the colour of the Machine that owns the focused window,
+and grey only while the host itself has focus, drawn by the host from the
+host-owned provenance below, so no guest can fake it (decided by ADR 0064;
+not yet built). The spheres inside guest wallpapers are ambience: a guest
+draws its own wallpaper, so they prove nothing. Authority stays with
+host-drawn signals, the bar core and the window borders. No theme or scheme
+changes a sphere colour, the host grey, the bar core or a trust colour.
+
 ### Focus and keyboard trust indication
 
 Trust-mode keyboard RGB follows the host-resolved provenance of the currently

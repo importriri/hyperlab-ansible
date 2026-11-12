@@ -721,6 +721,15 @@ Decision pending: [ADR 0036](adr/0036-machine-snapshots-and-backups.md) (propose
       rule; software-verified)
 - [ ] external visual state accepted on Nitro and Predator
 
+- [x] spheres are Machines: one `MachineSphere.qml` draws every state of
+      the table for every domain from the palette alone, with a neutral
+      external outline, reduced motion and an accessible name; no surface
+      uses it yet ([ADR 0064](adr/0064-spheres-are-machines.md), accepted;
+      `tests/machine_sphere_contract.py`, software-verified)
+- [ ] sphere contact sheet accepted by the operator: each domain told apart
+      at 16 px, each state told apart without colour, spheres like the
+      reference renders
+
 - [x] generated, text-free `trust-pool-v3` on geometry B: twelve 1672×941
       wallpapers, palette-owned sphere tints with packed literal rejection,
       exact pixel/hash, full negative-space and shared-geometry contracts;
