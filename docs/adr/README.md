@@ -193,6 +193,11 @@ entered the pipeline.
     — proposed: a separate version-3 campaign for the selected v1, retaining
     the historical v2 contract and pending hardware observations.
 
+64. [`0064-spheres-are-machines.md`](0064-spheres-are-machines.md)
+    — accepted operator decision: every Machine is a sphere in its domain
+    colour, the host the grey symbol; state is shape and light; the bar
+    core follows the focused Machine; one component draws every sphere.
+
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
 not current implementation documentation.

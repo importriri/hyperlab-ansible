@@ -5550,3 +5550,40 @@ helper also failed `bare-command`; resolving only the executable then failed
 the user-site import, before preserving `PYTHONUSERBASE` made both pass.
 The full guest and inventory contracts continue to execute real Ansible and
 the strict SSH proofs with their existing hardware stubs.
+
+## Spheres are Machines
+
+[ADR 0064](../docs/adr/0064-spheres-are-machines.md) gives every Machine one
+drawing, `roles/host_desktop_common/files/quickshell/hyperlab/MachineSphere.qml`.
+`tests/machine_sphere_contract.py` executes it with the real `Theme.qml` and
+`Tokens.qml` under Qt's software rasteriser and reads the captured pixels,
+the runtime accessibility properties and the ADR's state table.
+
+Each break changes one file. Replay one at a time from a saved copy, run
+`python tests/machine_sphere_contract.py`, restore the copy and run it again.
+The ADR break edits `docs/adr/0064-spheres-are-machines.md`; every other
+break edits `MachineSphere.qml`.
+
+| Mutation | Break | Observed red diagnostic | After restoration |
+| --- | --- | --- | --- |
+| `hex-literal` | The rim's `ctx.strokeStyle = tone` becomes `"#5b8cff"`. | `colour literal in component` | Exit 0, contract OK. |
+| `colour-name` | The rim's `ctx.strokeStyle = tone` becomes `"white"`. | `literal outside the reviewed vocabulary (colour name?): ['white']` | Exit 0, contract OK. |
+| `external-host-grey` | The neutral tone `sphere.theme.textPrimary` becomes `sphere.theme.palette.dom_host`. | `neutral outline is not the appearance text tone: host/external/128: (139, 148, 158)` | Exit 0, contract OK. |
+| `external-domain-colour` | `tone` takes the domain colour whenever the domain is known (`sphere.knownDomain ?` for `sphere.classified ?`). | `external depends on the domain input at 12` | Exit 0, contract OK. |
+| `no-pause-notch` | Delete the two `ctx.clearRect` cuts of the paused drawing. | `missing pause notch: host/12` | Exit 0, contract OK. |
+| `no-disposable-ring` | `if (sphere.disposable)` becomes `if (false)`. | `missing disposable ring or GPU token: host/12` | Exit 0, contract OK. |
+| `no-gpu-token` | `if (sphere.gpuOwner)` becomes `if (false)`. | `missing disposable ring or GPU token: host/12` | Exit 0, contract OK. |
+| `off-lit` | `dim` ignores shut off: `sphere.paused ? 2.6 : 1`. | `shut off must be a dark sphere: host/12` | Exit 0, contract OK. |
+| `frozen-transition` | The arc animation's `running:` becomes `false`. | `motion only while a transition is reported, never with reduced motion: host/starting/32` | Exit 0, contract OK. |
+| `no-accessible-name` | `Accessible.name:` becomes an ordinary property. | `accessible name or role: host/running/12` | Exit 0, contract OK. |
+| `theme-tinted` | Mix the domain colour with the theme `accent` at 0.9. | `rim is not the palette domain colour: host/running/128` | Exit 0, contract OK. |
+| `fail-open-table` | Drop `sphere.theme.provenanceAvailable &&` from `knownDomain`. | `unresolved identity became a filled sphere: dev` | Exit 0, contract OK. |
+| `glow-past-edge` | `orbitRatio` 0.43 becomes 0.49. | `drawing escaped the sphere's envelope: host/starting/32` | Exit 0, contract OK. |
+| `pointer-handler` | Add `MouseArea { anchors.fill: parent }`. | `a sphere presents confirmed input; it observes, acts and changes state on nothing` | Exit 0, contract OK. |
+| `adr-state-without-drawing` | Add the row `\| crashed \| dark sphere with a cross \|` to the ADR's state table. | `ADR states and drawn cases differ: ['crashed']` | Exit 0, contract OK. |
+
+All fifteen breaks exited 1 with the diagnostic listed; each restored copy
+was byte-identical to the original and exited 0. `theme-tinted` is caught by
+the exact 128-pixel rim colour before the per-appearance comparison runs;
+that comparison independently refuses any accent-dependent sphere. The first
+test-first run refused the missing ADR before the component was rewritten.
