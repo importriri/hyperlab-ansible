@@ -5561,8 +5561,10 @@ the runtime accessibility properties and the ADR's state table.
 
 Each break changes one file. Replay one at a time from a saved copy, run
 `python tests/machine_sphere_contract.py`, restore the copy and run it again.
-The ADR break edits `docs/adr/0064-spheres-are-machines.md`; every other
-break edits `MachineSphere.qml`.
+The ADR break edits `docs/adr/0064-spheres-are-machines.md`,
+`theme-text-near-clean` edits
+`roles/host_desktop_sway/files/palette/green/hyperlab-palette-quickshell.json`;
+every other break edits `MachineSphere.qml`.
 
 | Mutation | Break | Observed red diagnostic | After restoration |
 | --- | --- | --- | --- |
@@ -5573,16 +5575,24 @@ break edits `MachineSphere.qml`.
 | `no-pause-notch` | Delete the two `ctx.clearRect` cuts of the paused drawing. | `missing pause notch: host/12` | Exit 0, contract OK. |
 | `no-disposable-ring` | `if (sphere.disposable)` becomes `if (false)`. | `missing disposable ring or GPU token: host/12` | Exit 0, contract OK. |
 | `no-gpu-token` | `if (sphere.gpuOwner)` becomes `if (false)`. | `missing disposable ring or GPU token: host/12` | Exit 0, contract OK. |
-| `off-lit` | `dim` ignores shut off: `sphere.paused ? 2.6 : 1`. | `shut off must be a dark sphere: host/12` | Exit 0, contract OK. |
+| `off-lit` | `dim` ignores shut off: `sphere.paused ? 2.6 : 1` for `sphere.paused ? 2.6 : sphere.darkBody`. | `shut off must be a dark sphere: host/12` | Exit 0, contract OK. |
 | `frozen-transition` | The arc animation's `running:` becomes `false`. | `motion only while a transition is reported, never with reduced motion: host/starting/32` | Exit 0, contract OK. |
 | `no-accessible-name` | `Accessible.name:` becomes an ordinary property. | `accessible name or role: host/running/12` | Exit 0, contract OK. |
 | `theme-tinted` | Mix the domain colour with the theme `accent` at 0.9. | `rim is not the palette domain colour: host/running/128` | Exit 0, contract OK. |
-| `fail-open-table` | Drop `sphere.theme.provenanceAvailable &&` from `knownDomain`. | `unresolved identity became a filled sphere: dev` | Exit 0, contract OK. |
+| `fail-open-table` | Drop `sphere.theme.provenanceAvailable &&` from `knownDomain`. | `unresolved identity became a filled sphere: dev (isHost False)` | Exit 0, contract OK. |
 | `glow-past-edge` | `orbitRatio` 0.43 becomes 0.49. | `drawing escaped the sphere's envelope: host/starting/32` | Exit 0, contract OK. |
 | `pointer-handler` | Add `MouseArea { anchors.fill: parent }`. | `a sphere presents confirmed input; it observes, acts and changes state on nothing` | Exit 0, contract OK. |
+| `off-unfilled` | The body fill skips shut off: `if (sphere.classified && sphere.drawnState !== "shut off")`. | `a dark sphere keeps a body above the ground: host/shut off/12` | Exit 0, contract OK. |
+| `off-near-ground` | `darkBody` 4.5 becomes 9, the darkening of the first version, which left a shut-off body almost on the ground. | `a dark sphere keeps a body above the ground: host/shut off/12` | Exit 0, contract OK. |
+| `theme-text-near-clean` | The green appearance's `text` `#dcf3e4` becomes `#72f2a5`, the clean colour. | `external drawn with the HOST grey or a domain colour: green/host/external: (114, 242, 165)` | Exit 0, contract OK. |
+| `dashes-solid` | Each dash `ctx.arc(cx, cy, orbit, angle, angle + Math.PI / 12)` becomes a full circle. | `the disposable ring is not dashed: host/64` | Exit 0, contract OK. |
+| `gpu-token-centred` | The token's `x = cx + orbit - side` becomes `cx - side / 2`. | `the GPU token is not docked on the ring at the right: host/64` | Exit 0, contract OK. |
+| `no-highlight` | The highlight's `if (sphere.lit \|\| sphere.paused)` becomes `if (sphere.paused)`. | `missing specular highlight: host/64` | Exit 0, contract OK. |
+| `host-grey-unflagged` | Drop `&& sphere.isHost === (sphere.domain === "host")` from `knownDomain`. | `unresolved identity became a filled sphere: host (isHost False)` | Exit 0, contract OK. |
+| `alias-dropped` | Delete the `"in shutdown"` → `"stopping"` line of `drawnState`. | `libvirt state 'in shutdown' does not draw 'stopping': host: dev-01, host, in shutdown` | Exit 0, contract OK. |
 | `adr-state-without-drawing` | Add the row `\| crashed \| dark sphere with a cross \|` to the ADR's state table. | `ADR states and drawn cases differ: ['crashed']` | Exit 0, contract OK. |
 
-All fifteen breaks exited 1 with the diagnostic listed; each restored copy
+All twenty-three breaks exited 1 with the diagnostic listed; each restored copy
 was byte-identical to the original and exited 0. `theme-tinted` is caught by
 the exact 128-pixel rim colour before the per-appearance comparison runs;
 that comparison independently refuses any accent-dependent sphere. The first

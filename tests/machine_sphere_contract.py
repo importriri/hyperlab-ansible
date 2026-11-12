@@ -67,9 +67,22 @@ ADR_ROWS = {
 # "transparent") or any other new literal is a refusal, not a default.
 LITERALS = {
     "running", "shut off", "starting", "stopping", "paused", "suspended",
+    "shutoff", "in shutdown", "pmsuspended", "host",
     "", "external", "unclassified", "unknown", "Machine", "2d",
     ", ", ", disposable", ", owns the GPU",
 }
+
+# The libvirt words the component accepts and the table word each one draws.
+ALIASES = {"shutoff": "shut off", "in shutdown": "stopping", "pmsuspended": "suspended"}
+# States drawn as a dark but filled body, and the least mean luminance that
+# body keeps above the ground, so it never reads as the empty outline.
+DARK = ("shut off", "starting", "stopping")
+DARK_BODY_LIFT = 8.0
+# Least per-channel distance between the neutral outline and the HOST grey or
+# any domain colour, under every appearance.
+NEUTRAL_DISTANCE = 48
+# Least whiteness the specular highlight adds over its own surroundings.
+HIGHLIGHT_LIFT = 72
 
 SCENE = r'''
 import QtQuick
@@ -101,6 +114,7 @@ Window {
                 theme: shellTheme, tokens: metrics, machineName: "dev-01",
                 domain: row.domain, state: row.state,
                 disposable: row.disposable || false, gpuOwner: row.gpuOwner || false,
+                isHost: row.isHost || false,
                 size: row.size, x: row.x, y: row.y
             });
             if (!item) throw new Error("sphere did not instantiate");
@@ -258,7 +272,7 @@ def grid(size: int, domains: tuple[str, ...] = DOMAINS) -> list[dict]:
     for line, domain in enumerate(domains):
         for column, (_, inputs) in enumerate(CASES):
             rows.append(dict(domain=domain, size=size, x=column * (size + 8) + 4,
-                             y=line * (size + 8) + 4, **inputs))
+                             y=line * (size + 8) + 4, isHost=domain == "host", **inputs))
     return rows
 
 
@@ -273,6 +287,27 @@ def pixel(picture: bytes, size: int, x: float, y: float) -> tuple[int, int, int]
     offset = (int(y) * size + int(x)) * 3
     red, green, blue = picture[offset:offset + 3]
     return red, green, blue
+
+
+def luminance(colour: tuple[int, int, int]) -> float:
+    red, green, blue = colour
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def inner_luminance(picture: bytes, size: int) -> list[float]:
+    """Luminance of every pixel wholly inside 0.7 of the body radius."""
+    centre, reach = size / 2, size * 0.37 * 0.7
+    return [luminance(pixel(picture, size, x, y)) for y in range(size) for x in range(size)
+            if math.hypot(x + 0.5 - centre, y + 0.5 - centre) + math.sqrt(0.5) <= reach]
+
+
+def orbit_runs(picture: bytes, size: int, ground: bytes) -> int:
+    """Runs of drawn pixels met walking once round the orbit circle."""
+    centre, orbit = size / 2, size * 0.43
+    drawn = [pixel(picture, size, centre + orbit * math.cos(step * math.pi / 360),
+                   centre + orbit * math.sin(step * math.pi / 360)) != tuple(ground)
+             for step in range(720)]
+    return sum(1 for index, here in enumerate(drawn) if here and not drawn[index - 1])
 
 
 def rgb(colour: str) -> tuple[int, int, int]:
@@ -319,9 +354,11 @@ def cuts(picture: bytes, size: int, ground: bytes) -> int:
 
 
 def expected_name(row: dict) -> str:
-    state = row["state"]
+    state = ALIASES.get(row["state"], row["state"])
+    reserved = row.get("isHost", False) == (row["domain"] == "host")
     word = ("external" if state == "external"
-            else "unclassified" if state == "unclassified" else row["domain"])
+            else "unclassified" if state == "unclassified" or not reserved
+            or row["domain"] not in DOMAINS else row["domain"])
     return (f"dev-01, {word}, {state}" + (", disposable" if row.get("disposable") else "")
             + (", owns the GPU" if row.get("gpuOwner") else ""))
 
@@ -344,8 +381,12 @@ def check_grid(rows: list[dict], records: list[dict], frames: list[bytes], width
         require((picture != later) == moving,
                 f"motion only while a transition is reported, never with reduced motion: {where}")
         if row["state"] in NEUTRAL:
-            require(pixel(picture, size, size / 2, size / 2) == tuple(ground),
+            require(set(inner_luminance(picture, size)) == {luminance(tuple(ground))},
                     f"neutral outline must have no fill: {where}")
+        elif row["state"] in DARK:
+            inner = inner_luminance(picture, size)
+            require(sum(inner) / len(inner) - luminance(tuple(ground)) >= DARK_BODY_LIFT,
+                    f"a dark sphere keeps a body above the ground: {where}")
 
     centre = (size / 2, size / 2)
     for line, domain in enumerate(DOMAINS):
@@ -365,6 +406,8 @@ def check_grid(rows: list[dict], records: list[dict], frames: list[bytes], width
         require(len({running, pictures["disposable"], pictures["GPU"]}) == 3
                 and pictures["off + GPU"] != off and pictures["all marks"] != pictures["paused"],
                 f"missing disposable ring or GPU token: {domain}/{size}")
+        if size == 64:
+            check_marks(domain, size, pictures, ground)
     for label in ("running", "shut off", "paused"):
         drawings = {first[line * len(CASES) + COLUMN[label]] for line in range(len(DOMAINS))}
         require(len(drawings) == len(DOMAINS), f"two domains share one {label} sphere at {size}")
@@ -373,12 +416,47 @@ def check_grid(rows: list[dict], records: list[dict], frames: list[bytes], width
     return first
 
 
+def check_marks(domain: str, size: int, pictures: dict[str, bytes], ground: bytes) -> None:
+    """Where the marks sit and what they look like, read at 64 px."""
+    where = f"{domain}/{size}"
+    running = pictures["running"]
+    require(orbit_runs(running, size, ground) == 0, f"running draws on the orbit: {where}")
+    require(orbit_runs(pictures["disposable"], size, ground) >= 8,
+            f"the disposable ring is not dashed: {where}")
+    # The GPU token is docked on the orbit at the right: every pixel it
+    # changes, pins included, lies within its own width of the orbit's right
+    # edge, and it covers the orbit there.
+    centre, orbit, side = size / 2, size * 0.43, size * 0.16
+    changed = [(x, y) for y in range(size) for x in range(size)
+               if pixel(pictures["GPU"], size, x, y) != pixel(running, size, x, y)]
+    require(bool(changed) and min(x for x, _ in changed) >= centre + orbit - 1.25 * side - 2
+            and any(abs(x + 0.5 - (centre + orbit)) <= 2 and abs(y + 0.5 - centre) <= 2
+                    for x, y in changed),
+            f"the GPU token is not docked on the ring at the right: {where}")
+    # The specular highlight whitens its spot well beyond its surroundings.
+    body = size * 0.37
+    spot = (centre - body * 0.36, centre - body * 0.40)
+    around = [pixel(running, size, spot[0] + body * 0.375 * math.cos(step * math.pi / 4),
+                    spot[1] + body * 0.375 * math.sin(step * math.pi / 4)) for step in range(8)]
+    require(min(pixel(running, size, *spot)) - max(min(colour) for colour in around) >= HIGHLIGHT_LIFT,
+            f"missing specular highlight: {where}")
+
+
+def neutral_rim(picture: bytes, size: int, palette: dict, where: str) -> None:
+    """The outline is the appearance text tone and far from every identity colour."""
+    colour = pixel(picture, size, size / 2, size / 2 - size * 0.37)
+    require(near(colour, rgb(palette["text"])),
+            f"neutral outline is not the appearance text tone: {where}: {colour}")
+    identities = [rgb(palette["dom_" + domain]) for domain in DOMAINS]
+    require(all(max(abs(a - b) for a, b in zip(colour, tint, strict=True)) >= NEUTRAL_DISTANCE
+                for tint in identities),
+            f"external drawn with the HOST grey or a domain colour: {where}: {colour}")
+
+
 def check_rims(rows: list[dict], pictures: list[bytes], palette: dict) -> None:
     """At 128 px the rim is wider than a pixel: read its exact colour."""
     size = rows[0]["size"]
     top = (size / 2, size / 2 - size * 0.37)
-    host = rgb(palette["dom_host"])
-    domains = {rgb(palette["dom_" + domain]) for domain in DOMAINS}
     for row, picture in zip(rows, pictures, strict=True):
         where = f"{row['domain']}/{row['state']}/{size}"
         colour = pixel(picture, size, *top)
@@ -386,10 +464,7 @@ def check_rims(rows: list[dict], pictures: list[bytes], palette: dict) -> None:
             require(near(colour, rgb(palette["dom_" + row["domain"]])),
                     f"rim is not the palette domain colour: {where}: {colour}")
         elif row["state"] in NEUTRAL:
-            require(near(colour, rgb(palette["text"])),
-                    f"neutral outline is not the appearance text tone: {where}: {colour}")
-            require(not near(colour, host, 12) and all(not near(colour, tint, 12) for tint in domains),
-                    f"external drawn with the HOST grey or a domain colour: {where}: {colour}")
+            neutral_rim(picture, size, palette, where)
 
 
 def contact_sheet(directory: Path, palette: dict, destination: Path) -> None:
@@ -400,7 +475,7 @@ def contact_sheet(directory: Path, palette: dict, destination: Path) -> None:
             labels.append({"text": f"{domain} · {size} px", "x": 8, "y": y + size // 2 - 4})
             for index, (_, inputs) in enumerate(CASES):
                 rows.append(dict(domain=domain, size=size, x=132 + index * column + (column - size) // 2,
-                                 y=y, **inputs))
+                                 y=y, isHost=domain == "host", **inputs))
             y += max(36, size + 12)
         y += 12
     for index, (label, _) in enumerate(CASES):
@@ -440,7 +515,14 @@ def main() -> int:
         check_grid(rows, records, frames, width, palette, reduced=False)
 
         # Themes never touch a sphere: identical drawings on every appearance.
-        for variant in sorted(path.name for path in VARIANTS.iterdir() if path.is_dir()):
+        # The neutral outline is the appearance text tone, and under every
+        # appearance it stays far from the HOST grey and every domain colour.
+        variants = sorted(path.name for path in VARIANTS.iterdir() if path.is_dir())
+        require(bool(variants), "no appearance variants to compare")
+        outline = [{"domain": domain, "state": state, "size": 128, "x": 4 + index * 136, "y": 4}
+                   for index, (domain, state) in enumerate(
+                       (domain, state) for domain in DOMAINS for state in NEUTRAL)]
+        for variant in variants:
             appearance = json.loads((VARIANTS / variant / "hyperlab-palette-quickshell.json")
                                     .read_text(encoding="utf-8"))
             appearance["base"] = palette["base"]
@@ -449,6 +531,22 @@ def main() -> int:
                 if row["state"] not in NEUTRAL:
                     require(crop(frames[0], width, row) == baseline[index],
                             f"theme {variant} changed the {row['domain']}/{row['state']} sphere")
+            _, frames, width = render(directory, outline, appearance)
+            for row in outline:
+                neutral_rim(crop(frames[0], width, row), 128, appearance,
+                            f"{variant}/{row['domain']}/{row['state']}")
+
+        # The libvirt words draw the table state they name.
+        aliases = [{"domain": domain, "state": word, "size": 32, "x": 4 + index * 40,
+                    "y": 4 + line * 40, "isHost": domain == "host"}
+                   for line, domain in enumerate(DOMAINS) for index, word in enumerate(ALIASES)]
+        records, frames, width = render(directory, aliases, palette)
+        for row, record in zip(aliases, records, strict=True):
+            line = DOMAINS.index(row["domain"])
+            drawn = baseline[line * len(CASES) + COLUMN[ALIASES[row["state"]]]]
+            require(crop(frames[0], width, row) == drawn and record["name"] == expected_name(row),
+                    f"libvirt state {row['state']!r} does not draw {ALIASES[row['state']]!r}: "
+                    f"{row['domain']}: {record['name']}")
 
         # The neutral outline owes nothing to the domain table, and every
         # domain drawing follows it.
@@ -469,11 +567,18 @@ def main() -> int:
         # Fail closed: an incomplete table or an invented domain is neutral.
         neutral = baseline[COLUMN["external"]]
         incomplete = {key: value for key, value in palette.items() if key != "dom_dev"}
-        for table_input, domain in ((incomplete, "dev"), (incomplete, "host"), (palette, "invented")):
-            single = [{"domain": domain, "state": "running", "size": 32, "x": 4, "y": 4}]
-            _, frames, width = render(directory, single, table_input)
+        # The HOST grey is the host's own: "host" without the caller's
+        # isHost, or isHost with any other domain, is the neutral outline.
+        cases = ((incomplete, "dev", False), (incomplete, "host", True), (palette, "invented", False),
+                 (palette, "host", False), (palette, "dev", True), (palette, "invented", True))
+        for table_input, domain, host in cases:
+            single = [{"domain": domain, "state": "running", "size": 32, "x": 4, "y": 4, "isHost": host}]
+            records, frames, width = render(directory, single, table_input)
             require(crop(frames[0], width, single[0]) == neutral,
-                    f"unresolved identity became a filled sphere: {domain}")
+                    f"unresolved identity became a filled sphere: {domain} (isHost {host})")
+            if table_input is palette:
+                require(records[0]["word"] == "unclassified",
+                        f"unresolved identity keeps a domain word: {domain} (isHost {host})")
 
         if args.contact_sheet:
             contact_sheet(directory, palette, args.contact_sheet)

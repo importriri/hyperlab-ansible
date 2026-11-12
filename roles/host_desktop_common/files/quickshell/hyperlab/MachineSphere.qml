@@ -8,7 +8,9 @@
 // Colours come only from Theme.provenanceColor() and the appearance text
 // tone; none is written here. An external domain, an unresolved identity or
 // a state outside the reviewed vocabulary is a neutral outline without fill,
-// never a domain colour or the HOST grey.
+// never a domain colour or the HOST grey. The HOST grey sphere is the host's
+// own: it needs the caller's explicit `isHost`, and `isHost` with any other
+// domain is a contradiction drawn as the neutral outline.
 
 import QtQuick
 
@@ -25,20 +27,29 @@ Item {
     state: ""
     property bool disposable: false
     property bool gpuOwner: false
+    property bool isHost: false
     property int size: 32
 
     readonly property var drawnStates: [
         "running", "shut off", "starting", "stopping", "paused", "suspended"
     ]
+    // The libvirt words that name a state of the table. Any other word is
+    // outside the vocabulary and fails closed.
+    readonly property string drawnState:
+        sphere.state === "shutoff" ? "shut off"
+        : sphere.state === "in shutdown" ? "stopping"
+        : sphere.state === "pmsuspended" ? "suspended"
+        : sphere.state
     readonly property bool knownDomain:
         sphere.theme.provenanceAvailable && sphere.theme.knownProvenance(sphere.domain)
-    readonly property bool knownState: sphere.drawnStates.indexOf(sphere.state) >= 0
+        && sphere.isHost === (sphere.domain === "host")
+    readonly property bool knownState: sphere.drawnStates.indexOf(sphere.drawnState) >= 0
     readonly property bool classified: sphere.knownDomain && sphere.knownState
-    readonly property bool lit: sphere.classified && sphere.state === "running"
+    readonly property bool lit: sphere.classified && sphere.drawnState === "running"
     readonly property bool paused:
-        sphere.classified && (sphere.state === "paused" || sphere.state === "suspended")
+        sphere.classified && (sphere.drawnState === "paused" || sphere.drawnState === "suspended")
     readonly property bool transitioning:
-        sphere.classified && (sphere.state === "starting" || sphere.state === "stopping")
+        sphere.classified && (sphere.drawnState === "starting" || sphere.drawnState === "stopping")
     readonly property bool reducedMotion: sphere.tokens.reducedMotion
     readonly property color tone:
         sphere.classified ? sphere.theme.provenanceColor(sphere.domain)
@@ -54,6 +65,8 @@ Item {
     // inside 0.5: nothing is drawn beyond the sphere's own envelope.
     readonly property real bodyRatio: 0.37
     readonly property real orbitRatio: 0.43
+    // Darkening of a shut-off or transitioning body.
+    readonly property real darkBody: 4.5
     property real phase: 0
 
     implicitWidth: sphere.size
@@ -64,7 +77,7 @@ Item {
     Accessible.role: Accessible.Graphic
     Accessible.name: (sphere.machineName.length > 0 ? sphere.machineName : "Machine")
         + ", " + sphere.domainWord
-        + ", " + (sphere.state.length > 0 ? sphere.state : "unknown")
+        + ", " + (sphere.drawnState.length > 0 ? sphere.drawnState : "unknown")
         + (sphere.disposable ? ", disposable" : "")
         + (sphere.gpuOwner ? ", owns the GPU" : "")
 
@@ -78,7 +91,7 @@ Item {
     }
 
     onToneChanged: paint.requestPaint()
-    onStateChanged: paint.requestPaint()
+    onDrawnStateChanged: paint.requestPaint()
     onClassifiedChanged: paint.requestPaint()
     onDisposableChanged: paint.requestPaint()
     onGpuOwnerChanged: paint.requestPaint()
@@ -108,11 +121,13 @@ Item {
             const tone = sphere.tone;
 
             // Body. Light from the upper left, darker lower right. A shut-off
-            // or transitioning Machine is dark; a paused one is dimmed.
+            // or transitioning Machine is a dark but filled sphere, always
+            // brighter than the ground, so it never reads as the empty
+            // external outline; a paused one is dimmed.
             ctx.beginPath();
             ctx.arc(cx, cy, r, 0, 2 * Math.PI);
             if (sphere.classified) {
-                const dim = sphere.lit ? 1 : sphere.paused ? 2.6 : 9;
+                const dim = sphere.lit ? 1 : sphere.paused ? 2.6 : sphere.darkBody;
                 const light = ctx.createRadialGradient(
                     cx - r * 0.38, cy - r * 0.42, 0, cx, cy, r);
                 light.addColorStop(0, Qt.darker(Qt.lighter(tone, 1.3), dim));
@@ -161,7 +176,7 @@ Item {
             // top, stopping counter-clockwise; with reduced motion the arc
             // stays fixed at its first position.
             if (sphere.transitioning) {
-                const direction = sphere.state === "starting" ? 1 : -1;
+                const direction = sphere.drawnState === "starting" ? 1 : -1;
                 const turn = sphere.reducedMotion ? 0 : sphere.phase;
                 const start = -Math.PI / 2 + direction * turn * 2 * Math.PI;
                 ctx.beginPath();
