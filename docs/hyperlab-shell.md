@@ -976,24 +976,30 @@ Every Machine is a sphere and the host is the grey symbol at the centre
 ([ADR 0064](adr/0064-spheres-are-machines.md), accepted operator decision).
 `MachineSphere.qml` is the one drawing of a Machine; no surface uses it yet,
 and each adopts it in its own change. Its inputs are `domain`, `state`,
-`disposable`, `gpuOwner`, `size` and `machineName`, with the shell's
-`theme` and `tokens`:
+`disposable`, `gpuOwner`, `size`, `machineName` and `isHost`, with the
+shell's `theme` and `tokens`. The ADR's operator decision fixes the table
+below; how the component reads it (the outline tone, the libvirt words, the
+reserved HOST grey) is the ADR's proposed part:
 
 | State | Drawing |
 | --- | --- |
 | running | lit sphere in the domain colour |
-| shut off | dark sphere, only its rim in the domain colour |
-| starting, stopping | dark sphere with an arc on its ring, clockwise for starting, counter-clockwise for stopping, moving only while the transition is reported and still under reduced motion |
-| paused, suspended | dimmed sphere with two cuts through its top |
+| shut off, `shutoff` | dark but filled sphere, always brighter than the ground, only its rim in the domain colour |
+| starting, stopping, `in shutdown` | dark sphere with an arc on its ring, clockwise for starting, counter-clockwise for stopping, moving only while the transition is reported and still under reduced motion |
+| paused, suspended, `pmsuspended` | dimmed sphere with two cuts through its top |
 | disposable | dashed ring around the sphere, with any state |
 | owns the GPU | a chip docked on the ring at the right, with any state |
 | external, unclassified, any other word | solid neutral outline in the appearance text tone, no fill |
+| domain `host` without `isHost`, or `isHost` with another domain | the same neutral outline, word `unclassified`: the HOST grey sphere is the host's own |
 
 The sphere is lit from the upper left with a small highlight and draws
 nothing beyond its own edge, from 12 to 256 pixels. Its accessible name reads
 `dev-01, dev, running`, extended with `disposable` and `owns the GPU`;
 `domainWord` is the word a surface writes beside it: the domain, `external`
-for an external domain, `unclassified` when no identity resolved. The
+for an external domain, `unclassified` when no identity resolved. A Machine
+in a state outside the table (`crashed`, `unknown`) is drawn as the outline
+with its domain still in the accessible name; a surface writes the state
+word beside it, because the outline alone reads as external. The
 component reads nothing from the host and has no pointer handler: it changes
 only when its caller reports a state the bridge, GPU ownership or inventory
 confirmed. The host bar's

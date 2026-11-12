@@ -135,7 +135,10 @@ notch when paused or suspended, a dashed ring when disposable, the GPU token
 on its ring when it owns the GPU, and the neutral outline above for an
 external or unclassified domain. The domain is also written as a word beside
 the sphere where space allows. `MachineSphere.qml` is the one drawing every
-surface uses.
+surface uses. The HOST grey sphere is the host's own: the component draws it
+only when its caller marks the sphere as the host, and draws the neutral
+outline for any other Machine whose provenance says `host` (a proposed
+component choice of the ADR).
 
 The product symbol's arcs and ring carry no trust claim. Its core in the host
 bar does: it takes the colour of the Machine that owns the focused window,
@@ -144,7 +147,12 @@ host-owned provenance below, so no guest can fake it (decided by ADR 0064;
 not yet built). The spheres inside guest wallpapers are ambience: a guest
 draws its own wallpaper, so they prove nothing. Authority stays with
 host-drawn signals, the bar core and the window borders. No theme or scheme
-changes a sphere colour, the host grey, the bar core or a trust colour.
+changes a sphere colour, the host grey, the bar core or a trust colour. The
+one themed tone on a sphere is the neutral outline of an external or
+unclassified Machine: it is the appearance text tone, as above, so a theme
+may change its shade, and under every appearance it must stay far from the
+HOST grey and every domain colour (a proposed component choice of the ADR,
+checked by `tests/machine_sphere_contract.py`).
 
 ### Focus and keyboard trust indication
 

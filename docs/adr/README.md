@@ -197,6 +197,8 @@ entered the pipeline.
     — accepted operator decision: every Machine is a sphere in its domain
     colour, the host the grey symbol; state is shape and light; the bar
     core follows the focused Machine; one component draws every sphere.
+    Its component choices (themed neutral outline, reserved HOST grey,
+    libvirt state words) are proposed.
 
 The pre-VM baseline that led to these decisions remains available as
 [`../historical-audit-m0.md`](../historical-audit-m0.md); it is archival evidence,
