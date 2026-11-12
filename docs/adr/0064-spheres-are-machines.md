@@ -96,18 +96,34 @@ component and its contract alone.
 - **External and unclassified share one drawing** and differ only in the
   word: **external** for a domain a readable registry places outside the
   product, **unclassified** for a registry Machine whose identity did not
-  resolve (ADR 0060). Rules out: a domain colour or fill for either.
-- **A dark sphere keeps a body.** Shut off and transitioning Machines are
-  filled, much darker than running but always measurably brighter than the
-  ground, so a shut-off Machine and the empty external outline differ in
-  light and shape, not only in rim colour. Rules out: a shut-off Machine
-  drawn as a bare coloured ring.
+  resolve. This amends the accepted table, whose row writes the word
+  `external` for both: following [ADR 0060](0060-external-machine-visibility.md),
+  which reserves **external** for domains a readable registry places outside
+  the product, a registry Machine is never called external. Rules out: a
+  domain colour or fill for either, and the word external for a registry
+  Machine.
+- **A dark sphere keeps a body, in its own darkened hue.** Shut off and
+  transitioning Machines are filled, much darker than running but always
+  measurably brighter than the ground, so a shut-off Machine and the empty
+  external outline differ in light and shape, not only in rim colour. The
+  body is the domain colour darkened, not a neutral dark: this reads the
+  accepted row ("dark sphere, only its rim in the domain colour") as "only
+  the rim is lit in the domain colour", so that shut-off Machines of
+  different domains still differ in the body as well as the rim. A neutral
+  dark body is the alternative, at the cost of that difference. Rules out: a
+  shut-off Machine drawn as a bare coloured ring.
 - **The HOST grey sphere is the host's own.** The component draws the grey
   sphere only when its caller sets `isHost` for the domain `host`; `host`
   without `isHost`, or `isHost` with any other domain, is a contradiction
   and draws the neutral outline with the word **unclassified**. No guest
   Machine can be drawn with the host's identity by a provenance that merely
   resolves to `host`. Rules out: a guest Machine in the HOST grey.
+- **The domain arrives in canonical form.** The component accepts only the
+  lower-case domain names of the palette; `Host`, `HOST` or `Dev` draw the
+  neutral outline with the word **unclassified**. The shell's colour lookup
+  is case-insensitive, so without this rule a capitalised `Host` would pass
+  the reserved-grey comparison and still be drawn in the HOST grey. Rules
+  out: folding case inside the component.
 - **The state input is the component's `Item.state`.** The component
   declares no QML `States`, so only its caller changes it. Rules out: QML
   States or transitions inside the component.
@@ -131,6 +147,13 @@ component and its contract alone.
   of a classified sphere. Disposable and GPU ownership combine with any
   state. The noise texture of the reference renders is left out, because
   it does not hold at 16 pixels.
+- **Marks are promised from 32 pixels.** Domain colour, light and the pause
+  cuts hold from 12 pixels; the disposable dashes and the GPU token are
+  drawn at every size but are reliably told apart only from 32 pixels. At
+  12 and 16 pixels they are a hint, and a surface that draws a sphere that
+  small writes `disposable` and `GPU` as words beside it, as the accessible
+  name already does. Rules out: a surface relying on the 16-pixel token
+  alone to say who owns the GPU.
 - **Fail closed and present only.** A domain outside the reviewed set or an
   incomplete `dom_*` table draws the neutral outline. The component reads
   nothing from the host, runs nothing and declares no pointer handler: it
@@ -145,13 +168,14 @@ real Theme and Tokens under the Qt software rasteriser. It reads this
 record's state table and refuses a row without a drawn case; it checks every
 state and mark for every domain at 12, 16, 32, 64, 128 and 256 pixels: the
 exact rim colours, a dark body above the ground and an empty outline, the
-pause cuts, dashes on the orbit, the token's place, the highlight, the
+paused body between shut off and running, the pause cuts, the marks' floor
+at 16 pixels, dashes on the orbit, the token's place, the highlight, the
 neutral outline against the HOST grey and every domain colour under every
 appearance, independence from every appearance palette and, for the
 outline, from the domain table, motion only while a transition is reported,
-the libvirt words, the reserved HOST grey, the fail-closed inputs, the
-accessible name and the absence of any colour literal or host service in
-the component. Its `--contact-sheet` option writes the review sheet of all
+the libvirt words, the reserved HOST grey in canonical case, the fail-closed
+inputs, the accessible name and the absence of any colour literal or host
+service in the component. Its `--contact-sheet` option writes the review sheet of all
 states and domains at 16 to 128 pixels.
 
 No surface uses the component yet; each later surface adopts it in its own

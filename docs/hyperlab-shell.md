@@ -984,16 +984,19 @@ reserved HOST grey) is the ADR's proposed part:
 | State | Drawing |
 | --- | --- |
 | running | lit sphere in the domain colour |
-| shut off, `shutoff` | dark but filled sphere, always brighter than the ground, only its rim in the domain colour |
+| shut off, `shutoff` | dark but filled sphere in its own darkened hue, always brighter than the ground, only its rim lit in the domain colour |
 | starting, stopping, `in shutdown` | dark sphere with an arc on its ring, clockwise for starting, counter-clockwise for stopping, moving only while the transition is reported and still under reduced motion |
 | paused, suspended, `pmsuspended` | dimmed sphere with two cuts through its top |
 | disposable | dashed ring around the sphere, with any state |
 | owns the GPU | a chip docked on the ring at the right, with any state |
 | external, unclassified, any other word | solid neutral outline in the appearance text tone, no fill |
-| domain `host` without `isHost`, or `isHost` with another domain | the same neutral outline, word `unclassified`: the HOST grey sphere is the host's own |
+| domain `host` without `isHost`, `isHost` with another domain, or a domain not in lower case (`Host`, `Dev`) | the same neutral outline, word `unclassified`: the HOST grey sphere is the host's own |
 
 The sphere is lit from the upper left with a small highlight and draws
-nothing beyond its own edge, from 12 to 256 pixels. Its accessible name reads
+nothing beyond its own edge, from 12 to 256 pixels. Domain, light and the
+pause cuts hold at every size; the disposable dashes and the GPU token are
+promised only from 32 pixels, so a surface drawing a smaller sphere writes
+`disposable` and `GPU` beside it. Its accessible name reads
 `dev-01, dev, running`, extended with `disposable` and `owns the GPU`;
 `domainWord` is the word a surface writes beside it: the domain, `external`
 for an external domain, `unclassified` when no identity resolved. A Machine
